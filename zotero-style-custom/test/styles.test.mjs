@@ -11,8 +11,8 @@ function parse(source){
  let nativeContainerSyntax=true;
  try{CSSOM.parse('@container sc-workbench (max-width: 720px) {.sc-body {padding:8px}}');}catch(_){nativeContainerSyntax=false;}
  const headers=[...source.matchAll(/@container\s+([^{}]+)\{/g)].map(m=>m[1].trim());
- for(const header of headers)assert.match(header,/^sc-workbench \((?:max|min)-(?:width|height): \d+px\)$/,'validated container condition');
- const supported=nativeContainerSyntax?source:source.replace(/@container\s+sc-workbench\s+(\([^{}]+\))\s*\{/g,'@media $1 {');
+ for(const header of headers)assert.match(header,/^sc-(?:workbench|main) \((?:max|min)-(?:width|height): \d+px\)$/,'validated container condition');
+ const supported=nativeContainerSyntax?source:source.replace(/@container\s+sc-(?:workbench|main)\s+(\([^{}]+\))\s*\{/g,'@media $1 {');
  return {sheet:CSSOM.parse(supported),nativeContainerSyntax,headers};
 }
 const parsed=parse(css);
@@ -299,4 +299,91 @@ test('a segmented tray spaces its segments with gap, never negative margins, and
 test("focus rings on rounded rows sit outside them, never inset into the curve", () => {
   // An inset ring on a rounded row card looked like painted nails on its sides in Zotero.
   assert.doesNotMatch(css, /\.sc-path-row:focus-visible\s*\{[^}]*outline-offset:\s*-/);
+});
+
+// Audit item 10: the font-size setting scales the main text, and nothing is below 11px.
+test('no CSS file declares a font size below 11px, in any unit or in the font shorthand', () => {
+ const small = [];
+ for (const name of ['workbench.css', 'jcr-browser.css', 'citation.css', 'preferences.css']) {
+  const source = fs.readFileSync(fileURLToPath(new URL('../content/' + name, import.meta.url)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+   const [, selector, body] = m;
+   if (['sc-node-face', 'sc-face-text', 'sc-watch-face', 'sc-quartile'].some(n => selector.includes(n))) continue;
+   for (const size of body.matchAll(/(?:^|[;\s])font-size:\s*([0-9.]+)(px|pt|em|rem|%)/g)) {
+    const px = size[2] === 'px' ? Number(size[1]) : size[2] === 'pt' ? Number(size[1]) * 4 / 3 : size[2] === '%' ? 13 * Number(size[1]) / 100 : 13 * Number(size[1]);
+    if (px < 11) small.push(`${name}: ${selector.trim().split('\n').pop().slice(-60)} ${size[1]}${size[2]}`);
+   }
+   for (const size of body.matchAll(/(?:^|[;\s])font:\s*(?:[0-9a-z-]+\s+)*?([0-9.]+)px/g)) {
+    if (Number(size[1]) < 11) small.push(`${name}: ${selector.trim().split('\n').pop().slice(-60)} font ${size[1]}px`);
+   }
+  }
+ }
+ assert.deepEqual(small, []);
+});
+
+test('the type scale is derived from the user\'s size, keeps its ratios and never drops below 11px', () => {
+ const root = css.match(/#style-custom-workbench \{([\s\S]*?)\n\}/)[1];
+ const defs = Object.fromEntries([...root.matchAll(/(--sc-(?:fs|lh)-[a-z]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]));
+ const evaluate = (base) => {
+  const values = {'--sc-fs-base': base};
+  const value = (expr) => {
+   expr = expr.replace(/var\((--[a-z-]+)\)/g, (_, name) => String(values[name] ?? value(defs[name])));
+   expr = expr.replace(/calc\(([^()]*)\)/g, (_, inner) => String(Function('return ' + inner.replace(/px/g, ''))()));
+   const max = expr.match(/^max\(([^,]+),\s*([^)]+)\)$/);
+   return max ? Math.max(parseFloat(max[1]), parseFloat(max[2])) : parseFloat(expr);
+  };
+  for (const name of Object.keys(defs)) if (name !== '--sc-fs-base') values[name] = value(defs[name]);
+  return values;
+ };
+ const at13 = evaluate(13);
+ assert.deepEqual([at13['--sc-fs-meta'], at13['--sc-fs-body'], at13['--sc-fs-title'], at13['--sc-fs-brand'], at13['--sc-fs-page']], [11, 12, 13, 15, 22], 'the default look is unchanged');
+ assert.deepEqual([at13['--sc-lh-meta'], at13['--sc-lh-body'], at13['--sc-lh-title'], at13['--sc-lh-brand'], at13['--sc-lh-page']], [16, 18, 20, 20, 28]);
+ const at20 = evaluate(20);
+ assert.ok(at20['--sc-fs-title'] === 20 && at20['--sc-fs-body'] > 18 && at20['--sc-fs-meta'] > 16, 'saving 20px scales titles, body and meta');
+ assert.ok(Math.abs(at20['--sc-fs-body'] / at20['--sc-fs-title'] - 12 / 13) < 1e-9, 'the ratios are kept');
+ assert.ok(at20['--sc-lh-body'] > at20['--sc-fs-body'], 'line height follows the size');
+ for (let base = 11; base <= 20; base++) for (const [name, v] of Object.entries(evaluate(base))) if (name.startsWith('--sc-fs-')) assert.ok(v >= 11, `${name} at ${base}px is ${v}`);
+});
+
+// Audit item 9: the stacked-row breakpoint follows the body, not the panel.
+test('the metrics grid beside the title is decided by the content area and leaves the journal line room', () => {
+ const body = css.match(/#style-custom-workbench \.sc-body \{([^}]*)\}/)[1];
+ assert.match(body, /container-name:\s*sc-main/);
+ assert.match(body, /container-type:\s*inline-size/);
+ const cols = Object.fromEntries([...css.matchAll(/--sc-col-(if|cites|stars|time|gap):\s*(\d+)px/g)].map(m => [m[1], Number(m[2])]));
+ const metrics = cols.if + cols.cites + cols.stars + cols.time + 3 * cols.gap;
+ assert.equal(metrics, 420, 'the fixed metrics grid');
+ const wide = css.match(/@container sc-main \(min-width: (\d+)px\) \{\s*#style-custom-workbench \.sc-paper-columns,/);
+ assert.ok(wide, 'the grid rules sit in a query on the body container');
+ const threshold = Number(wide[1]);
+ // The row loses the card's 24px inset, its padding and the check column (about 72px with the gap) besides the metrics.
+ const overhead = metrics + cols.gap + 60;
+ assert.ok(threshold - 24 - overhead >= 160, `at the threshold the journal/author line has ${threshold - 24 - overhead}px`);
+ assert.doesNotMatch(css, /@container sc-workbench \(min-width: 761px\) \{\s*#style-custom-workbench \.sc-paper-columns,/, 'no longer the panel width alone');
+ assert.ok(css.includes(`@container sc-main (max-width: ${threshold - 1}px)`), 'below it the metrics stack under the title');
+ // Both queries are tied to the same container, so panel 800px (body ~544px) is stacked and a 1100px panel (body ~832px) is not.
+ const bodyWidth = {800: 800 - 256, 1100: 1100 - 268};
+ assert.ok(bodyWidth[800] - 0 < threshold && bodyWidth[1100] >= threshold);
+});
+
+// The 11px floor also covers inline styles written by the scripts. Exactly two elements are exempt, by the user's
+// own request (2026-10-04): the item-tree journal badge and the patent/thesis chip, which keep their original 9px.
+test('inline font sizes in the scripts are at least 11px, except the documented user-requested badge and chip sizes', () => {
+ const exempt = [];
+ for (const name of fs.readdirSync(fileURLToPath(new URL('../src/', import.meta.url))).filter(n => n.endsWith('.js'))) {
+  const lines = fs.readFileSync(fileURLToPath(new URL('../src/' + name, import.meta.url)), 'utf8').split('\n');
+  lines.forEach((line, index) => {
+   for (const m of line.matchAll(/font-size:\s*([0-9.]+)px/g)) {
+    if (Number(m[1]) >= 11) continue;
+    const near = lines.slice(Math.max(0, index - 3), index + 1).join('\n');
+    assert.match(near, /floor-exempt: user-requested original size/, `${name}:${index + 1} sets ${m[1]}px with no documented exemption`);
+    exempt.push(`${name}:${m[1]}`);
+   }
+  });
+ }
+ assert.equal(exempt.filter(e => e.startsWith('runtime.js:9')).length, 1, 'the patent/thesis chip');
+ const identity = JSON.stringify(Object.keys(exempt));
+ assert.ok(identity.length > 0);
+ const journals = fs.readFileSync(fileURLToPath(new URL('../src/journal-identity.js', import.meta.url)), 'utf8');
+ assert.match(journals, /floor-exempt: user-requested original size[^\n]*\n[^\n]*\n\s*const BADGE_FONT_PX = 9;/, 'the badge token is documented as exempt');
 });

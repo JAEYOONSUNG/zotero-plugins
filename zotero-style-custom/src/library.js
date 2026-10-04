@@ -110,39 +110,65 @@
        looking for neighbours lost every link of paper #800. When more papers
        qualify than `limit`, the ones kept are `focus` and its neighbours first,
        then the best-connected, so what is drawn is what is linked. */
+    /* The inverted indexes behind a graph: for authors and tags, value -> the
+       papers carrying it; for related links, paper -> its linked papers. A
+       paper's neighbours are read from these, never from the thinned edge list
+       that is drawn, which keeps only a spanning star per shared value. */
+    function neighbourIndex(filtered,mode) {
+      const ids=new Set(filtered.map(i=>String(i.id)));
+      if(mode==='related') {
+        const adj=new Map();
+        const link=(a,b)=>{a=String(a);b=String(b);if(a===b||!ids.has(a)||!ids.has(b))return;(adj.get(a)||adj.set(a,new Set()).get(a)).add(b);(adj.get(b)||adj.set(b,new Set()).get(b)).add(a);};
+        for(const row of filtered)for(const id of row.related||[])link(row.id,id);
+        return {ids,groups:null,neighbours:id=>[...(adj.get(String(id))||[])],degree:id=>(adj.get(String(id))||new Set()).size};
+      }
+      const groups=new Map(),member=new Map();
+      for(const row of filtered) {
+        const id=String(row.id),keys=new Set();
+        for(const token of mode==='tags'?row.tags||[]:String(row.authors||'').split(';')) {
+          const key=String(token).trim().toLocaleLowerCase();if(!key||keys.has(key))continue;keys.add(key);
+          if(!groups.has(key))groups.set(key,[]);groups.get(key).push(id);
+        }
+        member.set(id,[...keys]);
+      }
+      return {ids,groups,
+        neighbours:id=>{const out=new Set();for(const key of member.get(String(id))||[])for(const other of groups.get(key))if(other!==String(id))out.add(other);return [...out];},
+        degree:id=>(member.get(String(id))||[]).reduce((n,key)=>n+groups.get(key).length-1,0)};
+    }
+    function neighbours(items,{mode='related',query='',focus=null}={}) {
+      if(!['related','tags','authors'].includes(mode))throw new Error('Unknown graph mode');
+      if(focus===null||focus===undefined)return [];
+      const q=String(query).toLocaleLowerCase();
+      const filtered=items.filter(i=>!q||[i.title,i.authors,i.venue,...(i.tags||[])].join(' ').toLocaleLowerCase().includes(q));
+      return neighbourIndex(filtered,mode).neighbours(focus);
+    }
     function graph(items,{mode='related',query='',limit=500,focus=null}={}) {
       if(!['related','tags','authors'].includes(mode))throw new Error('Unknown graph mode');
       const q=String(query).toLocaleLowerCase(),cap=Math.max(1,Number(limit)||500);
       const filtered=items.filter(i=>!q||[i.title,i.authors,i.venue,...(i.tags||[])].join(' ').toLocaleLowerCase().includes(q));
-      const ids=new Set(filtered.map(i=>String(i.id))),all=[],seen=new Set();
+      const index=neighbourIndex(filtered,mode),ids=index.ids,all=[],seen=new Set();
       function edge(a,b) {a=String(a);b=String(b);if(a===b||!ids.has(a)||!ids.has(b))return;const pair=[a,b].sort(),key=pair.join('\0');if(seen.has(key))return;seen.add(key);all.push({source:pair[0],target:pair[1],kind:mode});}
       if(mode==='related')for(const row of filtered)for(const id of row.related||[])edge(row.id,id);
-      else {
-        const groups=new Map();
-        for(const row of filtered)for(const token of mode==='tags'?row.tags||[]:String(row.authors||'').split(';')) {
-          const key=String(token).trim().toLocaleLowerCase();if(!key)continue;
-          if(!groups.has(key))groups.set(key,[]);groups.get(key).push(String(row.id));
-        }
-        // A spanning star per shared value keeps dense topic graphs navigable.
-        for(const members of groups.values())for(let i=1;i<members.length;i++)edge(members[0],members[i]);
-      }
+      // A spanning star per shared value keeps dense topic graphs navigable. It is only what is drawn.
+      else for(const members of index.groups.values())for(let i=1;i<members.length;i++)edge(members[0],members[i]);
       const centre=focus===null||focus===undefined?null:String(focus);
+      const real=centre&&ids.has(centre)?index.neighbours(centre):[];
       let keep=ids;
       if(filtered.length>cap){
-        const degree=new Map();
-        for(const e of all){degree.set(e.source,(degree.get(e.source)||0)+1);degree.set(e.target,(degree.get(e.target)||0)+1);}
-        const order=new Map(filtered.map((row,index)=>[String(row.id),index]));
-        const rank=(a,b)=>(degree.get(b)||0)-(degree.get(a)||0)||order.get(a)-order.get(b);
+        const order=new Map(filtered.map((row,i)=>[String(row.id),i]));
+        const rank=(a,b)=>index.degree(b)-index.degree(a)||order.get(a)-order.get(b);
         const chosen=[];
-        if(centre&&ids.has(centre)){
-          chosen.push(centre);
-          chosen.push(...all.filter(e=>e.source===centre||e.target===centre).map(e=>e.source===centre?e.target:e.source).sort(rank));
-        }
+        if(centre&&ids.has(centre)){chosen.push(centre);chosen.push(...real.sort(rank));}
         chosen.push(...[...ids].sort(rank));
         keep=new Set(chosen.slice(0,cap).length?[...new Set(chosen)].slice(0,cap):[]);
       }
       const rows=filtered.filter(i=>keep.has(String(i.id))),nodes=rows.map(i=>({id:String(i.id),label:i.title||'(Untitled)',itemID:String(i.id),kind:'item'}));
       let edges=all.filter(e=>keep.has(e.source)&&keep.has(e.target));
+      // The selected paper shows every real link it has among the drawn papers, thinning or not.
+      if(centre&&mode!=='related')for(const other of real) {
+        if(!keep.has(other))continue;const pair=[centre,other].sort(),key=pair.join('\0');
+        if(seen.has(key))continue;seen.add(key);edges.push({source:pair[0],target:pair[1],kind:mode});
+      }
       let truncated=filtered.length>rows.length;
       if(edges.length>2000){
         // The focus paper's own links first: they are what an ego view is for.
@@ -344,12 +370,23 @@
         const year=field(item,'date').match(/\b\d{4}\b/)?.[0]||'';
         html+=`<h2><a href="zotero://select/${route}/items/${escape(item.key)}">${escape(field(item,'title')||say('제목 없음'))}</a>${year?' ('+year+')':''}</h2>`;
         if(evidence.length)html+='<ul>'+evidence.map(([label,text])=>`<li><b>${escape(label)}</b>: ${para(text)}</li>`).join('')+'</ul>';
+        /* Zotero's own serializer, the one the single-paper note uses, so image
+           and ink annotations, citation metadata and the quote formatting come
+           through exactly as in a note made under one paper. Its answer is an
+           unsaved note whose wrapper div is dropped to nest it under the heading. */
+        if(marks.length&&typeof Z.EditorInstance?.createNoteFromAnnotations==='function'){
+          const native=await Z.EditorInstance.createNoteFromAnnotations(marks.map(m=>m.mark),{parentID:item.id,noSave:true});
+          const inner=String(native.getNote()||'').trim().replace(/^<div[^>]*data-schema-version[^>]*>([\s\S]*)<\/div>$/,'$1');
+          html+=inner;
+        }
         for(const {mark,file} of marks){
           const page=safe(()=>JSON.parse(mark.annotationPosition).pageIndex,null),label=String(safe(()=>mark.annotationPageLabel,'')||'')||(Number.isInteger(page)?String(page+1):'');
           const link=`zotero://open-pdf/${route}/items/${escape(file.key)}?${Number.isInteger(page)?'page='+(page+1)+'&amp;':''}annotation=${escape(mark.key)}`;
-          const text=String(safe(()=>mark.annotationText,'')||''),comment=String(safe(()=>mark.annotationComment,'')||'');
-          if(text)html+=`<blockquote><p>${para(text)}</p></blockquote>`;
-          if(comment)html+=`<p>${para(comment)}</p>`;
+          if(typeof Z.EditorInstance?.createNoteFromAnnotations!=='function'){
+            const text=String(safe(()=>mark.annotationText,'')||''),comment=String(safe(()=>mark.annotationComment,'')||'');
+            if(text)html+=`<blockquote><p>${para(text)}</p></blockquote>`;
+            if(comment)html+=`<p>${para(comment)}</p>`;
+          }
           html+=`<p><a href="${link}">${label?'p.'+escape(label)+' · ':''}${say('주석 열기')}</a></p>`;
         }
       }
@@ -633,9 +670,24 @@
       guard(input);
       const libraries=new Set(input.map(item=>item.libraryID));
       if(libraries.size!==1)throw new Error('서로 다른 라이브러리의 문헌은 한 컬렉션에 담을 수 없습니다. 한 라이브러리의 문헌만 골라 다시 시도하세요.');
+      /* One transaction for the collection and every membership: a failure in
+         the middle used to leave a collection holding some of the papers, and a
+         retry then made a second one. The database rolls back as a whole; the
+         in-memory papers are put back to what they were. */
       const collection=new Z.Collection();collection.libraryID=[...libraries][0];collection.name=title;
-      await collection.saveTx();
-      for(const item of input){item.addToCollection(collection.id);await item.saveTx();}
+      const touched=[];
+      try{
+        await Z.DB.executeTransaction(async()=>{
+          await collection.save();
+          for(const item of input){touched.push(item);item.addToCollection(collection.id);await item.save();}
+        });
+      }catch(error){
+        for(const item of touched){
+          try{if(collection.id!==undefined)item.removeFromCollection?.(collection.id);item._clearChanged?.('collections');await item.reload?.(['collections'],true);}
+          catch(restoreError){Z.logError?.(restoreError);}
+        }
+        throw error;
+      }
       return {id:String(collection.id),name:title,count:input.length};
     }
     async function collectionItems(collectionID,{libraryID,recursive=false}={}) {
@@ -691,7 +743,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,memoToNote,memoConflict,resolveMemoConflict,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
+    return {trashItems,snapshot,graph,neighbours,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,memoToNote,memoConflict,resolveMemoConflict,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

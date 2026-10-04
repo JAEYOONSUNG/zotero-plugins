@@ -744,8 +744,9 @@
     if (soft >= MIN_CONTRAST) return '#111111';
     return white >= contrast('#000000', background) ? '#ffffff' : '#000000';
   }
-  // The one size every badge is drawn at, matching --sc-fs-meta; nothing in the list is smaller.
-  const BADGE_FONT_PX = 11;
+  // The item-tree journal badge is drawn at its original 9px in a 14px box. floor-exempt: user-requested original size,
+  // 2026-10-04 (the 11px floor of the workbench panel does not apply to this one element; its ink still reaches 4.5:1).
+  const BADGE_FONT_PX = 9;
   function tonesFor(hex, dark) {
     if (!hex) return dark
       ? {ink: 'hsl(0 0% 88%)', fill: 'hsl(0 0% 24%)', edge: 'hsl(0 0% 36%)'}

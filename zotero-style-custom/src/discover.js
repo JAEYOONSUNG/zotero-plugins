@@ -465,6 +465,43 @@
     }));
   }
 
+  // How the given name of a candidate sits against the recorded one: 'exact'
+  // (the same, a known short form, or the same letters split differently),
+  // 'weak' (only an initial, one typo or a prefix agrees) or 'mismatch' (two
+  // different given names, which no family name can excuse).
+  function givenKind(wantedParts, gotParts) {
+    if (wantedParts.length < 2 || gotParts.length < 2) return 'weak';
+    const a = wantedParts[0], b = gotParts[0];
+    if (a === b || expansions(a).includes(b) || expansions(b).includes(a)) return 'exact';
+    const joinedA = wantedParts.slice(0, -1).join(''), joinedB = gotParts.slice(0, -1).join('');
+    if (joinedA === joinedB) return 'exact';
+    // "J. Craig Venter" is "Craig Venter" with a leading initial.
+    const sameName = (x, y) => x.length > 1 && y.length > 1 && (x === y || expansions(x).includes(y) || expansions(y).includes(x));
+    if (gotParts.slice(0, -1).some(part => sameName(a, part)) || wantedParts.slice(0, -1).some(part => sameName(b, part))) return 'exact';
+    if (a.length === 1 || b.length === 1) return a[0] === b[0] ? 'weak' : 'mismatch';
+    if (withinOneEdit(a, b) || joinedA.startsWith(b) || joinedB.startsWith(a)) return 'weak';
+    return 'mismatch';
+  }
+
+  function nameStrength(candidate, {name} = {}) {
+    const wanted = nameParts(name), got = nameParts(candidate?.name);
+    if (!wanted.length || !got.length) return 'weak';
+    if (wanted[wanted.length - 1] !== got[got.length - 1]) return 'weak';
+    return givenKind(wanted, got) === 'exact' ? 'strong' : 'weak';
+  }
+
+  const orcidOf = value => text(value).replace(/^https?:\/\/orcid\.org\//i, '').replace(/[^0-9x]/gi, '').toLowerCase();
+  // What besides a name says this is the person: an ORCID both sides carry, a
+  // recorded institution the candidate also holds, a coauthor both share.
+  function authorEvidence(candidate, wanted = {}) {
+    const evidence = [];
+    if (orcidOf(wanted.orcid) && orcidOf(wanted.orcid) === orcidOf(candidate?.orcid)) evidence.push('orcid');
+    if (institutionAgrees(candidate, wanted.institution)) evidence.push('institution');
+    const mine = new Set((Array.isArray(wanted.coauthors) ? wanted.coauthors : []).map(fullName).filter(Boolean));
+    if ((Array.isArray(candidate?.coauthors) ? candidate.coauthors : []).some(other => mine.has(fullName(other)))) evidence.push('coauthor');
+    return evidence;
+  }
+
   function scoreAuthor(candidate, {name, institution, topics, confirm} = {}) {
     const wanted = nameParts(name);
     const got = nameParts(candidate?.name);
@@ -477,6 +514,8 @@
       if (confirm !== 'fragment' || wanted[0] !== got[0]
         || !droppedLetter(wanted[wanted.length - 1], got[got.length - 1])) return 0;
     }
+    // An explicit given-name mismatch ends it: Alice Kim is not David Kim.
+    if (wanted.length > 1 && got.length > 1 && givenKind(wanted, got) === 'mismatch') return 0;
     // A loose query casts wide -- a surname on its own pulls in every Nielsen --
     // so the given name has to hold up too, as itself, one typo away, or the
     // short form of what was found.
@@ -540,7 +579,10 @@
       .filter(row => row.score > 0)
       .sort((a, b) => b.score - a.score);
     if (!ranked.length) return null;
-    const answer = row => ({...row.candidate, matchScore: row.score});
+    // A weak name match is adopted only with evidence beyond the name, and
+    // being the only candidate is not evidence.
+    const answer = row => nameStrength(row.candidate, wanted) === 'strong' || authorEvidence(row.candidate, wanted).length
+      ? {...row.candidate, matchScore: row.score} : null;
     const [best, next] = ranked;
 
     // A guessed query only earns an answer the recorded place confirms.
@@ -596,6 +638,18 @@
       return null;
     }
     return dominates(best, next) ? answer(best) : null;
+  }
+
+  // What pickAuthor would not adopt but a person could settle: the leading
+  // candidates whose name fits, with what supports each. Never someone whose
+  // given name differs.
+  function uncertainAuthors(candidates, wanted = {}, limit = 3) {
+    return collapseDuplicates(candidates)
+      .map(candidate => ({candidate, score: scoreAuthor(candidate, wanted)}))
+      .filter(row => row.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(row => ({...row.candidate, matchScore: row.score, evidence: authorEvidence(row.candidate, wanted)}));
   }
 
   // The queries to try, in order, each saying what it takes to trust its answer.
@@ -934,7 +988,7 @@
     })).filter(row => row.ror);
   }
 
-  const api = {API, GROUPS, scoreAuthor, pickAuthor, authorQueries, institutionAgrees, topicsAgree,
+  const api = {API, GROUPS, scoreAuthor, pickAuthor, uncertainAuthors, authorEvidence, nameStrength, authorQueries, institutionAgrees, topicsAgree,
     worksByDOIsURL, institutionsURL, readInstitutions,
     workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, matchWork, sameFirstAuthor, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,

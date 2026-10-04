@@ -307,7 +307,129 @@
       .slice(0, limit);
   }
 
-  const api = {choose, readPage, personImage, orcidURL, readResearcherURLs, stale, coauthors,
+
+  /* One followed author's own relationship graph: the author in the middle and
+     the people who share papers with them around, out of works already in hand
+     (the tracked works, the news the last check stored, and the library's own
+     author lists). No request is made. A co-author's weight is the number of
+     distinct papers they share with the centre, a paper held in two places
+     counting once; a paper naming a crowd says nothing about who works with
+     whom and is skipped, as in the circle of followed authors. */
+  const fold = value => text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^\p{L}\s-]/gu, ' ').replace(/\s+/g, ' ').trim();
+  const initialsOf = name => {
+    const all = text(name).split(' ').filter(Boolean);
+    const parts = all.filter((word, index) => index === 0 || !/^(jr|sr|ii|iii|iv|v)\.?,?$/i.test(word));
+    if (!parts.length) return '?';
+    return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  };
+  const bareDoi = value => text(value).toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '');
+  const CROWD = 30;
+  function egoGraph({me, works, news, items, followed, limit = 20, fullLabels = 8} = {}) {
+    const myID = text(me?.id).replace(/^https?:\/\/openalex\.org\//i, '');
+    const myName = fold(me?.name);
+    const people = new Map();        // folded name -> {name, id}
+    const papers = new Map();        // paper key -> Set of folded names (never the centre)
+    const note = (key, list) => {
+      const names = new Set();
+      let mine = false;
+      for (const person of list) {
+        const name = text(person.name), folded = fold(name);
+        if (!folded) continue;
+        if ((myID && person.id === myID) || folded === myName) { mine = true; continue; }
+        names.add(folded);
+        const known = people.get(folded);
+        if (!known) people.set(folded, {name, id: person.id || ''});
+        else {
+          if (!known.id && person.id) known.id = person.id;
+          if (name.length > known.name.length) known.name = name;
+        }
+      }
+      if (!mine || names.size + 1 > CROWD) return;
+      const held = papers.get(key) || new Set();
+      for (const name of names) held.add(name);
+      papers.set(key, held);
+    };
+    for (const work of Array.isArray(works) ? works : [])
+      note(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(p => ({id: text(p.id).replace(/^https?:\/\/openalex\.org\//i, ''), name: p.name})));
+    for (const work of Array.isArray(news) ? news : [])
+      note(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(name => ({id: '', name: typeof name === 'string' ? name : name?.name})));
+    for (const item of Array.isArray(items) ? items : [])
+      note(bareDoi(item.doi) || 'l:' + text(item.id), text(item.authors).split(';').map(name => ({id: '', name})));
+
+    const weight = new Map();
+    for (const names of papers.values()) for (const name of names) weight.set(name, (weight.get(name) || 0) + 1);
+    const follow = Array.isArray(followed) ? followed : [];
+    const ranked = [...people.entries()].filter(([key]) => weight.has(key))
+      .map(([key, person]) => {
+        const who = follow.find(row => row && ((row.id && person.id && row.id === person.id) || fold(row.name) === key));
+        return {key, name: person.name, authorID: person.id, weight: weight.get(key), who};
+      })
+      .sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
+    const total = ranked.length;
+    const shownRows = ranked.slice(0, Number.isFinite(limit) ? Math.max(0, limit) : undefined);
+    const nodes = shownRows.map((row, rank) => {
+      const id = row.authorID || 'n:' + row.key;
+      const followedAs = row.who ? {id: row.who.id, name: row.who.name} : null;
+      const full = rank < fullLabels || !!followedAs;
+      return {id, name: row.name, weight: row.weight, rank, followed: followedAs, authorID: row.authorID || '',
+        full, label: full ? row.name : initialsOf(row.name), initials: initialsOf(row.name), tooltip: row.name};
+    });
+    const idByKey = new Map(shownRows.map((row, i) => [row.key, nodes[i].id]));
+    const pair = new Map();
+    for (const names of papers.values()) {
+      const inside = [...names].filter(name => idByKey.has(name));
+      if (inside.length < 2 || inside.length > 12) continue;
+      for (let i = 0; i < inside.length; i++) for (let j = i + 1; j < inside.length; j++) {
+        const a = idByKey.get(inside[i]), b = idByKey.get(inside[j]);
+        const key = a < b ? a + '\u0000' + b : b + '\u0000' + a;
+        const row = pair.get(key) || {source: a < b ? a : b, target: a < b ? b : a, weight: 0};
+        row.weight++;
+        pair.set(key, row);
+      }
+    }
+    const links = [...pair.values()].sort((a, b) => b.weight - a.weight).slice(0, 30);
+    return {
+      centre: {id: myID || 'me', name: text(me?.name), initials: initialsOf(me?.name)},
+      nodes, edges: nodes.map(node => ({source: myID || 'me', target: node.id, weight: node.weight})),
+      links, total, shown: nodes.length, hidden: total - nodes.length
+    };
+  }
+
+  /* Where everything goes: the author in the middle and the rest on an ellipse
+     (two or three when there are many), the people whose names are written out
+     placed at the sides, where a name has room, and the initials-only circles at
+     the top and bottom. Pure, so the same numbers can be checked. */
+  function egoLayout(graph, {width = 760, height = 360} = {}) {
+    const centre = {id: graph.centre.id, name: graph.centre.name, x: width / 2, y: height / 2, rad: 26, centre: true};
+    const maxWeight = Math.max(1, ...graph.nodes.map(node => node.weight));
+    const nodes = graph.nodes.slice(0, 48).map(node => ({...node,
+      rad: node.followed ? 17 : 12 + Math.round(5 * Math.sqrt(node.weight / maxWeight))}));
+    const labelRoom = Math.min(150, Math.round(width * 0.25));
+    const widest = Math.max(17, ...nodes.map(node => node.rad));
+    const rx0 = Math.max(60, width / 2 - labelRoom - widest - 6), ry0 = Math.max(50, height / 2 - widest - 6);
+    const rings = [[1, 24], [0.62, 16], [0.34, 8]];
+    let from = 0;
+    for (const [scale, capacity] of rings) {
+      const members = nodes.slice(from, from + capacity);
+      from += members.length;
+      if (!members.length) break;
+      const at = members.map((_, k) => -Math.PI / 2 + 2 * Math.PI * k / members.length + (scale < 1 ? Math.PI / members.length : 0));
+      // Written-out names take the positions nearest the left and right edges of the ellipse.
+      const slots = at.map((angle, k) => ({angle, k})).sort((a, b) => Math.abs(Math.cos(b.angle)) - Math.abs(Math.cos(a.angle)));
+      const full = members.filter(node => node.full), rest = members.filter(node => !node.full);
+      [...full, ...rest].forEach((node, i) => {
+        const angle = slots[i].angle;
+        node.x = centre.x + rx0 * scale * Math.cos(angle);
+        node.y = centre.y + ry0 * scale * Math.sin(angle);
+        // The text-anchor of a written-out name: starts at the circle on the right half, ends at it on the left.
+        node.side = Math.cos(angle) >= 0 ? 'start' : 'end';
+      });
+    }
+    return {centre, nodes: nodes.filter(node => Number.isFinite(node.x)), omitted: Math.max(0, graph.nodes.length - 48), width, height};
+  }
+
+  const api = {choose, readPage, personImage, orcidURL, readResearcherURLs, stale, coauthors, egoGraph, egoLayout,
     normalise, absolute, CACHE_DAYS, MIN_SCORE, MARGIN,
     bareOrcid, wikidataSearchURL, readWikidataSearch, wikidataEntitiesURL, readWikidataEntities,
     commonsThumb, commonsPage, scholarID, scholarPhoto, scholarPage, scholarIsPhoto, WIKIDATA_SEARCH_BATCH, WIKIDATA_ENTITY_BATCH};

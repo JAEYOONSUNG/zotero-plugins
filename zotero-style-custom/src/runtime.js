@@ -411,6 +411,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          paint has the same count and the same date, so the strip's memo is
          also dropped here, for the paper whose annotation changed -- during a
          sync too. A deletion may leave nothing to look up; then all of it. */
+      if(type==='item'&&event!=='redraw'&&event!=='select')this.invalidateHeldRows();
       if(type==='item'&&this.annotationMemo?.size){
         for(const id of ids||[]){
           const changed=this.Z.Items?.get?.(id);
@@ -996,12 +997,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalAbbreviationOf(item);
     const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
-    // One box, the line exactly as tall, so the text sits in the middle of it
-    // rather than on its upper edge. 11px is the shared minimum (--sc-fs-meta);
-    // the badge used to be 9px inline.
-    const px = this.journalIdentity.BADGE_FONT_PX || 11, box = px + 5;
+    // One box: 14px tall, the line exactly as tall, so the 9px text sits in the middle of it rather than on
+    // its upper edge. floor-exempt: user-requested original size, 2026-10-04.
+    const px = this.journalIdentity.BADGE_FONT_PX || 9, box = 14;
     mark.style.cssText = `flex:none;display:inline-block;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;vertical-align:middle;`
-      + `min-width:24px;height:${box}px;padding:0 4px;border-radius:3px;white-space:nowrap;`
+      + `min-width:22px;height:${box}px;padding:0 4px;border-radius:3px;white-space:nowrap;`
       + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
       + `font-size:${px}px;font-weight:700;letter-spacing:.02em;line-height:${box}px;font-variant-numeric:normal;`;
     mark.title = found.identity.label ? `${found.title} · ${found.identity.label}` : found.title;
@@ -1023,9 +1023,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const mark = doc.createElementNS('http://www.w3.org/1999/xhtml', 'span');
     mark.textContent = this.journalIdentity.ABBREVIATIONS[title] || this.journalIdentity.abbreviate(title) || identity.mark;
     const bg = tone.badge || tone.fill, ink = tone.badge ? tone.badgeInk : tone.ink, edge = tone.badge ? 'transparent' : tone.edge;
-    const px = this.journalIdentity.BADGE_FONT_PX || 11;
+    // floor-exempt: user-requested original size (9px in a 14px box), 2026-10-04.
+    const px = this.journalIdentity.BADGE_FONT_PX || 9;
     mark.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;`
-      + `min-width:24px;height:${px + 5}px;padding:0 4px;border-radius:3px;white-space:nowrap;vertical-align:middle;`
+      + `min-width:22px;height:14px;padding:0 4px;border-radius:3px;white-space:nowrap;vertical-align:middle;`
       + `background:${bg};color:${ink};box-shadow:inset 0 0 0 .5px ${edge};`
       + `font-size:${px}px;font-weight:700;letter-spacing:.02em;line-height:1;font-variant-numeric:normal;`;
     mark.title = identity.label ? `${title} · ${identity.label}` : title;
@@ -1895,6 +1896,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const search = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000});
     const article = this.supplementaryTools.pickArticle(search?.response, record);
     if (!article) return {status: 'not-found', reason: 'Europe PMC에서 찾지 못했습니다', added: 0};
+    if (article.needsConfirmation) return this.supplementaryCandidate(article);
     const filesURL = article.hasSupplementary ? this.supplementaryTools.supplementaryURL(article) : null;
     if (!filesURL) {
       return {status: 'none', added: 0,
@@ -1916,6 +1918,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     signal?.throwIfAborted?.();
     return this.attachSupplementary(item, bytes, {pdfOnly, article});
+  }
+
+  // A title-only hit that failed the strict check: shown for the user to
+  // confirm, never downloaded.
+  supplementaryCandidate(article) {
+    return {status: 'needs-confirmation', added: 0,
+      reason: '제목만 비슷한 논문이라 확인이 필요합니다',
+      candidate: {pmcid: article.id, title: article.title, year: article.year, authors: article.authors}};
   }
 
   // Zotero has no in-memory zip reader, so the archive round-trips through a
@@ -2035,6 +2045,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         report.checked++;
         const article = this.supplementaryTools.pickArticle(search?.response, record);
         if (!article) { report.notFound++; continue; }
+        if (article.needsConfirmation) { (report.candidates ||= []).push({id: String(item.id), title: record.title, ...this.supplementaryCandidate(article).candidate}); continue; }
         if (article.source !== 'PMC') { report.notArchived++; continue; }
         if (!article.hasSupplementary) { report.noSupplement++; continue; }
         // Europe PMC hands over the archive only for open-access articles; the
@@ -2069,7 +2080,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   bibliographyRecord(item) {
     const field = key => { try { return String(item.getField(key) || '').trim(); } catch (_) { return ''; } };
     const base = this.citationRecord(item);
+    const extra = field('extra'), url = field('url');
+    const pmcid = (/^\s*PMCID:\s*(PMC\d+)/im.exec(extra) || /ncbi\.nlm\.nih\.gov\/pmc\/articles\/(PMC\d+)/i.exec(url) || [])[1] || '';
     return {
+      pmid: base.pmid ? String(base.pmid) : '', pmcid,
       title: field('title'),
       creators: (item.getCreators?.() || []).filter(c => !c.creatorType || c.creatorType === 'author'),
       year: base.year ? String(base.year) : (field('date').match(/\b(?:1[5-9]|20)\d{2}\b/) || [''])[0],
@@ -2848,26 +2862,40 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // than watching nobody.
   // Each query says what it takes to trust its answer: the plain forms of the
   // name stand on their own, the guessed ones only count with the institution.
-  async resolveAuthor(name, {institution, topics, signal} = {}) {
+  async resolveAuthor(name, options = {}) {
+    return (await this.resolveAuthorDetailed(name, options)).hit;
+  }
+  // The answer plus, when nothing was clear enough to adopt, the few candidates
+  // whose name fits (never one whose given name differs) for the user to settle.
+  async resolveAuthorDetailed(name, {institution, topics, orcid, coauthors, signal} = {}) {
     const options = this.discoverOptions();
+    const wanted = {name, institution, topics, orcid, coauthors};
+    const uncertain = new Map();
     for (const {query, confirm} of this.discoverTools.authorQueries(name, {institution})) {
       const url = this.discoverTools.authorSearchURL(query, options);
       if (!url) continue;
       const found = this.discoverTools.readAuthors(await this.discoverJSON(url, {signal}));
-      const hit = this.discoverTools.pickAuthor(found, {name, institution, topics, confirm});
-      if (hit) return hit;
+      const hit = this.discoverTools.pickAuthor(found, {...wanted, confirm});
+      if (hit) return {hit, candidates: []};
+      // A guessed query pulls in arbitrary namesakes; only the plain forms of
+      // the name are worth putting in front of the user.
+      if (!confirm) for (const row of this.discoverTools.uncertainAuthors(found, wanted)) if (!uncertain.has(row.id)) uncertain.set(row.id, row);
     }
-    return null;
+    return {hit: null, candidates: [...uncertain.values()].slice(0, 3)};
   }
 
   async importWatchedAuthors(people, {onProgress, signal} = {}) {
-    const result = {added: 0, already: 0, unresolved: [], failed: 0};
+    const result = {added: 0, already: 0, unresolved: [], pending: 0, failed: 0};
     for (const [index, person] of people.entries()) {
       onProgress?.(index, people.length, person);
       try {
-        const hit = await this.resolveAuthor(person.name,
-          {institution: person.institution, topics: person.topics, signal});
-        if (!hit) { result.unresolved.push(person.name); continue; }
+        const {hit, candidates} = await this.resolveAuthorDetailed(person.name,
+          {institution: person.institution, topics: person.topics, orcid: person.orcid, coauthors: person.coauthors, signal});
+        if (!hit) {
+          result.unresolved.push(person.name);
+          if (candidates.length) { await this.keepAuthorCandidates(person, candidates); result.pending++; }
+          continue;
+        }
         if (this.watchedAuthors().some(row => row.id === hit.id)) { result.already++; continue; }
         // Nothing published so far counts as news; only what appears from now on.
         const {works} = await this.authorActivity(hit.id, {limit: 25, signal});
@@ -2882,13 +2910,53 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return result;
   }
 
+  // Candidates the matcher would not adopt on its own. They are kept, with the
+  // evidence for each, until the user follows one or dismisses the lot.
+  pendingAuthorCandidates() {
+    const saved = this.cache.authorCandidates;
+    return Array.isArray(saved) ? saved.filter(row => row && row.key && Array.isArray(row.candidates)) : [];
+  }
+  async keepAuthorCandidates(person, candidates) {
+    const key = String(person.name || '').trim().toLowerCase() + '|' + String(person.institution || '').trim().toLowerCase();
+    const rows = this.pendingAuthorCandidates().filter(row => row.key !== key);
+    rows.push({key, name: String(person.name || ''), institution: String(person.institution || ''),
+      candidates: candidates.map(c => ({id: c.id, name: c.name, institutions: c.institutions || [], works: c.works ?? null,
+        hIndex: c.hIndex ?? null, orcid: c.orcid || '', evidence: c.evidence || []})),
+      at: new Date().toISOString()});
+    this.cache.authorCandidates = rows.slice(-100);
+    this.dirty = true;
+    await this.flush();
+  }
+  async dismissAuthorCandidate(key) {
+    this.cache.authorCandidates = this.pendingAuthorCandidates().filter(row => row.key !== key);
+    this.dirty = true;
+    await this.flush();
+  }
+  // The user's own choice: follow the candidate they picked, with their
+  // current papers as the baseline so nothing old reads as new.
+  async confirmAuthorCandidate(key, authorID) {
+    const row = this.pendingAuthorCandidates().find(entry => entry.key === key);
+    const pick = row?.candidates.find(c => c.id === authorID);
+    if (!pick) return null;
+    const {works} = await this.authorActivity(pick.id, {limit: 25});
+    const added = await this.watchAuthor({id: pick.id, name: pick.name,
+      institution: row.institution || pick.institutions?.[0] || '', seen: (works || []).map(work => work.id)});
+    await this.dismissAuthorCandidate(key);
+    return added;
+  }
+
   // Fifty authors per request means following people is nearly free; what the
   // file actually carries is their stored news, so the limit sits there.
   get WATCH_LIMIT() { return 500; }
   // Enough ids that a prolific lab's back catalogue cannot roll off the end and
   // be re-announced as new.
   get SEEN_LIMIT() { return 400; }
+  // What is shown per author, and (separately) what is kept: the display cap
+  // must not decide what is stored, or papers nobody has seen vanish.
   get NEWS_LIMIT() { return 50; }
+  get NEWS_STORE_LIMIT() { return 200; }
+  // An unseen paper stays this long after its publication date.
+  get NEWS_RETENTION_DAYS() { return 180; }
   // The key the panel's 확인함 store uses for a paper: bare DOI, else the work id.
   static seenWorkKey(work) {
     return String(work?.doi || '').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').trim() || String(work?.id || '');
@@ -2901,10 +2969,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   /* Every paper not yet marked seen stays, newest first, up to NEWS_LIMIT per
      author; marked ones only fill what is left, so the oldest dropped are
      always ones the reader has already dealt with. */
-  keepNews(works, panelSeen = this.panelSeenKeys()) {
+  keepNews(works, panelSeen = this.panelSeenKeys(), limit = this.NEWS_LIMIT) {
     const sorted = [...works].sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
-    const open = sorted.filter(work => !panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, this.NEWS_LIMIT);
-    const room = Math.max(0, this.NEWS_LIMIT - open.length);
+    const open = sorted.filter(work => !panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, limit);
+    const room = Math.max(0, limit - open.length);
     const done = sorted.filter(work => panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, room);
     const keep = new Set([...open, ...done]);
     return sorted.filter(work => keep.has(work));
@@ -3303,9 +3371,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          not got round to marking, so the weekly check reads the same both
          when something happened and when nothing did. */
       const announced = new Set((row.news || []).map(work => work.id));
-      const partial = unfinished.has(short) || unfinished.has(row.id) || resumed.has(short) || resumed.has(row.id);
-      const earlier = partial ? (row.news || []) : [];
-      row.news = this.keepNews(papers, panelSeen).map(work => ({
+      const storeLimit = this.NEWS_STORE_LIMIT || 200;
+      const toNews = work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
         type: String(work.type || ''),
         preprint: /preprint/i.test(String(work.type || '')) || /rxiv|research square|preprints?\b|ssrn/i.test(String(work.venue || '')),
@@ -3318,12 +3385,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         citations: Number.isInteger(work.citations) ? work.citations : null,
         position: (work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.position || '',
         corresponding: !!(work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.corresponding
-      }));
-      // A batch that was not read to the end adds to what the row said; it does not replace it.
-      // Newest first across both runs, so a carried batch's older finds do not push out the news already shown.
-      if (partial) row.news = [...row.news, ...earlier.filter(old => !row.news.some(fresh => fresh.id === old.id))]
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, this.NEWS_LIMIT * 2);
-      if (partial) row.news = this.keepNews(row.news, panelSeen);
+      });
+      /* Always merged, never replaced: a refresh that finds nothing (the date
+         floor hides everything already known) must not empty what the reader
+         has not looked at. An earlier item stays until it is marked seen,
+         rejected, or older than the retention. */
+      const retention = Date.now() - (this.NEWS_RETENTION_DAYS || 180) * 864e5;
+      const found_ = new Set(papers.map(work => work.id));
+      const earlier = (row.news || []).filter(old => old && !found_.has(old.id)
+        && !panelSeen.has(CustomStyleRuntime.seenWorkKey(old)) && !seen.has(old.id) && !rejected.has(old.id)
+        && !(Date.parse(old.date || '') < retention));
+      row.news = this.keepNews([...papers.map(toNews), ...earlier], panelSeen, storeLimit);
       /* Two things the same records say for free.
 
          Where the author signs from now. The watched row remembers the lab it
@@ -3438,8 +3510,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          run actually turned up. Datasets and repository deposits are in
          neither: of 64 "new papers" over 109 authors, sixteen were copies of
          work already published. */
-      if (papers.length) result.withNews++;
-      result.works += papers.length;
+      const waiting = row.news.filter(work => !panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).length;
+      if (waiting) result.withNews++;
+      result.works += waiting;
       result.added += row.news.filter(work => !announced.has(work.id)).length;
     }
     this.cache.watchedAuthors = rows;
@@ -3497,7 +3570,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         preprint: /preprint/i.test(work.type || '') || /rxiv|research square|preprints?\b|ssrn/i.test(work.venue || ''),
         date: work.date, inLibrary: !!work.doi && owned.has(work.doi), people: work.people || [],
         citations: null, position: '', corresponding: false
-      }, ...(row.news || [])]);
+      }, ...(row.news || [])], this.panelSeenKeys(), this.NEWS_STORE_LIMIT || 200);
     } else {
       row.rejected = [...new Set([workID, ...(row.rejected || [])])].slice(0, 200);
       row.seen = [...new Set([workID, ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
@@ -3953,7 +4026,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
   /* The active (not trashed) regular items with a DOI, read live from Zotero, each with the library it is in.
      The stored rows only say which items exist: they carry no DOI, and a trashed paper's row outlives the paper. */
+  /* Built once and reused: itemForDOI is asked once per result row, and reading
+     every item each time was 1,200 lookups x 200 rows. The Zotero item notifier
+     drops it on any add, modify, trash or delete; a click re-verifies only the
+     one item it returns. */
+  invalidateHeldRows() { this._heldCache = null; }
   _heldRows() {
+    const sig = Object.keys(this.cache.items || {}).length + ':' + Object.keys(this.cache.works || {}).length;
+    if (this._heldCache?.sig === sig) return this._heldCache.rows;
+    const rows = this._readHeldRows();
+    this._heldCache = {sig, rows};
+    return rows;
+  }
+  _readHeldRows() {
     const keys = new Set([...Object.keys(this.cache.items || {}), ...Object.keys(this.cache.works || {})]);
     const rows = [];
     for (const identity of keys) {
@@ -3973,7 +4058,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   itemForDOI(doi, libraryID = this.currentLibraryID()) {
     const want = this.discoverTools.bareDOI(doi);
     if (!want) return null;
-    return this._heldRows().find(row => row.doi === want && row.libraryID === Number(libraryID))?.item || null;
+    const find = () => this._heldRows().find(row => row.doi === want && row.libraryID === Number(libraryID))?.item || null;
+    const found = find();
+    if (!found) return null;
+    // Verify this one item live; if it changed since the map was built, rebuild once.
+    let live = false;
+    try { live = !found.deleted && this.discoverTools.bareDOI(found.getField?.('DOI')) === want; } catch (_) { }
+    if (live) return found;
+    this.invalidateHeldRows();
+    return find();
   }
   // The same paper in a different library, for "held in another library".
   itemInOtherLibrary(doi, libraryID = this.currentLibraryID()) {
@@ -6174,7 +6267,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!chip) {
       chip = win.document.createElementNS('http://www.w3.org/1999/xhtml', 'span');
       chip.className = 'style-custom-kind';
-      chip.style.cssText = `display:inline-block;margin-inline-end:6px;padding:0 5px;border-radius:3px;font-size:11px;font-weight:700;line-height:16px;vertical-align:middle;pointer-events:none;`;
+      // floor-exempt: user-requested original size (9px), 2026-10-04.
+      chip.style.cssText = `display:inline-block;margin-inline-end:6px;padding:0 5px;border-radius:3px;font-size:9px;font-weight:700;line-height:14px;vertical-align:middle;pointer-events:none;`;
       cell.insertBefore(chip, cell.firstChild);
       state.titleNodes.add(chip);
     }

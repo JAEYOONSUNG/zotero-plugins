@@ -9,12 +9,17 @@
 
   // Europe PMC is queried by the strongest identifier the item has; a title
   // search is a last resort because it can match a different paper.
+  const bareDOIof = record => bareDOI(record?.DOI || record?.doi);
+  const pmidOf = record => text(record?.pmid || record?.PMID).replace(/\D/g, '');
+  const pmcidOf = record => { const m = /PMC\d+/i.exec(text(record?.pmcid || record?.PMCID)); return m ? m[0].toUpperCase() : ''; };
   function searchURL(record, {email} = {}) {
-    const doi = bareDOI(record?.DOI || record?.doi);
-    const pmid = text(record?.pmid || record?.PMID);
+    const doi = bareDOIof(record);
+    const pmcid = pmcidOf(record);
+    const pmid = pmidOf(record);
     const title = text(record?.title);
     let query;
     if (doi) query = `DOI:"${doi}"`;
+    else if (pmcid) query = `PMCID:${pmcid}`;
     else if (pmid) query = `EXT_ID:${pmid} AND SRC:MED`;
     else if (title) query = `TITLE:"${title.replace(/"/g, '')}"`;
     else return null;
@@ -23,20 +28,61 @@
       + (email ? '&email=' + encodeURIComponent(email) : '');
   }
 
+  const fold = value => text(value).replace(/<[^>]*>/g, ' ').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  // A correction, erratum or retraction notice describes a paper; it is not it.
+  const NOTICE_TYPE = /erratum|correction|retract|expression of concern|withdraw/i;
+  const NOTICE_TITLE = /^\s*(?:(?:author|publisher'?s?)\s+)?(?:correction|erratum|corrigendum|retraction|withdrawal|expression of concern)\b/i;
+  function isNotice(row) {
+    const types = row?.pubTypeList?.pubType;
+    const list = Array.isArray(types) ? types : types ? [types] : [];
+    return list.some(type => NOTICE_TYPE.test(text(type))) || NOTICE_TITLE.test(text(row?.title));
+  }
+  const familyOf = creator => fold(creator?.lastName || creator?.name || '').split(' ')[0] || '';
+  function firstFamily(record) {
+    const creators = Array.isArray(record?.creators) ? record.creators : [];
+    const first = creators.find(c => !c.creatorType || c.creatorType === 'author') || creators[0];
+    return familyOf(first) || fold(record?.firstAuthor).split(' ')[0] || '';
+  }
+  // The strict test a title-search hit must pass: exact normalised title, the
+  // year within one, and the first author's family name.
+  function strictMatch(row, record) {
+    const title = fold(record?.title);
+    if (!title || fold(row?.title) !== title) return false;
+    const year = Number(record?.year), got = Number(row?.pubYear);
+    if (!year || !got || Math.abs(year - got) > 1) return false;
+    const family = firstFamily(record);
+    if (!family) return false;
+    const list = Array.isArray(row?.authorList?.author) ? row.authorList.author : [];
+    const first = list.length ? fold(list[0]?.lastName || list[0]?.fullName) : fold(row?.authorString);
+    return first.split(' ')[0] === family;
+  }
+
   // Only an article Europe PMC says has supplementary material, and only when
-  // the identifier we searched by actually matches, is worth downloading.
+  // an identifier we have actually matches, is worth downloading. A title-only
+  // hit is trusted only when it passes strictMatch; otherwise it comes back as
+  // a candidate for the user to confirm and nothing is downloaded for it.
   function pickArticle(payload, record) {
     const results = payload?.resultList?.result;
     if (!Array.isArray(results)) return null;
-    const wantDOI = bareDOI(record?.DOI || record?.doi).toLowerCase();
-    const wantPMID = text(record?.pmid || record?.PMID);
-    let fallback = null;
+    const wantDOI = bareDOIof(record).toLowerCase();
+    const wantPMCID = pmcidOf(record);
+    const wantPMID = pmidOf(record);
+    const byTitle = !wantDOI && !wantPMCID && !wantPMID;
+    let fallback = null, candidate = null;
     for (const row of results) {
+      if (isNotice(row)) continue;
       if (wantDOI && bareDOI(row?.doi).toLowerCase() !== wantDOI) continue;
-      if (!wantDOI && wantPMID && text(row?.pmid) !== wantPMID) continue;
+      if (!wantDOI && wantPMCID && text(row?.pmcid).toUpperCase() !== wantPMCID) continue;
+      if (!wantDOI && !wantPMCID && wantPMID && text(row?.pmid) !== wantPMID) continue;
       const id = text(row?.pmcid) || text(row?.id);
       const source = text(row?.pmcid) ? 'PMC' : text(row?.source);
       if (!id || !source) continue;
+      if (byTitle && !strictMatch(row, record)) {
+        candidate = candidate || {id, source, doi: bareDOI(row?.doi), hasSupplementary: false, openAccess: false,
+          needsConfirmation: true, title: text(row?.title), year: text(row?.pubYear), authors: text(row?.authorString)};
+        continue;
+      }
       if (source !== 'PMC') { fallback = fallback || {id, source, doi: bareDOI(row?.doi), hasSupplementary: false, openAccess: false}; continue; }
       return {
         id, source,
@@ -47,13 +93,13 @@
     }
     // A match that is not in PMC is still worth returning: the caller can say
     // "indexed but not archived" rather than "not found".
-    return fallback;
+    return fallback || candidate;
   }
 
   // The endpoint takes the PMCID alone, with no source segment: a /PMC/<id>/
   // path answers 404. Only PMC-archived articles have retrievable files.
   const supplementaryURL = article =>
-    /^PMC\d+$/i.test(text(article?.id)) ? `${REST}${text(article.id).toUpperCase()}/supplementaryFiles` : null;
+    !article?.needsConfirmation && /^PMC\d+$/i.test(text(article?.id)) ? `${REST}${text(article.id).toUpperCase()}/supplementaryFiles` : null;
 
   const JUNK = /(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db)|(^|\/)\._/i;
 

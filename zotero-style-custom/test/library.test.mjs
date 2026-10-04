@@ -364,3 +364,68 @@ test('reading the annotations of 1,200 papers costs a few thousand lookups, not 
  const all=await f.service.annotations();
  assert.ok(all.length>=12000);assert.equal(counts.getAll,1,'the whole-library read is one getAll');
 });
+
+test('audit4 a multi-paper annotation note uses the native serializer per paper, so images, ink and citations survive',async()=>{
+ const f=fixture();
+ f.add('journalArticle',6,{fields:{title:'Second paper',date:'2021-03-01'}});
+ f.add('attachment',7,{parentID:6,attachmentContentType:'application/pdf'});
+ f.add('annotation',8,{parentID:7,annotationType:'image',annotationText:'',annotationComment:'',annotationPosition:'{"pageIndex":4}'});
+ f.add('annotation',9,{parentID:7,annotationType:'ink',annotationText:'',annotationComment:'',annotationPosition:'{"pageIndex":5}'});
+ const calls=[];
+ f.Z.EditorInstance.createNoteFromAnnotations=async(input,opts)=>{
+  calls.push({ids:input.map(i=>i.id),opts});assert.equal(opts.noSave,true);
+  const note=new f.Z.Item('note');
+  note.setNote('<div data-schema-version="9">'+input.map(i=>i.annotationType==='highlight'
+   ?'<blockquote>'+i.annotationText+'</blockquote><p><span class="citation" data-citation="%7B%22cite%22%3A1%7D">(Lovelace)</span></p>'
+   :'<p><img data-attachment-key="IMG'+i.id+'" data-annotation="%7B%22type%22%3A%22'+i.annotationType+'%22%7D"/></p>').join('')+'</div>');
+  return note;
+ };
+ const id=await f.service.synthesisNote([{id:1,annotationIDs:[3]},{id:6,annotationIDs:[8,9]}],{title:'모음'});
+ const html=f.items.get(Number(id)).html;
+ assert.deepEqual(calls.map(c=>c.ids),[[3],[8,9]],'one native call per paper, with that paper\'s annotations');
+ assert.equal(calls[0].opts.parentID,1);assert.equal(calls[1].opts.parentID,6);
+ assert.match(html,/data-attachment-key="IMG8"/);assert.match(html,/data-attachment-key="IMG9"/,'image and ink annotations are kept');
+ assert.match(html,/data-citation=/,'citation metadata is kept');
+ assert.ok(html.indexOf('K1')<html.indexOf('Quote')&&html.indexOf('Quote')<html.indexOf('K6')&&html.indexOf('K6')<html.indexOf('IMG8'),'under per-paper headings, in order');
+ assert.equal((html.match(/data-schema-version/g)||[]).length,1,'the per-paper wrappers are stripped, one wrapper remains');
+});
+
+test('audit5 neighbours come from the author and tag indexes, so a paper keeps every real neighbour', () => {
+ const s = fixture().service;
+ const rows = [1, 2, 3, 4].map(i => ({id: String(i), title: 'P' + i, related: [], tags: ['t' + (i % 2)], authors: 'Smith J; Other ' + i}));
+ assert.deepEqual(s.neighbours(rows, {mode: 'authors', focus: '4'}).sort(), ['1', '2', '3']);
+ assert.deepEqual(s.neighbours(rows, {mode: 'authors', focus: '1'}).sort(), ['2', '3', '4']);
+ assert.deepEqual(s.neighbours(rows, {mode: 'tags', focus: '4'}), ['2']);
+ const related = [{id: '1', related: ['2']}, {id: '2', related: []}, {id: '3', related: ['2']}];
+ assert.deepEqual(s.neighbours(related, {mode: 'related', focus: '2'}).sort(), ['1', '3'], 'a link is found from either end');
+ // The drawing thins to a star, but the selected paper still shows all its links and keeps all its neighbours under a small limit.
+ const g = s.graph(rows, {mode: 'authors', focus: '4', limit: 4});
+ const links = new Set(g.edges.filter(e => e.source === '4' || e.target === '4').map(e => [e.source, e.target].find(x => x !== '4')));
+ assert.deepEqual([...links].sort(), ['1', '2', '3']);
+ const tight = s.graph(rows, {mode: 'authors', focus: '4', limit: 3});
+ assert.equal(tight.nodes.length, 3);
+ assert.ok(tight.nodes.some(n => n.id === '4'));
+ // Thinning is for display only: a thousand-paper author does not stop the lookup.
+ const crowd = Array.from({length: 1500}, (_, i) => ({id: String(i + 1), title: 'x', related: [], tags: [], authors: 'Smith J'}));
+ assert.equal(s.neighbours(crowd, {mode: 'authors', focus: '1500'}).length, 1499);
+});
+
+test('audit8 saving a collection is one transaction: a failure leaves nothing behind, in the database or in memory, and a retry makes one collection',async()=>{
+ const f=fixture();
+ const second=f.add('journalArticle',5);
+ const db={collections:[],members:[]};let nextID=100,inTransaction=false;
+ f.Z.Item.prototype.addToCollection=function(id){(this.collections||(this.collections=[])).push(id);this.dirty=true;};
+ f.Z.Item.prototype.removeFromCollection=function(id){this.collections=(this.collections||[]).filter(c=>c!==id);};
+ f.Z.Item.prototype.save=async function(){if(!inTransaction)throw Error('save() called without a wrapping transaction');if(this.fail)throw Error('write failed');for(const c of this.collections||[])db.members.push([c,this.id]);this.dirty=false;};
+ f.Z.Collection=class{async save(){if(!inTransaction)throw Error('save() called without a wrapping transaction');this.id=++nextID;db.collections.push({id:this.id,name:this.name});}async saveTx(){throw Error('saveTx would be a separate transaction');}};
+ f.Z.DB.executeTransaction=async fn=>{const before=structuredClone(db);inTransaction=true;try{return await fn();}catch(error){db.collections=before.collections;db.members=before.members;throw error;}finally{inTransaction=false;}};
+ second.fail=true;
+ await assert.rejects(f.service.saveToCollection('Reading list',[1,5]),/write failed/);
+ assert.deepEqual(db,{collections:[],members:[]},'the rollback leaves no half-made collection');
+ assert.deepEqual(f.parent.collections||[],[],'the paper that saved before the failure is back to what it was');
+ second.fail=false;
+ const made=await f.service.saveToCollection('Reading list',[1,5]);
+ assert.equal(db.collections.length,1,'a retry creates exactly one collection');
+ assert.equal(db.members.length,2);
+ assert.equal(made.count,2);
+});

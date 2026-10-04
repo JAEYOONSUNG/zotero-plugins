@@ -71,16 +71,21 @@
        22 the page title                  (line 28)
      Nothing is set below 11px: Korean at 10px loses its strokes. The only letters drawn
      inside a shape (an avatar's initials) are 11 as well. */
-  --sc-fs-meta: 11px;
-  --sc-fs-body: 12px;
-  --sc-fs-title: 13px;
-  --sc-fs-brand: 15px;
-  --sc-fs-page: 22px;
-  --sc-lh-meta: 16px;
-  --sc-lh-body: 18px;
-  --sc-lh-title: 20px;
-  --sc-lh-brand: 20px;
-  --sc-lh-page: 28px;
+  /* The user's size (설정 > 글꼴 크기, 11-20, default 13) is --sc-fs-base, set on this element by the
+     panel. Every other size is the same ratio of it as at 13, so the whole scale follows the setting;
+     max(11px, ...) is the floor, which a size below 13 would otherwise cross. Line heights keep their
+     ratio to the size they belong to (16/11, 18/12, 20/13, 20/15, 28/22). */
+  --sc-fs-base: 13px;
+  --sc-fs-meta: max(11px, calc(var(--sc-fs-base) * 11 / 13));
+  --sc-fs-body: max(11px, calc(var(--sc-fs-base) * 12 / 13));
+  --sc-fs-title: max(11px, var(--sc-fs-base));
+  --sc-fs-brand: max(11px, calc(var(--sc-fs-base) * 15 / 13));
+  --sc-fs-page: max(11px, calc(var(--sc-fs-base) * 22 / 13));
+  --sc-lh-meta: calc(var(--sc-fs-meta) * 16 / 11);
+  --sc-lh-body: calc(var(--sc-fs-body) * 18 / 12);
+  --sc-lh-title: calc(var(--sc-fs-title) * 20 / 13);
+  --sc-lh-brand: calc(var(--sc-fs-brand) * 20 / 15);
+  --sc-lh-page: calc(var(--sc-fs-page) * 28 / 22);
   --sc-fw-regular: 400;
   --sc-fw-medium: 500;
   --sc-fw-strong: 600;
@@ -556,7 +561,7 @@
 #style-custom-workbench .sc-section-title { margin: 0; font: var(--sc-fw-strong) var(--sc-fs-page)/var(--sc-lh-page) var(--sc-title-font); letter-spacing: -.02em; }
 #style-custom-workbench .sc-context-detail { display: inline-flex; align-items: center; min-height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
 #style-custom-workbench .sc-context-detail:empty { display: none; }
-#style-custom-workbench .sc-body { flex: 1 1 auto; min-width: 0; min-height: 0; padding: var(--sc-space-1) var(--sc-content-padding) var(--sc-content-padding); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+#style-custom-workbench .sc-body { container-name: sc-main; container-type: inline-size; flex: 1 1 auto; min-width: 0; min-height: 0; padding: var(--sc-space-1) var(--sc-content-padding) var(--sc-content-padding); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 /* The bar lies on the canvas: its secondary buttons are white, and with nothing chosen it keeps its room but hides its buttons. */
 #style-custom-workbench .sc-selection-bar,
 #style-custom-workbench > footer { display: flex; align-items: center; gap: var(--sc-space-2); flex-wrap: wrap; flex-shrink: 0; padding: var(--sc-space-3) var(--sc-content-padding) var(--sc-space-4); border-block-start: 0; background: transparent; }
@@ -2871,6 +2876,42 @@
   #style-custom-workbench .sc-metric-sub { justify-content: flex-start; }
 }
 
+/* The same stacked row, decided by the content area (see the grid block near 보유 문헌 rows). A panel wider than
+   760px can still have a body too narrow for the metrics grid, because the rail takes 204-216px of it; there the
+   metrics go under the title exactly as they do in a narrow panel. */
+@container sc-main (max-width: 699px) {
+  #style-custom-workbench .sc-paper-card .sc-paper-heading { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--sc-space-1); }
+  #style-custom-workbench .sc-paper-card .sc-metrics { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; gap: 4px 12px; }
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric], #style-custom-workbench .sc-paper-card .sc-stars { width: auto; }
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { width: 150px; }
+  #style-custom-workbench .sc-paper-card .sc-metric-unit { display: inline; }
+  #style-custom-workbench .sc-paper-card .sc-paper-actions { grid-column: 2; justify-content: flex-start; }
+  #style-custom-workbench .sc-paper-card:not(:hover):not(:focus-within) .sc-paper-actions { display: none; }
+  #style-custom-workbench .sc-paper-columns { display: flex; flex-wrap: wrap; gap: var(--sc-space-1) var(--sc-space-4); padding-inline-start: var(--sc-card-padding); }
+  #style-custom-workbench .sc-paper-columns-lead { font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); color: var(--sc-muted); }
+  #style-custom-workbench .sc-paper-columns-sortlabel { display: inline; }
+  #style-custom-workbench .sc-paper-columns-tail { display: none; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column { width: auto; }
+  #style-custom-workbench .sc-paper-card .sc-paper-heading { grid-template-columns: auto minmax(0, 1fr); }
+  #style-custom-workbench .sc-paper-mainline { grid-column: 2; }
+  #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-metrics { grid-column: 2; grid-row: 3; }
+  #style-custom-workbench .sc-paper-card .sc-paper-remark { grid-column: 2; grid-row: 4; }
+  #style-custom-workbench .sc-paper-card .sc-paper-search-hit { grid-column: 2; grid-row: 5; }
+  #style-custom-workbench .sc-paper-card .sc-metric,
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric] { flex: 0 0 auto; width: auto !important; }
+  #style-custom-workbench .sc-paper-card .sc-metric > * { flex: 0 0 auto; }
+  #style-custom-workbench .sc-paper-card .sc-stars .sc-metric-value { min-width: 0; letter-spacing: 0; }
+  #style-custom-workbench .sc-paper-card .sc-stars:has(.sc-metric-value:empty) { display: none; }
+  #style-custom-workbench .sc-paper-card .sc-metrics { row-gap: var(--sc-space-1); column-gap: var(--sc-space-4); }
+  #style-custom-workbench .sc-paper-columns { display: inline-flex; width: max-content; max-width: 100%; flex-wrap: wrap; gap: 0; padding: calc((var(--sc-h-ctl) - var(--sc-h-seg)) / 2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); border-block-end: 0; }
+  #style-custom-workbench .sc-paper-columns-title { display: none; }
+  #style-custom-workbench .sc-paper-columns-lead { padding-inline: var(--sc-space-3) var(--sc-space-1); color: var(--sc-muted); font-weight: var(--sc-fw-medium); }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column { width: auto; min-height: var(--sc-h-seg); padding: 0 var(--sc-space-3); border-radius: var(--sc-radius-pill); background: transparent; color: var(--sc-muted); align-items: center; justify-content: center; }
+  #style-custom-workbench .sc-paper-columns > .sc-paper-column[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); }
+  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { flex-direction: row; align-items: center; gap: var(--sc-space-2); }
+  #style-custom-workbench .sc-metric-sub { justify-content: flex-start; }
+}
+
 /* ==== 논문 비교 (detail review 2026-10-03) ==== */
 #style-custom-workbench .sc-matrix-pager { display: inline-flex; align-items: center; gap: var(--sc-space-1); margin-inline-start: auto; }
 #style-custom-workbench .sc-matrix-pager-count { min-width: 40px; text-align: center; color: var(--sc-muted); font-variant-numeric: tabular-nums; font-size: var(--sc-fs-body); line-height: var(--sc-lh-body); }
@@ -3014,30 +3055,37 @@
   --sc-paper-pad-y: 12px;
 }
 #style-custom-workbench[data-density=compact] { --sc-paper-pad-y: 8px; }
+/* The row's breakpoint is the width of the content area, not of the panel: the rail takes 204-216px of a
+   panel, so a 761px panel leaves a body of ~500px, which cannot hold the 420px of fixed metrics beside a
+   title (it left 28px for the journal and authors at 800px). The metrics are a grid beside the title only
+   when the body's own content box is 700px or wider, which leaves the journal/author line at least ~180px;
+   narrower, they stack under the title, as they do in a narrow panel. */
 @container sc-workbench (min-width: 761px) {
-  #style-custom-workbench .sc-paper-columns,
-  #style-custom-workbench .sc-paper-card .sc-metrics {
-    display: grid; column-gap: var(--sc-col-gap); align-items: center; justify-items: end;
-  }
-  #style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) var(--sc-col-if) var(--sc-col-cites) var(--sc-col-stars) var(--sc-col-time); padding-inline: var(--sc-card-padding); }
-  #style-custom-workbench .sc-paper-card .sc-metrics { grid-template-columns: var(--sc-col-if) var(--sc-col-cites) var(--sc-col-stars) var(--sc-col-time); width: calc(var(--sc-col-if) + var(--sc-col-cites) + var(--sc-col-stars) + var(--sc-col-time) + 3 * var(--sc-col-gap)); min-height: 0; margin: 0; padding: 0; align-self: center; }
-  #style-custom-workbench .sc-paper-columns > .sc-paper-column,
-  #style-custom-workbench .sc-paper-card .sc-metric[data-metric] { width: 100%; justify-content: flex-end; text-align: end; margin: 0; }
-  #style-custom-workbench .sc-paper-column[data-metric=rating],
-  #style-custom-workbench .sc-paper-card .sc-stars { justify-content: flex-end; }
-  #style-custom-workbench .sc-paper-card .sc-metric .sc-metric-value { min-width: 0; text-align: end; font-variant-numeric: tabular-nums; }
-  /* 읽기: [pages · 주석] then the time, all on the meta line; the label's right edge is the time's. */
-  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { display: flex; flex-direction: row-reverse; justify-content: flex-start; align-items: center; gap: var(--sc-space-2); }
-  #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] .sc-metric-value { flex: none; min-width: 3.6em; }
-  #style-custom-workbench .sc-paper-card .sc-metric-sub { flex: 0 1 auto; min-width: 0; justify-content: flex-end; }
-  #style-custom-workbench .sc-paper-card .sc-row-annotations { height: var(--sc-lh-meta); min-height: 0; max-height: none; margin: 0; padding: 0; line-height: var(--sc-lh-meta); }
-  /* The row: padding and the two lines, nothing taller than its text. */
-  #style-custom-workbench .sc-paper-card { padding-block: var(--sc-paper-pad-y); }
-  #style-custom-workbench .sc-paper-card .sc-paper-heading { row-gap: 4px; grid-template-columns: 16px minmax(0, 1fr) auto; }
-  #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-check { height: var(--sc-lh-title); }
-  #style-custom-workbench .sc-paper-mainline { min-height: var(--sc-lh-title); }
-  #style-custom-workbench .sc-paper-card .sc-paper-mainline > .sc-paper-actions { margin-block: calc((var(--sc-lh-title) - var(--sc-h-seg)) / 2); padding: 0; }
-  #style-custom-workbench .sc-paper-columns > .sc-paper-columns-lead { justify-self: start; justify-content: flex-start; }
-  #style-custom-workbench .sc-paper-card .sc-paper-meta { align-self: center; min-height: var(--sc-lh-body); }
-  #style-custom-workbench .sc-paper-card .sc-paper-meta .sc-kind { margin-block: calc((var(--sc-lh-body) - var(--sc-h-badge)) / 2); }
+@container sc-main (min-width: 700px) {
+   #style-custom-workbench .sc-paper-columns,
+   #style-custom-workbench .sc-paper-card .sc-metrics {
+     display: grid; column-gap: var(--sc-col-gap); align-items: center; justify-items: end;
+   }
+   #style-custom-workbench .sc-paper-columns { grid-template-columns: minmax(0, 1fr) var(--sc-col-if) var(--sc-col-cites) var(--sc-col-stars) var(--sc-col-time); padding-inline: var(--sc-card-padding); }
+   #style-custom-workbench .sc-paper-card .sc-metrics { grid-template-columns: var(--sc-col-if) var(--sc-col-cites) var(--sc-col-stars) var(--sc-col-time); width: calc(var(--sc-col-if) + var(--sc-col-cites) + var(--sc-col-stars) + var(--sc-col-time) + 3 * var(--sc-col-gap)); min-height: 0; margin: 0; padding: 0; align-self: center; }
+   #style-custom-workbench .sc-paper-columns > .sc-paper-column,
+   #style-custom-workbench .sc-paper-card .sc-metric[data-metric] { width: 100%; justify-content: flex-end; text-align: end; margin: 0; }
+   #style-custom-workbench .sc-paper-column[data-metric=rating],
+   #style-custom-workbench .sc-paper-card .sc-stars { justify-content: flex-end; }
+   #style-custom-workbench .sc-paper-card .sc-metric .sc-metric-value { min-width: 0; text-align: end; font-variant-numeric: tabular-nums; }
+   /* 읽기: [pages · 주석] then the time, all on the meta line; the label's right edge is the time's. */
+   #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] { display: flex; flex-direction: row-reverse; justify-content: flex-start; align-items: center; gap: var(--sc-space-2); }
+   #style-custom-workbench .sc-paper-card .sc-metric[data-metric=time] .sc-metric-value { flex: none; min-width: 3.6em; }
+   #style-custom-workbench .sc-paper-card .sc-metric-sub { flex: 0 1 auto; min-width: 0; justify-content: flex-end; }
+   #style-custom-workbench .sc-paper-card .sc-row-annotations { height: var(--sc-lh-meta); min-height: 0; max-height: none; margin: 0; padding: 0; line-height: var(--sc-lh-meta); }
+   /* The row: padding and the two lines, nothing taller than its text. */
+   #style-custom-workbench .sc-paper-card { padding-block: var(--sc-paper-pad-y); }
+   #style-custom-workbench .sc-paper-card .sc-paper-heading { row-gap: 4px; grid-template-columns: 16px minmax(0, 1fr) auto; }
+   #style-custom-workbench .sc-paper-card .sc-paper-heading > .sc-check { height: var(--sc-lh-title); }
+   #style-custom-workbench .sc-paper-mainline { min-height: var(--sc-lh-title); }
+   #style-custom-workbench .sc-paper-card .sc-paper-mainline > .sc-paper-actions { margin-block: calc((var(--sc-lh-title) - var(--sc-h-seg)) / 2); padding: 0; }
+   #style-custom-workbench .sc-paper-columns > .sc-paper-columns-lead { justify-self: start; justify-content: flex-start; }
+   #style-custom-workbench .sc-paper-card .sc-paper-meta { align-self: center; min-height: var(--sc-lh-body); }
+   #style-custom-workbench .sc-paper-card .sc-paper-meta .sc-kind { margin-block: calc((var(--sc-lh-body) - var(--sc-h-badge)) / 2); }
+ }
 }

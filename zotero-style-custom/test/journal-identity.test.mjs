@@ -427,7 +427,7 @@ const hexOf = value => {
   return m ? journals.hslToHex(Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100) : value;
 };
 
-test("every journal in the registry has a badge, ink and fill that reach 4.5:1 in light and dark, and badges are 11px", () => {
+test("every journal in the registry has a badge, ink and fill that reach 4.5:1 in light and dark, and badges keep their original 9px", () => {
   journals.loadRegistry(JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")));
   const names = new Set([...Object.keys(journals.JOURNAL_COLOURS), ...Object.keys(journals.JOURNAL_HUES)]);
   for (const row of JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")).journals) names.add(row.title);
@@ -450,7 +450,7 @@ test("every journal in the registry has a badge, ink and fill that reach 4.5:1 i
   }
   assert.deepEqual(failures.slice(0, 10), [], `${failures.length} colour pairs under 4.5:1`);
   assert.ok(seen.size > 500, "hundreds of distinct colours were walked");
-  assert.ok(journals.BADGE_FONT_PX >= 11, "badges are drawn at the shared 11px token or larger");
+  assert.equal(journals.BADGE_FONT_PX, 9, "item-tree journal badges are drawn at their original 9px (user-requested, 2026-10-04)");
 });
 
 test("the reviewed badges: Nature Methods, Nature Communications and a mid-tone background all reach 4.5:1", () => {

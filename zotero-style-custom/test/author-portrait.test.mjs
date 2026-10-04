@@ -154,3 +154,91 @@ test("a Google Scholar ID from Wikidata becomes that profile's photo, and only a
   assert.equal(portrait.scholarIsPhoto("image/png"), false, "the grey placeholder is a PNG");
   assert.equal(portrait.scholarIsPhoto(null), false);
 });
+
+// Item 11: every followed author has a relationship graph of their own.
+// Names are compared as letters only, so test names are spelled with letters, not digits.
+const nm = i => String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26) % 26) + String.fromCharCode(97 + Math.floor(i / 676));
+const ego = (over = {}) => portrait.egoGraph({
+  me: {id: "A1", name: "Jennifer A. Doudna"},
+  works: [
+    {id: "W1", doi: "https://doi.org/10.1/w1", title: "One", year: 2024, people: [{id: "A1", name: "Jennifer A. Doudna"}, {id: "A2", name: "Sam Sternberg"}, {id: "A3", name: "Ruth Lee"}]},
+    {id: "W2", doi: "10.1/w2", title: "Two", year: 2023, people: [{id: "A1", name: "Jennifer A. Doudna"}, {id: "A2", name: "Sam Sternberg"}]},
+    {id: "W9", title: "Not hers", people: [{id: "A8", name: "Someone Else"}, {id: "A2", name: "Sam Sternberg"}]}
+  ],
+  news: [{id: "W3", doi: "10.1/w3", title: "Three", people: ["Jennifer A. Doudna", "Ruth Lee", "Kim Park"]},
+    {id: "W1b", doi: "10.1/W1", title: "One again", people: ["Jennifer A. Doudna", "Sam Sternberg"]}],
+  items: [{id: "11", doi: "", authors: "Jennifer A. Doudna; Ruth Lee; Alice Kim"}, {id: "12", authors: "Other Person; Alice Kim"}],
+  followed: [{id: "A3", name: "Ruth Lee"}],
+  ...over
+});
+
+test("the centre is the followed author and each co-author's weight is the number of shared papers, counted once per paper", () => {
+  const g = ego();
+  assert.equal(g.centre.id, "A1");
+  assert.equal(g.centre.name, "Jennifer A. Doudna");
+  const by = Object.fromEntries(g.nodes.map(n => [n.name, n]));
+  assert.equal(by["Sam Sternberg"].weight, 2, "W1 held twice (tracked work and stored news, one DOI) is one paper, plus W2");
+  assert.equal(by["Ruth Lee"].weight, 3, "W1, the stored news W3 and the library item");
+  assert.equal(by["Kim Park"].weight, 1);
+  assert.equal(by["Alice Kim"].weight, 1);
+  assert.ok(!by["Jennifer A. Doudna"] && !by["Someone Else"] && !by["Other Person"], "not the centre, and not people from papers she is not on");
+  assert.deepEqual(g.nodes.map(n => n.name).slice(0, 2), ["Ruth Lee", "Sam Sternberg"], "heaviest first");
+  assert.ok(g.edges.every(e => e.source === "A1" && e.weight === by[g.nodes.find(n => n.id === e.target).name].weight));
+});
+
+test("a followed co-author is marked with who they are, and every node has a readable label", () => {
+  const g = ego({fullLabels: 2});
+  const ruth = g.nodes.find(n => n.name === "Ruth Lee");
+  assert.deepEqual(ruth.followed, {id: "A3", name: "Ruth Lee"});
+  assert.equal(ruth.label, "Ruth Lee");
+  const full = g.nodes.filter(n => n.label === n.name).map(n => n.name);
+  assert.deepEqual(full.sort(), ["Ruth Lee", "Sam Sternberg"], "the top two by weight carry their full name");
+  const rest = g.nodes.filter(n => n.label !== n.name);
+  assert.ok(rest.length >= 2);
+  for (const n of rest) { assert.match(n.label, /^[A-Z]{1,2}$/, "initials for the rest"); assert.ok(n.tooltip.includes(n.name), "with the name in the tooltip"); }
+  for (const n of g.nodes) assert.ok(n.label && n.tooltip, "no node without a name");
+  const followedLast = ego({fullLabels: 1, followed: [{id: "A9", name: "Alice Kim"}]}).nodes.find(n => n.name === "Alice Kim");
+  assert.equal(followedLast.label, "Alice Kim", "a followed co-author always shows their full name");
+});
+
+test("the visible co-authors are capped by weight, with the rest counted for Show all", () => {
+  const many = Array.from({length: 35}, (_, i) => ({id: "W" + (100 + i), doi: "10.9/" + i, title: "p" + i, people: [{id: "A1", name: "Jennifer A. Doudna"}, {id: "B" + i, name: "Person " + nm(i) + "x"}, ...(i < 5 ? [{id: "C", name: "Heavy Hitter"}] : [])]}));
+  const g = portrait.egoGraph({me: {id: "A1", name: "Jennifer A. Doudna"}, works: many, limit: 20});
+  assert.equal(g.total, 36);
+  assert.equal(g.nodes.length, 20);
+  assert.equal(g.hidden, 16);
+  assert.equal(g.nodes[0].name, "Heavy Hitter", "the heaviest survive the cap");
+  const all = portrait.egoGraph({me: {id: "A1", name: "Jennifer A. Doudna"}, works: many, limit: Infinity});
+  assert.equal(all.nodes.length, 36);
+  assert.equal(all.hidden, 0);
+});
+
+test("links between co-authors come from papers they share, only among the people drawn", () => {
+  const g = ego();
+  const link = g.links.find(l => [l.source, l.target].sort().join() === ["A2", "A3"].join());
+  assert.equal(link.weight, 1, "Sam and Ruth are both on W1");
+  const shown = new Set(g.nodes.map(n => n.id));
+  assert.ok(g.links.every(l => shown.has(l.source) && shown.has(l.target)));
+});
+
+test("a consortium paper is not a hundred collaborations, and an author with nothing in hand has no neighbours", () => {
+  const crowd = {id: "WC", doi: "10.1/c", people: [{id: "A1", name: "Jennifer A. Doudna"}, ...Array.from({length: 40}, (_, i) => ({id: "X" + i, name: "Member " + nm(i) + "z"}))]};
+  assert.equal(portrait.egoGraph({me: {id: "A1", name: "Jennifer A. Doudna"}, works: [crowd]}).nodes.length, 0);
+  const none = portrait.egoGraph({me: {id: "A1", name: "Jennifer A. Doudna"}});
+  assert.deepEqual([none.nodes.length, none.total, none.hidden], [0, 0, 0]);
+  assert.equal(none.centre.name, "Jennifer A. Doudna");
+});
+
+test("the layout puts the author in the middle and every co-author inside the frame without touching another", () => {
+  const g = ego();
+  const laid = portrait.egoLayout(g, {width: 760, height: 360});
+  assert.equal(Math.round(laid.centre.x), 380);
+  assert.equal(Math.round(laid.centre.y), 180);
+  const all = [laid.centre, ...laid.nodes];
+  for (const n of all) assert.ok(n.x - n.rad >= 0 && n.x + n.rad <= 760 && n.y - n.rad >= 0 && n.y + n.rad <= 360, n.name + " is inside");
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) assert.ok(Math.hypot(all[i].x - all[j].x, all[i].y - all[j].y) >= all[i].rad + all[j].rad, `${all[i].name} and ${all[j].name} do not overlap`);
+  const twenty = portrait.egoLayout(portrait.egoGraph({me: {id: "A1", name: "Me Self"}, works: Array.from({length: 20}, (_, i) => ({id: "W" + i, doi: "10/" + i, people: [{id: "A1", name: "Me Self"}, {id: "B" + i, name: "Co " + nm(i) + "y"}]}))}), {width: 760, height: 360});
+  const nodes = [twenty.centre, ...twenty.nodes];
+  for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) assert.ok(Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y) >= nodes[i].rad + nodes[j].rad, "twenty around one author do not overlap");
+  for (const n of twenty.nodes) assert.ok(n.rad >= 11, "big enough for two letters at 11px");
+});

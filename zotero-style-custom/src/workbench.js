@@ -1961,7 +1961,7 @@
    const mainline=node('div',null,identity,{class:'sc-paper-mainline'});
    const h3=node('h3',null,mainline,{class:'sc-paper-title',title:D(item.title||'')});
    rich(h3,Dor(item.title,'제목 없음'));
-   const meta=node('span',null,identity,{class:'sc-paper-meta',title:[item.authors,item.venue].filter(Boolean).join(' · ')});
+   const meta=node('span',null,identity,{class:'sc-paper-meta',title:D([item.authors,item.venue].filter(Boolean).join(' · '))});
    // A list that is in an order for a reason says the reason first: 최근 문헌 says what happened, and when.
    const reason=why?.(item);
    // The kind (Preprint, patent, thesis...) opens the meta line, so the title always starts at the same x.
@@ -2489,9 +2489,8 @@
   }
   // The other graph kinds around one paper: the paper and whoever shares a tag, an author or a related link with it.
   function egoLegacyItems(centreItem){
-   const raw=library.graph(state.items,{mode:state.graphMode==='citations'?'related':state.graphMode,focus:centreItem.id,limit:Math.max(500,state.items.length)});
-   const ids=new Set([String(centreItem.id)]);
-   for(const e of raw.edges){if(String(e.source)===String(centreItem.id))ids.add(String(e.target));if(String(e.target)===String(centreItem.id))ids.add(String(e.source));}
+   // Neighbours come from the author/tag/link indexes, not from the thinned edges the map draws.
+   const ids=new Set([String(centreItem.id),...library.neighbours(state.items,{mode:state.graphMode==='citations'?'related':state.graphMode,focus:centreItem.id})]);
    return state.items.filter(i=>ids.has(String(i.id)));
   }
   function drawCollectionScope(b){
@@ -2566,7 +2565,7 @@
     const section=node('section',null,lists,{class:'sc-group'});sectionHead('연결 없는 논문',stillIsolated.length,section);
     const rowsEl=node('div',null,section,{class:'sc-hits'});
     for(const n of stillIsolated.slice(0,30)){const c=node('div',null,rowsEl,{class:'sc-hit','data-node-id':n.id});node('p',D(n.label),c,{class:'sc-hit-title'});
-     node('p',[n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     node('p',D([n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · ')),c,{class:'sc-hit-meta'});
      button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});}
     if(stillIsolated.length>30)node('p',`${stillIsolated.length-30}편 더 있습니다.`,section,{class:'sc-muted'});
    }
@@ -2984,7 +2983,7 @@
     for(const n of graph.isolated.slice(0,30)){
      const c=node('div',null,list,{class:'sc-hit'});
      node('p',D(n.label),c,{class:'sc-hit-title'});
-     node('p',[n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     node('p',D([n.venue,n.year,n.references?T(`참고문헌 ${n.references}건`):T('인용 목록 없음')].filter(Boolean).join(' · ')),c,{class:'sc-hit-meta'});
      button('열기',()=>library.openItem(n.id),node('div',null,c,{class:'sc-hit-actions'}),{'data-opens':'window'});
     }
    }
@@ -4915,14 +4914,14 @@
      const text=node('div',null,row,{class:'sc-resume-text'});
      node('span',Dor(item.title,'제목 없음'),text,{class:'sc-resume-title',title:D(item.title||'')});
      const waited=Math.max(0,Math.floor((Date.now()-Date.parse(entry.at||''))/DAY));
-     node('span',[item.venue,(entry.people||[]).join(', '),Number.isFinite(waited)?T(`대기 ${waited}일`):''].filter(Boolean).join(' · '),text,{class:'sc-resume-remark'});
-     if(entry.reason?.text)node('span',entry.reason.text,text,{class:'sc-resume-remark sc-queue-why',title:entry.reason.text});
+     node('span',D([item.venue,(entry.people||[]).join(', '),Number.isFinite(waited)?T(`대기 ${waited}일`):''].filter(Boolean).join(' · ')),text,{class:'sc-resume-remark'});
+     if(entry.reason?.text)node('span',D(entry.reason.text),text,{class:'sc-resume-remark sc-queue-why',title:D(entry.reason.text)});
      const sources=(entry.reason?.paperIDs||[]).map(id=>state.items.find(i=>String(i.id)===String(id))).filter(Boolean);
      if(sources.length){
       const why=node('details',null,text,{class:'sc-queue-reason'});
       node('summary',entry.reason.direction==='citing'?T(`담은 이유: 읽던 ${sources.length}편을 인용`):T(`담은 이유: 읽던 ${sources.length}편이 인용`),why);
       node('p',T('인용 관계는 담을 때의 기록이고, 상태와 시간은 지금 값입니다.'),why,{class:'sc-muted'});
-      for(const src of sources)node('p',[src.title,T('지금')+' '+(src.status==='done'?T('완료'):src.status==='reading'?T('읽는 중'):T('안 읽음')),Number(src.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(src.seconds,{compact:true}):''].filter(Boolean).join(' · '),why,{class:'sc-queue-reason-paper'});
+      for(const src of sources)node('p',D([src.title,T('지금')+' '+(src.status==='done'?T('완료'):src.status==='reading'?T('읽는 중'):T('안 읽음')),Number(src.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(src.seconds,{compact:true}):''].filter(Boolean).join(' · ')),why,{class:'sc-queue-reason-paper'});
      }
      const memo=String(item.remark||'').trim();
      if(memo)node('span',D(memo.split('\n')[0].slice(0,140)),text,{class:'sc-resume-remark'});
@@ -6474,6 +6473,96 @@
    /* One person's page, drawn into `root`: the full page under the watch table
       (show) and the panel that opens right under their row (inline) are the
       same renderer, so the two cannot drift apart. */
+   /* This author's own relationship graph: they sit in the middle, the people who share papers with them
+      around, from the papers already in hand (tracked works, the news the last check kept, the library's own author
+      lists), so drawing it asks for nothing. A line's weight is the number of shared papers. The twenty heaviest are
+      drawn, the rest one press away; a followed co-author wears their photo and opens right where they are. */
+   const EGO_LIMIT=20,EGO_MAX=48;
+   function drawEgo(person,profile,works,parent,redo,opts={}){
+    const tools=runtime.portraitTools;
+    if(!tools?.egoGraph||!tools?.egoLayout)return;
+    const myName=profile?.name||person.name;
+    const stored=watchedRow(person.id);
+    const mine=papersBy(myName);
+    const all=state.egoAll===person.id;
+    const followed=(runtime.watchedAuthors?.()||[]).filter(w=>w.id!==person.id).map(w=>({id:w.id,name:w.name}));
+    const graph=tools.egoGraph({me:{id:person.id,name:myName},works,news:stored?.news||[],items:mine.guess?[]:mine.items,followed,limit:all?EGO_MAX:EGO_LIMIT});
+    const g=personGroup('공저 관계',graph.total||'',parent,'sc-person-ego');
+    if(!graph.nodes.length){node('p',T('이 저자와 함께 쓴 논문이 아직 보이지 않습니다. 서재의 논문이나 확인한 새 논문에서 공저자를 찾아 그립니다.'),g,{class:'sc-muted'});return;}
+    const bar_=node('div',null,g,{class:'sc-author-graph-tools'});
+    node('span',T(`공저자 ${graph.shown}명 · 함께 쓴 논문 순`),bar_,{class:'sc-muted'});
+    if(graph.hidden>0||all)viewButton(all?T(`상위 ${EGO_LIMIT}명만 보기`):T(`모두 보기 (${graph.total}명)`),()=>{state.egoAll=all?'':person.id;return run(redo);},bar_,{class:'sc-graph-all','aria-pressed':String(all)});
+    const room=Math.round((g.clientWidth||0)-24),W=Math.max(320,Math.min(860,room>0?room:graphWidth())),H=graph.nodes.length>12?400:320;
+    const laid=tools.egoLayout(graph,{width:W,height:H});
+    const frame=node('div',null,g,{class:'sc-graph-frame'});
+    const svg=doc.createElementNS(SVG,'svg');
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('class','sc-graph sc-author-graph sc-ego-graph');
+    svg.style.setProperty('--sc-graph-height',H+'px');
+    svg.setAttribute('role','group');svg.setAttribute('aria-label',T(`${myName} 공저 관계 그래프`));
+    frame.appendChild(svg);
+    const defs=doc.createElementNS(SVG,'defs');svg.appendChild(defs);
+    const lineLayer=doc.createElementNS(SVG,'g'),nodeLayer=doc.createElementNS(SVG,'g');svg.appendChild(lineLayer);svg.appendChild(nodeLayer);
+    const at=new Map([[laid.centre.id,laid.centre],...laid.nodes.map(n=>[n.id,n])]);
+    const line=(a,b,width,opacity,cls,title)=>{
+     const el=doc.createElementNS(SVG,'line');
+     for(const [k,v] of Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y}))el.setAttribute(k,v);
+     el.setAttribute('stroke','var(--sc-graph-line)');el.setAttribute('stroke-width',String(width));el.setAttribute('stroke-opacity',String(opacity));el.setAttribute('class',cls);
+     if(title){const t=doc.createElementNS(SVG,'title');t.textContent=title;el.appendChild(t);}
+     lineLayer.appendChild(el);
+    };
+    // Second ring, drawn lightly: co-authors who also share papers with each other.
+    for(const l of graph.links){const a=at.get(l.source),b=at.get(l.target);if(a&&b)line(a,b,1,.22,'sc-ego-link');}
+    for(const e of graph.edges){const b=at.get(e.target);if(b)line(laid.centre,b,Math.min(6,1+e.weight*1.1),.6,'sc-ego-edge',`${D(myName).text} · ${D(b.name).text} · ${T(`함께 쓴 논문 ${e.weight}편`)}`);}
+    const portrait=(n,id)=>{
+     const found=runtime.portraitOf?.(id);
+     if(!found?.url)return;
+     const clip=doc.createElementNS(SVG,'clipPath');clip.setAttribute('id','sc-ego-clip-'+n.id.replace(/[^\w-]/g,''));
+     const hole=doc.createElementNS(SVG,'circle');hole.setAttribute('r',n.rad-1);clip.appendChild(hole);defs.appendChild(clip);
+     const img=doc.createElementNS(SVG,'image');img.setAttribute('href',found.url);img.setAttribute('x',-(n.rad-1));img.setAttribute('y',-(n.rad-1));img.setAttribute('width',(n.rad-1)*2);img.setAttribute('height',(n.rad-1)*2);
+     img.setAttribute('preserveAspectRatio','xMidYMid slice');img.setAttribute('clip-path',`url(#sc-ego-clip-${n.id.replace(/[^\w-]/g,'')})`);
+     img.addEventListener('error',()=>img.remove());
+     return img;
+    };
+    const mark=(n,{centre})=>{
+     const gEl=doc.createElementNS(SVG,'g');
+     gEl.setAttribute('transform',`translate(${n.x} ${n.y})`);gEl.setAttribute('data-ego',n.id);
+     const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',n.rad);circle.setAttribute('class','sc-author-dot');gEl.appendChild(circle);
+     const letters=doc.createElementNS(SVG,'text');letters.setAttribute('class','sc-author-initials');letters.setAttribute('text-anchor','middle');letters.setAttribute('y','4');
+     letters.textContent=D(centre?initials(n.name):n.followed||!n.full?n.initials:n.initials).text;gEl.appendChild(letters);
+     const img=portrait(n,centre?person.id:n.followed?.id||n.authorID);
+     if(img){img.addEventListener('load',()=>letters.setAttribute('display','none'));gEl.appendChild(img);}
+     const ring=doc.createElementNS(SVG,'circle');ring.setAttribute('r',n.rad);ring.setAttribute('class','sc-author-ring');gEl.appendChild(ring);
+     // A full name beside the circle, on the side facing away from the middle; the rest are initials with the name in their tooltip.
+     if(centre||n.full){
+      const text=doc.createElementNS(SVG,'text');text.setAttribute('class','sc-graph-label');text.setAttribute('data-name',n.name);
+      if(centre){text.setAttribute('text-anchor','middle');text.setAttribute('y',n.rad+15);}
+      else{text.setAttribute('text-anchor',n.side);text.setAttribute('x',n.side==='start'?n.rad+5:-(n.rad+5));text.setAttribute('y','4');}
+      text.textContent=D(n.name.length>26?n.name.slice(0,25)+'…':n.name).text;gEl.appendChild(text);
+     }
+     const title=doc.createElementNS(SVG,'title');
+     title.textContent=centre?D(n.name).text:[D(n.name).text,T(`함께 쓴 논문 ${n.weight}편`),n.followed?T('관심 저자'):''].filter(Boolean).join(' · ');
+     gEl.appendChild(title);
+     gEl.setAttribute('aria-label',title.textContent);
+     return gEl;
+    };
+    nodeLayer.appendChild(mark(laid.centre,{centre:true}));
+    for(const n of laid.nodes){
+     const gEl=mark(n,{});
+     // A followed co-author opens where they are in the table; anyone else with a known id gets their own page.
+     const row=n.followed?watchedRow(n.followed.id):null;
+     const go=()=>{
+      if(opts.inline&&row&&opts.expand){opts.expand(row);return;}
+      return run(()=>show({id:n.followed?.id||n.authorID,name:n.name}));
+     };
+     if(row||n.authorID){
+      gEl.setAttribute('role','button');gEl.setAttribute('tabindex','0');
+      gEl.addEventListener('click',go);
+      gEl.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
+     }
+     nodeLayer.appendChild(gEl);
+    }
+    if(laid.omitted)node('p',T(`${laid.omitted}명은 그리지 않았습니다.`),g,{class:'sc-muted'});
+   }
    async function renderPerson(person,root,opts={}){
     const inline=!!opts.inline;
     const live=()=>token===epoch&&!disposed&&state.tab==='authors'&&root.isConnected;
@@ -6616,6 +6705,7 @@
      }
     }
     drawShelf(profile?.name||person.name,person,wrap,redo);
+    drawEgo(person,profile,works,wrap,redo,opts);
     // The circle of colleagues, out of the works already in hand: no request of
     // its own, and an edge exists because two names are on the same paper.
     const circle=runtime.coauthorsOf?.(person.id,works)||[];
@@ -6691,7 +6781,7 @@
    // and each one's own copy of the record (their part in it is in that copy).
    function mergedNews(watched){
     const merged=new Map();
-    for(const person of watched)for(const work of person.news||[]){
+    for(const person of watched)for(const work of shownNews(person)){
      const key=seenWorkKey(work);if(!key)continue;
      if(!merged.has(key))merged.set(key,{key,work,people:[],copies:[]});
      const entry=merged.get(key);
@@ -6802,7 +6892,7 @@
     for(const {person,work} of held){
      const row=node('div',null,fold,{class:'sc-author-inbox-row'});
      node('b',D(work.title||work.doi||work.id),row);
-     node('p',[person.name,work.venue,(work.date||'').slice(0,4),(work.places||[]).join(', ')].filter(Boolean).join(' · '),row,{class:'sc-muted'});
+     node('p',D([person.name,work.venue,(work.date||'').slice(0,4),(work.places||[]).join(', ')].filter(Boolean).join(' · ')),row,{class:'sc-muted'});
      node('p',T('동명이인일 수 있음'),row,{class:'sc-muted'});
      const acts=node('div',null,row,{class:'sc-hit-actions'});
      button('이 저자의 논문입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,true);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{class:'sc-namesake-confirm'});
@@ -6938,7 +7028,10 @@
    };
    const COAUTHOR_NOTE=T('공동 저자로 실린 문헌은 관련된 관심 저자 모두에게 집계됩니다');
    // What a person has that is still to look at: their news less what the inbox has marked 확인함.
-   const unseenWorks=person=>(person.news||[]).filter(work=>!isSeen({key:seenWorkKey(work)}));
+   /* The display cap (50 unseen per author) is separate from what is stored:
+      the rest stay in the file and come into view as these are marked seen. */
+   const shownNews=person=>{let open=0;const cap=runtime.NEWS_LIMIT||50;return (person.news||[]).filter(work=>{if(isSeen({key:seenWorkKey(work)}))return true;return ++open<=cap;});};
+   const unseenWorks=person=>shownNews(person).filter(work=>!isSeen({key:seenWorkKey(work)}));
    /* 관계: who among the followed authors writes with whom. Every edge is a
       paper two of them are both on, found in what is already held -- the news
       each one's last check kept (its stored author names) and the library's own
@@ -6969,9 +7062,10 @@
    const GRAPH_LIMIT=40;
    function drawAuthorGraph(watched,parent,hook){
     const graphTools=runtime.graphTools;
-    const open=runtime.cache.workbenchUI?.authorGraphOpen!==false;
+    // The combined picture of everyone followed is the secondary view: each author has a graph of their own, so this one starts closed.
+    const open=runtime.cache.workbenchUI?.authorGraphOpen===true;
     const edgesAll=authorLinks(watched);
-    const head=sectionHead('관계',edgesAll.length?T(`공저 ${edgesAll.length}쌍`):'',parent);
+    const head=sectionHead('전체 관심 저자 관계',edgesAll.length?T(`공저 ${edgesAll.length}쌍`):'',parent);
     const toggle=viewButton(open?'접기':'펼치기',()=>{saveUI({authorGraphOpen:!open});refreshWatched();},head,{class:'sc-graph-toggle','aria-expanded':String(open),title:T('관심 저자 사이의 공저 관계')});
     if(!open||!graphTools?.layout)return;
     const wrap=node('div',null,parent,{class:'sc-author-graph-wrap'});
@@ -7117,7 +7211,7 @@
      const top=node('div',null,summary,{class:'sc-author-graph-who'});
      watchFace(person,top);
      const names=node('div',null,top,{class:'sc-author-graph-name'});
-     node('strong',person.name,names);
+     node('strong',D(person.name),names);
      placeLine(person,names);
      const figures=[f.lib?T(`서재 ${f.lib}편`):T('서재에 없음'),f.fresh?T(`새 논문 ${f.fresh}편`):T('새 논문 없음'),T(`공저 ${near.get(picked).size}명`)];
      node('p',figures.join(' · '),summary,{class:'sc-muted sc-author-graph-figures'});
@@ -7550,8 +7644,30 @@
     }
     if(state.watchRefocus){state.watchRefocus=false;host.querySelector('.sc-watch-expand-body')?.focus?.();}
    }
+   /* Authors the matcher would not adopt on its own: a weak name match with
+      nothing but the name to go on. Kept until the user follows one of the
+      candidates or says none of them is the person. */
+   function drawPendingAuthors(parent){
+    const pending=runtime.pendingAuthorCandidates?.()||[];
+    if(!pending.length)return;
+    const group=node('section',null,parent,{class:'sc-group sc-person-group sc-author-pending'});
+    sectionHead('확인이 필요한 저자 후보',pending.length,group,'sc-author-head');
+    node('p','이름만으로는 같은 사람인지 알 수 없어 자동으로 등록하지 않았습니다. 맞는 사람을 직접 고르세요.',group,{class:'sc-muted'});
+    for(const row of pending){
+     const card=node('div',null,group,{class:'sc-hit'});
+     node('p',D([row.name,row.institution].filter(Boolean).join(' · ')),card,{class:'sc-hit-title'});
+     for(const c of row.candidates){
+      const line=node('div',null,card,{class:'sc-hit-actions'});
+      node('span',D([c.name,(c.institutions||[]).slice(0,2).join(', '),c.works!=null?T(`논문 ${c.works}편`):''].filter(Boolean).join(' · ')),line,{class:'sc-hit-meta'});
+      button('이 저자 등록',()=>run(async()=>{await runtime.confirmAuthorCandidate(row.key,c.id);if(!disposed&&state.tab==='authors')refreshWatched();}),line,{'data-writes':'cache',title:T('이 사람의 현재 논문을 기준으로 관심 저자에 등록합니다')});
+     }
+     const none=node('div',null,card,{class:'sc-hit-actions'});
+     button('모두 아닙니다',()=>run(async()=>{await runtime.dismissAuthorCandidate(row.key);if(!disposed&&state.tab==='authors')refreshWatched();}),none,{'data-writes':'cache'});
+    }
+   }
    function refreshWatched(){
     watchArea.replaceChildren();
+    drawPendingAuthors(watchArea);
     drawWatched(watchArea);
 
    }
@@ -8356,7 +8472,7 @@
    // The app's own light/dark switch only flips between the two (the setting has no 'follow the system' value), so it sits on the same row as the other panel look controls.
    node('span',T('앱 테마'),form,{class:'sc-settings-label'});
    button('앱 밝게/어둡게 전환',()=>runtime.toggleAppTheme(),form);
-   button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);panel.style.fontSize=fontSize+'px';size.value=String(fontSize);message(`패널 모양을 저장했습니다 · 글꼴 ${fontSize}px`);},form,{'data-variant':'primary'});
+   button('스타일 저장',async()=>{runtime.Z.Prefs.set('extensions.style-custom.accentColor',accent.value,true);const fontSize=Math.max(11,Math.min(20,Number(size.value)||13));runtime.Z.Prefs.set('extensions.style-custom.panelFontSize',fontSize,true);if(['#374151','#5654d8'].includes(accent.value.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent.value);setPanelFontSize(fontSize);size.value=String(fontSize);message(`패널 모양을 저장했습니다 · 글꼴 ${fontSize}px`);},form,{'data-variant':'primary'});
    const list=part('목록 표시','Zotero 문헌 목록의 제목 열과 항목 아이콘에 적용됩니다.');
    const opts=node('div',null,list,{class:'sc-settings-stack'});
    check('제목 옆 색상·별점 태그',runtime.pref('titleTags',false),on=>{runtime.Z.Prefs.set('extensions.style-custom.titleTags',on,true);runtime.refreshWindows();},opts);
@@ -8451,7 +8567,10 @@
    for(const card of body.querySelectorAll('[data-item-id="'+key+'"]'))paintMetrics(item,card);
    refreshTotals(false);
   }
-  async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=setting('panelFontSize',13)+'px';await render();}
+  /* The size the user chose is the base of the whole type scale (--sc-fs-base in the stylesheet): titles, body and meta
+     all derive from it, with an 11px floor. Setting only font-size left every rule that names a variable at 13/12/11. */
+  function setPanelFontSize(size){const px=Math.max(11,Math.min(20,Number(size)||13))+'px';panel.style.fontSize=px;panel.style.setProperty('--sc-fs-base',px);}
+  async function applyPreferences(){panel.dataset.density=setting('workbenchDensity',runtime.cache.workbenchUI?.density||'comfortable');syncDensity();const accent=setting('accentColor','#374151');if(['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.removeProperty('--sc-accent');else panel.style.setProperty('--sc-accent',accent);setPanelFontSize(setting('panelFontSize',13));await render();}
   const keyboard=e=>{if(e.isComposing||panel.hidden)return;
    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();e.stopPropagation();commands.hidden?openCommands():closeCommands();return;}
    if(!commands.hidden)return;
@@ -8499,7 +8618,7 @@
    for(const entry of memoFields)Promise.resolve(entry.flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
    abortAround();dismissToast();disposed=true;LIVE_DRAFT_WINDOWS.delete(WINDOW_ID);stopMemoListener?.();win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
-  const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);panel.style.fontSize=Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13))+'px';
+  const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);setPanelFontSize(Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13)));
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.
   const setStatus=value=>{if(!disposed)message(value);};

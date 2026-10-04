@@ -4814,7 +4814,7 @@ test('a reading tick hands the changed item id to the open panel, so it repaints
   assert.deepEqual(got, [42]);
 });
 
-test('runtime badges are drawn at 11px with ink that reaches 4.5:1, and the T4 label reads on white and on dark', async () => {
+test('runtime badges are drawn at their original 9px (user-requested, 2026-10-04) with ink that reaches 4.5:1, and the T4 label reads on white and on dark', async () => {
   const {parseHTML} = await import('linkedom');
   const {document} = parseHTML('<html><body></body></html>');
   const {plugin} = fixture();
@@ -4827,8 +4827,9 @@ test('runtime badges are drawn at 11px with ink that reaches 4.5:1, and the T4 l
       const mark = plugin.journalMarkForVenue(document, venue, P);
       assert.ok(mark, venue);
       const css = mark.style.cssText;
-      assert.match(css, /font-size:\s*11px/, venue + ' is 11px, not 9px');
-      assert.doesNotMatch(css, /font-size:\s*9px/);
+      assert.match(css, /font-size:\s*9px/, venue + ' is the original 9px');
+      assert.match(css, /min-width:22px;height:14px;padding:0 4px/, venue + ' keeps its 22 x 14px box');
+      assert.doesNotMatch(css, /font-size:\s*11px/);
       const bg = /background:\s*(#[0-9a-f]{6})/i.exec(css)?.[1], ink = /(?:^|;)\s*color:\s*(#[0-9a-f]{6})/i.exec(css)?.[1];
       if (bg && ink) assert.ok(J.contrast(ink, bg) >= 4.5, `${venue} ${dark ? 'dark' : 'light'} ${J.contrast(ink, bg).toFixed(2)}`);
     }
@@ -4860,7 +4861,64 @@ test('held papers are the active items of one library: trashed ones and other li
   assert.deepEqual([...plugin.otherLibraryDOIs(1)], ['10.1/group'], 'held elsewhere is reported separately');
   assert.equal(plugin.itemInOtherLibrary('10.1/group', 1), group);
   assert.equal(plugin.itemInOtherLibrary('10.1/mine', 1), null);
-  // The trash is read live: restoring the paper makes it held again.
+  // The Zotero notifier drops the held map on a restore, which makes the paper held again.
   trashed.deleted = false;
+  plugin.invalidateHeldRows();
   assert.ok(plugin.libraryDOIs(1).has('10.1/trashed'));
+});
+
+test('a stored PMID in Extra reaches the supplementary lookup, and a correction by other authors is never downloaded', async () => {
+  const f = supplementaryFixture({article: {
+    id: 'PMC999', source: 'PMC', pmcid: 'PMC999', pmid: '99999', title: 'Correction: Gene X controls growth.',
+    pubYear: '2025', authorString: 'Other A.', hasSuppl: 'Y', isOpenAccess: 'Y',
+    pubTypeList: {pubType: ['Published Erratum']}}});
+  const fields = {title: 'Gene X controls growth', date: '2020', extra: 'PMID: 12345678'};
+  f.ref.getField = key => fields[key] || '';
+  f.ref.getCreators = () => [{firstName: 'J', lastName: 'Park'}];
+  const result = await f.plugin.fetchSupplementary(f.ref);
+  assert.match(f.requests[0], /EXT_ID%3A12345678/, 'the PMID is searched, not the title');
+  assert.notEqual(result.status, 'ok');
+  assert.equal(f.imported.length, 0);
+  assert.equal(f.requests.length, 1, 'no archive request');
+});
+
+test('a title-only match that fails the strict check is a candidate needing confirmation, with nothing downloaded', async () => {
+  const f = supplementaryFixture({article: {
+    id: 'PMC999', source: 'PMC', pmcid: 'PMC999', pmid: '99999', title: 'Gene X controls growth',
+    pubYear: '2025', authorString: 'Other A.', hasSuppl: 'Y', isOpenAccess: 'Y', pubTypeList: {pubType: ['Journal Article']}}});
+  const fields = {title: 'Gene X controls growth', date: '2020'};
+  f.ref.getField = key => fields[key] || '';
+  f.ref.getCreators = () => [{firstName: 'J', lastName: 'Park'}];
+  const result = await f.plugin.fetchSupplementary(f.ref);
+  assert.equal(result.status, 'needs-confirmation');
+  assert.equal(result.candidate.pmcid, 'PMC999');
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.imported.length, 0);
+});
+
+test('audit6 itemForDOI reads the library once per batch, not once per call (1,200 items x 200 rows)', () => {
+  const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+  const all = new Map(), cacheItems = {};
+  for (let n = 1; n <= 1200; n++) {
+    const ref = item(n, {libraryID: 1});
+    ref.getField = name => name === 'DOI' ? '10.1/p' + n : '';
+    ref.deleted = false; ref.isRegularItem = () => true; ref.libraryID = 1; ref.key = 'K' + n;
+    all.set('1:K' + n, ref); cacheItems['1:K' + n] = {};
+  }
+  let lookups = 0;
+  Z.Items = {...(Z.Items || {}), getByLibraryAndKey: (lib, key) => { lookups++; return all.get(lib + ':' + key); }};
+  plugin.cache.items = cacheItems;
+  for (let row = 0; row < 200; row++) assert.equal(plugin.itemForDOI('10.1/p' + (row + 1), 1), all.get('1:K' + (row + 1)));
+  assert.ok(lookups <= 1200 + 200, `${lookups} item lookups for 200 rows; one pass over the library is 1,200`);
+  const before = lookups;
+  for (let row = 0; row < 200; row++) plugin.libraryDOIs(1);
+  assert.equal(lookups, before, 'libraryDOIs reuses the same map');
+  // A click re-verifies just that item: a paper trashed since is not returned.
+  all.get('1:K5').deleted = true;
+  assert.equal(plugin.itemForDOI('10.1/p5', 1), null);
+  // The notifier drops the map, so an added or restored paper is seen.
+  const late = item(2000, {libraryID: 1}); late.getField = n => n === 'DOI' ? '10.1/late' : ''; late.deleted = false; late.isRegularItem = () => true; late.libraryID = 1; late.key = 'K2000';
+  all.set('1:K2000', late); plugin.cache.items['1:K2000'] = {};
+  plugin.invalidateHeldRows();
+  assert.equal(plugin.itemForDOI('10.1/late', 1), late);
 });

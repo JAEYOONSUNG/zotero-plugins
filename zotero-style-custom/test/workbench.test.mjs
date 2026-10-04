@@ -92,7 +92,7 @@ function fixture(initialCache,toolbar,{nativeJCR=false,catalog,locale}={}){
   importWork:record('importWork',[{getField:()=>'Imported paper'}])
  });
  runtime.Z={Items:{get:id=>refs.get(id),getAsync:async id=>refs.get(id)||{id}},Libraries:{userLibraryID:1},Prefs:{set:(...a)=>calls.push(['pref',...a])},Utilities:{Internal:{copyTextToClipboard:text=>calls.push(['copy',text])}},Notifier:{registerObserver:observer=>{notify=observer.notify;return 42;},unregisterObserver:id=>calls.push(['unregister',id])},logError:error=>errors.push(error)};
- const library={trashItems:record('trashItems',async ids=>ids.length),snapshot:record('snapshot',()=>papers),graph:rows=>({nodes:rows.map(i=>({id:i.id,label:i.title})),edges:[]}),tagTree:()=>[{name:'topic',path:'topic',count:2,children:[]}],notes:record('notes',[{id:'9',title:'Rich note',text:'<script>literal note</script>',modified:'today',html:'<b>unsafe raw HTML</b>'}]),annotations:record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Highlight',comment:'Comment',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]),backlinks:record('backlinks',[{id:'2',title:'Paper Beta',kind:'related'}]),attachments:record('attachments',[{id:'99',parentID:'1',title:'PDF one',contentType:'application/pdf'},{id:'100',parentID:'1',title:'PDF two',contentType:'application/pdf'}]),collections:record('collections',[{id:'4',name:'Research',count:2,parentID:null}]),openItem:record('open'),relate:record('relate'),addTags:record('addTags'),removeTags:record('removeTags'),setRemark:record('remark'),memoToNote:record('memoToNote',async()=>({created:true,text:''})),createNote:record('createNote','9'),noteFromAnnotations:record('extract','9')};
+ const library={trashItems:record('trashItems',async ids=>ids.length),snapshot:record('snapshot',()=>papers),graph:rows=>({nodes:rows.map(i=>({id:i.id,label:i.title})),edges:[]}),neighbours:()=>[],tagTree:()=>[{name:'topic',path:'topic',count:2,children:[]}],notes:record('notes',[{id:'9',title:'Rich note',text:'<script>literal note</script>',modified:'today',html:'<b>unsafe raw HTML</b>'}]),annotations:record('annotations',[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Highlight',comment:'Comment',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}]),backlinks:record('backlinks',[{id:'2',title:'Paper Beta',kind:'related'}]),attachments:record('attachments',[{id:'99',parentID:'1',title:'PDF one',contentType:'application/pdf'},{id:'100',parentID:'1',title:'PDF two',contentType:'application/pdf'}]),collections:record('collections',[{id:'4',name:'Research',count:2,parentID:null}]),openItem:record('open'),relate:record('relate'),addTags:record('addTags'),removeTags:record('removeTags'),setRemark:record('remark'),memoToNote:record('memoToNote',async()=>({created:true,text:''})),createNote:record('createNote','9'),noteFromAnnotations:record('extract','9')};
  const palettes=[];const reader={annotationPalettes:()=>palettes,saveAnnotationPalette:record('savePalette',(name,entries)=>{const row={id:'palette1',name,entries};palettes.push(row);return row;}),applyAnnotationPalette:record('applyPalette'),deleteAnnotationPalette:record('deletePalette',id=>{palettes.splice(palettes.findIndex(p=>p.id===id),1);}),tabs:()=>[{id:'tab1',title:'Paper Alpha',itemID:1,selected:true}],tabGroups:()=>[{id:'g1',name:'Group',tabs:[{id:1}]}],viewGroups:()=>[{id:'v1',name:'View',columns:[{dataKey:'title'}]}],applyTheme:record('theme'),setMarginAnnotations:record('margin'),setColorLabel:record('color'),setSidebar:record('sidebar'),setVerticalTabs:record('vertical'),saveTabGroup:record('saveTabs'),restoreTabGroup:record('restoreTabs',{opened:1,missing:0}),deleteTabGroup:record('deleteTabs'),undeleteTabGroup:record('undeleteTabs'),undeleteView:record('undeleteView'),selectTab:record('selectTab'),closeTab:record('closeTab'),saveView:record('saveView'),applyView:record('applyView'),deleteView:record('deleteView')};
  Object.assign(library,{mergeAnnotations:record('mergeAnnotations','3'),unrelate:record('unrelate',2),renameTagBranch:record('renameTagBranch',{updatedItems:1,renamedTags:1,mergedTags:0}),recolorAnnotations:record('recolor',1),collectionItems:record('collectionItems',['2'])});
  Object.assign(reader,{moveTab:(...args)=>{calls.push(['moveTab',...args]);},closeOtherTabs:(...args)=>{calls.push(['closeOtherTabs',...args]);return {closed:1};},renameTabGroup:record('renameTabGroup'),updateTabGroup:record('updateTabGroup'),renameView:record('renameView'),updateView:record('updateView'),marginOptions:()=>({width:210,side:'right',textLimit:1500}),setMarginOptions:record('setMarginOptions'),resetAppearance:record('resetAppearance')});
@@ -4858,7 +4858,7 @@ test('an inbox row says each thing once: the journal in its ink, Preprint as one
   f.bench.destroy();
 });
 
-test('저자 추적 order: 관심 저자 first, then 관계, then 저장된 새 논문, toolbar on top',async()=>{
+test('저자 추적 order: 관심 저자 first, then 전체 관심 저자 관계, then 저장된 새 논문, toolbar on top',async()=>{
   const f = fixture();
   const rows = [{id: 'A1', name: 'Ada', seen: [], news: [{id: 'W1', title: 'T', venue: 'Nature', date: '2026-09-01', doi: '10.1/x'}]}];
   f.runtime.watchedAuthors = () => rows;
@@ -4866,7 +4866,9 @@ test('저자 추적 order: 관심 저자 first, then 관계, then 저장된 새 
   f.runtime.graphTools = PaperGraph;
   await f.bench.show('authors');
   const heads = [...f.body().querySelectorAll('.sc-author-watch .sc-section-head-name')].map(h => h.textContent);
-  assert.deepEqual(heads, ['관심 저자', '관계', '저장된 새 논문']);
+  assert.deepEqual(heads, ['관심 저자', '전체 관심 저자 관계', '저장된 새 논문']);
+  assert.equal(f.body().querySelector('.sc-author-graph'), null, 'the combined graph starts closed: each author has a graph of their own');
+  assert.equal(f.body().querySelector('.sc-graph-toggle').getAttribute('aria-expanded'), 'false');
   const area = f.body().querySelector('.sc-author-watch');
   assert.equal(area.firstElementChild.className.includes('sc-watch-head'), true, 'the toolbar stays on top');
   f.bench.destroy();
@@ -4892,6 +4894,7 @@ const coWorks = () => {
 };
 const graphFixture = async () => {
   const f = fixture();
+  f.runtime.cache.workbenchUI = {...(f.runtime.cache.workbenchUI || {}), authorGraphOpen: true};
   const rows = coWorks();
   f.runtime.watchedAuthors = () => rows;
   f.runtime.watchedAuthorsByNews = () => rows;
@@ -4974,6 +4977,7 @@ test('관계 graph is keyboard operable: Enter and Space choose, arrows move the
 
 test('관계 graph with many authors shows the connected ones and the most active, and 모두 보기 shows everyone',async()=>{
   const f = fixture();
+  f.runtime.cache.workbenchUI = {...(f.runtime.cache.workbenchUI || {}), authorGraphOpen: true};
   const rows = [];
   for (let i = 0; i < 60; i++) rows.push({id: 'P' + i, name: 'Person' + String.fromCharCode(65 + i % 26) + ' Surname' + String.fromCharCode(97 + Math.floor(i / 26)) + i, institution: 'X', seen: [], sweptAt: '2026-09-18T00:00:00Z', news: []});
   for (let i = 0; i < 10; i += 2) {
@@ -8390,8 +8394,8 @@ test('내 기록 포함 indexes notes and annotations once per load, not once pe
 
 test('the relation graph hands the whole library to library.graph; nothing slices it to 500 first',()=>{
  const source=fs.readFileSync(new URL('../src/workbench.js',import.meta.url),'utf8');
- const calls=[...source.matchAll(/library\.graph\(([^;]*?),\{mode:/g)].map(m=>m[1]);
- assert.ok(calls.length>=2);
+ const calls=[...source.matchAll(/library\.(?:graph|neighbours)\(([^;]*?),\{mode:/g)].map(m=>m[1]);
+ assert.ok(calls.length>=2,'both the whole-library graph and the neighbour lookup');
  for(const arg of calls)assert.doesNotMatch(arg,/slice\(/,'library.graph(' + arg + ') must not pre-slice');
 });
 
@@ -8675,7 +8679,12 @@ test('English: notes, annotations, tags, titles and names that contain interface
   const visible=el=>{const parts=[];const add=(text,where)=>{parts.push(text);places.set(text,where);};const walk=n=>{for(const c of n.childNodes){if(c.nodeType===3)add(c.textContent,(n.localName||'')+'.'+String(n.className||'').split(/\s+/)[0]);else if(c.nodeType===1){for(const a of ['title','aria-label','placeholder'])if(c.getAttribute(a))add(c.getAttribute(a),(c.localName||'')+'['+a+']');if(['textarea','input'].includes(c.localName)&&c.value)add(c.value,(c.localName||'')+'.value');walk(c);}}};walk(el);return parts;};
   f.runtime.watchedAuthors=()=>[{id:'A1',name:words.note,institution:words.venue,seen:[],news:[{id:'W4',title:words.title,doi:'10.1/f',date:'2026-09-01',places:[]}],works:[]}];
   f.runtime.watchedAuthorsByNews=f.runtime.watchedAuthors;
-  const expectations=[['authors',[words.note]],['journals',[words.venue]],['matrix',[words.title]],['explore',[words.title,words.author,words.venue]],['notes',[words.note,words.quote]],['annotations',[words.quote]],['tags',[words.tag,words.note]],['collections',[words.collection]],['attachments',[words.file]],['tabs',[words.tabTitle,words.group]],['views',[words.group]],['canvas',[words.board,words.card]]];
+  // The reading queue: its reason, the papers that prompted it, who it came from and the venue are the user's data too.
+  f.runtime.cache.workbenchUI={...(f.runtime.cache.workbenchUI||{}),readingQueue:{'1:K1':{at:new Date(Date.now()-2000).toISOString(),people:[words.author],reason:{text:words.note,paperIDs:['2'],direction:'citing'}}}};
+  f.papers[1].title=words.note;f.papers[1].status='done';
+  // Author candidates awaiting confirmation: the name, place and candidates are shown as stored.
+  f.runtime.pendingAuthorCandidates=()=>[{key:'k',name:words.quote,institution:words.venue,candidates:[{id:'A9',name:words.author,institutions:[words.venue],works:3,evidence:[]}]}];
+  const expectations=[['reading',[words.note,words.title,words.author]],['authors',[words.note,words.quote,words.author]],['journals',[words.venue]],['matrix',[words.title]],['explore',[words.title,words.author,words.venue]],['notes',[words.note,words.quote]],['annotations',[words.quote]],['tags',[words.tag,words.note]],['collections',[words.collection]],['attachments',[words.file]],['tabs',[words.tabTitle,words.group]],['views',[words.group]],['canvas',[words.board,words.card]]];
   const problems=[];
   for(const [tab,raws] of expectations){
    if(tab==='canvas')f.bench.state.boardID='b1';
@@ -8683,7 +8692,7 @@ test('English: notes, annotations, tags, titles and names that contain interface
    await f.bench.show(tab);await f.bench.load();await settle();
    const pieces=visible(f.bench.panel);
    for(const raw of raws)if(!pieces.some(p=>p.includes(raw)))problems.push(`${tab}: "${raw}" is not shown as written`);
-   for(const bad of ['checked 필요','Memo for 내','결과 3 papers','핵심 결과 3 papers'])for(const p of pieces)if(p.includes(bad))problems.push(`${tab}: user text rewritten to "${bad}" in ${places.get(p)}`);
+   for(const bad of ['checked 필요','Memo for 내','결과 3 papers','핵심 결과 3 papers','Needs checking','Queued'])for(const p of pieces)if(p.includes(bad))problems.push(`${tab}: user text rewritten to "${bad}" in ${places.get(p)}`);
   }
   assert.deepEqual(problems,[],'user text was altered');
   // The self-same text in Korean mode is also unchanged: the helper is not an English-only branch.
@@ -8742,4 +8751,89 @@ test('Korean: the rail shows the whole Korean names',async()=>{
  const f=fixture();
  for(const b of f.bench.panel.querySelectorAll('nav button[data-tab]'))assert.equal(b.querySelector('.sc-nav-label').textContent,Workbench.TABS.find(([id])=>id===b.dataset.tab)[1]);
  f.bench.destroy();
+});
+
+test('audit10 saving a panel font size sets the base the whole type scale derives from',async()=>{
+ const f=fixture();
+ try{
+  await f.bench.show('appearance');
+  const plus=[...f.body().querySelectorAll('button')].find(b=>b.getAttribute('aria-label')==='글꼴 크기 키우기');
+  for(let i=0;i<10;i++){plus.click();await new Promise(r=>setTimeout(r,5));}
+  await f.click('스타일 저장');
+  assert.equal(f.bench.panel.style.getPropertyValue('--sc-fs-base'),'20px');
+  assert.equal(f.bench.panel.style.fontSize,'20px');
+ }finally{f.bench.destroy();}
+});
+
+/* ---- Item 11: every followed author has a relationship graph of their own ---- */
+const egoFixture=(extra={})=>{
+ const {f,rows}=expandFixture();
+ f.runtime.portraitTools=require('../src/author-portrait.js');
+ f.runtime.portraitOf=id=>id==='A2'?{url:'https://img.example/bo.jpg'}:null;
+ const mates=Array.from({length:30},(_,i)=>({id:'M'+i,name:'Mate '+String.fromCharCode(97+i%26)+String.fromCharCode(97+Math.floor(i/26))+'z'}));
+ const work=(id,doi,people)=>({id,doi,title:'Paper '+id,year:2025,people:[{id:'A1',name:'Ada Lovelace'},...people]});
+ const works=[work('W10','10.1/e1',[{id:'A2',name:'Bo Chen'},mates[0]]),work('W11','10.1/e2',[{id:'A2',name:'Bo Chen'},mates[1]]),work('W12','10.1/e3',[{id:'A2',name:'Bo Chen'}]),
+  ...mates.map((m,i)=>work('X'+i,'10.2/'+i,[m]))];
+ f.runtime.authorUpdates=async id=>({profile:{name:'Ada Lovelace',hIndex:50,works:120,citations:9000,institutions:['MIT'],topics:[],orcid:''},works:id==='A1'?works:[],fresh:[],watching:true,checkedAt:'2026-09-17T00:00:00Z'});
+ Object.assign(f.runtime,extra);
+ return {f,rows,mates};
+};
+const openAda=async f=>{
+ await f.bench.show('authors');await f.click('목록 관리');
+ f.body().querySelector('tr.sc-watch-row[data-author-id="A1"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ return personOf(f).querySelector('.sc-ego-graph');
+};
+
+test('an author\'s own graph has them in the centre, a line per co-author weighted by shared papers, and every node named',async()=>{
+ const {f}=egoFixture();
+ try{
+  const svg=await openAda(f);
+  assert.ok(svg,'the graph is drawn inside the opened author');
+  const centre=svg.querySelector('[data-ego="A1"]');
+  assert.ok(centre,'the author is a node');
+  assert.equal(centre.querySelector('.sc-graph-label').textContent,'Ada Lovelace');
+  const nodes=[...svg.querySelectorAll('g[data-ego]')].filter(g=>g.getAttribute('data-ego')!=='A1');
+  const edges=[...svg.querySelectorAll('line.sc-ego-edge')];
+  assert.equal(nodes.length,20,'capped at twenty by weight');
+  assert.equal(edges.length,nodes.length,'one line from the centre to each co-author');
+  const bo=svg.querySelector('[data-ego="A2"]');
+  assert.match(bo.querySelector('title').textContent,/3편/,'Bo Chen shares three papers');
+  assert.equal(bo.querySelector('.sc-graph-label').textContent,'Bo Chen','a followed co-author shows the full name');
+  assert.ok(bo.querySelector('image'),'and the photo');
+  const widths=edges.map(e=>Number(e.getAttribute('stroke-width')));
+  assert.equal(Math.max(...widths),widths[0],'the heaviest line is the first co-author');
+  for(const g of nodes){
+   assert.ok(g.querySelector('title').textContent.length>3,'every node says who it is');
+   const label=g.querySelector('.sc-graph-label');
+   if(!label)assert.match(g.querySelector('.sc-author-initials').textContent,/^[A-Z]{1,2}$/,'initials for the rest');
+  }
+  assert.ok(nodes.filter(g=>g.querySelector('.sc-graph-label')).length<=9,'full names for the top few only');
+ }finally{f.bench.destroy();}
+});
+
+test('the author\'s graph shows twenty co-authors and a Show all toggle that is a view control, then everyone',async()=>{
+ const {f}=egoFixture();
+ try{
+  let svg=await openAda(f);
+  const toggle=personOf(f).querySelector('.sc-person-ego .sc-graph-all');
+  assert.ok(toggle,'there are more than twenty');
+  assert.equal(toggle.getAttribute('data-safe'),'view','a view button, not a write');
+  assert.match(toggle.textContent,/모두 보기 \(31명\)/);
+  toggle.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  svg=personOf(f).querySelector('.sc-ego-graph');
+  assert.equal(svg.querySelectorAll('g[data-ego]').length,32,'31 co-authors and the author');
+  assert.match(personOf(f).querySelector('.sc-person-ego .sc-graph-all').textContent,/상위 20명만 보기/);
+ }finally{f.bench.destroy();}
+});
+
+test('a followed co-author in the graph opens where they are in the table',async()=>{
+ const {f}=egoFixture();
+ try{
+  const svg=await openAda(f);
+  const bo=svg.querySelector('[data-ego="A2"]');
+  assert.equal(bo.getAttribute('role'),'button');
+  bo.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  assert.equal(personOf(f).previousElementSibling.dataset.authorId,'A2','Bo Chen opens right in the table');
+  assert.equal(f.body().querySelector('.sc-author-watch > .sc-author-graph-wrap'),null,'the combined graph stays closed');
+ }finally{f.bench.destroy();}
 });

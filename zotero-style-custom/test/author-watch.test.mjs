@@ -560,7 +560,7 @@ test("an author never checked before still sees their whole window, since there 
   assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["W1"], "there is nothing to measure it against yet");
 });
 
-test("an author with more than eight new papers keeps every unseen one, up to a cap of fifty", async () => {
+test("an author with more than eight new papers keeps every unseen one, up to the storage cap", async () => {
   const page = works => ({results: works, meta: {next_cursor: null}});
   const many = n => Array.from({length: n}, (_, i) => work("W" + i, ["A1"], {publication_date: new Date(Date.now() - (i + 1) * 864e5).toISOString().slice(0, 10)}));
   const h = host({rows: [person("A1", {seen: []})], pages: [page(many(12)), page([])]});
@@ -568,7 +568,7 @@ test("an author with more than eight new papers keeps every unseen one, up to a 
   assert.equal(h.cache.watchedAuthors[0].news.length, 12, "the card must not say there is nothing left while four papers were dropped");
   const big = host({rows: [person("A1", {seen: []})], pages: [page(many(60)), page([])]});
   await big.sweepWatchedAuthors();
-  assert.equal(big.cache.watchedAuthors[0].news.length, 50);
+  assert.equal(big.cache.watchedAuthors[0].news.length, 60, "storage is separate from the 50 the inbox shows");
   assert.equal(big.cache.watchedAuthors[0].news[0].id, "W0", "newest first, so the oldest are the ones dropped");
 });
 
@@ -653,4 +653,87 @@ test("confirming a held paper makes it news and teaches the place; rejecting rem
   const later = host({rows: no.cache.watchedAuthors, pages: [{results: [signed("W2", "A1", [["Nanjing Agricultural University", "RNAU", "CN"]])], meta: {}}]});
   await later.sweepWatchedAuthors();
   assert.deepEqual(later.cache.watchedAuthors[0].unverified, [], "a rejected paper never comes back");
+});
+
+// Audit item 2, runtime side: nothing is followed on the strength of being the only candidate.
+function importHost(candidates) {
+  const h = host({rows: [], pages: []});
+  h.cache.watchedAuthors = [];
+  const requested = [];
+  h.discoverJSON = async url => { requested.push(url); return {results: candidates.map(c => ({
+    id: "https://openalex.org/" + c.id, display_name: c.name, works_count: 50, summary_stats: {h_index: 20},
+    last_known_institutions: c.institutions.map(display_name => ({display_name})), orcid: c.orcid || null, topics: []}))}; };
+  h.requested = requested;
+  h.resolveAuthor = Runtime.prototype.resolveAuthor;
+  h.resolveAuthorDetailed = Runtime.prototype.resolveAuthorDetailed;
+  h.importWatchedAuthors = Runtime.prototype.importWatchedAuthors;
+  h.authorActivity = async () => ({works: []});
+  for (const name of ["pendingAuthorCandidates", "keepAuthorCandidates", "confirmAuthorCandidate", "dismissAuthorCandidate"])
+    h[name] = Runtime.prototype[name];
+  h.flush = async function () { this.flushed = (this.flushed || 0) + 1; };
+  return h;
+}
+
+test("a different-name candidate is not auto-followed, and is not even offered", async () => {
+  const h = importHost([{id: "A1", name: "David Kim", institutions: ["Harvard University"]}]);
+  const result = await h.importWatchedAuthors([{name: "Alice Kim", institution: "Stanford University"}]);
+  assert.equal(result.added, 0);
+  assert.deepEqual(h.cache.watchedAuthors, []);
+  assert.deepEqual(h.pendingAuthorCandidates(), []);
+  assert.deepEqual(result.unresolved, ["Alice Kim"]);
+});
+
+test("a weak match is kept for the user to confirm; confirming follows, dismissing drops it", async () => {
+  const h = importHost([{id: "A2", name: "A. Kim", institutions: ["Harvard University"]}]);
+  const result = await h.importWatchedAuthors([{name: "Alice Kim", institution: "Stanford University"}]);
+  assert.equal(result.added, 0);
+  assert.equal(result.pending, 1);
+  assert.deepEqual(h.cache.watchedAuthors, [], "nothing saved as followed");
+  const [pending] = h.pendingAuthorCandidates();
+  assert.equal(pending.name, "Alice Kim");
+  assert.equal(pending.candidates[0].id, "A2");
+  await h.confirmAuthorCandidate(pending.key, "A2");
+  assert.deepEqual(h.cache.watchedAuthors.map(r => r.id), ["A2"]);
+  assert.deepEqual(h.pendingAuthorCandidates(), []);
+  const again = importHost([{id: "A2", name: "A. Kim", institutions: ["Harvard University"]}]);
+  await again.importWatchedAuthors([{name: "Alice Kim", institution: "Stanford University"}]);
+  await again.dismissAuthorCandidate(again.pendingAuthorCandidates()[0].key);
+  assert.deepEqual(again.pendingAuthorCandidates(), []);
+});
+
+// Audit item 3: unseen news persists.
+test("an unseen paper survives a normal refresh that finds nothing", async () => {
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const swept = new Date(Date.now() - 3 * 864e5).toISOString();
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const wold = {id: "https://openalex.org/Wold", title: "Wold", doi: "10.1/wold", date: day(20)};
+  const rows = [person("A1", {sweptAt: swept, seen: [], news: [wold]})];
+  const h = host({rows, pages: [page([]), page([])]});
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["https://openalex.org/Wold"]);
+  assert.deepEqual(h.cache.watchedAuthors[0].seen, []);
+});
+
+test("unseen news is dropped only when seen or older than the retention, and a seen paper leaves", async () => {
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const swept = new Date(Date.now() - 3 * 864e5).toISOString();
+  const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const old = {id: "Wold", title: "old", doi: "10.1/old", date: day(200)};
+  const mid = {id: "Wmid", title: "mid", doi: "10.1/mid", date: day(120)};
+  const gone = {id: "Wseen", title: "seen", doi: "10.1/seen", date: day(10)};
+  const rows = [person("A1", {sweptAt: swept, seen: [], news: [old, mid, gone]})];
+  const h = host({rows, pages: [page([]), page([])]});
+  h.cache.workbenchUI = {inboxSeen: {"10.1/seen": "2026-01-01"}};
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors[0].news.map(w => w.id), ["Wmid"], "200 days is past retention, the seen one is gone");
+});
+
+test("what is stored and what is shown have separate caps", async () => {
+  const page = works => ({results: works, meta: {next_cursor: null}});
+  const many = n => Array.from({length: n}, (_, i) => work("W" + i, ["A1"], {publication_date: new Date(Date.now() - (i + 1) * 864e5).toISOString().slice(0, 10)}));
+  const h = host({rows: [person("A1", {seen: []})], pages: [page(many(80)), page([])]});
+  await h.sweepWatchedAuthors();
+  const stored = h.cache.watchedAuthors[0].news.length;
+  assert.ok(stored > h.NEWS_LIMIT, "storage holds more than the display cap, " + stored);
+  assert.ok(stored <= 200, "and is still bounded");
 });

@@ -535,3 +535,35 @@ test("estrogen receptor alpha and beta are two papers: Greek letters are kept in
   ], {seeds: ["W1", "W2"]});
   assert.equal(twin.length, 2);
 });
+
+// Audit item 2: the only candidate is not evidence.
+test("a lone candidate with a different given name is rejected even though the family name agrees", () => {
+  const david = author("David Kim", ["Harvard University"], 20, 80);
+  assert.equal(discover.pickAuthor([david], {name: "Alice Kim", institution: "Stanford University"}), null);
+  assert.equal(discover.scoreAuthor(david, {name: "Alice Kim", institution: "Stanford University"}), 0);
+  // Compatible initials are not a mismatch.
+  const initial = author("A. Kim", ["Stanford University"], 20, 80);
+  assert.ok(discover.scoreAuthor(initial, {name: "Alice Kim"}) > 0);
+  assert.ok(discover.scoreAuthor(author("Alice B. Kim", [], 1, 1), {name: "Alice Kim"}) > 0);
+  assert.ok(discover.scoreAuthor(author("Jaeyoon Sung", [], 1, 1), {name: "Jae Yoon Sung"}) > 0, "a split given name is the same name");
+});
+
+test("a weak name match needs an ORCID, a shared institution or a shared coauthor to be adopted", () => {
+  const initialOnly = author("A. Kim", ["Harvard University"], 20, 80, {orcid: "https://orcid.org/0000-0001-2345-6789"});
+  const wanted = {name: "Alice Kim", institution: "Stanford University"};
+  assert.equal(discover.pickAuthor([initialOnly], wanted), null, "only candidate, name weak, no evidence");
+  assert.equal(discover.pickAuthor([initialOnly], {...wanted, orcid: "0000-0001-2345-6789"}).id, initialOnly.id);
+  assert.equal(discover.pickAuthor([{...initialOnly, institutions: ["Stanford University"]}], wanted).id, initialOnly.id);
+  const withCoauthor = {...initialOnly, coauthors: ["Bob Lee", "Carol Diaz"]};
+  assert.equal(discover.pickAuthor([withCoauthor], {...wanted, coauthors: ["carol diaz"]}).id, initialOnly.id);
+  // A full given-name match stands without extra evidence, as before.
+  const exact = author("Alice Kim", ["Elsewhere"], 20, 80);
+  assert.equal(discover.pickAuthor([exact], wanted).id, exact.id);
+});
+
+test("candidates that cannot be adopted are offered for confirmation, never a different-name person", () => {
+  const david = author("David Kim", ["Harvard University"], 20, 80);
+  const initialOnly = author("A. Kim", ["Harvard University"], 20, 80);
+  const list = discover.uncertainAuthors([david, initialOnly], {name: "Alice Kim", institution: "Stanford University"});
+  assert.deepEqual(list.map(c => c.id), [initialOnly.id]);
+});

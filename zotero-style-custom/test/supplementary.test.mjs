@@ -82,3 +82,37 @@ test("a closed-access article comes back as a readable reason, not a corrupt arc
 test("attachment titles say the file is supplementary so it is distinguishable in the item list", () => {
   assert.equal(suppl.attachmentTitle({name: "mmc1.pdf"}), "Supplementary: mmc1.pdf");
 });
+
+// Audit item 1: a title search must never be trusted as an identifier match.
+const titled = (over = {}) => ({resultList: {result: [{
+  id: "PMC999", source: "PMC", pmcid: "PMC999", pmid: "999", title: "Gene X controls growth in cells.",
+  pubYear: "2020", authorString: "Park J, Lee K.", doi: "10.1/new", hasSuppl: "Y", isOpenAccess: "Y",
+  pubTypeList: {pubType: ["Journal Article"]}, ...over}]}});
+const want = {title: "Gene X controls growth in cells", year: 2020, creators: [{lastName: "Park", firstName: "J"}]};
+
+test("a stored PMID or PMCID drives the lookup before any title search", () => {
+  assert.match(suppl.searchURL({pmid: "12345678", title: "t"}), /EXT_ID%3A12345678/);
+  assert.match(suppl.searchURL({pmcid: "PMC77", pmid: "5", title: "t"}), /PMCID%3APMC77/);
+  assert.match(suppl.searchURL({DOI: "10.1/x", pmid: "5"}), /DOI%3A/);
+});
+
+test("a title-search hit needs exact title, year within one and the first author's family name", () => {
+  const ok = suppl.pickArticle(titled(), want);
+  assert.equal(ok.id, "PMC999");
+  assert.equal(ok.needsConfirmation, undefined);
+  assert.equal(suppl.pickArticle(titled({pubYear: "2021"}), want).id, "PMC999", "year +-1 is allowed");
+  for (const over of [{pubYear: "2025"}, {authorString: "Other A."}, {title: "Gene X controls growth in other cells."}]) {
+    const got = suppl.pickArticle(titled(over), want);
+    assert.equal(got.needsConfirmation, true, JSON.stringify(over));
+    assert.equal(got.hasSupplementary, false, "nothing is downloaded for an unconfirmed candidate");
+    assert.equal(suppl.supplementaryURL(got), null);
+  }
+  assert.equal(suppl.pickArticle(titled(), {title: want.title}).needsConfirmation, true, "no year or author to check means unconfirmed");
+});
+
+test("corrections, errata and retraction notices are never picked", () => {
+  for (const type of ["Published Erratum", "Retraction of Publication", "Retracted Publication", "Correction", "Erratum", "Expression of Concern"]) {
+    assert.equal(suppl.pickArticle(titled({pubTypeList: {pubType: [type]}}), want), null, type);
+  }
+  assert.equal(suppl.pickArticle(titled({title: "Correction: Gene X controls growth in cells"}), want), null);
+});
