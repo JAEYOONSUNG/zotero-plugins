@@ -154,7 +154,7 @@ test('every badge colour lands on the same contrast, so no one of them shouts', 
       const saturation = max === min ? 0 : light > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
       // User direction 2026-10-03 (detail review): the star amber #94600F replaces the muddy #7D5208 for rating stars (4.5:1 on the grey fill, warmer on screen).
       // User direction 2026-10-01 (premium dashboard look): the ZotPoP palette (lime, amber and their inks, the ok/warn/err inks) are the sanctioned saturated colours; nothing else may be.
-      if (['#D8EE9A', '#FAE5BD', '#36440F', '#573700', '#D2EE8C', '#F4CF8A', '#C5E07B', '#F4C871', '#3B422D', '#433827', '#53671E', '#7D5208', '#E6A5A7', '#94600F', '#F2B01E', '#C98A0B', '#F7C948'].includes(hex.toUpperCase())) continue;
+      if (['#D8EE9A', '#FAE5BD', '#36440F', '#573700', '#D2EE8C', '#F4CF8A', '#C5E07B', '#F4C871', '#3B422D', '#433827', '#53671E', '#7D5208', '#E6A5A7', '#94600F', '#FFC233', '#FFD35C'].includes(hex.toUpperCase())) continue;
       assert.ok(saturation <= 0.55, `${file} still has ${hex} at saturation ${saturation.toFixed(2)}`);
     }
   }
@@ -388,10 +388,10 @@ test('inline font sizes in the scripts are at least 11px, except the documented 
  assert.match(journals, /floor-exempt: user-requested original size[^\n]*\n[^\n]*\n\s*const BADGE_FONT_PX = 9;/, 'the badge token is documented as exempt');
 });
 
-test('star colour token: one bright warm yellow with a darker edge in light, a lighter yellow in dark, grey for empty stars',()=>{
- assert.equal(light['--sc-star-fill'],'#f2b01e');assert.equal(light['--sc-star-edge'],'#c98a0b');assert.equal(dark['--sc-star-fill'],'#f7c948');
+test('star colour token: one bright warm yellow with no outline, a lighter yellow in dark, grey for empty stars',()=>{
+ assert.equal(light['--sc-star-fill'],'#ffc233');assert.equal(light['--sc-star-edge'],'transparent');assert.equal(dark['--sc-star-fill'],'#ffd35c');
  for(const [name,p] of [['light',light],['dark',dark]]){const n=parseInt(p['--sc-star-fill'].slice(1),16);assert.ok((n>>16&255)>0xe8&&(n>>8&255)>0xa0&&(n&255)<0x60,name+' fill is a warm yellow');}
  const value=rule('#style-custom-workbench .sc-stars .sc-metric-value');
- assert.equal(value.getPropertyValue('color'),'var(--sc-star-fill)');assert.match(value.getPropertyValue('-webkit-text-stroke'),/var\(--sc-star-edge\)/);
+ assert.equal(value.getPropertyValue('color'),'var(--sc-star-fill)');assert.equal(value.getPropertyValue('-webkit-text-stroke'),'');
  assert.equal(rule('#style-custom-workbench .sc-stars .sc-star-off').getPropertyValue('color'),'var(--sc-muted)');
 });

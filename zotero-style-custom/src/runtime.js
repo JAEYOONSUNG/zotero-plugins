@@ -949,8 +949,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return dark
       // Lifted a step in saturation from the first pastel set, which read as
       // muddy on a white ground; the evenness across hues is kept.
-      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#F7C948',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#676770',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
-      : {blue:'#3068CA',green:'#1C7A4B',orange:'#9D5C25',red:'#C92F34',purple:'#9043D3',teal:'#207585',gold:'#7E681E',amber:'#8F6322',star:'#F2B01E',starEdge:'#C98A0B',reading:'#3C775C',done:'#2D7854',gray:'#6A6A6F',faint:'#8B95A2',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
+      ? {blue:'#7EA3E1',green:'#2BB771',orange:'#D79256',red:'#E3888B',purple:'#BC8EE5',teal:'#2FB0C9',gold:'#C09D2D',amber:'#D1963D',star:'#FFD35C',reading:'#7FC3A3',done:'#3FA372',gray:'#98989D',faint:'#676770',muted:'#A0A0A6',text:'#E8E8ED',tint:0.28,dark:true}
+      : {blue:'#3068CA',green:'#1C7A4B',orange:'#9D5C25',red:'#C92F34',purple:'#9043D3',teal:'#207585',gold:'#7E681E',amber:'#8F6322',star:'#FFC233',reading:'#3C775C',done:'#2D7854',gray:'#6A6A6F',faint:'#8B95A2',muted:'#6E6E73',text:'#1C1C1E',tint:0.18,dark:false};
   }
   tint(hex, alpha) {
     const n = parseInt(hex.slice(1), 16);
@@ -1280,7 +1280,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         star.textContent = n<=rating ? "★" : "☆"; star.title = n===rating ? this.t("클릭하면 별점을 지웁니다") : this.t(`${n}/5로 매기기`); star.setAttribute("role","button");
         // A filled star is a mark, not text: it can be the light warm colour a
         // star is supposed to be instead of the dark ochre that reads as dirt.
-        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};${n<=rating&&P.starEdge?`-webkit-text-stroke:1px ${P.starEdge};`:''}`;
+        star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};`;
         const armed = this.guardClick(star, doc, index);
         star.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
         cell.appendChild(star);
@@ -3793,9 +3793,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (!popup || !host || typeof popup.openPopup !== "function") {
       return apply({unread: "reading", reading: "done", done: "unread"}[current] || "reading");
     }
+    // Each state with the icon its cell shows, so the menu reads like the column.
+    const P = this.palette(doc);
+    const icon = status => {
+      const colour = status === "done" ? P.done : status === "reading" ? P.reading : P.gray;
+      const shape = status === "done" ? `<circle cx="8" cy="8" r="5.5" fill="${colour}"/>`
+        : status === "reading" ? `<circle cx="8" cy="8" r="5" fill="none" stroke="${colour}" stroke-width="1.5"/><path d="M8 3a5 5 0 0 0 0 10z" fill="${colour}"/>`
+        : `<circle cx="8" cy="8" r="5" fill="none" stroke="${colour}" stroke-width="1.5"/>`;
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">${shape}</svg>`);
+    };
+    const title = text => text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
     for (const status of ["unread", "reading", "done"]) {
       const entry = make("menuitem");
-      entry.setAttribute("label", this.t(words[status]));
+      entry.setAttribute("label", title(this.t(words[status])));
+      entry.classList?.add("menuitem-iconic");
+      entry.setAttribute("image", icon(status));
       entry.setAttribute("type", "checkbox");
       if (status === current) entry.setAttribute("checked", "true");
       entry.addEventListener("command", () => { if (status !== current) apply(status); });
@@ -6444,7 +6456,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           else if (node.nodeType === 1) {
             const inner = styleOf(node);
             const box = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect().width : 0;
-            sum += (inner && inner.overflow === 'hidden' ? contentWidth(node) : Math.max(box, overflow(node)))
+            /* A box stretched across its cell (a right-aligned figure is a
+               block as wide as the column) says how wide the column is, not
+               what it holds: measured by its box, each fit added the padding
+               again and IF grew at every double-click. Such a box is
+               measured by its content, like a clipped one. */
+            const stretched = inner && (inner.display === 'block' || inner.display === 'flex' || px(inner.flexGrow) > 0 || box >= (el.clientWidth || 0) - 1 - px(style?.paddingLeft) - px(style?.paddingRight));
+            sum += (inner && (inner.overflow === 'hidden' || stretched) ? contentWidth(node) : Math.max(box, overflow(node)))
               + (inner ? px(inner.marginLeft) + px(inner.marginRight) : 0);
           }
         }

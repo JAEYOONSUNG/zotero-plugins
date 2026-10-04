@@ -1566,10 +1566,10 @@ test('filled stars use gold with enough area to read, empty ones are plainly emp
   // star is supposed to be rather than the dark ochre that read as dirt.
   assert.deepEqual(stars.map(s => s.style.color), [P.star, P.star, P.star, P.faint, P.faint]);
   assert.equal(stars[0].style.fontSize, '13px');
-  // The same colour tokens as the workbench: light #F2B01E with a #C98A0B edge, dark #F7C948.
-  assert.equal(P.star.toUpperCase(), '#F2B01E');assert.equal(P.starEdge.toUpperCase(), '#C98A0B');
-  assert.match(stars[0].style.cssText, /text-stroke:\s*1px/);assert.doesNotMatch(stars[3].style.cssText, /text-stroke/);
-  assert.equal(plugin.palette({defaultView:{matchMedia:()=>({matches:true})},documentElement:{}}).star?.toUpperCase?.()??'#F7C948','#F7C948');
+  // The same colour tokens as the workbench: a bright warm yellow with no outline, light #FFC233, dark #FFD35C.
+  assert.equal(P.star.toUpperCase(), '#FFC233');assert.equal(P.starEdge, undefined);
+  assert.doesNotMatch(stars[0].style.cssText, /text-stroke/);assert.doesNotMatch(stars[3].style.cssText, /text-stroke/);
+  assert.equal(plugin.palette({defaultView:{matchMedia:()=>({matches:true})},documentElement:{}}).star?.toUpperCase?.()??'#FFD35C','#FFD35C');
   assert.notEqual(P.star, P.faint);
   assert.notEqual(P.star, P.gold);
 });
@@ -4960,4 +4960,36 @@ test('audit6 itemForDOI reads the library once per batch, not once per call (1,2
   all.set('1:K2000', late); plugin.cache.items['1:K2000'] = {};
   plugin.invalidateHeldRows();
   assert.equal(plugin.itemForDOI('10.1/late', 1), late);
+});
+
+test('a right-aligned figure stretched across its cell is measured by its text: repeated fits of IF stay put', async () => {
+  /* The IF cell holds its figure in a box as wide as the column. Measured by
+     that box, every double-click added the cell padding again and IF grew. */
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML(`<html><body><div id="tbl">
+    <div class="virtualized-table-header"><div class="cell if"><span class="cell-text">IF</span></div><div class="cell cites"><div class="resizer cites"></div><span>Cites</span></div></div>
+    <div class="virtualized-table-body"><div class="row"><span class="cell if"><span class="fig">104.6</span></span></div></div>
+  </div></body></html>`);
+  const {plugin} = fixture();
+  const resized = [];
+  const columns = [{dataKey: 'if', minWidth: 20}, {dataKey: 'cites', minWidth: 20}];
+  window.ZoteroPane = {itemsView: {tree: {props: {id: 'tbl'}, _getVisibleColumns: () => columns, _columns: {onResize: (widths, store) => resized.push([widths, store])}}}};
+  window.CSS = {escape: s => s};
+  const createElementNS = document.createElementNS.bind(document);
+  document.createElementNS = (ns, tag) => tag === 'canvas' ? {getContext: () => ({font: '', measureText: text => ({width: text.length * 7})})} : createElementNS(ns, tag);
+  window.getComputedStyle = el => ({font: '13px sans-serif', overflow: 'visible', display: el.classList.contains('fig') ? 'block' : 'flex', flexGrow: '0', marginLeft: '0px', marginRight: '0px', paddingLeft: el.classList.contains('cell') ? '8px' : '0px', paddingRight: el.classList.contains('cell') ? '8px' : '0px'});
+  const cell = document.querySelector('.virtualized-table-body .cell.if'), fig = cell.querySelector('.fig');
+  const size = {if: 60, cites: 80};
+  const lay = () => { Object.defineProperty(cell, 'clientWidth', {value: size.if, configurable: true}); Object.defineProperty(cell, 'scrollWidth', {value: size.if, configurable: true}); fig.getBoundingClientRect = () => ({width: size.if - 16}); };
+  for (const key of Object.keys(size)) document.querySelector(`.virtualized-table-header .cell.${key}`).getBoundingClientRect = () => ({width: size[key]});
+  const state = {listeners: []};
+  plugin.attachColumnFit(window, state);
+  lay();
+  document.querySelector('.resizer.cites').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  // "104.6" is 35 px, 16 of cell padding, 16 of room: 67.
+  assert.equal(resized[0][0].if, 67);
+  size.if = 67; lay();
+  for (let i = 0; i < 3; i++) document.querySelector('.resizer.cites').dispatchEvent(new window.Event('dblclick', {bubbles: true}));
+  assert.equal(resized.length, 1, 'fitting again changes nothing');
+  assert.match(state.columnFit.last, /already fits/);
 });
