@@ -3,9 +3,9 @@
     "zotpop@sungjaeyoon.dev": {
       "updates": [
         {
-          "version": "0.51.0",
-          "update_link": "https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.51.0/zotpop-0.51.0.xpi",
-          "update_hash": "sha256:677c7f79848619d336d59febd8bb577dadb53f0d4c1e5023c857e34afadfd8bc",
+          "version": "0.52.0",
+          "update_link": "https://github.com/JAEYOONSUNG/zotero-plugins/releases/download/zotpop-v0.52.0/zotpop-0.52.0.xpi",
+          "update_hash": "sha256:a57120854f922cdfd8346e445a1b153a32fbc33c828a0fb94d4556ef8f4f9a19",
           "applications": {
             "zotero": {
               "strict_min_version": "6.999"
