@@ -2232,6 +2232,7 @@
 	}
 	function displaySearchResults(records, { stream = false } = {}) {
 		settleImpactFactors(records.filter(r => !r.popOriginal && !r.authorProfile));
+		affiliationMemo = new WeakMap();
 		// A merged record may acquire a different source key. Carry row interaction
 		// state through a shared identifier as well as an unchanged key.
 		let previous = new Map();
@@ -2602,7 +2603,10 @@
 	}
 
 	// ------------------------------------------------------------ affiliation
-	const affiliationMemo = new WeakMap();
+	/* Summaries are kept per list of people, but enrichment fills a list in place, so a
+	   kept summary outlives its data. Every display of results is a new data version:
+	   the memo starts over, and nothing that sorts, draws or exports reads an old one. */
+	let affiliationMemo = new WeakMap();
 	function affiliationOf(r) {
 		if (typeof ZotPoPAffiliations === "undefined" || !r?.people) return null;
 		/* Asked on every comparison of a sort and every keystroke of the filter:
@@ -3454,7 +3458,10 @@
 		return JSON.stringify([r.citations, r.citationSource, r.rank, r.popOriginal, r.popRank, r.authorString, r.title, r.titleMarkup,
 			r.year, r.venue, r.publisher, r.journalIF, r.journalIFSource, r.journalOA2y, r.journalH, r.journalAbbrev, identity?.mark, identity?.known,
 			r.doi, hasPDF(r), r.inLibrary, r.readState, r.isNew, r.retracted, r.status, r.statusClass, r.statusTitle,
-			objectId(where), row?.institution, row?.tier, row?.hIndex, row?.flag, where?.countries, affLineParts(r).length,
+			r.source, r.sources, r.pdfUrl, r.pdfUrls, r.pmcid, r.arxiv,
+			// By value, never by the summary object: a new summary of unchanged data must not rebuild the row.
+			where && [where.first, where.corresponding].map(p => p && [p.name, p.institution, p.country, p.hIndex, p.tier]), where?.correspondingKnown,
+			row?.institution, row?.tier, row?.hIndex, row?.flag, where?.countries, affLineParts(r).map(p => [p.role, p.institution, p.country, p.hIndex]),
 			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r))]);
 	}
 	// The parts of a row that follow the selection, not the paper: set on every draw, reused row or not.
@@ -4323,6 +4330,30 @@
 		box.appendChild(fel("div", "tr-note", t("metricsTrendNote", sum.papers, sum.of)));
 	}
 
+	// ------------------------------------------------------------ PubMed abstracts
+	/* PubMed's summary has no abstract. The one of a paper the reader opens, or translates, is fetched
+	   then (several papers in one request when several are asked together), and never for a whole list. */
+	const abstractBusy = new Set(), abstractFailed = new Set();
+	async function ensureAbstracts(recs, { force = false } = {}) {
+		let need = recs.filter(r => r && r.pmid && !r.abstract && !abstractBusy.has(r.key) && (force || !abstractFailed.has(r.key)));
+		if (!need.length || typeof ZotPoPSources?.fetchPubMedAbstracts !== "function") return false;
+		for (let r of need) { abstractBusy.add(r.key); abstractFailed.delete(r.key); }
+		let found = false;
+		try {
+			let got = await ZotPoPSources.fetchPubMedAbstracts(need.map(r => String(r.pmid)), http, { ncbiApiKey: PREF("ncbiApiKey") || "", log });
+			for (let r of need) { let text = got.get(String(r.pmid)); if (text) { r.abstract = text; found = true; } }
+		}
+		catch (e) { log("PubMed abstract lookup failed: " + (e.message || e)); for (let r of need) abstractFailed.add(r.key); }
+		finally { for (let r of need) abstractBusy.delete(r.key); }
+		let open = detailRecord();
+		if (open && need.includes(open)) paintAbstract(open);
+		return found;
+	}
+	function paintAbstract(r) {
+		$("d-abstract").textContent = r.abstract || (abstractBusy.has(r.key) ? t("abstractLoading") : t("noAbstract"));
+		renderTranslate(r);
+	}
+
 	// ------------------------------------------------------------ translating the abstract
 	let trNote = null; // { key, text, err }
 	const trLang = () => state.trLang || (state.trLang = (translator && translator.defaultLanguage()) || "en");
@@ -4368,6 +4399,7 @@
 		if (!r || !translator) return;
 		let lang = trLang(), wantTitle = trTitleOn(), id = r.key + "|" + lang;
 		if (state.trBusy === id) return;
+		if (!r.abstract && r.pmid) { await ensureAbstracts([r], { force: true }); }
 		if (!r.abstract && !wantTitle) { trSet(r, t("trNoText"), true); renderTranslate(r); return; }
 		state.trBusy = id; trNote = null;
 		renderTranslate(r);
@@ -4604,8 +4636,8 @@
 		tip(filed, paths.map(p => p.join(" › ")).join("\n"));
 		filed.hidden = !paths.length;
 		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
-		$("d-abstract").textContent = r.abstract || t("noAbstract");
-		renderTranslate(r);
+		if (r.pmid && !r.abstract) { ensureAbstracts([r]); }
+		paintAbstract(r);
 
 		// Why the row has the status it has, in words: a failure's cause was only in a tooltip.
 		let statusLine = $("d-status");
@@ -4979,6 +5011,8 @@
 		setStatus(msg || t("copied"), "", { transient: true });
 	}
 
+	// One person's institution, country and h-index, from the same record: values of two labs are never mixed.
+	const personCells = p => [p?.institution ?? "", p?.country ?? "", p?.hIndex ?? ""];
 	function csvText() {
 		let esc = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
 		let lines = [t("csvHead").join(",")];
@@ -4986,7 +5020,7 @@
 			lines.push([
 				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
 				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.journalIF == null ? "" : (r.journalIFSource || "JCR"), r.journalOA2y == null ? "" : fmt(r.journalOA2y, 2),
-				affiliationOf(r)?.first?.institution ?? "", (affiliationOf(r)?.countries || []).join("/"), affiliationOf(r)?.hIndex ?? "",
+				...personCells(affiliationOf(r)?.first), ...personCells(affiliationOf(r)?.corresponding),
 				r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")
 			].map(esc).join(","));

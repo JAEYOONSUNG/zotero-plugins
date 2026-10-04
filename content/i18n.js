@@ -234,6 +234,7 @@ var ZotPoPI18N = (function () {
 			statusLine: (status, why) => status + (why ? " · " + why : ""),
 			noAuthors: "No author information",
 			noAbstract: "No abstract provided.",
+			abstractLoading: "Fetching the abstract from PubMed…",
 
 			addTo: "Add to",
 			optPdf: "Find & attach PDF",
@@ -514,7 +515,7 @@ var ZotPoPI18N = (function () {
 			prefOpenAlexNote: "Without a key OpenAlex allows roughly ten searches per day and then refuses every request until midnight UTC. Sign in at openalex.org with an e-mail address and the account page shows a free key, which raises the allowance about a hundredfold. No payment method is asked for. Crossref, Europe PMC, PubMed and arXiv need no key at all.",
 			notJSON: where => "The server did not return JSON — " + where,
 			columnResetTip: "Drag to resize · double-click to reset",
-			csvHead: ["Cites", "CitesPerYear", "Rank", "Authors", "Title", "Year", "Publication", "JIF", "JIFSource", "OpenAlex2yMean", "FirstAuthorInstitution", "Country", "InstitutionHIndex", "Publisher", "DOI", "URL", "PDF", "Source", "InLibrary"],
+			csvHead: ["Cites", "CitesPerYear", "Rank", "Authors", "Title", "Year", "Publication", "JIF", "JIFSource", "OpenAlex2yMean", "FirstAuthorInstitution", "FirstAuthorCountry", "FirstAuthorHIndex", "CorrespondingInstitution", "CorrespondingCountry", "CorrespondingHIndex", "Publisher", "DOI", "URL", "PDF", "Source", "InLibrary"],
 			csvYes: "yes",
 			csvNo: "no",
 			thIF: "IF",
@@ -864,6 +865,7 @@ var ZotPoPI18N = (function () {
 			statusLine: (status, why) => status + (why ? " · " + why : ""),
 			noAuthors: "저자 정보 없음",
 			noAbstract: "초록이 제공되지 않습니다.",
+			abstractLoading: "PubMed에서 초록을 가져오는 중…",
 
 			addTo: "추가 위치",
 			optPdf: "PDF 자동 첨부",
@@ -1144,7 +1146,7 @@ var ZotPoPI18N = (function () {
 			prefOpenAlexNote: "키가 없으면 OpenAlex는 하루 약 10회 검색 후 자정(UTC)까지 모든 요청을 거부합니다. openalex.org에 이메일로 로그인하면 계정 페이지에서 무료 키를 받을 수 있고, 한도가 약 100배가 됩니다. 결제수단은 요구하지 않습니다. Crossref·Europe PMC·PubMed·arXiv는 키 자체가 필요 없습니다.",
 			notJSON: where => "서버가 JSON을 반환하지 않았습니다 — " + where,
 			columnResetTip: "끌어서 너비 조절 · 더블클릭하면 초기화",
-			csvHead: ["인용", "연간인용", "순위", "저자", "제목", "연도", "저널", "JIF", "JIF 출처", "OpenAlex 2년 평균", "1저자기관", "국가", "기관h-index", "출판사", "DOI", "URL", "PDF", "소스", "보유"],
+			csvHead: ["인용", "연간인용", "순위", "저자", "제목", "연도", "저널", "JIF", "JIF 출처", "OpenAlex 2년 평균", "1저자기관", "1저자국가", "1저자기관h-index", "교신저자기관", "교신저자국가", "교신저자기관h-index", "출판사", "DOI", "URL", "PDF", "소스", "보유"],
 			csvYes: "예",
 			csvNo: "아니오",
 			thIF: "IF",

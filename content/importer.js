@@ -156,6 +156,22 @@ var ZotPoPImporter = (function () {
 		} catch (e) { /* a missing hint, not a failure */ }
 		return out;
 	}
+	/* A saved item joins the held index at once: the same paper imported twice
+	   within the cache window was otherwise saved twice. */
+	function addToTitleIndex(libraryID, item) {
+		let held = titleRuns.get(libraryID);
+		if (!held || !item) return;
+		try {
+			let key = flatTitle(item.getField("title"));
+			if (!key) return;
+			let list = held.rows.get(key); if (!list) held.rows.set(key, list = []);
+			list.push({ itemID: item.id, title: item.getField("title"), date: item.getField("date"), doi: item.getField("DOI") || null, extra: item.getField("extra") || null });
+		} catch (e) { /* the TTL still bounds a missed entry */ }
+	}
+	// Deleted or trashed items leave the index; added/modified ones are handled on save or by the TTL.
+	try {
+		Zotero.Notifier?.registerObserver?.({ notify(event, type) { if (type === "item" && (event === "delete" || event === "trash" || event === "removeDuplicatesMaster")) forgetTitleIndex(); } }, ["item"], "zotpop-title-index");
+	} catch (e) { /* no notifier here: add-on-save and the TTL remain */ }
 	function forgetTitleIndex(libraryID) { if (libraryID == null) titleRuns.clear(); else titleRuns.delete(libraryID); }
 	async function titleIndex(libraryID) {
 		let held = titleRuns.get(libraryID);
@@ -301,11 +317,14 @@ var ZotPoPImporter = (function () {
 			setIf("repository", rec.preprintServer || (rec.arxiv ? "arXiv" : ""));
 			if (rec.arxiv) setIf("archiveID", "arXiv:" + rec.arxiv);
 		}
-		item.setCreators((rec.authors || []).filter(a => a.lastName || a.firstName).map(a => ({
-			firstName: a.firstName || "",
-			lastName: a.lastName || a.name || "",
-			creatorType: "author"
-		})));
+		item.setCreators((rec.authors || []).filter(a => a.lastName || a.firstName || a.name).map(a => a.kind === "organization"
+			// An organisation is one field (fieldMode 1): split in two it becomes a person called "Consortium".
+			? { firstName: "", lastName: a.name || a.lastName, fieldMode: 1, creatorType: "author" }
+			: {
+				firstName: a.firstName || "",
+				lastName: a.lastName || a.name || "",
+				creatorType: "author"
+			}));
 		if (collections && collections.length) item.setCollections(collections);
 		await item.saveTx();
 		return item;
@@ -534,6 +553,7 @@ var ZotPoPImporter = (function () {
 				item = await createManually(rec, libraryID, collections);
 				how = "manual";
 			}
+			addToTitleIndex(libraryID, item);
 			/* The item exists from here on. A later step that fails -- the abstract,
 			   the Extra lines -- is reported as that step, not as a failed import:
 			   "실패" for a paper already in the library led to importing it again. */

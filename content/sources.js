@@ -1618,7 +1618,9 @@ var ZotPoPSources = (function () {
 						source: "pubmed",
 						sourceId: uid,
 						title: d.title || "",
-						authors: (d.authors || []).filter(a => a.authtype !== "CollectiveName").map(a => {
+						authors: (d.authors || []).filter(a => String(a.name || "").trim()).map(a => {
+							// A consortium is one organisation author, never "Consortium" as a surname with initials.
+							if (a.authtype === "CollectiveName") { let name = String(a.name).replace(/\s+/g, " ").trim(); return { firstName: "", lastName: name, name, kind: "organization" }; }
 							// "Sung JY" -> last "Sung", first "JY"
 							let m = String(a.name || "").match(/^(.*\S)\s+(\S+)$/);
 							return m ? { firstName: m[2], lastName: m[1], name: a.name } : parseName(a.name);
@@ -1656,6 +1658,50 @@ var ZotPoPSources = (function () {
 		if (q.sort === "citations" && scanned < total) warn(ctx, "pubmed", "Citation order applies to the retrieved PubMed relevance pool; PubMed has no global citation ranking.");
 		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(out, http, ctx);
 		return sortSearchResults(out, q).slice(0, max);
+	}
+
+
+	// ---------------------------------------------------------------- PubMed abstracts
+	/* esummary carries no abstract. It is fetched for the papers the reader opens or translates,
+	   several PMIDs per EFetch, and remembered: never for a whole result list. */
+	const PUBMED_ABSTRACTS = new TimedMap(); // pmid -> text | null
+	function parsePubMedAbstracts(xml) {
+		let out = new Map();
+		for (let block of String(xml || "").split(/<PubmedArticle[\s>]/).slice(1)) {
+			let pmid = (block.match(/<PMID[^>]*>\s*(\d+)\s*<\/PMID>/) || [])[1];
+			if (!pmid) continue;
+			let parts = [];
+			for (let m of block.matchAll(/<AbstractText([^>]*)>([\s\S]*?)<\/AbstractText>/g)) {
+				let text = stripTags(xmlText(m[0], "AbstractText"));
+				if (!text) continue;
+				let label = (m[1].match(/\bLabel="([^"]*)"/) || [])[1];
+				parts.push(label && label !== "UNLABELLED" ? label + ": " + text : text);
+			}
+			out.set(pmid, parts.join("\n"));
+		}
+		return out;
+	}
+	async function fetchPubMedAbstracts(pmids, http, ctx = {}) {
+		let wanted = [...new Set((pmids || []).map(p => String(p || "").trim()).filter(p => /^\d{1,9}$/.test(p)))];
+		let result = new Map();
+		let missing = wanted.filter(p => {
+			if (PUBMED_ABSTRACTS.has(p)) { let v = PUBMED_ABSTRACTS.get(p); if (v) result.set(p, v); return false; }
+			return true;
+		});
+		// No email address is sent for this lookup; a key the reader set up is not an address.
+		let tool = "&tool=zotpop" + (ctx.ncbiApiKey ? "&api_key=" + enc(String(ctx.ncbiApiKey).trim()) : "");
+		for (let i = 0; i < missing.length; i += 200) {
+			throwIfCancelled(ctx);
+			let chunk = missing.slice(i, i + 200);
+			let xml = await withRetry(() => http.getText("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&rettype=abstract&id=" + chunk.join(",") + tool), {}, ctx);
+			let parsed = parsePubMedAbstracts(xml);
+			for (let p of chunk) {
+				let text = parsed.get(p) || "";
+				PUBMED_ABSTRACTS.set(p, text || null);
+				if (text) result.set(p, text);
+			}
+		}
+		return result;
 	}
 
 	// ---------------------------------------------------------------- arXiv
@@ -2920,7 +2966,7 @@ var ZotPoPSources = (function () {
 	}
 
 	return {
-		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, parseCountsByYear, refreshOpenAlexWork, fetchReferencedWorks, clearWorkCache: () => { WORK_CACHE.clear(); REF_CACHE.clear(); }, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, parseCountsByYear, refreshOpenAlexWork, fetchPubMedAbstracts, parsePubMedAbstracts, fetchReferencedWorks, clearWorkCache: () => { WORK_CACHE.clear(); REF_CACHE.clear(); }, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();
