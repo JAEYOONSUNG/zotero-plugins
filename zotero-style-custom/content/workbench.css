@@ -3089,3 +3089,17 @@
    #style-custom-workbench .sc-paper-card .sc-paper-meta .sc-kind { margin-block: calc((var(--sc-lh-body) - var(--sc-h-badge)) / 2); }
  }
 }
+
+/* ==== A person's view: opens at its own top, then lists every paper, newest first ============================ */
+#style-custom-workbench .sc-person-detail { scroll-margin-block-start: var(--sc-space-2); }
+#style-custom-workbench .sc-person-detail:focus-within { outline: 0; }
+#style-custom-workbench .sc-person-detail h3[tabindex="-1"]:focus { outline: 0; }
+#style-custom-workbench .sc-person-papers .sc-section-head-count:empty { display: none; }
+#style-custom-workbench .sc-person-papers .sc-papers-refresh { margin-inline-start: auto; }
+#style-custom-workbench .sc-person-papers-body { display: flex; flex-direction: column; gap: var(--sc-space-2); }
+#style-custom-workbench .sc-person-papers-body > p { margin: 0; }
+#style-custom-workbench .sc-papers-years { display: flex; flex-wrap: wrap; gap: var(--sc-space-1); }
+#style-custom-workbench .sc-papers-list { margin: 0; }
+#style-custom-workbench .sc-papers-year { display: flex; align-items: center; gap: var(--sc-space-2); margin: var(--sc-space-2) var(--sc-space-1) 0; color: var(--sc-muted); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-papers-foot { display: flex; align-items: center; gap: var(--sc-space-3); margin: 0; padding: 0 var(--sc-space-1); }
+#style-custom-workbench .sc-person-work[data-new="true"] .sc-tag { margin-inline-start: var(--sc-space-1); }

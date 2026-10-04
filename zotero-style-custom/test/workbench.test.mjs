@@ -2001,7 +2001,7 @@ test('following an author adds them to the panel and surfaces what is new next t
  await f.bench.show('explore');await f.bench.show('authors');
  assert.ok(headings().includes('관심 저자 1'));
 
- await f.click('새 논문 1편 확인함');
+ await f.click('새 논문 1편을 확인함으로 표시');
  /* Marked in the one per-paper store the inbox also reads, so 확인함 in
     either place means the same thing and can be undone. It used to call
     markAuthorSeen and clearAuthorNews, which threw the stored news away for
@@ -4801,14 +4801,14 @@ test('a paper dismissed in the inbox is dismissed on the author page too, and th
   f.runtime.authorsOfCached = async () => [{id: 'A1', name: 'Only Author', institution: 'Somewhere', position: 'first'}];
   await f.bench.show('authors');
   await f.click('관심 저자로 등록');
-  assert.ok(f.findButton('새 논문 1편 확인함'), 'one unread paper to begin with');
+  assert.ok(f.findButton('새 논문 1편을 확인함으로 표시'), 'one unread paper to begin with');
   // The inbox marks by DOI, in workbenchUI.inboxSeen, keyed per library.
   const news = (await f.runtime.authorUpdates('A1')).fresh[0];
   const key = `1:${String(news.doi).toLowerCase()}`;
   f.runtime.cache.workbenchUI = {...(f.runtime.cache.workbenchUI || {}), inboxSeen: {[key]: '2026-09-30T00:00:00Z'}};
   await f.bench.render();
   await settle();
-  assert.equal(f.findButton('새 논문 1편 확인함'), undefined,
+  assert.equal(f.findButton('새 논문 1편을 확인함으로 표시'), undefined,
     'the page counts the same papers the inbox does');
   // And nothing was thrown away to achieve it.
   assert.equal(f.calls.some(c => c[0] === 'clearNews'), false);
@@ -8836,4 +8836,208 @@ test('a followed co-author in the graph opens where they are in the table',async
   assert.equal(personOf(f).previousElementSibling.dataset.authorId,'A2','Bo Chen opens right in the table');
   assert.equal(f.body().querySelector('.sc-author-watch > .sc-author-graph-wrap'),null,'the combined graph stays closed');
  }finally{f.bench.destroy();}
+});
+
+/* ---- A person's view: opens at its own top, lists every paper newest first ---------------------------------- */
+const allWorksFixture=(f,{count=120,listed=289,shuffle=true,extra=[]}={})=>{
+ // Dates run backwards from 2026-09-30, one a week, so the newest is W1; the runtime hands them over shuffled.
+ const base=Date.UTC(2026,8,30);
+ let works=Array.from({length:count},(_,n)=>({id:'W'+(n+1),doi:'10.1/w'+(n+1),title:'Paper number '+(n+1),date:new Date(base-n*7*864e5).toISOString().slice(0,10),year:new Date(base-n*7*864e5).getUTCFullYear(),citations:n,venue:'Nature Communications',type:'article',position:n===0?'first':n===1?'last':'middle',corresponding:n===1}));
+ works=[...works,...extra];
+ if(shuffle)works=works.map((w,i)=>[w,(i*7919)%works.length]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]);
+ const authorUpdates=f.runtime.authorUpdates;
+ f.runtime.authorUpdates=async id=>{const r=await authorUpdates(id);return {...r,profile:{...r.profile,works:listed}};};
+ f.runtime.authorAllWorks=f.record('authorAllWorks',async(id,opts)=>({works:works.map(w=>({...w})),checkedAt:'2026-10-01T00:00:00Z',truncated:false,cached:!opts?.refresh}));
+ return works;
+};
+const personFixture=(options={},fixtureOptions)=>{
+ const f=options.english?englishFixture():fixture();
+ f.runtime.authorsOfCached=async()=>[{id:'A1',name:'Only Author',institution:'Somewhere',position:'first'}];
+ return f;
+};
+
+test('a person opens at its own top: scrolled into view with the heading focused, and the old scroll position is not kept',async()=>{
+ const f=fixture();
+ const scrolled=[];
+ f.win.HTMLElement.prototype.scrollIntoView=function(arg){scrolled.push({cls:String(this.className),arg});};
+ f.body().scrollTop=900;
+ await f.bench.show('authors');
+ const first=f.body().querySelector('[data-author-id]');assert.ok(first,'an author row to open');
+ first.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const hits=scrolled.filter(s=>/sc-person-detail/.test(s.cls));
+ assert.ok(hits.length>=2,'once at the start of loading and again once the page is laid out');
+ assert.ok(hits.every(s=>s.arg.block==='start'));
+ assert.ok(hits.every(s=>s.arg.behavior!=='smooth'),'smooth scrolling is interrupted by the content arriving');
+ const active=f.doc.activeElement;
+ assert.equal(active.localName,'h3');assert.equal(active.getAttribute('tabindex'),'-1');
+ assert.ok(active.textContent.trim().length>0);
+ f.bench.destroy();
+});
+
+test('a followed author opened in the table scrolls its row to the top',async()=>{
+ const {f}=expandFixture();
+ const scrolled=[];
+ f.win.HTMLElement.prototype.scrollIntoView=function(arg){scrolled.push({cls:String(this.className),arg});};
+ await f.bench.show('authors');await f.click('목록 관리');
+ const row=f.body().querySelector('tr.sc-watch-row');assert.ok(row,'the followed author is a table row');
+ row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.ok(scrolled.some(s=>/sc-watch-row/.test(s.cls)&&s.arg.block==='start'),'the opened row goes to the top');
+ f.bench.destroy();
+});
+
+test('← back returns to the list at the scroll position and row it was left from',async()=>{
+ const f=fixture();
+ f.win.HTMLElement.prototype.scrollIntoView=function(){f.body().scrollTop=0;};
+ await f.bench.show('authors');
+ f.body().scrollTop=420;
+ const row=[...f.body().querySelectorAll('[data-author-id]')].find(el=>el.dataset.authorId==='A2');
+ assert.ok(row,'each author row names its author');
+ row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.ok(f.body().querySelector('.sc-person-detail'),'the person is open');
+ assert.equal(f.body().scrollTop,0,'and the page is at the person');
+ await f.click('← 이 논문의 저자 보기');
+ assert.equal(f.body().scrollTop,420,'the old position is back');
+ assert.equal(f.doc.activeElement.dataset.authorId,'A2','and so is the row');
+ f.bench.destroy();
+});
+
+test('all papers, newest first: a sorted list in pages of fifty, never cut off silently, with the profile count said when it differs',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=personFixture({english:true});
+  allWorksFixture(f,{count:120,listed:289});
+  await f.bench.show('authors');await settle();
+  const section=()=>f.body().querySelector('.sc-person-papers');
+  assert.ok(section(),'the Papers section exists');
+  assert.match(section().querySelector('.sc-section-head').textContent,/Papers\s*120/);
+  const titles=()=>[...section().querySelectorAll('.sc-person-work .sc-hit-title')].map(n=>n.textContent.replace(/\s*New$/,''));
+  assert.equal(titles().length,50,'the first page is fifty');
+  assert.deepEqual(titles().slice(0,3),['Paper number 1','Paper number 2','Paper number 3'],'newest first, although the store handed them over shuffled');
+  const dates=[...section().querySelectorAll('.sc-person-work .sc-paper-year')].map(n=>n.textContent);
+  assert.deepEqual(dates,dates.slice().sort().reverse(),'dates only ever go back');
+  assert.match(section().querySelector('.sc-papers-count').textContent,/Showing 50 of 120/);
+  assert.match(section().querySelector('.sc-papers-note').textContent,/OpenAlex lists 289 papers for this author, and 120 were loaded/);
+  await f.click('Show more');
+  assert.equal(titles().length,100);
+  assert.match(section().querySelector('.sc-papers-count').textContent,/Showing 100 of 120/);
+  await f.click('Show more');
+  assert.equal(titles().length,120,'every paper is reachable');
+  assert.equal(section().querySelector('.sc-papers-more'),null,'and nothing is left to ask for');
+  assert.equal(f.calls.filter(c=>c[0]==='authorAllWorks').length,1,'Show more never asks again');
+  // A year narrows the list; the count follows it.
+  const chip=[...section().querySelectorAll('.sc-papers-years button')].find(b=>/^2026\b/.test(b.textContent));
+  assert.ok(chip,'years to jump by');
+  chip.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  assert.ok(titles().length>0&&titles().length<120);
+  assert.match(section().querySelector('.sc-papers-count').textContent,new RegExp(`Showing ${titles().length} of ${titles().length}`));
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+test('the Papers list opens with one fetch, and 새로고침 (data-writes) is the only way to ask again',async()=>{
+ const f=personFixture();
+ allWorksFixture(f,{count:5,listed:5});
+ await f.bench.show('authors');await settle();
+ const asks=()=>f.calls.filter(c=>c[0]==='authorAllWorks');
+ assert.equal(asks().length,1,'one fetch for opening the person');
+ assert.equal(asks()[0][2].refresh,false);
+ const refresh=f.body().querySelector('.sc-papers-refresh');
+ assert.equal(refresh.getAttribute('data-writes'),'cache','the self-check sweep must not press it');
+ assert.equal(f.body().querySelector('.sc-person-papers .sc-papers-note'),null,'no count note when the counts agree');
+ refresh.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(asks().length,2);assert.equal(asks()[1][2].refresh,true);
+ f.bench.destroy();
+});
+
+test('a paper row says its journal in full, Preprint in English, citations, the person’s part, new, and held or Add',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=personFixture({english:true});
+  await f.runtime.watchAuthor({id:'A1',name:'A Author',institution:'Somewhere',seen:[]});
+  allWorksFixture(f,{count:0,listed:4,shuffle:false,extra:[
+   {id:'W11',doi:'10.1/new',title:'Brand new',date:'2026-09-18',year:2026,citations:3,venue:'ACS Synthetic Biology',type:'article',position:'last',corresponding:true},
+   {id:'W12',doi:'10.1/pre',title:'A preprint',date:'2025-10-14',year:2025,citations:0,venue:'bioRxiv (Cold Spring Harbor Laboratory)',type:'preprint',position:'first'},
+   {id:'W13',doi:'10.1/held',title:'Already held',date:'2024-05-01',year:2024,citations:12,venue:'Science',type:'article',inLibrary:true},
+   {id:'W14',doi:'',title:'No DOI',date:null,year:2019,citations:null,venue:'',type:'article'}]});
+  await f.bench.show('authors');await settle();
+  const rows=[...f.body().querySelectorAll('.sc-person-work')];
+  assert.equal(rows.length,4);
+  const [fresh,pre,held,bare]=rows;
+  assert.match(fresh.textContent,/ACS Synthetic Biology/);assert.equal(fresh.dataset.new,'true');
+  assert.match(fresh.textContent,/Brand new\s*New/);assert.match(fresh.textContent,/3 citations/);
+  assert.match(fresh.textContent,/Last author · Corresponding|corresponding/i);
+  assert.equal(fresh.querySelector('.sc-paper-venue').textContent,'ACS Synthetic Biology','the journal by its full name');
+  assert.match(pre.querySelector('.sc-preprint').textContent,/^Preprint$/);
+  assert.match(pre.textContent,/bioRxiv/);assert.doesNotMatch(pre.textContent,/Cold Spring/);
+  assert.equal(held.dataset.new,'false');
+  assert.ok(held.querySelector('.sc-hit-owned'),'held says so');assert.equal(held.querySelector('button.sc-hit-title-link')!==null,true);
+  assert.ok([...fresh.querySelectorAll('button')].some(b=>/^Add/.test(b.textContent)&&b.getAttribute('data-writes')==='library'),'not held: Add');
+  assert.equal([...bare.querySelectorAll('button')].some(b=>/^Add/.test(b.textContent)),false,'no DOI, nothing to add');
+  assert.equal(bare.querySelector('.sc-paper-year').textContent,'2019');
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+test('English: the person view and the paper-authors header carry no Hangul, with the full list, the news and the stats line',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=englishFixture();
+  await f.runtime.watchAuthor({id:'A2',name:'B Author',institution:'Elsewhere',seen:[]});
+  allWorksFixture(f,{count:60,listed:289});
+  // The header of the list of authors of this paper.
+  await f.bench.show('authors');await settle();
+  assert.deepEqual(hangulIn(f.bench.panel,{ignore:allowNative}),[],'the list of the paper’s authors');
+  // And a person, from the list: stats line, status line, news, papers, buttons.
+  const row=[...f.body().querySelectorAll('[data-author-id]')].find(el=>el.dataset.authorId==='A2');
+  row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  assert.ok(f.body().querySelector('.sc-person-papers'));
+  assert.deepEqual(hangulIn(f.bench.panel,{ignore:allowNative}),[],'the person view');
+  const status=f.bench.panel.querySelector('.sc-status').textContent;
+  assert.match(status,/papers? · .*already held · .*new · Last check 2026-09-17/);
+  const stats=f.body().querySelector('.sc-profile').textContent;
+  assert.match(stats,/Papers 289/);assert.match(stats,/Total citations 900/);
+  // Every view button in the person view, pressed.
+  for(const b of [...f.body().querySelectorAll('.sc-person-detail button[data-safe="view"]')]){b.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();}
+  assert.deepEqual(hangulIn(f.bench.panel,{ignore:allowNative}),[],'after pressing the view buttons');
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+test('the new-papers button asks, and after the press the status line says what happened with an Undo',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=personFixture({english:true});
+  await f.runtime.watchAuthor({id:'A1',name:'A Author',institution:'Somewhere',seen:[]});
+  await f.bench.show('authors');await settle();
+  const label=()=>[...f.body().querySelectorAll('.sc-person-detail button')].map(b=>b.textContent).find(t=>/as seen/.test(t));
+  assert.equal(label(),'Mark 1 new paper as seen','a button, not a status');
+  await f.click('Mark 1 new paper as seen');
+  assert.equal(label(),undefined,'the pressed button is gone');
+  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/Marked 1 new paper as seen/);
+  const undo=f.bench.panel.querySelector('.sc-undo-toast-button');
+  assert.ok(undo,'offers Undo');assert.equal(undo.textContent,'Undo');
+  undo.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  assert.equal(label(),'Mark 1 new paper as seen','undone, the paper is unseen again');
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
+});
+
+test('the self-check layout probe looks at fixed and absolute boxes and at a person view, so a pill outside the panel is caught',()=>{
+ const source=fs.readFileSync(new URL('../src/selfcheck.js',import.meta.url),'utf8');
+ const probe=source.slice(source.indexOf('every tab lays out inside its frames'),source.indexOf('every safe button on every tab survives a press'));
+ // The old probe skipped position:fixed/absolute with a bare `continue`; now each is measured against the panel first.
+ assert.doesNotMatch(probe,/position === 'fixed' \|\| s\.position === 'absolute'\) continue;/);
+ assert.match(probe,/note\('outside the panel · '/);
+ assert.match(probe,/paintedRect/);
+ assert.match(probe,/authors with a person open/);
+ assert.match(probe,/data-density', 'compact'[\s\S]*authors with a person open/,'in both densities');
+});
+
+test('the dark pill left of the panel in the screenshot is the rail’s own active item: it sits inside the rail, which is inside the panel',()=>{
+ const css=fs.readFileSync(new URL('../content/workbench.css',import.meta.url),'utf8');
+ // Nothing that paints the active navigation item is positioned out of its button, and nothing offsets it left.
+ const rules=css.split('}').filter(r=>/button\[data-tab\]/.test(r.split('{')[0])).join('}');
+ assert.doesNotMatch(rules,/position:\s*(fixed|absolute)/);
+ assert.doesNotMatch(rules,/(margin-inline-start|margin-left|inset-inline-start|left):\s*-/);
+ assert.match(css,/\.sc-shell nav\s*\{[^}]*overflow:\s*auto/,'the rail clips what it holds');
 });

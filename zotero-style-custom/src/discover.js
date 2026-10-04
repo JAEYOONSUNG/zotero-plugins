@@ -730,6 +730,40 @@
       + `&sort=publication_date:desc&select=${WORK_FIELDS}${credentials(options)}`
     : null;
 
+  /* Everything an author has published, newest first: the person view's own
+     list. 200 to a page and cursor paging, because OpenAlex stops offset paging
+     at 10,000 and a prolific author needs several pages. Looked up by OpenAlex
+     id, or by ORCID when the person has no id. The fields are the ones the row
+     shows plus authorships, which is where the author's own position (first,
+     last, corresponding) is read; the reference lists are not asked for. */
+  const ORCID_ID = /(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i;
+  const orcidDashed = value => (ORCID_ID.exec(text(value)) || [])[1]?.toUpperCase() || '';
+  function authorAllWorksURL(authorID, {orcid = '', cursor = '*', ...options} = {}) {
+    const id = shortID(authorID), iD = orcidDashed(orcid);
+    const filter = id.startsWith('A') ? 'author.id:' + id : iD ? 'author.orcid:https://orcid.org/' + iD : '';
+    if (!filter) return null;
+    return `${API}works?per_page=200&cursor=${encodeURIComponent(cursor)}`
+      + `&filter=${encodeURIComponent(filter)}`
+      + `&sort=publication_date:desc&select=${WATCH_FIELDS}${credentials(options)}`;
+  }
+  /* One compact row per work, with this author's part in it. Nothing else of
+     the authorship list is kept, so a few hundred works stay small in the cache. */
+  function readAuthorWorks(payload, {authorID = '', orcid = ''} = {}) {
+    const id = shortID(authorID), iD = orcidDashed(orcid);
+    return (Array.isArray(payload?.results) ? payload.results : []).map(raw => {
+      const work = shapeWork(raw);
+      if (!work) return null;
+      const mine = (Array.isArray(raw.authorships) ? raw.authorships : []).find(a =>
+        (id && shortID(a?.author?.id) === id) || (iD && orcidDashed(a?.author?.orcid) === iD));
+      return {id: work.id, doi: work.doi, title: work.title, year: work.year, date: work.date,
+        citations: work.citations, venue: work.venue, type: work.type,
+        position: mine ? text(mine.author_position) : '', corresponding: mine?.is_corresponding === true};
+    }).filter(Boolean);
+  }
+  // Newest first: the full date when OpenAlex has one, the year otherwise (a year-only work sorts after that year's dated ones).
+  const byNewest = (a, b) => String(b.date || (b.year ? b.year + '-00-00' : '')).localeCompare(String(a.date || (a.year ? a.year + '-00-00' : '')))
+    || (b.citations ?? 0) - (a.citations ?? 0);
+
   // Asking "who has published something new" one author at a time costs one
   // request per person; 109 followed authors is 109 requests and most of them
   // come back with nothing. OpenAlex ORs up to 50 ids in a single filter, so
@@ -992,7 +1026,7 @@
     worksByDOIsURL, institutionsURL, readInstitutions,
     workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, matchWork, sameFirstAuthor, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
-    watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH,
+    authorAllWorksURL, readAuthorWorks, byNewest, orcidDashed, watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH,
     freshCitersURL, freshBatches, rankFreshCiters, FRESH_BATCH, FRESH_FIELDS};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;

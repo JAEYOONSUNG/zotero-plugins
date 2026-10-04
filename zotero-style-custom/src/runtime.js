@@ -2620,7 +2620,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      again only for the one paper or journal the reader opens or refreshes. Expiry
      never starts a bulk fetch -- the sweeps below still ask only about what has
      never been asked. A not-found answer comes back sooner than a found one. */
-  static get EXPIRY_DAYS() { return {citationList: 30, citers: 30, journalMetric: 90, notFound: 14}; }
+  static get EXPIRY_DAYS() { return {citationList: 30, citers: 30, journalMetric: 90, notFound: 14, authorWorks: 30}; }
   static get JOURNAL_VERSION() { return 2; }
   expiredAt(at, days) {
     const time = Date.parse(at);
@@ -4895,6 +4895,65 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const works = this.discoverTools.readWorks(worksPayload)
       .map(work => ({...work, inLibrary: !!work.doi && owned.has(work.doi)}));
     return {profile: profile || null, works};
+  }
+
+  /* Every work of one person, for the person view's "Papers" list.
+
+     Asked when the user opens the person (or presses 새로고침), never in the
+     background: one request per 200 works, cursor paging, a page cap of 25 so a
+     consortium-sized profile cannot run away. The answer is kept per author for
+     30 days (EXPIRY_DAYS.authorWorks) and reused until then; a press on 새로고침
+     is the only way to ask again sooner. Two openings at once share one request.
+     `held` is worked out on every read from the library, never stored. */
+  authorWorksStore() {
+    const store = this.cache.authorWorks;
+    return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.authorWorks = {});
+  }
+  authorWorksKey(authorID, orcid) {
+    const id = this.discoverTools.shortID(authorID), iD = this.discoverTools.orcidDashed(orcid);
+    return id.startsWith('A') ? id : iD ? 'orcid:' + iD : '';
+  }
+  async authorAllWorks(authorID, {orcid = '', refresh = false, signal} = {}) {
+    const key = this.authorWorksKey(authorID, orcid);
+    if (!key) throw new Error('저자 식별자가 올바르지 않습니다. 관심 저자 목록에서 저자를 다시 고르세요.');
+    const store = this.authorWorksStore();
+    const owned = () => this.libraryDOIs();
+    const shape = (row, cached) => ({works: row.works.map(work => ({...work, inLibrary: !!work.doi && owned().has(work.doi)})),
+      checkedAt: row.checkedAt, truncated: !!row.truncated, cached});
+    const hit = store[key];
+    if (!refresh && hit && hit.v === 1 && Array.isArray(hit.works) && !this.expiredAt(hit.checkedAt, this.constructor.EXPIRY_DAYS.authorWorks)) return shape(hit, true);
+    this.authorWorksPending = this.authorWorksPending || new Map();
+    if (!refresh && this.authorWorksPending.has(key)) return this.authorWorksPending.get(key).then(row => shape(row, false));
+    const job = (async () => {
+      const options = this.discoverOptions(), tools = this.discoverTools, PAGES = 25;
+      const all = new Map();
+      let cursor = '*', truncated = false;
+      for (let page = 0; page < PAGES && cursor; page++) {
+        const url = tools.authorAllWorksURL(authorID, {...options, orcid, cursor});
+        if (!url) break;
+        const payload = await this.discoverJSON(url, {signal});
+        const works = tools.readAuthorWorks(payload, {authorID, orcid});
+        for (const work of works) if (!all.has(work.id)) all.set(work.id, work);
+        cursor = works.length ? payload?.meta?.next_cursor || '' : '';
+        if (cursor && page === PAGES - 1) truncated = true;
+        if (cursor) await this.pause(150);
+      }
+      const row = {v: 1, checkedAt: new Date().toISOString(), truncated, works: [...all.values()].sort(tools.byNewest)};
+      store[key] = row;
+      // Forty people at most: each holds a few hundred rows.
+      const keys = Object.keys(store);
+      if (keys.length > 40) for (const old of keys.sort((a, b) => String(store[a]?.checkedAt).localeCompare(String(store[b]?.checkedAt))).slice(0, keys.length - 40)) delete store[old];
+      this.dirty = true;
+      return row;
+    })();
+    this.authorWorksPending.set(key, job);
+    try { return shape(await job, false); }
+    finally { if (this.authorWorksPending.get(key) === job) this.authorWorksPending.delete(key); }
+  }
+  // Whether a fresh copy is held, so the panel can say "from <date>" without asking.
+  authorWorksState(authorID, orcid = '') {
+    const row = this.authorWorksStore()[this.authorWorksKey(authorID, orcid)];
+    return row ? {checkedAt: row.checkedAt, stale: this.expiredAt(row.checkedAt, this.constructor.EXPIRY_DAYS.authorWorks), count: row.works?.length || 0} : null;
   }
 
   // --- Paper signals: retraction, open access, preprint -> published ---

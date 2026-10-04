@@ -6563,6 +6563,124 @@
     }
     if(laid.omitted)node('p',T(`${laid.omitted}명은 그리지 않았습니다.`),g,{class:'sc-muted'});
    }
+   /* 논문: everything this person has published, newest first, below what is new.
+
+      Asked when the person is opened (that is the user's action) and then kept for 30 days per author; 새로고침 is the
+      only way to ask sooner. Fifty rows at a time with the count said ("50 of 289"), and years to jump by when the list is
+      long. When OpenAlex's own count for the profile differs from what was loaded the section says so plainly, rather
+      than letting the shorter list pass for the whole. */
+   const PAPERS_PAGE=50;
+   const paperViews=new Map();
+   const yearOfWork=work=>String(work.year||String(work.date||'').slice(0,4)||'');
+   function drawAllPapers(person,profile,newIDs,recent,wrap,live){
+    const key=String(runtime.discoverTools?.shortID?.(person.id)||person.id);
+    const view=paperViews.get(key)||{shown:PAPERS_PAGE,year:'',allYears:false};paperViews.set(key,view);
+    const group=node('section',null,wrap,{class:'sc-group sc-person-group sc-person-papers','aria-label':T('논문')});
+    const head=sectionHead('논문','',group,'sc-author-head');
+    head.appendChild(doc.createTextNode(' '));
+    const countEl=node('span','',head,{class:'sc-section-head-count'});
+    const refresh=button('새로고침',()=>run(()=>load(true)),head,{'data-writes':'cache',class:'sc-quiet-action sc-papers-refresh',title:T('OpenAlex에서 이 저자의 논문 목록을 다시 불러옵니다')});
+    const box=node('div',null,group,{class:'sc-person-papers-body'});
+    let result=null;
+    const byDOI=()=>new Map(state.items.filter(i=>i.doi).map(i=>[bareDOI(i.doi),i]));
+    async function load(again){
+     if(!live())return;
+     refresh.disabled=true;box.replaceChildren();box.setAttribute('aria-busy','true');
+     node('p',T('논문 목록을 불러오는 중…'),box,{class:'sc-muted'});
+     try{result=await runtime.authorAllWorks(person.id,{orcid:profile?.orcid||person.orcid||'',refresh:!!again});}
+     catch(error){
+      if(!live())return;
+      refresh.disabled=false;box.removeAttribute('aria-busy');box.replaceChildren();
+      const line=node('p',null,box,{class:'sc-muted'});node('span',readable(error),line);line.appendChild(doc.createTextNode(' '));
+      button('다시 시도',()=>run(()=>load(true)),line,{'data-writes':'cache'});
+      // What was already in hand stays on the page: the 25 most recent.
+      if(recent.length)hitList(recent,box);
+      return;
+     }
+     if(!live())return;
+     refresh.disabled=false;box.removeAttribute('aria-busy');
+     paint();
+    }
+    function paint(){
+     box.replaceChildren();
+     // Newest first, whatever order the store handed over: the full date when there is one, else the year.
+     const stamp=w=>String(w.date||(w.year?w.year+'-00-00':''));
+     const works=result.works.slice().sort((a,b)=>stamp(b).localeCompare(stamp(a))||(Number(b.citations)||0)-(Number(a.citations)||0)),total=works.length;
+     countEl.textContent=String(total);
+     const listed=profile?.works;
+     if(listed!=null&&listed!==total)node('p',F('OpenAlex에는 이 저자의 논문이 {0}편으로 집계되어 있고, {1}편을 불러왔습니다.',fmtN(listed),fmtN(total)),box,{class:'sc-muted sc-papers-note'});
+     if(result.truncated)node('p',T('불러오기 한도에 닿아 더 오래된 논문은 빠졌을 수 있습니다.'),box,{class:'sc-muted sc-papers-note'});
+     const checked=String(result.checkedAt||'').slice(0,10);
+     if(checked)node('p',F('목록 확인 {0}',checked),box,{class:'sc-muted sc-papers-checked'});
+     if(!total){node('p','이 저자의 논문을 찾지 못했습니다.',box,{class:'sc-muted'});return;}
+     // Years, to jump by, once the list is longer than one page.
+     const years=new Map();for(const w of works){const y=yearOfWork(w)||'?';years.set(y,(years.get(y)||0)+1);}
+     const order=[...years.keys()].sort((a,b)=>b.localeCompare(a));
+     if(total>PAPERS_PAGE&&order.length>1){
+      const chips=node('div',null,box,{class:'sc-watch-facet-chips sc-papers-years',role:'group','aria-label':T('연도로 좁히기')});
+      const make=(label,value,n)=>{const chip=viewButton('',()=>{view.year=value;view.shown=PAPERS_PAGE;paint();},chips,{class:'sc-chip-button sc-watch-chip','aria-pressed':String(view.year===value)});withCount(chip,D(label),n);return chip;};
+      make(T('전체'),'',total);
+      const cap=view.allYears?order:order.slice(0,8);
+      for(const y of (view.year&&!cap.includes(view.year)?[...cap,view.year]:cap))make(y==='?'?T('연도 미상'):y,y,years.get(y));
+      if(cap.length<order.length)viewButton(F('{0}개 연도 더 보기',order.length-cap.length),()=>{view.allYears=true;paint();},chips,{class:'sc-quiet-action sc-watch-facet-more'});
+     }
+     const pool=view.year?works.filter(w=>(yearOfWork(w)||'?')===view.year):works;
+     const shown=pool.slice(0,view.shown);
+     const list=node('div',null,box,{class:'sc-author-inbox sc-papers-list'});
+     const held=byDOI();
+     let lastYear=null,heading=null;
+     for(const work of shown){
+      const y=yearOfWork(work)||'?';
+      // A heading per year, with how many that year has in all, so the groups read at a glance.
+      if(y!==lastYear){lastYear=y;heading=node('h4',null,list,{class:'sc-papers-year'});node('span',y==='?'?T('연도 미상'):y,heading);heading.appendChild(doc.createTextNode(' '));node('span',String(years.get(y)),heading,{class:'sc-section-head-count'});}
+      drawWorkRow(work,list,{held,isNew:newIDs.has(work.id),redraw:paint});
+     }
+     // Never cut off without saying so.
+     const more=pool.length-shown.length;
+     const foot=node('div',null,box,{class:'sc-actions sc-papers-foot'});
+     node('span',F('{0}/{1}편 표시 중',shown.length,pool.length),foot,{class:'sc-muted sc-papers-count'});
+     if(more>0)viewButton('더 보기',()=>{view.shown+=PAPERS_PAGE;paint();},foot,{class:'sc-papers-more'});
+    }
+    load(false);
+    return group;
+   }
+   // One paper of a person's list: title, journal in its ink (or Preprint and its server), date, citations, their part, and held or Add.
+   function drawWorkRow(work,box,ctx){
+    const row=node('div',null,box,{class:'sc-author-inbox-row sc-inbox-self sc-person-work','data-new':String(!!ctx.isNew)});
+    const text=node('div',null,row,{class:'sc-inbox-text'});
+    const title=node('p',null,text,{class:'sc-hit-title'});
+    const mine=ctx.held.get(bareDOI(work.doi))||null;
+    if(mine)button(Dor(work.title,'제목 없음'),()=>{state.selected=new Set([String(mine.id)]);state.scope='selected';scope.value='selected';return navigate('explore');},title,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
+    else if(work.doi){const link=node('button',Dor(work.title,'제목 없음'),title,{type:'button',class:'sc-hit-title-link','data-opens':'browser',title:T('doi.org에서 열기')});link.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+bareDOI(work.doi));}catch(e){message(readable(e),true);}});}
+    else title.appendChild(doc.createTextNode(String(D(work.title||'').text||T('제목 없음'))));
+    if(ctx.isNew){title.appendChild(doc.createTextNode(' '));node('span',T('새'),title,{class:'sc-tag sc-new',title:T('마지막 확인 이후 새로 나온 논문')});}
+    const meta=node('p',null,text,{class:'sc-hit-meta sc-inbox-meta'});
+    const preprint=isPreprintWork(work);
+    if(preprint)node('span','Preprint',meta,{class:'sc-preprint',title:T('아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.')});
+    const parts=[];
+    const venueName=preprint?serverName(work.venue):String(work.venue||'').trim();
+    if(venueName)parts.push(el=>{const v=venueSpan(el,venueName);if(venueName!==work.venue)v.title=work.venue;});
+    const date=String(work.date||work.year||'').slice(0,10);
+    if(date)parts.push(el=>node('span',date,el,{class:'sc-paper-year'}));
+    const cited=Number(work.citations);
+    if(work.citations!=null&&Number.isFinite(cited))parts.push(el=>node('span',T(`인용 ${cited.toLocaleString(LOC())}`),el,{class:'sc-inbox-fact',title:T('지금까지 이 논문을 인용한 논문 수')}));
+    const roles=rolesOf(work);
+    if(roles.length)parts.push(el=>node('span',roles.join(' · '),el,{class:'sc-inbox-role'}));
+    parts.forEach((make,index)=>{if(index)meta.appendChild(doc.createTextNode(' · '));make(meta);});
+    const status=node('span',null,row,{class:'sc-inbox-status'});
+    if(mine||work.inLibrary)node('span',T('보유'),status,{class:'sc-hit-owned'});
+    else if(work.doi&&typeof runtime.importWork==='function'){const add=button(importLabel(),()=>run(async()=>{
+     const saved=await importHere(work);
+     const record=ownedRecord(saved,work);
+     work.inLibrary=true;
+     if(record)ctx.held.set(bareDOI(work.doi),record);
+     if(typeof ctx.redraw==='function')ctx.redraw();else{add.remove();node('span',T('보유'),status,{class:'sc-hit-owned'});}
+    }),status,{'data-writes':'library',title:importTip()});}
+    node('span',null,row,{class:'sc-inbox-actions'});
+    return row;
+   }
+   // A person's view starts at the top of the scroll area: their back line and name are the first thing seen.
+   function toPerson(target){try{target?.scrollIntoView?.({block:'start',behavior:'auto'});}catch(_){}}
    async function renderPerson(person,root,opts={}){
     const inline=!!opts.inline;
     const live=()=>token===epoch&&!disposed&&state.tab==='authors'&&root.isConnected;
@@ -6572,6 +6690,9 @@
     root.replaceChildren();
     const wrap=node('div',null,root,{class:'sc-person-detail'+(inline?' sc-person-inline':'')});
     if(!inline)node('h3',D(person.name),wrap,{class:'sc-hit-group'});
+    // Opened by a click anywhere: the person's own top (the back line and the name) goes to the top of the scroll
+    // area at once, not after the data arrives, so the page never opens mid-way or at the old scroll position.
+    if(!inline)toPerson(wrap);
     else node('p',T('불러오는 중…'),wrap,{class:'sc-muted sc-person-loading'});
     drawShelf(person.name,person,wrap,redo);
     let data;
@@ -6596,18 +6717,17 @@
     const fresh=reported.filter(work=>!isSeen({key:newsKey(work)}));
     if(!live())return;
     wrap.replaceChildren();
-    if(!inline&&item){const back=bar(wrap);button('← 이 논문의 저자 보기',()=>run(loadAuthors),back);}
+    if(!inline&&item){const back=bar(wrap);button('← 이 논문의 저자 보기',()=>run(async()=>{const was=state.authorsReturn;state.authorsReturn=null;await loadAuthors();restoreAuthorsView(was);}),back);}
     const stored=watchedRow(person.id);
     // The face, the name and the numbers on one line. A person is easier to
     // hold in mind than a row of statistics, which is the whole point of
     // following people rather than papers.
     const head=node('div',null,wrap,{class:'sc-person'+(inline?' sc-person-compact':'')});
-    if(!inline)wrap.scrollIntoView?.({block:'start',behavior:'smooth'});
     let face=null;
     if(!inline){face=node('div',null,head,{class:'sc-face'});node('span',D(initials(profile?.name||person.name)),face,{class:'sc-face-text'});}
     const who=node('div',null,head,{class:'sc-person-who'});
     // The row's name is cut to fit its column; the opened panel always says the whole name.
-    node('h3',D(profile?.name||person.name),who,{class:inline?'sc-person-inline-name':'',title:D(profile?.name||person.name)});
+    const heading=node('h3',D(profile?.name||person.name),who,{class:inline?'sc-person-inline-name':'',title:D(profile?.name||person.name),...(inline?{}:{tabindex:'-1'})});
     const stats=node('p',null,who,{class:'sc-profile'});
     const places=person.places&&person.places.length>1?person.places.map(p=>p.name).join(' · '):'';
     const institution=stored?.institution||person.institution||profile?.institutions?.[0]||'';
@@ -6620,7 +6740,7 @@
     const checkedOn=(stored&&stored.sweptAt)||checkedAt||'';
     for(const [label,value] of [['h-index',profile?.hIndex],['논문',profile?.works!=null?fmtN(profile.works):null],['총 인용',profile?.citations!=null?fmtN(profile.citations):null],['마지막 확인',checkedOn.slice(0,10)]]){
      if(value==null||value==='')continue;
-     const span=node('span',label+' ',stats);node('b',String(value),span);
+     const span=node('span',T(label)+' ',stats);node('b',String(value),span);
     }
     if(profile?.topics?.length){
      const chips=node('div',null,who,{class:'sc-chips'});
@@ -6653,13 +6773,23 @@
      }
      /* The count is the list shown under it (the stored unseen papers when there are any), so the button and the group agree. */
      const toMark=unseenStored.length?unseenStored:fresh;
-     if(toMark.length)button(`새 논문 ${toMark.length}편 확인함`,()=>run(async()=>{
+     if(toMark.length)button(F('새 논문 {0}편을 확인함으로 표시',toMark.length),()=>run(async()=>{
       // Marked one by one in the store the inbox reads, so 확인함 above and
       // here agree and either can be undone. The sweep's own record of what
       // it has found is left alone; a later sweep replaces it anyway.
-      for(const work of toMark)await setSeen({key:newsKey(work)},true);
+      const marked=toMark.map(work=>({key:newsKey(work)}));
+      for(const entry of marked)await setSeen(entry,true);
       if(inline)state.watchRefocus=true;
       await refreshed();
+      // The button is gone after the press, so the result is said where status lines are said, with the way back.
+      if(disposed||state.tab!=='authors')return;
+      message(F('새 논문 {0}편을 확인함으로 표시했습니다.',marked.length));
+      undoToast(F('새 논문 {0}편을 확인함으로 표시했습니다.',marked.length).text,async()=>{
+       for(const entry of marked)await setSeen(entry,false);
+       if(disposed||state.tab!=='authors')return;
+       await refreshed();
+       message(F('새 논문 {0}편을 다시 미확인으로 되돌렸습니다.',marked.length));
+      });
      }),follow);
     } else if(!inline){
      // Everything visible now is the baseline, so "new" later means new to the user.
@@ -6704,6 +6834,11 @@
       node('span',T(`${newPatents}건 · 아래 특허 목록에 표시`),line);
      }
     }
+    // Every paper, newest first, begins loading here; the sections below do not wait for it.
+    if(typeof runtime.authorAllWorks==='function'){
+     const newIDs=new Set([...unseenStored,...fresh].map(w=>w.id).filter(Boolean));
+     drawAllPapers(person,profile,newIDs,works,wrap,live);
+    }
     drawShelf(profile?.name||person.name,person,wrap,redo);
     drawEgo(person,profile,works,wrap,redo,opts);
     // The circle of colleagues, out of the works already in hand: no request of
@@ -6737,9 +6872,11 @@
       chip.title=[mate.name,mate.institution,T(`공저 ${mate.papers}편`),mateRow?T('관심 저자'):'',...(mate.titles||[])].filter(Boolean).join('\n');
      }
     }
-    const recent=personGroup('최근 논문',works.length,wrap,'sc-person-recent');
-    if(!works.length)node('p','최근 논문을 찾지 못했습니다.',recent,{class:'sc-muted'});
-    else hitList(works,recent);
+    if(typeof runtime.authorAllWorks!=='function'){
+     const recent=personGroup('최근 논문',works.length,wrap,'sc-person-recent');
+     if(!works.length)node('p','최근 논문을 찾지 못했습니다.',recent,{class:'sc-muted'});
+     else hitList(works,recent);
+    }
     // Filings last: they are the rarest and the least often read, and the new
     // ones are already named in the box at the top.
     if(stored&&stored.patents&&stored.patents.length){
@@ -6759,10 +6896,27 @@
     }else if(stored&&typeof runtime.patentsKey==='function'&&!runtime.patentsKey()&&!inline){
      node('p','특허 확인은 설정에 USPTO Open Data Portal 키를 넣으면 켜집니다 (무료).',wrap,{class:'sc-muted'});
     }
-    if(!inline)message(`${works.length}편 · 이미 보유 ${works.filter(w=>w.inLibrary).length}편`
-     +(watching?` · 새 논문 ${fresh.length}편`+(checkedAt?` · 마지막 확인 ${checkedAt.slice(0,10)}`:''):''));
+    // Each piece is translated on its own and joined after: the whole line never matches a table key.
+    if(!inline){
+     const said=[F('{0}편',works.length).text,F('이미 보유 {0}편',works.filter(w=>w.inLibrary).length).text];
+     if(watching){said.push(F('새 논문 {0}편',fresh.length).text);if(checkedAt)said.push(T('마지막 확인')+' '+checkedAt.slice(0,10));}
+     message(D(said.join(' · ')));
+    }
+    // Everything above the papers is now laid out, so the top can be reached: scroll once more, then hand the heading to
+    // keyboard and screen-reader users (preventScroll: the scroll is already where it should be).
+    if(!inline&&live()){toPerson(wrap);heading.focus?.({preventScroll:true});}
+   }
+   /* Where the list was before a person was opened: its scroll position and the row that was pressed. ← back puts both
+      back, so the reader is looking at the same row again rather than at the top of the page. A person opened from
+      another person's page keeps the first place, so back leads to the list and not to the previous person. */
+   function restoreAuthorsView(was){
+    if(!was||disposed||state.tab!=='authors')return;
+    body.scrollTop=was.top||0;
+    const row=[...list.querySelectorAll('[data-author-id]')].find(el=>el.dataset.authorId===String(was.id));
+    row?.focus?.({preventScroll:true});
    }
    async function show(person){
+    if(!list.querySelector('.sc-person-detail'))state.authorsReturn={top:body.scrollTop||0,id:person.id};
     list.replaceChildren();
     await renderPerson(person,list,{});
    }
@@ -7526,6 +7680,8 @@
     if(table&&typeof win.ResizeObserver==='function'){try{new win.ResizeObserver(()=>{const n=String(columns());if(cell.getAttribute('colspan')!==n)cell.setAttribute('colspan',n);}).observe(table);}catch(_){}}
     const panel=node('div',null,cell,{class:'sc-watch-expand-body',tabindex:'-1',role:'region','aria-label':T(`${person.name} 상세`)});
     tr.after(row);
+    // Opened by a press on the row: the row goes to the top of the scroll area with its panel under it.
+    if(animate)try{tr.scrollIntoView?.({block:'start',behavior:'auto'});}catch(_){}
     const opts={inline:true,expand:p=>watchApi.expand?.(p)};
     renderPerson(person,panel,opts).catch(error=>runtime.Z.logError?.(error));
     return panel;
@@ -7699,7 +7855,7 @@
     message(`이 논문의 저자 ${people.length}명. 이름을 눌러 최근 작업을 확인하세요.`);
     const authors=node('div',null,list,{class:'sc-hits'});
     for(const person of people){
-     const row=node('div',null,authors,{class:'sc-hit',role:'button',tabindex:'0'});
+     const row=node('div',null,authors,{class:'sc-hit',role:'button',tabindex:'0','data-author-id':String(person.id)});
      row.addEventListener('click',e=>{if(e.target.closest('button'))return;run(()=>show(person));});
      row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run(()=>show(person));}});
      node('p',D(person.name),row,{class:'sc-hit-title'});

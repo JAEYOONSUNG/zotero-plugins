@@ -360,6 +360,10 @@
       const visibleRect = el => { const r = el.getBoundingClientRect(); let L = r.left, T = r.top, R = r.right, B = r.bottom;
         for (let n = el.parentElement; n && n.nodeType === 1; n = n.parentElement) { const s = style(n); if (s.overflowX !== 'visible' || s.overflowY !== 'visible') { const q = n.getBoundingClientRect(); L = Math.max(L, q.left); T = Math.max(T, q.top); R = Math.min(R, q.right); B = Math.min(B, q.bottom); } if (n.id === 'style-custom-workbench') break; }
         return R - L >= 1 && B - T >= 1 ? {left: L, top: T, right: R, bottom: B} : null; };
+      // The part of a box painted before the panel's own clip: what a scroller or an ellipsis cell leaves, but not the panel's overflow:hidden, which would hide the very escape being looked for.
+      const paintedRect = el => { const r = el.getBoundingClientRect(); let L = r.left, T = r.top, R = r.right, B = r.bottom;
+        for (let n = el.parentElement; n && n.nodeType === 1 && n.id !== 'style-custom-workbench'; n = n.parentElement) { const s = style(n); if (s.overflowX !== 'visible' || s.overflowY !== 'visible') { const q = n.getBoundingClientRect(); L = Math.max(L, q.left); T = Math.max(T, q.top); R = Math.min(R, q.right); B = Math.min(B, q.bottom); } }
+        return R - L >= 1 && B - T >= 1 ? {left: L, top: T, right: R, bottom: B} : null; };
       const faded = el => { for (let n = el; n && n.nodeType === 1; n = n.parentElement) { if (Number(style(n).opacity) === 0) return true; if (n.id === 'style-custom-workbench') break; } return false; };
       const probe = where => {
         const rootEl = host(); if (!rootEl) return;
@@ -367,7 +371,17 @@
         const texts = [];
         for (const el of all) {
           const s = style(el), r = el.getBoundingClientRect();
-          if (s.position === 'fixed' || s.position === 'absolute') continue;
+          /* A fixed or absolute box has no frame to be measured against, so the old probe skipped it. Each is checked
+             against the panel itself instead: the part of it that is actually painted (not cut by a clipping ancestor)
+             must lie inside the panel, or it is a dark pill, a bar or a menu poking out beside the rail or past the edge. */
+          if (s.position === 'fixed' || s.position === 'absolute') {
+            const painted = paintedRect(el), edge = rootEl.getBoundingClientRect();
+            if (painted && (edge.left - painted.left > 1.5 || painted.right - edge.right > 1.5 || edge.top - painted.top > 1.5 || painted.bottom - edge.bottom > 1.5)) note('outside the panel · ' + label(el) + ' (' + s.position + ')', where);
+            continue;
+          }
+          // Anything else painted beyond the panel's own box is the same defect, whatever it is positioned by.
+          { const painted = paintedRect(el), edge = rootEl.getBoundingClientRect();
+            if (el !== rootEl && painted && (edge.left - painted.left > 1.5 || painted.right - edge.right > 1.5)) note('outside the panel · ' + label(el), where); }
           let p = el.parentElement; while (p && p !== rootEl && !framed(p)) { if (style(p).overflow !== 'visible') { p = null; break; } p = p.parentElement; }
           if (p && p !== rootEl && style(p).overflow === 'visible') { const q = p.getBoundingClientRect(); const over = Math.max(q.left - r.left, r.right - q.right, q.top - r.top, r.bottom - q.bottom); if (over > 1.5) note('escape · ' + label(el) + ' out of ' + label(p), where); }
           const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
@@ -407,6 +421,22 @@
           for (const tab of tabs) { try { await bench.show(tab); await new Promise(r => win.setTimeout(r, 120)); width = width || Math.round(host().getBoundingClientRect().width); probe(mode + ':' + tab);
             const tile = tab === 'explore' && host().querySelector('.sc-overview-fact');
             if (tile) { const cs = style(tile); diag[mode] = {display: cs.display, height: cs.height, minHeight: cs.minHeight, maxHeight: cs.maxHeight, appearance: cs.appearance || cs.MozAppearance, lineHeight: cs.lineHeight, box: Math.round(tile.getBoundingClientRect().height), kids: [...tile.children].map(k => k.localName + ':' + Math.round(k.getBoundingClientRect().top - tile.getBoundingClientRect().top) + '+' + Math.round(k.getBoundingClientRect().height))}; } } catch (error) { note('error · ' + (error.message || error), mode + ':' + tab); } }
+        }
+        /* The Authors tab with a person's view open: the part that grew a stray dark pill at the panel's left edge in
+           a screenshot, and the longest page the panel draws. Only with the network allowed (a person's view reads their
+           OpenAlex profile and works) and a followed author to open; the table's own row opening is what a user does. */
+        const watched = network ? (runtime.watchedAuthors?.() || []) : [];
+        if (watched.length) {
+          for (const mode of ['normal', 'compact']) {
+            if (mode === 'compact') panel.setAttribute('data-density', 'compact'); else panel.removeAttribute('data-density');
+            try {
+              bench.state.watchOpen = watched[0].id;
+              await bench.show('authors');
+              for (let n = 0; n < 40 && !host().querySelector('.sc-person-detail h3, .sc-watch-expand-body h3'); n++) await new Promise(r => win.setTimeout(r, 150));
+              await new Promise(r => win.setTimeout(r, 300));
+              probe(mode + ':authors with a person open');
+            } finally { bench.state.watchOpen = ''; }
+          }
         }
       } finally {
         if (density) panel.setAttribute('data-density', density); else panel.removeAttribute('data-density');
