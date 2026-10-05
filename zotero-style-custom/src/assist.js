@@ -31,7 +31,11 @@
   const explicitEndpoint=()=>String(runtime.pref('aiEndpoint','')||'').trim();
   function bridgePath(){
    const p=pathTools();if(!p)return null;
+   /* PathUtils.homeDir is not there in every Gecko the plugin runs on (Zotero 9 measured: the bridge was
+      never found), so the directory service's "Home" is the fallback, then $HOME. */
    let home=null;try{home=p.homeDir;}catch(_){}
+   if(!home){try{const S=runtime.Services||(typeof Services!=='undefined'?Services:null),C=typeof Ci!=='undefined'?Ci:(typeof Components!=='undefined'?Components.interfaces:null);if(S&&C)home=S.dirsvc.get('Home',C.nsIFile).path;}catch(_){}}
+   if(!home){try{const S=runtime.Services||(typeof Services!=='undefined'?Services:null);home=S?.env?.get?.('HOME')||null;}catch(_){}}
    if(!home)return null;
    return p.join(home,'Library','Application Support','StyleCustomBridge','bridge.json');
   }
@@ -264,7 +268,9 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
   }
   function cancel(){cancelEpoch++;for(const job of jobs)job.abort?.();}
   function stop(){active=false;cancel();jobs.clear();}
-  return {run,chat,paperSummary,translateParagraphs,available,status,cancel,stop};
+  // An explicit look, for callers that can wait (the self-check, a settings page opening).
+  async function refresh(){if(explicitEndpoint())return status();await detectBridge().catch(()=>null);return status();}
+  return {run,chat,paperSummary,translateParagraphs,available,status,refresh,cancel,stop};
  }
  const api={create,endpoint,bridgeConfig,BRIDGE_LABEL};root.CustomStyleAssist=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

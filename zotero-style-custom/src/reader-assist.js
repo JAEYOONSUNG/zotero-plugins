@@ -1735,6 +1735,7 @@
      const wait=ms=>sleepIn(session.doc.defaultView,ms);
      return {
       status:()=>{try{return runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;}catch(_){return null;}},
+      refresh:async()=>{try{return runtime.assist&&typeof runtime.assist.refresh==='function'?await runtime.assist.refresh():null;}catch(_){return null;}},
       language:()=>aiSettings().language,
       pages:()=>pageCount(reader),
       /* One summary, exactly as the "요약 만들기" button makes it (force: an earlier one is not reused). */

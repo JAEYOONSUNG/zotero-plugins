@@ -787,6 +787,8 @@
 
       let status = null;
       await check('AI status: the account connection is available', async () => {
+        // Look again before judging: the start-up look may predate the bridge, or not have finished.
+        try { if (typeof ai.refresh === 'function') await ai.refresh(); } catch (e) {}
         status = ai.status();
         report.ai.status = status;
         if (!status) return {pass: false, detail: 'assist.status() is missing'};
