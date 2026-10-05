@@ -1106,7 +1106,7 @@
         // A plugin column's key in the tree is the one registration handed back, not its name.
         const key = name => (runtime.featureColumns && runtime.featureColumns.get(name)) || name;
         const widths = {title: 430, firstCreator: 150, year: 56, journalMark: 120, if: 60, citations: 130, status: 90, rating: 84, time: 80, files: 70, correspondingInstitution: 220};
-        const keep = new Set(Object.keys(widths).map(key));
+        const keep = new Set(Object.keys(widths).map(key)); keep.add(key('more')); // the narrow actions column stays where the user keeps it
         cols.forEach((column, index) => { const want = keep.has(column.dataKey); if (!!column.hidden === want) tree._columns.toggleHidden(index); });
         await new Promise(resolve => win.setTimeout(resolve, 300));
         const present = new Set(cols.map(c => c.dataKey));

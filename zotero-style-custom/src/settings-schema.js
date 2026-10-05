@@ -993,6 +993,13 @@
       "default": true
     },
     {
+      "key": "hoverColumn",
+      "category": "columns",
+      "label": "마우스를 올린 열 강조",
+      "type": "boolean",
+      "default": true
+    },
+    {
       "key": "hoverDelay",
       "category": "columns",
       "label": "스크롤 시작 대기 (ms)",

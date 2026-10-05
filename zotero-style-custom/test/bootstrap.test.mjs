@@ -34,7 +34,7 @@ async function boot({failJCR=false,invalidJCR=false,licensed=null}={}){
 }
 test('Gecko-like bootstrap loads the openly licensed catalog before startup or window attachment without UI',async()=>{
  const {Z,context,columns,observers,registered,writes,errors,loaded,attached,started}=await boot();
- assert.equal(columns.size,28);assert.equal(Z.StyleCustom.Workbench.TABS.length,19);assert.equal(typeof Z.StyleCustom.readerTools.setVerticalTabs,'function');assert.equal(typeof Z.StyleCustom.libraryService.graph,'function');assert.equal(registered.size,1);assert.equal(writes.length,0);
+ assert.equal(columns.size,29);assert.equal(Z.StyleCustom.Workbench.TABS.length,19);assert.equal(typeof Z.StyleCustom.readerTools.setVerticalTabs,'function');assert.equal(typeof Z.StyleCustom.libraryService.graph,'function');assert.equal(registered.size,1);assert.equal(writes.length,0);
  // What ships is what may be passed on. Nothing licensed travels in the archive.
  const packaged=JSON.parse(fs.readFileSync(shipped('journal-catalog.json'),'utf8'));
  assert.equal(Z.StyleCustom.jcrCatalog.groups.length,packaged.groups.length);
@@ -68,7 +68,7 @@ test("a reader's own licensed catalog wins over the one in the archive",async()=
 test('missing or invalid catalog data stays unavailable without substituting the journal registry',async()=>{
  for(const options of [{failJCR:true},{invalidJCR:true}]){
   const {Z,context,columns,errors,debug}=await boot(options);
-  assert.equal(Z.StyleCustom.jcrCatalog,null);assert.ok(Z.StyleCustom.jcrCatalogError);assert.equal(columns.size,28);
+  assert.equal(Z.StyleCustom.jcrCatalog,null);assert.ok(Z.StyleCustom.jcrCatalogError);assert.equal(columns.size,29);
   assert.ok(debug.some(message=>message.includes('journal category catalog not loaded')));
   assert.ok(vm.runInContext('CustomStyleJournalIdentity.registryRanked().length',context)>0,'the registry is still loaded');
   await vm.runInContext('shutdown()',context);assert.equal(errors.length,0);

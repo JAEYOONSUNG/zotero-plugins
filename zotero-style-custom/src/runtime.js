@@ -27,6 +27,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
     this.affiliationTools = typeof CustomStyleAffiliations !== "undefined" ? CustomStyleAffiliations : require("./affiliations.js");
     this.graphTools = typeof CustomStylePaperGraph !== "undefined" ? CustomStylePaperGraph : require("./paper-graph.js");
+    this.itemCells = typeof CustomStyleItemCells !== "undefined" ? CustomStyleItemCells : require("./item-cells.js");
     this.pathTools = typeof CustomStyleReadingPath !== "undefined" ? CustomStyleReadingPath : require("./reading-path.js");
     // Held in memory only: a lookup is cheap to repeat and must not go stale on disk.
     this.discoverCache = new Map();
@@ -182,6 +183,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if(win.closed)continue;
       this.timeFormatMemo = null; this.bumpState();
       if(keys.some(key=>['recordReading','recordIntervalMs','idleSeconds'].includes(key)))this.attachMotion(win,state,{marquee:false,reading:true});
+      if(keys.includes('hoverColumn'))this.attachCells(win,state);
       if(keys.some(key=>['marquee','hoverDelay','scrollSpeed'].includes(key)))this.attachMotion(win,state,{marquee:true,reading:false});
       if(keys.some(key=>key.startsWith('reader')||key.startsWith('margin')||key.startsWith('feature.')||key==='verticalTabs'))await this.readerTools.applyPreferences?.(win);
       state.signature=null;await state.workbench?.applyPreferences?.();
@@ -302,7 +304,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time'].includes(dataKey),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','more'].includes(dataKey),...(dataKey==='more'?{fixedWidth:true,noPadding:true,minWidth:28}:{}),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -390,7 +392,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ["firstInstitution","1저자 기관","170"],["correspondingInstitution","교신 기관","170"],["institutionTier","기관 등급","80"],
       // Deep collection trees (Defense system › CRISPR-Cas › Type I Cas) made a
       // search result's folder invisible until the sidebar was clicked open.
-      ["collections","컬렉션","160"]];
+      ["collections","컬렉션","160"],
+      // A narrow button at the far right that opens the same menu as a right click on the row.
+      ["more","⋯","28"]];
     this.syncFeatureColumns();
     try{this.setCustomFields(this.pref('customFields',''),{persist:false});}catch(error){this.Z.logError(error);}
     this.prefPane = await this.Z.PreferencePanes.register({ pluginID: id, src: rootURI + "content/preferences.xhtml", label: "Style Custom",image:rootURI+"content/icons/style-custom.svg",scripts:[rootURI+"src/settings.js"],stylesheets:[rootURI+"content/preferences.css"] });
@@ -1197,6 +1201,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // Five stars are one rating, not five marks spread across the cell.
     if (key === "rating") cell.style.gap = "1px";
     const item = doc.defaultView?.ZoteroPane?.itemsView?.getRow(index)?.ref;
+    if (key === "more") { if (this.isRegular(item)) cell.appendChild(this.moreButton(doc, index, item)); cell.style.justifyContent = "center"; return cell; }
     // Read current data when painting: do not reuse a previously cached empty cell.
     if (this.isRegular(item)) {value=["if","oaCitedness","citations"].includes(key)?this.displayValue(key,item):this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
     // A sort key handed in without its row is never drawn as text.
@@ -1531,7 +1536,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const parent=attachment?.parentID?this.Z.Items.get(attachment.parentID):attachment;
     return this.isRegular(parent)?[parent]:[];
   }
-  openWorkbench(win,tab='explore') {return this.windows.get(win)?.workbench?.show(tab);}
+  openWorkbench(win,tab='explore',focus) {return this.windows.get(win)?.workbench?.show(tab,focus);}
   toggleAppTheme() {
     const key='browser.theme.toolbar-theme',current=this.Z.Prefs.get(key,true),win=this.Z.getMainWindow?.();
     const dark=current===0||current!==1&&!!win?.matchMedia?.('(prefers-color-scheme: dark)').matches;
@@ -3817,6 +3822,64 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     host.appendChild(popup);
     popup.openPopup(cell, "after_start", 0, 0, true, false);
     return null;
+  }
+  /* The "more" column's button: a click behaves like a right click on its row. */
+  moreButton(doc, index, item) {
+    const button = doc.createElementNS("http://www.w3.org/1999/xhtml", "button");
+    button.type = "button"; button.className = "sc-more"; button.textContent = "⋯";
+    button.title = this.t("더 보기"); button.setAttribute("aria-label", this.t("더 보기"));
+    button.setAttribute("data-opens", "menu"); button.tabIndex = -1;
+    button.addEventListener("click", event => {
+      event.stopPropagation(); event.preventDefault();
+      this.openRowMenu(doc, button, index, item).catch(error => this.Z.logError(error));
+    });
+    return button;
+  }
+  async openRowMenu(doc, anchor, index, item) {
+    const win = doc.defaultView, pane = win.ZoteroPane, popup = doc.getElementById("zotero-itemmenu");
+    if (!pane || !popup) return;
+    if (!this.rowSelected(doc, index)) pane.itemsView?.selection?.select?.(index);
+    await pane.buildItemContextMenu();
+    popup.openPopup(anchor, "after_end", 0, 0, true, false);
+  }
+  /* The key (our own, un-namespaced, or Zotero's) of the column a cell belongs to. */
+  columnKeyFor(win, cell) {
+    const columns = win.ZoteroPane?.itemsView?.tree?._getVisibleColumns?.() || [];
+    const column = columns.find(c => cell.classList.contains(c.dataKey));
+    if (!column) return null;
+    for (const [own, namespaced] of this.featureColumns || []) if (namespaced === column.dataKey) return own;
+    return column.dataKey;
+  }
+  /* Focus a field in the item pane's info box, opening the pane if it is collapsed. */
+  editField(win, item, field) {
+    const pane = win.ZoteroPane;
+    if (pane?.itemPane?.collapsed) pane.itemPane.collapsed = false;
+    const box = win.document.getElementById("zotero-editpane-info-box");
+    if (box) box.open = true;
+    if (field === "creator") { box?.querySelector?.('[id^="creator-0-"]')?.focus?.(); return; }
+    if (typeof box?.focusField === "function") box.focusField(field);
+    else throw new Error(this.t("항목 창에서 이 필드를 찾지 못했습니다."));
+  }
+  /* Filter Zotero's list to one journal through its own search box. */
+  async filterListBy(win, text) {
+    const search = win.document.getElementById("zotero-tb-search");
+    const box = search?.searchTextbox || win.document.getElementById("zotero-tb-search-textbox");
+    if (!box) throw new Error(this.t("검색창을 찾지 못했습니다."));
+    // The default quick search covers title, creators and year only; a journal needs all fields.
+    // Switched only for this search: when the box is cleared, the reader's own mode comes back.
+    const before = this.Z.Prefs.get("search.quicksearch-mode");
+    if (before === "titleCreatorYear") {
+      this.Z.Prefs.set("search.quicksearch-mode", "fields");
+      const restore = () => { if (box.value) return; box.removeEventListener("input", restore); search?.removeEventListener?.("command", restore); try { this.Z.Prefs.set("search.quicksearch-mode", before); } catch (ignored) {} };
+      box.addEventListener("input", restore); search?.addEventListener?.("command", restore);
+    }
+    box.value = String(text).replace(/"/g, "");
+    await win.ZoteroPane.search();
+    this.say(win, this.t("목록을 이 저널로 걸렀습니다. 검색창의 ×로 해제합니다."));
+  }
+  attachCells(win, state) {
+    state.cellsCleanup?.(); state.cellsCleanup = null;
+    state.cellsCleanup = this.itemCells.attach(win, state, this, {hover: this.getSetting("hoverColumn")});
   }
   /* Zotero selects a row on mousedown, so by the click it is always selected.
      The cell asks on its own mousedown, which runs before the tree's, and the
@@ -6692,6 +6755,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     state.listeners.push([win, "unload", unload]);
     this.attachMotion(win,state);
     this.attachColumnFit(win,state);
+    try{this.attachCells(win,state);}catch(error){this.Z.logError(error);}
     this.watchItemPane(win,state);
     state.readerCleanup=this.readerTools.attach(win);
     for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
@@ -7023,7 +7087,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     cleanup(()=>win.clearInterval(state.timer));cleanup(()=>state.marqueeCleanup?.());
     cleanup(()=>state.workbench?.destroy());cleanup(()=>state.readerCleanup?.());
     cleanup(()=>state.itemPaneObserver?.disconnect());
-    cleanup(()=>state.rollCleanup?.());
+    cleanup(()=>state.rollCleanup?.());cleanup(()=>state.cellsCleanup?.());
     for(const row of win.document.querySelectorAll('#zotero-item-pane .meta-row[style*="min-height"]'))cleanup(()=>row.style.removeProperty('min-height'));
     for(const node of state.titleNodes||[])cleanup(()=>node.remove());
     for(const[cell,position]of state.titlePositions||[])cleanup(()=>{if(cell.style.position==='relative'){if(position)cell.style.position=position;else cell.style.removeProperty('position');}});

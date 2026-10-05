@@ -67,7 +67,7 @@ function fixture() {
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
-  assert.equal(columns.size, 28);
+  assert.equal(columns.size, 29);
   assert.equal(observers.size, 7);
   await plugin.stop();
   assert.equal(columns.size, 0);
@@ -408,9 +408,9 @@ test('legacy unbound progress is not assigned to a PDF or another library',()=>{
 });
 test('custom columns are validated and registration failure keeps previous fields intact',async()=>{
  const {plugin,Z,columns,item}=fixture();await plugin.start({id:'custom',version:'0.5',rootURI:'file:///custom/'});
- Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,30);
+ Z.ItemFields={getID:name=>['volume','issue','pages'].includes(name)};plugin.setCustomFields('volume, issue');assert.equal(columns.size,31);
  const original=Z.ItemTreeManager.registerColumn;Z.ItemTreeManager.registerColumn=options=>options.dataKey==='field-pages'?false:original(options);
- assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,30);assert.ok(plugin.dynamicFieldMap.has('issue'));
+ assert.throws(()=>plugin.setCustomFields('volume, pages'));assert.equal(columns.size,31);assert.ok(plugin.dynamicFieldMap.has('issue'));
  assert.throws(()=>plugin.setCustomFields('unknown'));const ref=item(1);ref.getField=key=>key==='volume'?'12':'';assert.equal(plugin.value('field-volume',ref),'12');await plugin.stop();
 });
 test('panel CSS is scoped and cannot load remote content or escape its rules',()=>{
