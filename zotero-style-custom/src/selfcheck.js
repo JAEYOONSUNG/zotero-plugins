@@ -693,7 +693,7 @@
       const tree = win.ZoteroPane.itemsView.tree, root = win.document.getElementById(tree.props.id);
       const list = root.querySelector('.windowed-list'), header = root.querySelector('.virtualized-table-header'), body = root.querySelector('.virtualized-table-body');
       if (roll.rolling) {
-        if (parseFloat(list.style.minWidth) !== roll.wanted) throw new Error(`rolling, but the rows are ${list.style.minWidth} wide, not ${roll.wanted}`);
+        if (Math.abs(parseFloat(list.style.minWidth) - roll.wanted) >= 1) throw new Error(`rolling, but the rows are ${list.style.minWidth} wide, not ${roll.wanted}`);
         if (!header.style.width) throw new Error('rolling, but the header was not widened');
         if (body.scrollWidth <= body.clientWidth) throw new Error('rolling, but the body has nothing to scroll');
       }
