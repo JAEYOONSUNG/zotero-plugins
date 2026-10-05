@@ -10,6 +10,7 @@ import Authors from "../../content/authors.js";
 import Filters from "../../content/filters.js";
 import Journals from "../../content/journals.js";
 import Signals from "../../content/signals.js";
+import Related from "../../content/related.js";
 import Tip from "../../content/tooltip.js";
 
 export const paper = (key, extra = {}) => ({
@@ -162,6 +163,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPFilters: Filters,
 		ZotPoPJournals: Journals,
 		ZotPoPSignals: Signals,
+		ZotPoPRelated: Related,
 		ZotPoPJournalMarks: JournalMarks,
 		ZotPoPTip: Tip,
 		ZotPoPJCR: JCR,

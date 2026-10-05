@@ -92,6 +92,7 @@
 		focusKey: null,
 		detailKey: null,
 		sortKey: "rank",
+		related: { running: false, controller: null, prev: null, store: null },
 		checking: false,
 		sortDir: "asc",
 		searching: false,
@@ -438,6 +439,7 @@
 		$("person-clear")?.addEventListener("click", () => setPick(null));
 		$("selected-only")?.addEventListener("click", () => { state.selectedOnly = !state.selectedOnly; render(); });
 		$("select-none").addEventListener("click", () => { state.selected.clear(); render(); });
+		$("related-btn").addEventListener("click", toggleRelated);
 		// Changing the library filter never touches the checks: what was chosen stays chosen.
 		for (let b of document.querySelectorAll("#lib-filter button")) b.addEventListener("click", () => { state.libraryFilter = b.dataset.lib; render(); });
 		let toolbarMenus = { "export-btn": () => [exportMenuItems(), t("exportMenu")], "view-btn": () => [viewMenuItems(), t("viewMenu")], "d-more": () => [moreMenuItems(detailRecord()), t("dMore")], "d-tr-lang": () => [trLangMenuItems(), t("trLang")] };
@@ -2548,6 +2550,8 @@
 		if (k === "country") return (affiliationOf(r)?.countries || []).join("/");
 		if (k === "tier") return affiliationOf(r)?.hIndex ?? -1;
 		if (k === "inLibrary") return r.inLibrary ? 1 : 0;
+		// "Rank by my library": the score, then held papers, then those that could not be compared.
+		if (k === "related") return r.related?.score != null ? r.related.score : r.related?.held ? -1 : -2;
 		if (k === "pdf") return hasPDF(r) ? 1 : 0;
 		let v = r[k];
 		if (v == null) return ["citations", "year", "rank", "journalIF", "journalOA2y"].includes(k) ? -1 : "";
@@ -3438,6 +3442,7 @@
 			: state.searched ? t(state.lastPartial ? "emptyAfterPartial" : "emptyAfterSearch")
 			: t(searchSurface === "authors" ? "emptyInitialAuthors" : "emptyInitial");
 		updateCounts();
+		syncRelatedBtn();
 		renderMetrics(list);
 		renderDetail();
 	}
@@ -3462,7 +3467,7 @@
 			// By value, never by the summary object: a new summary of unchanged data must not rebuild the row.
 			where && [where.first, where.corresponding].map(p => p && [p.name, p.institution, p.country, p.hIndex, p.tier]), where?.correspondingKnown,
 			row?.institution, row?.tier, row?.hIndex, row?.flag, where?.countries, affLineParts(r).map(p => [p.role, p.institution, p.country, p.hIndex]),
-			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r))]);
+			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r)), r.related]);
 	}
 	// The parts of a row that follow the selection, not the paper: set on every draw, reused row or not.
 	function paintRowState(tr, r, pick) {
@@ -3625,6 +3630,7 @@
 		main.appendChild(a);
 		// A small lime mark ahead of the title (so a narrow cell never clips it): this row was not in the previous run of this search.
 		if (r.isNew) { let mark = document.createElement("span"); mark.className = "new-mark"; mark.textContent = t("newMark"); tip(mark, t("newMarkTip")); main.insertBefore(mark, a); }
+		if (r.related) { let chip = relatedChip(r.related); if (chip) main.insertBefore(chip, a); }
 		if (r.retracted) { let mark = document.createElement("span"); mark.className = "retract-mark"; mark.textContent = t("retractedChip"); tip(mark, t("retractedTip")); main.insertBefore(mark, main.firstChild); }
 		tt.appendChild(main);
 		paintRowDot(main, r);
@@ -4655,6 +4661,119 @@
 		primary.classList.toggle("primary", !owned);
 		tip(primary, t(owned ? "dShowLibrary" : "dAdd"));
 		primary.disabled = !owned && (state.importing || state.searching);
+	}
+
+	/* ---- "Rank by my library": only when the button is pressed (content/related.js has the formula) ---- */
+	async function loadRelatedStore() {
+		let store = ZotPoPRelated.createStore();
+		try { store.import(JSON.parse(await cacheIO.readText(dataPath("related.json")))); }
+		catch (_) { /* first run, or a damaged file: the lookups simply happen again */ }
+		return store;
+	}
+	async function saveRelatedStore(store) {
+		if (!cacheIO) return;
+		try { await cacheIO.writeText(dataPath("related.json"), JSON.stringify(store.export())); }
+		catch (e) { log("saving related-ranking cache failed: " + e.message); }
+	}
+	/* The papers this library holds, with what is already known about them: Style Custom's stored OpenAlex id
+	   and reference list where it has one (no request), otherwise the DOI the search window already read. */
+	function relatedHeld() {
+		let out = [], seen = new Set(), lib = state.libraryID;
+		let title = id => { try { let it = Zotero.Items.get(id); return it ? String(it.getField("title") || "").trim() : ""; } catch (e) { return ""; } };
+		let sc = styleCustom();
+		if (sc) for (let w of ZotPoPSignals.libraryWorks(sc)) {
+			if (!w.openalex) continue;
+			if (lib != null && Number(String(w.key).split(":")[0]) !== Number(lib)) continue;
+			let item = libraryItemOfKey(w.key);
+			if (!item) continue;
+			seen.add(item.id);
+			out.push({ itemID: item.id, title: item.title, openalex: w.openalex, refs: [...w.refs] });
+		}
+		for (let [doi, id] of state.doiMap || []) { if (seen.has(id)) continue; seen.add(id); out.push({ itemID: id, title: title(id), doi }); }
+		return out;
+	}
+	// What the tooltip shows of a held paper: title, year and the journal in full.
+	function heldLine(top) {
+		let year = "", venue = "";
+		try { let it = Zotero.Items.get(top.itemID); year = String(it.getField("date") || "").match(/\d{4}/)?.[0] || ""; venue = String(it.getField("publicationTitle") || it.getField("journalAbbreviation") || "").trim(); } catch (e) { /* the title alone */ }
+		return "\u2022 " + top.title + (year || venue ? " (" + [year, venue].filter(Boolean).join(", ") + ")" : "") + " \u2014 " + t("relTipWhy", top.why);
+	}
+	function relatedChip(rel) {
+		let chip = document.createElement("span");
+		chip.className = "rel-chip";
+		if (rel.held || rel.unrankable) {
+			chip.classList.add("muted");
+			chip.textContent = t(rel.held ? "relHeldChip" : "relUnrankable");
+			tip(chip, t(rel.held ? "relHeldTip" : "relUnrankableTip"));
+			return chip;
+		}
+		chip.textContent = rel.score === 0 ? t("relNoLink") : t("relChip", rel.c1, rel.c2, rel.c3);
+		if (rel.score === 0) chip.classList.add("muted");
+		tip(chip, [t("relTip", rel.score, rel.c1, rel.c2, rel.c3w), ...(rel.top || []).map(heldLine)].join("\n"));
+		return chip;
+	}
+	function syncRelatedBtn() {
+		let btn = $("related-btn"), rel = state.related, on = state.sortKey === "related";
+		btn.disabled = !rel.running && (state.searching || !state.records.length);
+		btn.setAttribute("aria-pressed", String(on && !rel.running));
+		$("related-label").textContent = t(rel.running ? "relCancel" : on ? "relBack" : "relButton");
+	}
+	async function toggleRelated() {
+		let rel = state.related;
+		if (rel.running) { rel.controller?.abort(); return; }
+		if (state.sortKey === "related") {
+			let prev = rel.prev || { key: "rank", dir: "asc" };
+			state.sortKey = prev.key; state.sortDir = prev.dir; rel.prev = null;
+			render();
+			return;
+		}
+		if (state.searching || !state.records.length) return;
+		let held = relatedHeld();
+		if (!held.length) { showBanner(t(state.doiMap?.failed ? "relLibraryFailed" : "relNeedsLibrary"), null, { warn: true }); return; }
+		let records = state.records.slice(), controller = new AbortController();
+		rel.running = true; rel.controller = controller;
+		hideBanner();
+		syncRelatedBtn();
+		let cctx = { openAlexApiKey: String(PREF("openAlexApiKey") || ""), log, openAlexSpent: openAlexHeld(), signal: controller.signal };
+		let out = null;
+		try {
+			rel.store = rel.store || await loadRelatedStore();
+			out = await ZotPoPRelated.rank({ held, http, ctx: cctx, store: rel.store, sources: ZotPoPSources,
+				results: records.map(r => ({ key: r.key, source: r.source, sourceId: r.sourceId, doi: r.doi, title: r.title, publishedAs: r.publishedAs, preprintOf: r.preprintOf })),
+				onProgress: p => { setStatus(t("relProgress", p.done, p.total)); setProgress(p.done, p.total); } });
+		}
+		catch (e) {
+			if (e?.name === "AbortError") setStatus(t("relStopped"), "", { transient: true });
+			else { log("ranking by library failed: " + (e?.message || e)); setStatus(t("relFailed"), "err"); }
+		}
+		finally {
+			noteOpenAlexSpent(cctx);
+			rel.running = false; rel.controller = null;
+			setProgress(null);
+			if (rel.store) await saveRelatedStore(rel.store);
+		}
+		if (out) {
+			let reason = out.reason;
+			if (!out.ok) {
+				if (reason === "empty-library" || reason === "no-known-held") showBanner(t("relNeedsLibrary"), null, { warn: true });
+				else setStatus(t(reason === "budget" ? "relBudget" : "relFailed"), "err");
+			}
+			else {
+				let live = new Set(state.records), same = records.every(r => live.has(r));
+				for (let r of records) {
+					let s = out.scores.get(r.key);
+					r.related = s && s.top ? { ...s, top: s.top.map(x => ({ ...x })) } : s || null;
+				}
+				if (same) {
+					rel.prev = { key: state.sortKey, dir: state.sortDir };
+					state.sortKey = "related"; state.sortDir = "desc";
+					let ranked = records.filter(r => r.related?.score != null).length;
+					setStatus(out.partial ? t("relPartial", ranked, records.length) : out.requests ? t("relDone", ranked, records.length, out.requests) : t("relDoneCached", ranked, records.length), out.partial && reason === "budget" ? "err" : "");
+				}
+			}
+		}
+		syncRelatedBtn();
+		render();
 	}
 
 	/* ---- what the library says about the open paper, and following its authors (Style Custom, optional) ---- */

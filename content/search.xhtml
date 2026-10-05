@@ -19,6 +19,7 @@
 	<script src="chrome://zotpop/content/filters.js"></script>
 	<script src="chrome://zotpop/content/journals.js"></script>
 	<script src="chrome://zotpop/content/signals.js"></script>
+	<script src="chrome://zotpop/content/related.js"></script>
 	<script src="chrome://zotpop/content/importer.js"></script>
 	<script src="chrome://zotpop/content/preview.js"></script>
 	<script src="chrome://zotpop/content/marquee.js"></script>
@@ -208,6 +209,7 @@
 					<button id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear" hidden="hidden">×</button>
 				</span>
 				<button id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter"/></svg><span data-i18n="filterBtn"></span><span id="filter-count" class="filter-count" hidden="hidden"></span></button>
+				<button id="related-btn" type="button" class="icon-text related-btn" aria-pressed="false" data-i18n-title="relButtonTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library"/></svg><span id="related-label"></span></button>
 				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
 				<span id="person-chip" class="facet-chip" hidden="hidden"><span id="person-text"></span><button id="person-clear" type="button" class="filter-clear" data-i18n-title="personClear" aria-label="clear">×</button></span>
 				<span class="spacer"></span>
