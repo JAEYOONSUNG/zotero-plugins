@@ -120,9 +120,13 @@ async function startup({ id, version, rootURI }) {
         seed: String(Zotero.Prefs.get("extensions.style-custom.selfCheckDemoSeed", true) || ""),
         // Opens one PDF in a background reader tab, measures the reader panel on it and closes the tab
         // (style-custom-reader-check.json). Off unless asked for: the default check never opens a reader.
-        reader: Zotero.Prefs.get("extensions.style-custom.selfCheckReader", true) === true
+        reader: Zotero.Prefs.get("extensions.style-custom.selfCheckReader", true) === true,
+        // With the reader check only: one summary, one question and one stopped question through the AI account
+        // bridge, measured end to end (style-custom-reader-check.json, "ai").
+        readerAI: Zotero.Prefs.get("extensions.style-custom.selfCheckReader", true) === true
+          && Zotero.Prefs.get("extensions.style-custom.selfCheckReaderAI", true) === true
       };
-      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill", "selfCheckShots", "selfCheckReader"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
+      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill", "selfCheckShots", "selfCheckReader", "selfCheckReaderAI"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
       Zotero.Prefs.set("extensions.style-custom.selfCheckDemoSeed", "", true);
       const reportPath = PathUtils.join(Zotero.DataDirectory.dir, "style-custom-selfcheck.json");
       setTimeout(() => {

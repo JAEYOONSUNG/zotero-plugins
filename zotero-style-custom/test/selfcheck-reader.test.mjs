@@ -8,6 +8,8 @@ import Strings from '../src/strings.js';
 import ReaderAssist from '../src/reader-assist.js';
 import SelfCheck from '../src/selfcheck.js';
 import Live from '../src/selfcheck-reader.js';
+import Assist from '../src/assist.js';
+import PC from '../src/paper-chat.js';
 const require = createRequire(import.meta.url);
 const PT = require('../src/paper-text.js');
 I18N.load(Strings.en); I18N.use('en-US');
@@ -294,7 +296,41 @@ test('bootstrap reads the reader flag with the others, clears it before running,
 
 /* ---- reader-assist's diagnose() handle, on the real module ---------------- */
 
-function readerFixture() {
+/* The account bridge, as Zotero.HTTP.request meets it: an OpenAI-shaped answer with x-bridge-provider, SSE through
+   the transport's own requestObserver when stream:true, the canceller aborting it, and one log line per request in
+   the bridge's own format (status 200, or 499 when the client closed). */
+const BRIDGE_JSON = JSON.stringify({port: 47823, token: 'a'.repeat(40)});
+const SUMMARY = '## 요약\nThe paper evolves a polymerase.\n## 핵심 결과\n- It survives 95 C (Results, p. 1)\n## 방법\nScreening.\n## 한계\n- One enzyme.\n## 확인할 점\n- Controls?';
+function fakeBridge({chunks = ['Step 1: libraries were screened ', '(Methods, p. 1). ', 'Step 2: kinetics ', 'were measured.'], chunkMs = 25, summary = SUMMARY} = {}) {
+  const requests = [], log = [];
+  const line = (body, status) => log.push(`${new Date().toISOString()} method=POST path=/v1/chat/completions origin=none inChars=${JSON.stringify(body.messages).length} stream=${!!body.stream} provider=claude status=${status} ms=7`);
+  function request(method, url, options = {}) {
+    const body = JSON.parse(options.body);
+    const req = {body, aborted: false};requests.push(req);
+    const listeners = {};
+    const xhr = {readyState: 1, responseText: '', headers: {'x-bridge-provider': 'claude', 'content-type': body.stream ? 'text/event-stream' : 'application/json'},
+      getResponseHeader(k) { return this.headers[String(k).toLowerCase()] || null; }, addEventListener(t, fn) { (listeners[t] || (listeners[t] = [])).push(fn); }};
+    const fire = t => (listeners[t] || []).forEach(fn => fn());
+    if (options.requestObserver) options.requestObserver(xhr);
+    return new Promise((resolve, reject) => {
+      let timer = null;
+      if (options.cancellerReceiver) options.cancellerReceiver(() => { if (req.aborted) return; req.aborted = true; realClearTimeout(timer); line(body, 499); reject(new Error('aborted')); });
+      const answer = () => ({status: 200, response: body.stream ? null : {choices: [{message: {content: summary}}]}, responseText: xhr.responseText, getResponseHeader: k => xhr.getResponseHeader(k)});
+      if (!body.stream) { timer = realSetTimeout(() => { xhr.readyState = 4; fire('readystatechange'); line(body, 200); resolve(answer()); }, chunkMs); return; }
+      xhr.readyState = 2; fire('readystatechange');
+      let i = 0;
+      const step = () => {
+        if (req.aborted) return;
+        if (i < chunks.length) { xhr.readyState = 3; xhr.responseText += `data: ${JSON.stringify({choices: [{delta: {content: chunks[i++]}}]})}\n\n`; fire('progress'); timer = realSetTimeout(step, chunkMs); }
+        else { xhr.responseText += 'data: [DONE]\n\n'; xhr.readyState = 4; fire('readystatechange'); line(body, 200); resolve(answer()); }
+      };
+      timer = realSetTimeout(step, chunkMs);
+    });
+  }
+  return {requests, log, request};
+}
+
+function readerFixture({bridge = null} = {}) {
   const {document: doc, window: win} = parseHTML('<html><head></head><body><div id="split-view"></div></body></html>');
   Object.defineProperty(win, 'setTimeout', {value: (fn, ms) => realSetTimeout(fn, ms), configurable: true, writable: true});
   Object.defineProperty(win, 'clearTimeout', {value: id => realClearTimeout(id), configurable: true, writable: true});
@@ -309,14 +345,17 @@ function readerFixture() {
   const attachment = {id: 11, key: 'ATT', libraryID: 1, parentID: 10, getFilePathAsync: async () => '/lib/ATT.pdf'};
   const parent = {id: 10, getField: k => ({title: 'A paper', abstractNote: 'An abstract.'}[k] || '')};
   const touched = [], writes = [];
-  const io = {exists: async () => true, stat: async () => ({size: 1000, lastModified: 5}), readUTF8: async () => JSON.stringify({v: 1, summary: {}, chat: [], tr: {}}),
+  const io = {exists: async () => true, stat: async () => ({size: 1000, lastModified: 5}),
+    readUTF8: async p => /StyleCustomBridge\/bridge\.json$/.test(p) ? (bridge ? BRIDGE_JSON : '{}') : JSON.stringify({v: 1, summary: {}, chat: [], tr: {}}),
     writeUTF8: async p => writes.push(p), setModificationTime: async p => touched.push(p), makeDirectory: async () => {}, remove: async () => {}};
   const css = fs.readFileSync(new URL('../content/reader-assist.css', import.meta.url), 'utf8');
-  const Z = {Items: {get: id => id === 11 ? attachment : id === 10 ? parent : null}, HTTP: {request: async () => ({response: css, status: 200})}, DataDirectory: {dir: '/data'}, logError() {}, Reader: {_readers: [reader]}, isMac: true};
-  const runtime = {cache: {readerAssist: {open: true, tab: 'translate'}}, dirty: false, rootURI: 'file:///plugin/', io, paths: {join: (...p) => p.join('/')}, i18n: {isKorean: () => false}, t: I18N.t,
+  const Z = {Items: {get: id => id === 11 ? attachment : id === 10 ? parent : null}, DataDirectory: {dir: '/data'}, logError() {}, Reader: {_readers: [reader]}, isMac: true,
+    HTTP: {request: async (method, url, options) => /chat\/completions/.test(url) && bridge ? bridge.request(method, url, options) : ({response: css, status: 200})}};
+  const runtime = {cache: {readerAssist: {open: true, tab: 'translate'}}, dirty: false, rootURI: 'file:///plugin/', io, paths: {join: (...p) => p.join('/'), homeDir: '/home'}, i18n: {isKorean: () => false}, t: I18N.t,
     pref: (k, d) => d, getSetting: () => undefined, setSetting: async () => {}, scheduleFlush() {}, assist: {available: () => false}};
+  if (bridge) runtime.assist = Assist.create({Zotero: Z, runtime});
   const service = ReaderAssist.create({Zotero: Z, runtime});
-  return {doc, win, viewDoc, reader, runtime, service, touched, writes};
+  return {doc, win, viewDoc, reader, runtime, service, touched, writes, Z};
 }
 
 test('diagnose() on the check\'s own reader: a probe session that saves nothing, sync() keeps out, release() leaves nothing behind', async () => {
@@ -379,4 +418,138 @@ test('diagnose() on the user\'s own reader puts the panel back the way it was an
 test('the say fallback asks the self-check\'s guard first', () => {
   const src = fs.readFileSync(new URL('../src/reader-assist.js', import.meta.url), 'utf8');
   assert.match(src, /function spawnSay\(args,onexit\)\{\n\s*\/\/[^\n]*\n\s*if\(guard&&guard\('nsIProcess \/usr\/bin\/say'\)\)return \{kill\(\)\{\}\};/);
+});
+
+/* ---- the AI round trip (selfCheckReaderAI) -------------------------------- */
+
+test('the bridge log is read as the bridge writes it, and a summary is judged by the sections its prompt asks for', () => {
+  const text = ['2026-10-05T13:23:53.093Z method=POST path=/v1/chat/completions origin=none inChars=20 stream=true provider=claude status=200 outChars=15 ms=3866',
+    '2026-10-05T13:23:53.200Z method=GET path=/health origin=none status=403 ms=2', 'garbage line',
+    '2026-10-05T13:24:00.000Z method=POST path=/v1/chat/completions origin=null status=499 ms=40'].join('\n');
+  const all = Live.parseBridgeLog(text);
+  assert.deepEqual(all.map(e => [e.origin, e.status]), [['none', '200'], ['null', '499']], 'health probes and noise are left out');
+  assert.equal(Live.parseBridgeLog(text, {since: Date.parse('2026-10-05T13:23:55Z')}).length, 1);
+  const heads = Live.headingsOf(PC.summaryPrompt('Korean'));
+  assert.deepEqual(heads, ['요약', '핵심 결과', '방법', '한계', '확인할 점']);
+  assert.deepEqual(Live.summaryShape(SUMMARY, heads, {PC, pages: 3}), {found: heads, missing: [], findingCitations: 1, ok: true});
+  const uncited = Live.summaryShape(SUMMARY.replace(' (Results, p. 1)', ''), heads, {PC, pages: 3});
+  assert.equal(uncited.ok, false); assert.equal(uncited.findingCitations, 0);
+  assert.deepEqual(Live.summaryShape('## 요약\nx', heads, {PC}).missing, ['핵심 결과', '방법', '한계']);
+});
+
+test('one allowance lets exactly one AI call through; the next is blocked and counted', async () => {
+  const spies = Live.createSpies();
+  const assist = {paperSummary: async () => 'ok', chat: async () => 'ok'};
+  Live.guards(spies, {Zotero: {HTTP: {request: async () => ({})}}, runtime: {assist}, service: null});
+  await assert.rejects(assist.paperSummary({}), /blocked/);
+  spies.allow('assist.paperSummary', 1);
+  assert.equal(await assist.paperSummary({}), 'ok');
+  await assert.rejects(assist.paperSummary({}), /blocked/, 'the allowance was for one call');
+  await assert.rejects(assist.chat([]), /blocked/, 'and for that entry point only');
+  assert.deepEqual(spies.passed.map(p => p.call), ['assist.paperSummary']);
+  assert.deepEqual(spies.violations.map(v => v.call), ['assist.paperSummary', 'assist.paperSummary', 'assist.chat']);
+  spies.allow('assist.chat', 2); assert.equal(spies.revoke('assist.chat'), 2, 'an allowance not used is taken back');
+  spies.restore();
+});
+
+test('the AI probe uses the panel\'s own summary and chat, saves nothing, and Stop ends the request with nothing after it', async () => {
+  const bridge = fakeBridge({chunks: Array.from({length: 30}, (_, i) => i === 1 ? '(Methods, p. 1) ' : `piece ${i} `)});
+  const f = readerFixture({bridge});
+  await settle(10);
+  const h = f.service.diagnose(f.reader, {fresh: true});
+  await h.ready();
+  assert.deepEqual(h.ai.status(), {available: true, source: 'bridge', provider: 'claude', label: Assist.BRIDGE_LABEL.claude});
+  const s = await h.ai.summary();
+  assert.equal(s.state, 'done'); assert.equal(s.text, SUMMARY);
+  assert.equal(bridge.requests.length, 1); assert.equal(!!bridge.requests[0].body.stream, false);
+  assert.match(bridge.requests[0].body.messages[0].content, /## 핵심 결과/, 'the panel\'s own summary prompt');
+  const a = await h.ai.ask('methods');
+  assert.equal(bridge.requests.length, 2); assert.equal(bridge.requests[1].body.stream, true);
+  assert.equal(bridge.requests[1].body.messages.at(-1).content, PC.quickPrompt('methods', I18N.t).question, 'the quick prompt\'s own question');
+  assert.ok(a.firstMs !== null && a.firstMs < a.ms, JSON.stringify(a));
+  assert.equal(Live.citationsIn(a.content, PC, h.ai.pages()), 1);
+  const stop = await h.ai.ask('methods', {stopAfterFirst: true, settleMs: 300});
+  assert.equal(stop.stopped, true); assert.equal(bridge.requests[2].aborted, true, 'the canceller reached the transport');
+  assert.ok(stop.endAfterStopMs < 2000); assert.equal(stop.lengthAfter, stop.lengthAtStop, 'nothing arrived after Stop');
+  assert.equal(stop.busy, false);
+  assert.deepEqual(bridge.log.map(l => /status=(\d+)/.exec(l)[1]), ['200', '200', '499']);
+  assert.ok(h.session.data.chat.length >= 2, 'the conversation is in the session meanwhile');
+  h.ai.restore();
+  assert.deepEqual(h.session.data.chat, []); assert.deepEqual(h.session.data.summary, {});
+  assert.deepEqual(f.writes, [], 'no summary, chat or structure written to the cache');
+  assert.deepEqual(f.touched, []);
+  h.release(); f.service.stop();
+});
+
+/* The whole live run with the AI step: the check's Zotero (liveFake) around the real panel and the real assist. */
+function aiRun({ai = true, bridgeOptions = {}, deaf = false} = {}) {
+  const bridge = fakeBridge(bridgeOptions);
+  if (deaf) { const real = bridge.request; bridge.request = (m, u, o) => real(m, u, {...o, cancellerReceiver: null}); }
+  const f = readerFixture({bridge});
+  const g = liveFake();
+  g.Z.HTTP = f.Z.HTTP;   // one transport: the guard and the bridge watch sit on what assist.js calls
+  const service = {diagnose: (r, o) => f.service.diagnose(f.reader, o), reserve: () => {}, setGuard: fn => f.service.setGuard(fn), sessions: () => f.service.sessions()};
+  f.runtime.readerAssist = service; f.runtime.version = 'test';
+  const reports = [];
+  const fileIO = {exists: async () => true, readUTF8: async p => p === '/logs/bridge.log' ? bridge.log.join('\n') : '', writeUTF8: async (p, text) => reports.push(JSON.parse(text))};
+  const run = () => Live.run(g.Z, f.runtime, {io: fileIO, paths: {join: (...p) => p.join('/')}, els: null, sleep: fast, after: never, paperText: PT, ai, bridgeLog: '/logs/bridge.log'});
+  return {bridge, f, g, run, reports};
+}
+
+test('with the AI flag the live run makes exactly three AI calls, each its own line, and writes nothing', async () => {
+  const t = aiRun({bridgeOptions: {chunks: Array.from({length: 120}, (_, i) => i === 1 ? '(Methods, p. 1) ' : `piece ${i} `)}});
+  await settle(10);
+  const report = await t.run();
+  const steps = Object.fromEntries(report.steps.map(s => [s.name, s]));
+  for (const name of ['AI status: the account connection is available', 'AI summary: one request through the panel\'s summary path', 'AI chat: one methods question with page citations',
+    'bridge log: both requests arrived with status 200', 'AI stop: Stop ends the request within 2 s and nothing more arrives', 'AI accounting: three calls, nothing else'])
+    assert.equal(steps[name] && steps[name].pass, true, name + ': ' + (steps[name] && steps[name].detail));
+  assert.equal(t.bridge.requests.length, 3);
+  assert.deepEqual(report.ai.calls, ['assist.paperSummary', 'assist.chat', 'assist.chat']);
+  assert.deepEqual(report.ai.origins, ['none'], 'the origin type Zotero sends is recorded');
+  assert.equal(report.ai.summary.provider, 'claude'); assert.equal(report.ai.summary.sections.length, 5); assert.equal(report.ai.summary.head, SUMMARY.slice(0, 300));
+  assert.equal(report.ai.chat.stream, true); assert.ok(report.ai.chat.firstTextMs !== null); assert.equal(report.ai.chat.citations, 1);
+  assert.equal(report.ai.stop.log.status, '499'); assert.ok(report.ai.stop.httpEndAfterStopMs <= 2000);
+  assert.match(steps['AI accounting: three calls, nothing else'].detail, /3 AI call\(s\) let through \(paperSummary, chat, chat\), 3 request\(s\) to the bridge, 0 blocked/);
+  assert.equal(steps['nothing was spoken, launched, sent or written'].pass, true, steps['nothing was spoken, launched, sent or written'].detail);
+  assert.deepEqual(t.f.writes, [], 'summary, chat and structure caches untouched');
+  assert.deepEqual(t.f.touched, []);
+  assert.equal(t.reports.length, 1, 'only the report file was written');
+  // and the guards are back: a further AI call is not made (the assist entry points are the real ones again)
+  assert.equal(typeof t.f.runtime.assist.chat, 'function');
+  t.f.service.stop();
+});
+
+test('without the AI flag, or without the reader flag, no AI call is made', async () => {
+  const t = aiRun({ai: false});
+  await settle(10);
+  const report = await t.run();
+  assert.equal(t.bridge.requests.length, 0);
+  assert.equal(report.steps.some(s => /^AI |bridge log/.test(s.name)), false);
+  assert.deepEqual(report.ai, {asked: false});
+  t.f.service.stop();
+  // through the self-check's own gate
+  const u = aiRun();
+  await settle(10);
+  assert.equal(await SelfCheck.readerCheck(u.g.Z, u.f.runtime, {reader: false, readerAI: true}), null, 'the AI flag alone opens nothing');
+  await SelfCheck.readerCheck(u.g.Z, u.f.runtime, {reader: true});
+  assert.equal(u.bridge.requests.length, 0, 'the reader flag alone makes no AI call');
+  assert.equal(u.g.calls.open.length, 1);
+  u.f.service.stop();
+  const boot = fs.readFileSync(new URL('../bootstrap.js', import.meta.url), 'utf8');
+  assert.match(boot, /readerAI: Zotero\.Prefs\.get\("extensions\.style-custom\.selfCheckReader", true\) === true\s*&& Zotero\.Prefs\.get\("extensions\.style-custom\.selfCheckReaderAI", true\) === true/);
+  assert.match(boot, /"selfCheckReader", "selfCheckReaderAI"\]\) Zotero\.Prefs\.set/);
+});
+
+test('a Stop the bridge never hears fails the stop line (no 499), and the panel still shows nothing after Stop', async () => {
+  // The bridge ignores the canceller: the request runs on to its end and is logged 200, not 499.
+  const t = aiRun({deaf: true, bridgeOptions: {chunks: Array.from({length: 20}, (_, i) => i === 1 ? '(Methods, p. 1) ' : `piece ${i} `), chunkMs: 20}});
+  await settle(10);
+  const report = await t.run();
+  const stop = report.steps.find(s => s.name === 'AI stop: Stop ends the request within 2 s and nothing more arrives');
+  assert.equal(stop.pass, false);
+  assert.match(stop.detail, /did not log a 499/);
+  assert.equal(t.bridge.requests[2].aborted, false);
+  assert.equal(report.ai.stop.lengthAfter2s, report.ai.stop.lengthAtStop, 'the panel itself shows nothing after Stop');
+  t.f.service.stop();
 });

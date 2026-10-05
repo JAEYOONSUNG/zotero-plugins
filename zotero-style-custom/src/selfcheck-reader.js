@@ -282,16 +282,34 @@
      shared objects are only blocked for calls coming from the reader modules: a write somebody else makes during
      the check is not lost. */
   function createSpies({stack = () => String(new Error().stack || '')} = {}) {
-    const violations = [], restores = [];
+    const violations = [], restores = [], passed = [], allowances = new Map();
     const fromReader = () => READER_MODULES.test(stack());
-    function wrap(owner, name, label, {when = () => true, result = 'reject', detail = null} = {}) {
+    /* allow(label, n): the next n calls a spy would block go through instead, each counted in `passed`. The AI step
+       lifts the assist guards this way, one call at a time; every other guard stays as it was. */
+    function allow(label, n = 1) { allowances.set(label, (allowances.get(label) || 0) + n); }
+    function revoke(label) { const left = allowances.get(label) || 0; allowances.delete(label); return left; }
+    /* observe(args, self) -> {args, done(result)}: a look at a call that is let through (the bridge requests). */
+    function wrap(owner, name, label, {when = () => true, result = 'reject', detail = null, observe = null} = {}) {
       if (!owner) return false;
       let real;
       try { real = owner[name]; } catch (ignored) { return false; }
       if (typeof real !== 'function') return false;
       const own = Object.prototype.hasOwnProperty.call(owner, name);
+      const through = (self, args) => {
+        if (!observe) return real.apply(self, args);
+        let seen = null;
+        try { seen = observe(args, self); } catch (ignored) {}
+        const out = real.apply(self, seen && seen.args || args);
+        try { if (seen && seen.done) seen.done(out); } catch (ignored) {}
+        return out;
+      };
       const spy = function (...args) {
-        if (!when(args)) return real.apply(this, args);
+        if (!when(args)) return through(this, args);
+        if ((allowances.get(label) || 0) > 0) {
+          allowances.set(label, allowances.get(label) - 1);
+          passed.push({call: label, detail: detail ? truncate(detail(args), 80) : ''});
+          return through(this, args);
+        }
         violations.push({call: label, detail: detail ? truncate(detail(args), 80) : ''});
         if (result === 'reject') return Promise.reject(Object.assign(new Error('blocked by the reader self-check: ' + label), {blocked: true}));
         if (result === 'resolve') return Promise.resolve(undefined);
@@ -322,15 +340,16 @@
     }
     function record(label, detail = '') { violations.push({call: label, detail}); return true; }
     function restore() { for (const undo of restores.splice(0).reverse()) undo(); }
-    return {violations, wrap, proxyField, record, restore, fromReader};
+    return {violations, passed, allow, revoke, wrap, proxyField, record, restore, fromReader};
   }
   /* What may not happen while the check runs: speech, a process, a request to a server, a write to the library, the
      plugin's data or the reader cache, an AI or translation call. */
-  function guards(spies, {Zotero, runtime, service}) {
+  function guards(spies, {Zotero, runtime, service, bridge = null}) {
     const {wrap, fromReader} = spies;
     const installed = [];
     const add = ok => { if (ok) installed.push(ok); };
-    add(wrap(Zotero.HTTP, 'request', 'Zotero.HTTP.request', {when: args => !isLocalURL(args[1]) && fromReader(), result: 'reject', detail: args => `${args[0]} ${hostOf(args[1])}`}) && 'network');
+    add(wrap(Zotero.HTTP, 'request', 'Zotero.HTTP.request', {when: args => !isLocalURL(args[1]) && fromReader(), result: 'reject', detail: args => `${args[0]} ${hostOf(args[1])}`,
+      observe: bridge ? (args => bridge.observe(args)) : null}) && 'network');
     for (const name of ['paperSummary', 'chat', 'translateParagraphs', 'complete']) add(wrap(runtime.assist, name, 'assist.' + name, {result: 'reject'}) && 'assist.' + name);
     for (const name of ['edit', 'addReading', 'flush', 'scheduleFlush', 'setSetting', 'importWork', 'queueForReading']) add(wrap(runtime, name, 'runtime.' + name, {when: fromReader, result: 'resolve'}) && 'runtime.' + name);
     add(wrap(runtime.storage, 'write', 'storage.write', {when: fromReader, result: 'resolve'}) && 'storage.write');
@@ -393,6 +412,65 @@
     return {total, mine};
   }
 
+  /* ---- the AI round trip (opt-in: selfCheckReaderAI) ------------------------ */
+  const BRIDGE_URL = /^http:\/\/(?:127\.0\.0\.1|localhost):\d+\/v1\/chat\/completions\b/i;
+  /* Every request to the local bridge, seen from inside Zotero.HTTP.request: when it started, when the first byte
+     came (the transport's own requestObserver keeps working), when it ended, its status and x-bridge-provider. */
+  function bridgeWatch({now = () => Date.now()} = {}) {
+    const calls = [];
+    function observe(args) {
+      const [method, url, options, ...rest] = args;
+      if (!BRIDGE_URL.test(String(url || '')) || !options || typeof options !== 'object') return null;
+      const call = {t0: now(), firstByte: null, end: null, status: null, provider: null, stream: false, error: null, host: hostOf(url)};
+      try { call.stream = !!JSON.parse(String(options.body || '{}')).stream; } catch (ignored) {}
+      calls.push(call);
+      const header = x => { try { const v = x && x.getResponseHeader && x.getResponseHeader('x-bridge-provider'); if (v && !call.provider) call.provider = String(v).trim().toLowerCase(); } catch (ignored) {} };
+      const theirs = options.requestObserver;
+      const watched = Object.assign({}, options, {requestObserver: xhr => {
+        if (typeof theirs === 'function') theirs(xhr);
+        const seen = () => {
+          if (Number(xhr.readyState) >= 2) header(xhr);
+          if (call.firstByte === null && Number(xhr.readyState) >= 3) call.firstByte = now() - call.t0;
+        };
+        try { xhr.addEventListener('progress', seen); xhr.addEventListener('readystatechange', seen); } catch (ignored) {}
+      }});
+      return {args: [method, url, watched, ...rest], done(out) {
+        Promise.resolve(out).then(r => { call.end = now() - call.t0; call.status = r && r.status; header(r); },
+          e => { call.end = now() - call.t0; call.error = message(e); });
+      }};
+    }
+    return {calls, observe};
+  }
+  /* The bridge's log: one line per request, "<ISO time> key=value ...", never content. */
+  function parseBridgeLog(text, {since = 0} = {}) {
+    const out = [];
+    for (const line of String(text || '').split(/\r?\n/)) {
+      const parts = line.trim().split(/\s+/);
+      const time = Date.parse(parts[0] || '');
+      if (!Number.isFinite(time) || time < since) continue;
+      const entry = {time};
+      for (const part of parts.slice(1)) { const i = part.indexOf('='); if (i > 0) entry[part.slice(0, i)] = part.slice(i + 1); }
+      if (entry.method === 'POST' && /\/chat\/completions/.test(entry.path || '')) out.push(entry);
+    }
+    return out;
+  }
+  // The section headings the summary prompt asks for, read from the prompt itself ("## Heading" lines).
+  const headingsOf = prompt => [...String(prompt || '').matchAll(/^##\s+(.+?)\s*$/gm)].map(m => m[1]);
+  const escapeRE = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // "(Section, p. N)" citations the panel turns into page links.
+  const citationsIn = (text, PC, pages = 0) => PC && typeof PC.linkCitations === 'function' ? PC.linkCitations(String(text || ''), {pages}).filter(seg => seg.type === 'cite').length : 0;
+  /* Which of the expected sections a summary has: the first four (summary, findings, methods, limitations) are
+     required, and the findings must cite where they come from. */
+  function summaryShape(text, headings, {PC = null, pages = 0} = {}) {
+    const body = String(text || '');
+    const found = headings.filter(h => new RegExp('^#{1,4}\\s*' + escapeRE(h) + '\\s*$', 'mi').test(body));
+    const required = headings.slice(0, 4), missing = required.filter(h => !found.includes(h));
+    let findings = '';
+    if (headings[1]) { const m = new RegExp('^#{1,4}\\s*' + escapeRE(headings[1]) + '\\s*$([\\s\\S]*?)(?=^#{1,4}\\s|(?![\\s\\S]))', 'mi').exec(body); findings = m ? m[1] : ''; }
+    const cites = citationsIn(findings, PC, pages);
+    return {found, missing, findingCitations: cites, ok: !missing.length && cites > 0};
+  }
+
   /* ---- the run ------------------------------------------------------------ */
   async function run(Zotero, runtime, opts = {}) {
     const now = opts.now || (() => Date.now());
@@ -418,6 +496,9 @@
     const win = Zotero.getMainWindow ? Zotero.getMainWindow() : null;
     const tabs = win && win.Zotero_Tabs;
     const spies = createSpies(opts.stack ? {stack: opts.stack} : {});
+    // The opt-in AI round trip (selfCheckReaderAI): every request to the local bridge is watched, none is made otherwise.
+    const bridge = bridgeWatch();
+    report.ai = opts.ai === true ? {asked: true} : {asked: false};
     let reader = null, handle = null, own = false, picked = null, selectedBefore = null, selectedForRender = false, closed = false;
     let before = null;
     try { await main(); }
@@ -438,7 +519,7 @@
       add('a test PDF with a local file is found', true, `item ${picked.id} (${picked.key}) · ${picked.doi || 'no DOI'} · ${picked.pages || '?'} pages · rank ${picked.rank} of 0-4 · ${picked.scanned} PDFs scanned`);
 
       /* 2. the guards, then the reader */
-      report.guards = guards(spies, {Zotero, runtime, service});
+      report.guards = guards(spies, {Zotero, runtime, service, bridge});
       const t2 = now();
       const loadedTabs = (Zotero.Reader._readers || []).filter(r => r.tabID).length;
       const existing = (Zotero.Reader._readers || []).find(r => r.itemID === picked.id && r.type === 'pdf');
@@ -681,11 +762,125 @@
         const shaped = 'active' in st && 'paused' in st;
         return {pass: shaped, data: {keys}, detail: `${keys.length} keys (${keys.slice(0, 8).join(', ')}) · active ${!!st.active} · paused ${!!st.paused}${shaped ? '' : ' · active/paused missing'}`};
       });
+
+      if (opts.ai === true) await aiSteps(extraction);
+    }
+
+    /* The AI account, end to end: status, one summary, one question, the bridge's own log, and Stop. Each AI entry
+       point is let through for exactly the calls below (spies.allow); translation, audio and every write stay blocked. */
+    async function aiSteps(extraction) {
+      const PC = opts.paperChat || root.CustomStylePaperChat || (typeof require === 'function' ? require('./paper-chat.js') : null);
+      const ai = handle && handle.ai;
+      const wall = () => Date.now();
+      const since = wall() - 2000;
+      const logPath = opts.bridgeLog || (paths && paths.homeDir ? paths.join(paths.homeDir, 'Library', 'Logs', 'StyleCustomBridge.log') : null);
+      const pages = (ai && ai.pages()) || (extraction && extraction.structured && extraction.structured.stats && extraction.structured.stats.pages) || 0;
+      const readLog = async () => {
+        if (!io || !logPath) throw new Error('no way to read the bridge log');
+        const text = await io.readUTF8(logPath);
+        return parseBridgeLog(String(text).split(/\r?\n/).slice(-300).join('\n'), {since});
+      };
+      const providerOf = call => (call && call.provider) || (ai && ai.status() && ai.status().provider) || null;
+      const only = async (label, fn) => { spies.allow(label, 1); try { return await fn(); } finally { report.ai.unused = (report.ai.unused || 0) + spies.revoke(label); } };
+      const head = text => String(text || '').slice(0, 300);
+      if (!ai) { add('AI status: the account connection is available', false, 'the diagnose handle has no AI probe'); return; }
+
+      let status = null;
+      await check('AI status: the account connection is available', async () => {
+        status = ai.status();
+        report.ai.status = status;
+        if (!status) return {pass: false, detail: 'assist.status() is missing'};
+        const pass = !!status.available && status.source === 'bridge' && !!status.label;
+        return {pass, data: status, detail: `${status.available ? 'available' : 'NOT available'} · source ${status.source}${status.source === 'endpoint' ? ' (an address in settings wins over the bridge)' : ''} · provider ${status.provider || '-'} · label ${status.label || '-'}`};
+      });
+      if (!status || !status.available) {
+        for (const name of ['AI summary: one request through the panel\'s summary path', 'AI chat: one methods question with page citations', 'bridge log: both requests arrived with status 200', 'AI stop: Stop ends the request within 2 s and nothing more arrives', 'AI accounting: three calls, nothing else'])
+          add(name, false, 'skipped: AI is not available');
+        return;
+      }
+
+      const language = ai.language();
+      await check('AI summary: one request through the panel\'s summary path', async () => {
+        const before = bridge.calls.length;
+        const r = await only('assist.paperSummary', () => ai.summary());
+        const call = bridge.calls[before] || null;
+        const shape = summaryShape(r.text, headingsOf(PC ? PC.summaryPrompt(language) : ''), {PC, pages});
+        const problems = [];
+        if (r.state !== 'done') problems.push(`the panel says ${r.state}${r.error ? ': ' + r.error : ''}`);
+        if (!call) problems.push('no request reached the bridge');
+        if (r.text && shape.missing.length) problems.push('missing sections: ' + shape.missing.join(', '));
+        if (r.text && !shape.findingCitations) problems.push('the findings cite no (section, p. n)');
+        const data = {provider: providerOf(call), label: ai.status() && ai.status().label, firstByteMs: call && call.firstByte, httpMs: call && call.end, panelMs: r.ms, status: call && call.status,
+          stream: call ? call.stream : null, chars: r.text.length, truncatedInput: r.truncated, sections: shape.found, findingCitations: shape.findingCitations, head: head(r.text)};
+        report.ai.summary = data;
+        return {pass: !problems.length, data, detail: (problems.length ? problems.join('; ') + ' · ' : '')
+          + `${data.provider || '?'} (${data.label || '-'}) · HTTP ${data.status} · first byte ${data.firstByteMs} ms (one JSON answer, not streamed) · total ${data.panelMs} ms · ${data.chars} chars · sections ${shape.found.length}/${headingsOf(PC ? PC.summaryPrompt(language) : '').length} · ${shape.findingCitations} finding citation(s)`};
+      }, 125000);
+
+      await check('AI chat: one methods question with page citations', async () => {
+        const before = bridge.calls.length;
+        const r = await only('assist.chat', () => ai.ask('methods'));
+        const call = bridge.calls[before] || null;
+        const cites = citationsIn(r.content, PC, pages);
+        const problems = [];
+        if (r.error) problems.push('error: ' + r.error);
+        if (!r.content) problems.push('no answer');
+        if (r.content && !cites) problems.push('no (…, p. n) citation that becomes a page link');
+        if (!call) problems.push('no request reached the bridge');
+        const data = {provider: providerOf(call), firstTextMs: r.firstMs, firstByteMs: call && call.firstByte, totalMs: r.ms, httpMs: call && call.end, status: call && call.status, stream: call ? call.stream : null, chars: r.content.length, citations: cites, head: head(r.content)};
+        report.ai.chat = data;
+        return {pass: !problems.length, data, detail: (problems.length ? problems.join('; ') + ' · ' : '')
+          + `${data.provider || '?'} · HTTP ${data.status} · ${data.stream ? 'streamed' : 'NOT streamed'} · first text ${data.firstTextMs} ms · total ${data.totalMs} ms · ${data.chars} chars · ${cites} page citation(s)`};
+      }, 125000);
+
+      let logged = [];
+      await check('bridge log: both requests arrived with status 200', async () => {
+        for (let i = 0; i < 30; i++) { logged = await readLog(); if (logged.filter(e => e.status === '200').length >= 2) break; await sleep(100); }
+        const ok = logged.filter(e => e.status === '200');
+        const origins = [...new Set(logged.map(e => e.origin || '?'))];
+        report.ai.origins = origins;
+        const data = {entries: logged.map(e => ({time: new Date(e.time).toISOString(), origin: e.origin, status: e.status, stream: e.stream, provider: e.provider, inChars: e.inChars, outChars: e.outChars, firstMs: e.firstMs, ms: e.ms})), origins};
+        return {pass: ok.length >= 2, data, detail: `${logged.length} request(s) logged since the AI step began, ${ok.length} with status 200 · origin Zotero sends: ${origins.join(', ') || '-'}`
+          + (logged.length > 2 ? ` · ${logged.length - 2} more than ours (another client?)` : '') + ` · ${ok.map(e => `${e.provider || '?'} in ${e.inChars || '?'} out ${e.outChars || '?'} chars ${e.ms || '?'} ms`).join(' / ')}`};
+      }, 20000);
+
+      await check('AI stop: Stop ends the request within 2 s and nothing more arrives', async () => {
+        const before = bridge.calls.length, seen = logged.length;
+        const asked = wall();
+        const r = await only('assist.chat', () => ai.ask('methods', {stopAfterFirst: true, settleMs: 2000}));
+        const call = bridge.calls[before] || null;
+        const problems = [];
+        if (!r.stopped) problems.push(r.content ? 'the answer finished before Stop could be pressed' : 'no text arrived to stop after' + (r.error ? ': ' + r.error : ''));
+        // The HTTP request itself, not only the panel: from the press to the moment Zotero.HTTP.request settled.
+        const httpAfterStop = call && call.end !== null && r.stopMs !== null ? Math.round(call.t0 + call.end - (asked + r.stopMs)) : null;
+        if (r.stopped && !(r.endAfterStopMs <= 2000)) problems.push(`the panel took ${r.endAfterStopMs} ms to end`);
+        if (r.stopped && !(httpAfterStop !== null && httpAfterStop <= 2000)) problems.push(`the request ${httpAfterStop === null ? 'had not ended' : 'ended ' + httpAfterStop + ' ms after Stop'}`);
+        if (r.stopped && r.lengthAfter !== r.lengthAtStop) problems.push(`${r.lengthAfter - r.lengthAtStop} more chars arrived after Stop`);
+        if (r.busy) problems.push('the panel still shows the question as running');
+        let entry = null;
+        for (let i = 0; i < 100 && !entry; i++) { const all = await readLog(); entry = all.slice(seen).find(e => e.status === '499') || null; if (!entry) await sleep(100); }
+        if (!entry) problems.push('the bridge did not log a 499 (client closed) within 10 s');
+        const data = {provider: providerOf(call), firstTextMs: r.firstMs, stopMs: r.stopMs, panelEndAfterStopMs: r.endAfterStopMs, httpEndAfterStopMs: httpAfterStop, lengthAtStop: r.lengthAtStop, lengthAfter2s: r.lengthAfter,
+          log: entry && {status: entry.status, origin: entry.origin, provider: entry.provider, ms: entry.ms}, error: r.error};
+        report.ai.stop = data;
+        return {pass: !problems.length, data, detail: (problems.length ? problems.join('; ') + ' · ' : '')
+          + `first text ${r.firstMs} ms · Stop at ${r.stopMs} ms · panel ended ${r.endAfterStopMs} ms later, request ${httpAfterStop} ms later · ${r.lengthAtStop} chars at Stop, ${r.lengthAfter} after 2 s · bridge logged ${entry ? entry.status : 'nothing'}`};
+      }, 60000);
+
+      try { ai.restore(); } catch (ignored) {}
+      const aiCalls = spies.passed.filter(p => /^assist\./.test(p.call));
+      const blocked = spies.violations.slice();
+      report.ai.calls = aiCalls.map(p => p.call);
+      report.ai.bridgeRequests = bridge.calls.map(c => ({stream: c.stream, status: c.status, provider: c.provider, firstByteMs: c.firstByte, ms: c.end, error: c.error}));
+      add('AI accounting: three calls, nothing else', aiCalls.length === 3 && bridge.calls.length === 3 && !blocked.length,
+        `${aiCalls.length} AI call(s) let through (${aiCalls.map(p => p.call.replace('assist.', '')).join(', ') || 'none'}), ${bridge.calls.length} request(s) to the bridge, ${blocked.length} blocked call(s)${blocked.length ? ': ' + [...new Set(blocked.map(v => v.call))].join(', ') : ''} · expected 3, 3, 0`);
     }
 
     /* 5. cleanup: our tab closes, nothing of ours stays behind */
     async function cleanup() {
       const t0 = now();
+      if (handle) { try { if (handle.ai) handle.ai.restore(); } catch (ignored) {} }
+      for (const label of ['assist.paperSummary', 'assist.chat']) spies.revoke(label);
       if (handle) {
         try {
           const problems = [], data = {};
@@ -758,7 +953,7 @@
     }
   }
 
-  const api = {run, REPORT_FILE, READER_MODULES, parseColor, contrastRatio, textContrast, backdrop, toRect, intersect, area, overlapRatio, besideNotUnder, within, oneRow, overflowing,
+  const api = {run, bridgeWatch, parseBridgeLog, headingsOf, summaryShape, citationsIn, REPORT_FILE, READER_MODULES, parseColor, contrastRatio, textContrast, backdrop, toRect, intersect, area, overlapRatio, besideNotUnder, within, oneRow, overflowing,
     percentToPx, overlayAgreement, rankAttachment, orderCandidates, chooseAttachment, pickAttachment, doiOf, bodyUnits, extractionSummary, measurePanel, rowFits,
     createSpies, guards, guardSpeech, isLocalURL, listenersOf, paddingBox, textSpans, truncate};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

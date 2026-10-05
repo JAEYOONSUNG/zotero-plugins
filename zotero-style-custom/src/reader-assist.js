@@ -1725,6 +1725,57 @@
     },
     selectionPopup(params,append){return selectionPopup({reader,doc:session.doc,params,append});},
     readAloudState:()=>builtInState(reader),
+    /* The AI round trip through the panel's own summary and chat code (runSummary, sendQuick, the Stop button), on
+       the probe session: saveSoon() does nothing while probing, and restore() puts the session's summaries and
+       conversation back as they were, so nothing made here outlives the check. The caller decides which AI calls
+       may pass (selfcheck-reader.js keeps the guards on). */
+    ai:(()=>{
+     const saved={data:null};
+     const keep=()=>{if(!saved.data)saved.data=JSON.stringify({summary:session.data.summary||{},chat:session.data.chat||[]});};
+     const wait=ms=>sleepIn(session.doc.defaultView,ms);
+     return {
+      status:()=>{try{return runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;}catch(_){return null;}},
+      language:()=>aiSettings().language,
+      pages:()=>pageCount(reader),
+      /* One summary, exactly as the "요약 만들기" button makes it (force: an earlier one is not reused). */
+      async summary(){
+       keep();await ensureReady(session);
+       const t0=Date.now();await runSummary(session,{force:true});
+       const entry=summaryEntry(session);
+       return {state:session.summaryState||'idle',error:session.summaryError||'',text:entry&&session.summaryState==='done'?String(entry.text||''):'',ms:Date.now()-t0,truncated:!!(entry&&entry.truncated)};
+      },
+      /* One quick-prompt question, as its chip sends it. firstMs: when the first text reached the panel's answer.
+         stopAfterFirst: the panel's Stop button is pressed as soon as that happens. */
+      async ask(id,{stopAfterFirst=false,poll=20,settleMs=2000}={}){
+       keep();await ensureReady(session);
+       const t0=Date.now();
+       const running=sendQuick(session,id);
+       const answer=session.data.chat[session.data.chat.length-1];
+       let done=false;running.then(()=>{done=true;},()=>{done=true;});
+       const out={firstMs:null,ms:null,stopped:false,stopMs:null,endAfterStopMs:null,lengthAtStop:null,lengthAfter:null};
+       while(!done&&!(answer&&answer.content)&&!session.destroyed)await wait(poll);
+       if(answer&&answer.content)out.firstMs=Date.now()-t0;
+       if(stopAfterFirst&&!done&&answer&&answer.content){
+        out.lengthAtStop=answer.content.length;const at=Date.now();out.stopMs=at-t0;out.stopped=true;
+        // The real button, as a press would reach it (it is a view-only control: data-safe="view").
+        const stopButton=session.ui.stop;
+        if(stopButton&&typeof stopButton.click==='function')stopButton.click();else if(session.chatToken)session.chatToken.cancel();
+        await running.catch(()=>{});out.endAfterStopMs=Date.now()-at;
+        await wait(settleMs);out.lengthAfter=answer.content.length;
+       }else await running.catch(()=>{});
+       out.ms=Date.now()-t0;
+       out.content=answer?String(answer.content||''):'';out.error=answer?String(answer.error||''):'';
+       out.busy=!!session.chatBusy;
+       return out;
+      },
+      restore(){
+       if(!saved.data)return;
+       const back=JSON.parse(saved.data);saved.data=null;
+       session.data.summary=back.summary;session.data.chat=back.chat;session.summaryState='idle';session.summaryError='';
+       if(!session.destroyed&&session.ui){try{renderSummary(session);renderChat(session);}catch(error){log(error);}}
+      }
+     };
+    })(),
     speech(){
      const win=reader._iframeWindow,s=win&&win.speechSynthesis;let voices=0;
      try{voices=s&&typeof s.getVoices==='function'?s.getVoices().length:0;}catch(_){}
