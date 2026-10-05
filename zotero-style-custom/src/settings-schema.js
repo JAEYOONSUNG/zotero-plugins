@@ -1215,12 +1215,13 @@
     },
     {
       "key": "aiLanguage",
-      "description": "요약·번역 결과를 쓸 언어입니다.",
+      "description": "요약·번역 결과를 쓸 언어입니다. 기본값은 패널 언어를 따르며, 전문 용어는 논문에 쓰인 영어 그대로 둡니다.",
       "category": "ai",
       "label": "출력 언어",
       "type": "select",
-      "default": "Korean",
+      "default": "auto",
       "options": [
+        { "value": "auto", "label": "패널 언어를 따름" },
         { "value": "Korean", "label": "한국어" },
         { "value": "English", "label": "English" }
       ]

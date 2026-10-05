@@ -176,7 +176,9 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
   }
   /* `signal` is the caller's own cancel token ({cancelled, onCancel(fn)}): Stop on one chat cancels that request
      only, not a summary or a translation running beside it. `quietMs` is the inactivity limit (see QUIET_*). */
-  async function transport(messages,{stream=false,onDelta=null,signal=null,quietMs=stream?QUIET_STREAM_MS:QUIET_WHOLE_MS}={}){
+  /* onFinish({incomplete}) is told, before the text is returned, whether the answer is whole: 'error' (the server
+     said it stopped), 'length' (the model hit its output limit), 'cut' (the stream ended without its end), or null. */
+  async function transport(messages,{stream=false,onDelta=null,signal=null,onFinish=null,quietMs=stream?QUIET_STREAM_MS:QUIET_WHOLE_MS}={}){
    let target=resolve();if(typeof target.then==='function')target=await target;
    const {model,url,headers,bridge}=target;
    const total=messages.reduce((n,m)=>n+String(m.content||'').length,0);
@@ -215,33 +217,41 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
     if(!active||job.cancelled)throw new Error('요청이 중지되었습니다.');
     if(bridge)noteProvider(result);
     if(result.status<200||result.status>=300)throw statusError(result.status,bridge);
-    let output;
+    let output,incomplete=null;
+    const finishOf=json=>{const r=json&&json.choices&&json.choices[0]&&json.choices[0].finish_reason;return r==='length'?'length':null;};
     if(stream){
      const type=eventStream||/text\/event-stream/i.test(String(result.getResponseHeader&&result.getResponseHeader('Content-Type')||''));
-     if(type){reader.update(result.responseText);output=reader.end();}
+     if(type){reader.update(result.responseText);output=reader.end();incomplete=reader.incomplete;}
      else{
       // The server ignored stream:true and answered with one JSON document.
       let json=result.response;if(typeof json==='string'||json==null){try{json=JSON.parse(result.responseText||json);}catch(_){json=null;}}
-      output=json&&json.choices&&json.choices[0]&&json.choices[0].message&&json.choices[0].message.content;
+      output=json&&json.choices&&json.choices[0]&&json.choices[0].message&&json.choices[0].message.content;incomplete=finishOf(json);
       if(typeof output==='string'&&output&&onDelta)onDelta(output,output);
      }
-    }else output=result.response&&result.response.choices&&result.response.choices[0]&&result.response.choices[0].message&&result.response.choices[0].message.content;
-    if(typeof output!=='string'||!output.trim())throw new Error('AI 서버가 아무 내용도 보내지 않았습니다. 모델 이름을 확인하고 다시 시도하세요.');
+    }else{output=result.response&&result.response.choices&&result.response.choices[0]&&result.response.choices[0].message&&result.response.choices[0].message.content;incomplete=finishOf(result.response);}
+    if(typeof output!=='string'||!output.trim()){
+     if(incomplete==='error'){const e=new Error('AI 서버가 답을 보내다 멈췄습니다. 잠시 뒤 다시 시도하세요.');e.own=true;throw e;}
+     throw new Error('AI 서버가 아무 내용도 보내지 않았습니다. 모델 이름을 확인하고 다시 시도하세요.');
+    }
+    if(onFinish){try{onFinish({incomplete});}catch(_){}}
     if(output.length>100000)throw new Error('AI 서버 응답이 너무 깁니다. 더 짧은 글을 고르거나 모델을 바꾸세요.');
     return output.trim();
    }catch(error){if(error?.own||/^AI 서|요청|태그|올바른|설정|플러그인|선택한/.test(error.message))throw error;throw unreachable(bridge);}
    finally{stopQuiet();off();jobs.delete(job);}
   }
-  async function paperSummary(input,{language='Korean',signal=null}={}){
+  /* With onDelta the summary streams like a chat answer: the first lines show in a few seconds instead of the
+     whole summary after twenty. A server that ignores stream:true still answers, in one piece. */
+  async function paperSummary(input,{language='Korean',signal=null,onDelta=null,onFinish=null}={}){
    if(runtime.featureEnabled?.('tldr')===false)throw new Error('설정에서 이 기능을 켜세요.');
    const text=String(input&&input.text||'').trim();
    if(!text||!String(input.abstract||input.title||'').trim())throw new Error('먼저 논문의 제목과 초록을 가져오세요.');
-   return transport([{role:'system',content:chatTools().summaryPrompt(language)},{role:'user',content:text}],{signal});
+   const user=text+(String(input.library||'').trim()?'\n\n'+String(input.library).trim():'');
+   return transport([{role:'system',content:chatTools().summaryPrompt(language)},{role:'user',content:user}],{signal,stream:typeof onDelta==='function',onDelta,onFinish});
   }
   /* `messages` come from paper-chat.chatMessages(); onDelta(piece, all) is called as text arrives. */
-  async function chat(messages,{onDelta=null,stream=true,signal=null}={}){
+  async function chat(messages,{onDelta=null,stream=true,signal=null,onFinish=null}={}){
    if(!Array.isArray(messages)||!messages.length)throw new Error('질문을 입력하세요.');
-   return transport(messages,{stream,onDelta,signal});
+   return transport(messages,{stream,onDelta,signal,onFinish});
   }
   function parseTranslations(output,count){
    let parsed;try{parsed=JSON.parse(String(output).replace(/^```(?:json)?\s*|\s*```$/g,''));}catch(_){return null;}

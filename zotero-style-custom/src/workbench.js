@@ -79,6 +79,8 @@
   state.jcrBrowserState=ui.jcrBrowserState&&typeof ui.jcrBrowserState==='object'?ui.jcrBrowserState:null;
   const enabled=id=>runtime.featureEnabled?.(id)!==false;
   const setting=(key,fallback)=>runtime.getSetting?runtime.getSetting(key):runtime.pref(key,fallback);
+  // The AI's output language: "auto" (the default) is the panel's own language.
+  const aiLanguage=()=>{const v=setting('aiLanguage','auto');if(v&&v!=='auto')return v;try{return runtime.i18n&&runtime.i18n.isKorean&&runtime.i18n.isKorean()?'Korean':'English';}catch(_){return 'English';}};
   const tabFeature={explore:'explore',recent:'Recent',graph:'graphView',tags:'tags',notes:'noteManager',annotations:'annotationManager',backlinks:'backlinks',attachments:'attachmentPreview',tabs:'tabManager',views:'viewManager',canvas:'canvas'};
   const actionFeature={'선택 주석 색상 변경':'annotationColors','선택 주석 색 바꾸기':'annotationColors','선택 주석 병합':'reader.mergeAnnotations','참조 노트 보기':'backlinks','참조 노트':'backlinks','밝은 PDF':'PDFStyles','어두운 PDF':'PDFStyles','세피아 PDF':'PDFStyles','사용자 PDF 테마 적용':'PDFStyles','주석 팔레트 적용':'annotationColors','주석 팔레트 삭제':'annotationColors','주석 팔레트 저장':'annotationColors','색상 이름 저장':'showAnnotationColorName','여백 주석 설정 적용':'marginAnnotation','관련 문헌으로 연결':'relatedItems','선택 문헌끼리 연결 해제':'relatedItems','선택 문헌에 태그 추가':'addTags','선택 문헌에서 태그 제거':'addTags','선택 문헌 태그 이름 변경':'addTags','초록 요약':'tldr','읽기 메모 제안':'AIGenerateRemark','태그 제안':'AIGenerateTags','앱 밝게/어둡게 전환':'darkLightButton'};
   /* Ordinary drafts are cut at DRAFT_LENGTH. A memo draft (it has an owner) is never cut: the reader's whole text is kept (up to MEMO_DRAFT_MAX, far beyond any memo). */
@@ -5652,7 +5654,7 @@
    // The account bridge on this Mac counts as set up, as does an address in settings.
    {const ai=runtime.assist?.status?.();if(ai?.available)node('p',ai.label?F('AI 연결: {0}',ai.label):T('AI 연결됨'),section,{class:'sc-muted'});else if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣거나, 이 Mac에 계정 연결 프로그램을 설치하면 켜집니다.',section,{class:'sc-muted'});}
    node('span','언어',b,{class:'sc-muted'});
-   const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});
+   const language=node('input',null,b,{value:aiLanguage(),'aria-label':'출력 언어',class:'sc-lang'});
    const ready=chosen.length>=2&&chosen.length<=6&&values.length<=6;
    node('span',values.length>6?`${values.length}편은 너무 많습니다. 둘에서 여섯 편을 선택하세요.`:chosen.length<2?'문헌을 둘 이상 선택하면 함께 읽습니다.':`${chosen.length}편 · 초록 있음 ${chosen.filter(paper=>String(paper.abstract||'').trim()).length}`,b,{class:'sc-muted'});
    let stop;
@@ -8884,7 +8886,7 @@
    }
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions,{'data-opens':'browser'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
-  function drawAssist(){let item;try{item=one();}catch(_){pickOne(empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.'));return;}bindAI(item.id);node('h2',D(item.title),body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인',placeholder:T('요청하면 결과가 여기에 나타납니다.')});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
+  function drawAssist(){let item;try{item=one();}catch(_){pickOne(empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.'));return;}bindAI(item.id);node('h2',D(item.title),body);const b=bar();const language=node('input',null,b,{value:aiLanguage(),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인',placeholder:T('요청하면 결과가 여기에 나타납니다.')});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
    const aiReady=!!(runtime.assist?.status?.()?.available||(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim()));
    /* Two parts, named: what to ask, and what came back. The request row and
       the result box used to run together under the paper's title, and the

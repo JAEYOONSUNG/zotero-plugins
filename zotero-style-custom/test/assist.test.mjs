@@ -75,6 +75,21 @@ test('chat asks for a stream, reads server-sent events as they arrive and return
  assert.equal(text,'Hello (Results, p. 4)');assert.deepEqual(seen,['Hel','Hello (Results, p. 4)']);
  assert.equal(JSON.parse(h.requests[0].options.body).stream,true);
 });
+test('a summary with onDelta streams: the first lines arrive before the whole, and the library block rides along',async()=>{
+ const h=harness();const seen=[];
+ h.respond(options=>{
+  const listeners={};const xhr={readyState:0,responseText:'',getResponseHeader:()=> 'text/event-stream',addEventListener:(n,f)=>(listeners[n]||=[]).push(f)};
+  options.requestObserver(xhr);
+  const feed=text=>{xhr.readyState=3;xhr.responseText+=text;for(const f of listeners.progress||[])f();};
+  feed('data: {"choices":[{"delta":{"content":"## Summary\\n"}}]}\n\n');
+  feed('data: {"choices":[{"delta":{"content":"It works."}}]}\n\ndata: [DONE]\n\n');
+  return {status:200,responseText:xhr.responseText,getResponseHeader:()=> 'text/event-stream'};
+ });
+ const text=await h.api.paperSummary({...summaryInput,library:'MY LIBRARY (x):\nTags on this paper: #rm'},{language:'English',onDelta:(piece,all)=>seen.push(all)});
+ assert.equal(text,'## Summary\nIt works.');assert.deepEqual(seen,['## Summary\n','## Summary\nIt works.']);
+ const body=JSON.parse(h.requests[0].options.body);assert.equal(body.stream,true);
+ assert.match(body.messages[1].content,/\[A, p\. 1\] body\n\nMY LIBRARY \(x\):\nTags on this paper: #rm$/);
+});
 test('chat falls back to one JSON answer when the server does not stream',async()=>{
  const h=harness();const seen=[];
  h.respond(options=>{options.requestObserver({readyState:2,getResponseHeader:()=> 'application/json',addEventListener(){}});return {status:200,response:null,responseText:'{"choices":[{"message":{"content":"Whole"}}]}',getResponseHeader:()=> 'application/json'};});

@@ -817,10 +817,10 @@
         if (r.text && shape.missing.length) problems.push('missing sections: ' + shape.missing.join(', '));
         if (r.text && !shape.findingCitations) problems.push('the findings cite no (section, p. n)');
         const data = {provider: providerOf(call), label: ai.status() && ai.status().label, firstByteMs: call && call.firstByte, httpMs: call && call.end, panelMs: r.ms, status: call && call.status,
-          stream: call ? call.stream : null, chars: r.text.length, truncatedInput: r.truncated, sections: shape.found, findingCitations: shape.findingCitations, head: head(r.text)};
+          stream: call ? call.stream : null, firstTextMs: r.firstMs == null ? null : r.firstMs, chars: r.text.length, truncatedInput: r.truncated, sections: shape.found, findingCitations: shape.findingCitations, head: head(r.text)};
         report.ai.summary = data;
         return {pass: !problems.length, data, detail: (problems.length ? problems.join('; ') + ' · ' : '')
-          + `${data.provider || '?'} (${data.label || '-'}) · HTTP ${data.status} · first byte ${data.firstByteMs} ms (one JSON answer, not streamed) · total ${data.panelMs} ms · ${data.chars} chars · sections ${shape.found.length}/${headingsOf(PC ? PC.summaryPrompt(language) : '').length} · ${shape.findingCitations} finding citation(s)`};
+          + `${data.provider || '?'} (${data.label || '-'}) · HTTP ${data.status} · first byte ${data.firstByteMs} ms · first text in the panel ${data.firstTextMs == null ? '- (not streamed)' : data.firstTextMs + ' ms (streamed)'} · total ${data.panelMs} ms · ${data.chars} chars · sections ${shape.found.length}/${headingsOf(PC ? PC.summaryPrompt(language) : '').length} · ${shape.findingCitations} finding citation(s)`};
       }, 125000);
 
       await check('AI chat: one methods question with page citations', async () => {

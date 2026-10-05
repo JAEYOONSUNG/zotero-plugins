@@ -89,11 +89,39 @@ test('the summary input stays inside its budget however long the paper is',()=>{
  assert.ok(PC.summaryInput(big,{budget:5000}).chars<=5000);
 });
 
-test('the summary prompt asks for the five parts in the output language and forbids inventing',()=>{
+test('the summary prompt asks for a researcher\'s parts in the output language, numbers with their pages, and forbids inventing',()=>{
  const ko=PC.summaryPrompt('Korean'),en=PC.summaryPrompt('English');
- assert.match(ko,/Write in Korean/);assert.match(ko,/## 요약/);assert.match(ko,/## 확인할 점/);
- assert.match(en,/## Key findings/);assert.match(en,/## What to check/);
+ assert.match(ko,/Write in Korean/);assert.match(ko,/## 요약/);assert.match(ko,/## 내 연구와의 관계/);assert.match(ko,/## 다음에 읽을 것/);
+ assert.deepEqual([...ko.matchAll(/^## (.+)$/gm)].map(m=>m[1]).slice(0,4),['요약','핵심 결과','방법','한계'],'the self-check reads the first four');
+ assert.match(en,/## Key findings/);assert.match(en,/## What to read next/);
+ assert.match(en,/what is new compared with earlier work/);assert.match(en,/with its numbers/);
  assert.match(en,/Do not invent numbers/);assert.match(en,/\(Section, p\. N\)/);
+ assert.match(ko,/Keep technical terms[^.]*in English/,'Korean prose, the paper\'s own terms');assert.doesNotMatch(en,/Keep technical terms/);
+ assert.match(en,/Leave this section out entirely when there is no MY LIBRARY block/);
+});
+
+test('the spare summary budget goes to more results paragraphs, numbers first, each cited with its own page',()=>{
+ const input=PC.summaryInput(paper());
+ assert.match(input.text,/\[Results, p\. 5\] Fidelity fell slightly, with an error rate of 2\.1e-5/,'the second results paragraph, on its own page');
+ assert.match(input.text,/\[Results, p\. 4\] Variant M7/);
+ assert.ok(PC.quantScore('80 percent after 30 min at 95 °C, n = 3, P < 0.01')>PC.quantScore('The gain comes from a rigid thumb domain.'));
+});
+
+test('a Cell paper with one long RESULTS section is summarised from its results across their pages, not the first 900 characters',(t)=>{
+ const s=realPaper('cell');if(!s)return t.skip('fixture not present');
+ const input=PC.summaryInput(s,{pageBase:1});
+ const pages=new Set(input.parts.filter(p=>/^\[RESULTS/.test(p.label)).map(p=>p.label));
+ assert.ok(pages.size>=4,[...pages].join(' '));
+ assert.ok(input.parts.filter(p=>p.part==='results').reduce((n,p)=>n+p.text.length,0)>8000);
+ assert.ok(input.chars<=PC.SUMMARY_BUDGET);assert.equal(input.truncated,false);assert.ok(input.coverage>0.5);
+});
+
+test('the user\'s library goes in as a labelled block, titles only, within its size',()=>{
+ assert.equal(PC.libraryBlock({}),'');
+ const b=PC.libraryBlock({memo:'I study Type III RM enzymes.',tags:['#topic/RM','/reading'],collections:['Restriction'],neighbours:[{title:'Type III restriction enzymes need two sites',year:1992},{title:''}]});
+ assert.match(b,/^MY LIBRARY/);assert.match(b,/Tags on this paper: #topic\/RM, \/reading/);assert.match(b,/In collections: Restriction/);
+ assert.match(b,/L1\. Type III restriction enzymes need two sites \(1992\)/);assert.doesNotMatch(b,/L2\./);
+ assert.ok(PC.libraryBlock({memo:'x'.repeat(9000),neighbours:Array.from({length:40},(_,i)=>({title:'Paper '+i}))}).length<=2400);
 });
 
 test('a chat question is sent with the rules, the picked excerpts with their pages, the summary, and the last six turns only',()=>{
@@ -117,6 +145,53 @@ test('the user\'s own memo and tags are sent only for the question that asks for
  assert.doesNotMatch(plain.messages[0].content,/OWN NOTES/);
  const mine=PC.chatMessages({question:'How does this relate to my research?',chunks,language:'English',mine:{memo:'I work on thermostable enzymes.',tags:['#topic/PCR']}});
  assert.match(mine.messages[0].content,/OWN NOTES[\s\S]*#topic\/PCR[\s\S]*thermostable enzymes/);
+});
+
+test('a follow-up question leans on the one before it to find its passage',(t)=>{
+ const s=realPaper('crampton');if(!s)return t.skip('fixture not present');
+ const chunks=PC.buildChunks(s,{pageBase:1});
+ const alone=PC.chatMessages({question:'왜 그런가요?',chunks,language:'Korean'}).picked;
+ assert.ok(!alone.some(c=>/^Translocation of DNA/.test(c.section)),'without the earlier question it misses');
+ const history=[{role:'user',content:'How was DNA translocation shown to be unidirectional?'},{role:'assistant',content:'Yes (Results, p. 3).'}];
+ const follow=PC.chatMessages({question:'왜 그런가요?',history,chunks,language:'Korean'}).picked;
+ assert.ok(follow.some(c=>/^Translocation of DNA/.test(c.section)),follow.map(c=>c.section).join(' | '));
+});
+
+test('a Korean question about a quantity finds it in an English paper',(t)=>{
+ const c=realPaper('crampton');
+ if(c)assert.ok(PC.rank(PC.buildChunks(c,{pageBase:1}),'그 속도는 얼마였어?',{k:6}).some(x=>/^Translocation of DNA/.test(x.section)),'속도 is speed, rate');
+ const s=realPaper('science');if(!s)return t.skip('fixture not present');
+ const picked=PC.rank(PC.buildChunks(s,{pageBase:1}),'해상도는?',{k:6});
+ assert.ok(picked.some(c=>/3\.01 and 3\.47 Å/.test(c.text)),picked.map(c=>c.section).join(' | '));
+});
+
+test('a selected passage is quoted to the model with its page and steers what is retrieved',()=>{
+ const chunks=PC.buildChunks(paper());
+ const q=PC.quickPrompt('passage');assert.match(q.question,/선택한 부분/);
+ const {messages,picked}=PC.chatMessages({question:q.question,chunks,language:'English',passage:{text:'Fidelity fell slightly, with an error rate of 2.1e-5.',page:5}});
+ assert.match(messages[0].content,/SELECTED PASSAGE \(the reader selected this on p\. 5[^)]*\):\n"Fidelity fell slightly/);
+ assert.ok(picked.some(c=>c.section==='Results'));
+});
+
+test('answers end with follow-up questions, which are split off, also while the answer is still streaming',()=>{
+ assert.match(PC.chatSystemPrompt('Korean'),/FOLLOW-UPS: first question \| second question/);
+ assert.match(PC.chatSystemPrompt('Korean'),/Keep technical terms/);
+ assert.deepEqual(PC.splitFollowUps('It rose 4-fold (Results, p. 4).\n\nFOLLOW-UPS: 대조군은? | 몇 번 반복했나요?'),{body:'It rose 4-fold (Results, p. 4).',followUps:['대조군은?','몇 번 반복했나요?']});
+ assert.deepEqual(PC.splitFollowUps('Answer.\n**FOLLOW-UPS:** - What controls? \n- How many replicates?'),{body:'Answer.',followUps:['What controls?','How many replicates?']});
+ assert.equal(PC.splitFollowUps('Answer so far.\nFOLL').body,'Answer so far.','a marker still arriving is held back');
+ assert.equal(PC.splitFollowUps('Answer.\nFollowing the').body,'Answer.\nFollowing the','ordinary words are not');
+ assert.deepEqual(PC.splitFollowUps('No marker.'),{body:'No marker.',followUps:[]});
+ assert.deepEqual(PC.splitFollowUps('A.\nFOLLOW-UPS: 1. 대조군은? | 250 bp 이내 신호는 어떻게 해석되나요?').followUps,['대조군은?','250 bp 이내 신호는 어떻게 해석되나요?'],'a number that starts the question stays');
+});
+
+test('earlier turns stay inside a character budget, newest first, and lose their follow-up lines',()=>{
+ const long='x'.repeat(3900);
+ const history=Array.from({length:12},(_,i)=>({role:i%2?'assistant':'user',content:(i%2?long+'\nFOLLOW-UPS: a? | b?':'question '+i)}));
+ const {messages}=PC.chatMessages({question:'Q',chunks:[],history,language:'English'});
+ const turns=messages.slice(1,-1),chars=turns.reduce((n,m)=>n+m.content.length,0);
+ assert.ok(chars<=PC.HISTORY_CHARS+4000,String(chars));assert.ok(turns.length>=2&&turns.length<12);
+ assert.equal(turns[0].role,'user','the kept history starts with a question');
+ assert.equal(turns.at(-1).content,long,'the newest answer whole, without its follow-ups');
 });
 
 test('failed or empty earlier turns are not sent back',()=>{
@@ -259,4 +334,55 @@ test('Korean section names are classified (no ASCII \\b after Hangul), and the e
  assert.deepEqual(PC.partsOf({sections:[sec('서론'),sec('2. 방법'),sec('결과'),sec('논의'),sec('결론'),sec('참고문헌')]}),['intro','methods','results','discussion','discussion','back']);
  assert.deepEqual(PC.partsOf({sections:[sec('Something',{part:'methods'}),sec('Other',{kind:'back'})]}),['methods','back']);
  assert.ok(PC.expandQuery('표 1을 설명해줘').includes('table'));assert.ok(!PC.expandQuery('표본 크기').includes('table'),'표본 is a sample, not a table');
+});
+
+test('word forms meet: lifetimes/lifetime, measured/measurements, so a protocol question finds the protocol',(t)=>{
+ assert.equal(PC.stem('lifetimes'),PC.stem('lifetime'));assert.equal(PC.stem('measured'),PC.stem('measurements'));
+ assert.equal(PC.stem('matches'),PC.stem('match'));assert.equal(PC.stem('libraries'),'library');
+ const s=realPaper('nar2025');if(!s)return t.skip('fixture not present');
+ const chunks=PC.buildChunks(s,{pageBase:1});
+ const a=PC.rank(chunks,'How were the mRNA lifetimes measured?',{k:6}).map(c=>c.id),b=PC.rank(chunks,'How were the mRNA lifetime measurements performed?',{k:6}).map(c=>c.id);
+ const protocol=chunks.filter(c=>c.part==='methods'&&/lifetime/i.test(c.text)).map(c=>c.id);
+ assert.ok(protocol.length);assert.ok(a.some(id=>protocol.includes(id)),`picked ${a} protocol ${protocol}`);assert.ok(b.some(id=>protocol.includes(id)));
+});
+
+test('a figure named in the question brings its caption and the passages citing it, in English or Korean',(t)=>{
+ assert.deepEqual(PC.figureRefs('What does Figure 3E show, and Table 1? 그림 2는?').map(r=>r.kind+r.n+r.panel),['figure3E','table1','figure2']);
+ assert.deepEqual(PC.figureRefs('Extended Data Fig. 4').map(r=>r.prefix+':'+r.n),['extended data:4']);
+ const s=realPaper('nar2025');if(!s)return t.skip('fixture not present');
+ const chunks=PC.buildChunks(s,{pageBase:1});
+ for(const q of ['What does Figure 3 show?','그림 3은 무엇을 보여주나요?']){
+  const picked=PC.rank(chunks,q,{k:6});
+  assert.ok(picked.some(c=>c.kind==='caption'&&/^Figure 3\b/.test(c.section)),q+': '+picked.map(c=>c.section).join(' | '));
+  assert.ok(picked.some(c=>c.kind==='body'&&/Fig(?:ure)?\.?\s*3/.test(c.text)),q+': a passage citing it');
+  assert.ok(!picked.some(c=>c.kind==='caption'&&/^Figure [1245]\b/.test(c.section)),'not other figures');
+ }
+});
+
+test('a chunk stays on one page: a paragraph that turns the page is cited on each page; the abstract on its own page',()=>{
+ const p={title:'T',abstract:'An abstract.',sections:[{heading:'Abstract',kind:'abstract',page:1,paragraphs:[para(1,'An abstract.')]},
+  {heading:'Results',level:1,page:3,paragraphs:[{sentences:[sent('All four mutants were made and purified to homogeneity for this assay series.',3),sent('All four mutants showed reduced activity in plaque assays against every phage tested here.',4)]}]}]};
+ const chunks=PC.buildChunks(p,{pageBase:1});
+ assert.equal(chunks.find(c=>c.kind==='abstract').page,2,'the abstract is on its own page');
+ const reduced=chunks.find(c=>/reduced activity/.test(c.text));assert.equal(reduced.page,5);assert.doesNotMatch(reduced.text,/purified/);
+ assert.match(PC.summaryInput(p,{pageBase:1}).text,/\[Results, pp\. 4–5\] All four mutants were made/);
+});
+
+test('a stream says when its answer is not whole: an error event, a length limit, or no end',()=>{
+ const ev=o=>'data: '+JSON.stringify(o)+'\n\n',d=t=>ev({choices:[{delta:{content:t}}]});
+ const whole=PC.streamReader();whole.update(d('a')+ev({choices:[{delta:{},finish_reason:'stop'}]})+'data: [DONE]\n\n');whole.end();assert.equal(whole.incomplete,null);
+ const err=PC.streamReader();err.update(d('a')+ev({error:{message:'The answer stopped early'}}));err.end();assert.equal(err.incomplete,'error');assert.equal(err.text,'a');
+ const len=PC.streamReader();len.update(d('a')+ev({choices:[{delta:{},finish_reason:'length'}]})+'data: [DONE]\n\n');len.end();assert.equal(len.incomplete,'length');
+ const cut=PC.streamReader();cut.update(d('a'));cut.end();assert.equal(cut.incomplete,'cut');
+ const json=PC.streamReader();json.update('{"choices":[{"message":{"content":"x"},"finish_reason":"stop"}]}');json.end();assert.equal(json.incomplete,null);
+});
+
+test('a follow-up keeps the passages the previous answer stood on',()=>{
+ const chunks=PC.buildChunks(paper());
+ const fid=chunks.find(c=>/Fidelity/.test(c.text)).id;
+ const history=[{role:'user',content:'What happened to fidelity?'},{role:'assistant',content:'It fell (Results, p. 5).',picked:[0,fid]}];
+ const {picked}=PC.chatMessages({question:'How were libraries screened?',history,chunks,language:'English',k:2});
+ assert.ok(picked.some(c=>c.id===fid),'the earlier evidence is still there');
+ const quick=PC.chatMessages({question:'How were libraries screened?',history,chunks,language:'English',k:2,intent:{parts:['methods']}}).picked;
+ assert.ok(!quick.some(c=>c.id===fid),'a quick prompt starts afresh');
 });

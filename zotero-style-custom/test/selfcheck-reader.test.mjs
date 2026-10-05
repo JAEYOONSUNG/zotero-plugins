@@ -300,13 +300,17 @@ test('bootstrap reads the reader flag with the others, clears it before running,
    the transport's own requestObserver when stream:true, the canceller aborting it, and one log line per request in
    the bridge's own format (status 200, or 499 when the client closed). */
 const BRIDGE_JSON = JSON.stringify({port: 47823, token: 'a'.repeat(40)});
-const SUMMARY = '## 요약\nThe paper evolves a polymerase.\n## 핵심 결과\n- It survives 95 C (Results, p. 1)\n## 방법\nScreening.\n## 한계\n- One enzyme.\n## 확인할 점\n- Controls?';
+const SUMMARY = '## 요약\nThe paper evolves a polymerase.\n## 핵심 결과\n- It survives 95 C (Results, p. 1)\n## 방법\nScreening.\n## 한계\n- One enzyme.\n## 다음에 읽을 것\n- Fig. 1 first.';
+// The summary as the bridge streams it: a few pieces cut anywhere.
+const pieces = (text, n = 6) => Array.from({length: n}, (_, i) => text.slice(Math.floor(i * text.length / n), Math.floor((i + 1) * text.length / n)));
 function fakeBridge({chunks = ['Step 1: libraries were screened ', '(Methods, p. 1). ', 'Step 2: kinetics ', 'were measured.'], chunkMs = 25, summary = SUMMARY} = {}) {
   const requests = [], log = [];
   const line = (body, status) => log.push(`${new Date().toISOString()} method=POST path=/v1/chat/completions origin=none inChars=${JSON.stringify(body.messages).length} stream=${!!body.stream} provider=claude status=${status} ms=7`);
   function request(method, url, options = {}) {
     const body = JSON.parse(options.body);
     const req = {body, aborted: false};requests.push(req);
+    const isSummary = /decide how to read one paper/.test(String(body.messages[0] && body.messages[0].content));
+    const streamed = isSummary ? pieces(summary) : chunks;
     const listeners = {};
     const xhr = {readyState: 1, responseText: '', headers: {'x-bridge-provider': 'claude', 'content-type': body.stream ? 'text/event-stream' : 'application/json'},
       getResponseHeader(k) { return this.headers[String(k).toLowerCase()] || null; }, addEventListener(t, fn) { (listeners[t] || (listeners[t] = [])).push(fn); }};
@@ -321,7 +325,7 @@ function fakeBridge({chunks = ['Step 1: libraries were screened ', '(Methods, p.
       let i = 0;
       const step = () => {
         if (req.aborted) return;
-        if (i < chunks.length) { xhr.readyState = 3; xhr.responseText += `data: ${JSON.stringify({choices: [{delta: {content: chunks[i++]}}]})}\n\n`; fire('progress'); timer = realSetTimeout(step, chunkMs); }
+        if (i < streamed.length) { xhr.readyState = 3; xhr.responseText += `data: ${JSON.stringify({choices: [{delta: {content: streamed[i++]}}]})}\n\n`; fire('progress'); timer = realSetTimeout(step, chunkMs); }
         else { xhr.responseText += 'data: [DONE]\n\n'; xhr.readyState = 4; fire('readystatechange'); line(body, 200); resolve(answer()); }
       };
       timer = realSetTimeout(step, chunkMs);
@@ -352,7 +356,7 @@ function readerFixture({bridge = null} = {}) {
   const Z = {Items: {get: id => id === 11 ? attachment : id === 10 ? parent : null}, DataDirectory: {dir: '/data'}, logError() {}, Reader: {_readers: [reader]}, isMac: true,
     HTTP: {request: async (method, url, options) => /chat\/completions/.test(url) && bridge ? bridge.request(method, url, options) : ({response: css, status: 200})}};
   const runtime = {cache: {readerAssist: {open: true, tab: 'translate'}}, dirty: false, rootURI: 'file:///plugin/', io, paths: {join: (...p) => p.join('/'), homeDir: '/home'}, i18n: {isKorean: () => false}, t: I18N.t,
-    pref: (k, d) => d, getSetting: () => undefined, setSetting: async () => {}, scheduleFlush() {}, assist: {available: () => false}};
+    pref: (k, d) => d, getSetting: k => k === 'aiLanguage' ? 'Korean' : undefined, setSetting: async () => {}, scheduleFlush() {}, assist: {available: () => false}};
   if (bridge) runtime.assist = Assist.create({Zotero: Z, runtime});
   const service = ReaderAssist.create({Zotero: Z, runtime});
   return {doc, win, viewDoc, reader, runtime, service, touched, writes, Z};
@@ -430,8 +434,8 @@ test('the bridge log is read as the bridge writes it, and a summary is judged by
   assert.deepEqual(all.map(e => [e.origin, e.status]), [['none', '200'], ['null', '499']], 'health probes and noise are left out');
   assert.equal(Live.parseBridgeLog(text, {since: Date.parse('2026-10-05T13:23:55Z')}).length, 1);
   const heads = Live.headingsOf(PC.summaryPrompt('Korean'));
-  assert.deepEqual(heads, ['요약', '핵심 결과', '방법', '한계', '확인할 점']);
-  assert.deepEqual(Live.summaryShape(SUMMARY, heads, {PC, pages: 3}), {found: heads, missing: [], findingCitations: 1, ok: true});
+  assert.deepEqual(heads, ['요약', '핵심 결과', '방법', '한계', '내 연구와의 관계', '다음에 읽을 것']);
+  assert.deepEqual(Live.summaryShape(SUMMARY, heads, {PC, pages: 3}), {found: heads.filter(h => h !== '내 연구와의 관계'), missing: [], findingCitations: 1, ok: true}, 'the library section is optional');
   const uncited = Live.summaryShape(SUMMARY.replace(' (Results, p. 1)', ''), heads, {PC, pages: 3});
   assert.equal(uncited.ok, false); assert.equal(uncited.findingCitations, 0);
   assert.deepEqual(Live.summaryShape('## 요약\nx', heads, {PC}).missing, ['핵심 결과', '방법', '한계']);
@@ -461,7 +465,8 @@ test('the AI probe uses the panel\'s own summary and chat, saves nothing, and St
   assert.deepEqual(h.ai.status(), {available: true, source: 'bridge', provider: 'claude', label: Assist.BRIDGE_LABEL.claude});
   const s = await h.ai.summary();
   assert.equal(s.state, 'done'); assert.equal(s.text, SUMMARY);
-  assert.equal(bridge.requests.length, 1); assert.equal(!!bridge.requests[0].body.stream, false);
+  assert.equal(bridge.requests.length, 1); assert.equal(bridge.requests[0].body.stream, true, 'the summary streams');
+  assert.ok(s.firstMs !== null && s.firstMs < s.ms, 'the first text shows before the whole summary: ' + JSON.stringify({firstMs: s.firstMs, ms: s.ms}));
   assert.match(bridge.requests[0].body.messages[0].content, /## 핵심 결과/, 'the panel\'s own summary prompt');
   const a = await h.ai.ask('methods');
   assert.equal(bridge.requests.length, 2); assert.equal(bridge.requests[1].body.stream, true);
@@ -508,6 +513,8 @@ test('with the AI flag the live run makes exactly three AI calls, each its own l
   assert.deepEqual(report.ai.calls, ['assist.paperSummary', 'assist.chat', 'assist.chat']);
   assert.deepEqual(report.ai.origins, ['none'], 'the origin type Zotero sends is recorded');
   assert.equal(report.ai.summary.provider, 'claude'); assert.equal(report.ai.summary.sections.length, 5); assert.equal(report.ai.summary.head, SUMMARY.slice(0, 300));
+  assert.equal(report.ai.summary.stream, true); assert.ok(report.ai.summary.firstTextMs !== null);
+  assert.match(steps['AI summary: one request through the panel\'s summary path'].detail, /first text in the panel \d+ ms \(streamed\)/);
   assert.equal(report.ai.chat.stream, true); assert.ok(report.ai.chat.firstTextMs !== null); assert.equal(report.ai.chat.citations, 1);
   assert.equal(report.ai.stop.log.status, '499'); assert.ok(report.ai.stop.httpEndAfterStopMs <= 2000);
   assert.match(steps['AI accounting: three calls, nothing else'].detail, /3 AI call\(s\) let through \(paperSummary, chat, chat\), 3 request\(s\) to the bridge, 0 blocked/);

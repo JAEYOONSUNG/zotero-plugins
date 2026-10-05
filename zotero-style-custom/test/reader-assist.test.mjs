@@ -221,18 +221,18 @@ test('a question goes out with the excerpts, the page on screen and the summary;
  f.stop();
 });
 
-test('the conversation is kept to the last 20 messages, saved per paper, restored in a new session, and can be cleared',async()=>{
+test('the whole conversation is kept (the AI sees only the last turns), saved per paper, restored in a new session, and can be cleared',async()=>{
  const io=memoryIO();
  const f=fixture({io});await f.open();
  for(let i=0;i<12;i++){f.aiReplies.push('Answer '+i);f.panel().querySelector('.sc-ra-input').textContent='Question '+i;f.press(f.byText('Send'));await settle(15);}
- const bubbles=f.panel().querySelectorAll('.sc-ra-msg');assert.equal(bubbles.length,20);
- assert.match(bubbles[0].textContent,/Question 2/);
+ const bubbles=f.panel().querySelectorAll('.sc-ra-msg');assert.equal(bubbles.length,24,'nothing asked earlier is deleted');
+ assert.match(bubbles[0].textContent,/Question 0/);
  const last=f.requests.filter(r=>r.body).at(-1).body.messages;
  assert.equal(last.length,1+12+1,'system, six earlier turns, the new question');
  await new Promise(r=>setTimeout(r,900));
  f.stop();
  const g=fixture({io});await g.open();await settle(10);
- assert.equal(g.panel().querySelectorAll('.sc-ra-msg').length,20);
+ assert.equal(g.panel().querySelectorAll('.sc-ra-msg').length,24);
  g.press(g.byText('Clear conversation'));await settle();
  assert.equal(g.panel().querySelectorAll('.sc-ra-msg').length,0);g.stop();
 });
@@ -1371,5 +1371,104 @@ test('choosing 자동 (Automatic) gives the player the ranked voice, not the sys
  assert.equal(p.state().voiceURI,'v-aman');
  f.press(toggle());await settle();f.press([...f.panel().querySelectorAll('.sc-ra-menu-item')].find(i=>/Automatic/.test(i.textContent)));await settle();
  assert.equal(p.state().voiceURI,'v-sam','Automatic is the same choice as the first ▶');assert.equal(f.allSettings.readAloudVoice,'');
+ f.stop();
+});
+
+/* ---- round 5: streamed summary, the library, follow-ups, a selected passage, the answer language ---- */
+const sse=(pieces,{hold=null}={})=>options=>{
+ const listeners={};const xhr={readyState:3,responseText:'',getResponseHeader:()=> 'text/event-stream',addEventListener:(n,fn)=>(listeners[n]||=[]).push(fn)};
+ options.requestObserver(xhr);
+ const feed=text=>{xhr.responseText+=`data: ${JSON.stringify({choices:[{delta:{content:text}}]})}\n\n`;for(const fn of listeners.progress||[])fn();};
+ const done=()=>{xhr.responseText+='data: [DONE]\n\n';return {status:200,responseText:xhr.responseText,getResponseHeader:()=> 'text/event-stream'};};
+ feed(pieces[0]);
+ if(hold){return new Promise(resolve=>{hold.release=()=>{for(const p of pieces.slice(1))feed(p);resolve(done());};});}
+ for(const p of pieces.slice(1))feed(p);return done();
+};
+test('the summary streams into the card: the first section shows while the rest is still coming, then the whole is kept',async()=>{
+ const f=fixture();await f.open();
+ const hold={};f.aiReplies.push(sse(['## Summary\nThe polymerase survives heat.\n','## Key findings\n- 80% activity (Results, p. 4)'],{hold}));
+ f.press(f.byText('Make summary'));await settle(40);await new Promise(r=>setTimeout(r,150));
+ const call=f.requests.find(r=>r.body);assert.equal(call.body.stream,true,'asked as a stream');
+ const card=f.panel().querySelector('.sc-ra-summary');
+ assert.match(card.textContent,/The polymerase survives heat\./,'the first text is on screen before the end');
+ assert.match(card.textContent,/Summarising/,'and it says more is coming');
+ hold.release();await settle(30);
+ assert.match(card.textContent,/80% activity/);assert.doesNotMatch(card.textContent,/Summarising/);
+ assert.equal(card.querySelector('.sc-ra-cite').getAttribute('data-page'),'4');
+ f.stop();
+});
+
+test('the summary is told about the reader\'s library: tags, memo, collections and neighbouring papers, labelled as theirs',async()=>{
+ const f=fixture();
+ const other={id:20,isRegularItem:()=>true,getField:k=>({title:'Directed evolution of Taq',date:'2019-02-01',dateAdded:'2024-01-01'}[k]||''),getTags:()=>[{tag:'#topic/PCR'}]};
+ const parent=f.Z.Items.get(10);parent.getCollections=()=>[5];
+ f.Z.Collections={get:id=>id===5?{name:'Polymerases',getChildItems:()=>[parent,other]}:null};
+ f.remarks.set(10,'Compare with my KOD data.');
+ await f.open();f.aiReplies.push('## Summary\nOK.');
+ f.press(f.byText('Make summary'));await settle(30);
+ const user=f.requests.find(r=>r.body).body.messages[1].content;
+ assert.match(user,/MY LIBRARY \(the researcher's own notes and papers, not part of this paper\):/);
+ assert.match(user,/Tags on this paper: #topic\/PCR, \/reading/);assert.match(user,/In collections: Polymerases/);
+ assert.match(user,/Memo: Compare with my KOD data\./);assert.match(user,/L1\. Directed evolution of Taq \(2019\)/);
+ assert.doesNotMatch(user,/L2\./,'the paper itself is not its own neighbour');
+ f.stop();
+});
+
+test('the answer language follows the panel unless one was chosen',async()=>{
+ const en=fixture({settings:{aiLanguage:'auto'}});await en.open();en.aiReplies.push('## Summary\nOK.');en.press(en.byText('Make summary'));await settle(30);
+ assert.match(en.requests.find(r=>r.body).body.messages[0].content,/Write in English\./);en.stop();
+ const ko=fixture({settings:{aiLanguage:'auto'}});ko.runtime.i18n={isKorean:()=>true};await ko.open();ko.aiReplies.push('## 요약\nOK.');ko.press(ko.byText('Make summary'));await settle(30);
+ const sys=ko.requests.find(r=>r.body).body.messages[0].content;assert.match(sys,/Write in Korean\./);assert.match(sys,/Keep technical terms[^.]*in English/);ko.stop();
+ const chosen=fixture({settings:{aiLanguage:'Korean'}});await chosen.open();chosen.aiReplies.push('## 요약\nOK.');chosen.press(chosen.byText('Make summary'));await settle(30);
+ assert.match(chosen.requests.find(r=>r.body).body.messages[0].content,/Write in Korean\./);chosen.stop();
+});
+
+test('an answer\'s follow-up questions become chips under it; one press asks it; the line itself is never shown or saved',async()=>{
+ const f=fixture();await f.open();
+ f.aiReplies.push(sse(['Libraries were screened (Methods, p. 3).\n','FOLLOW-UPS: What controls were used? | How many rounds?']));
+ f.panel().querySelector('.sc-ra-input').textContent='How were libraries screened?';f.press(f.byText('Send'));await settle(30);
+ const answer=f.panel().querySelector('.sc-ra-msg-assistant');
+ assert.doesNotMatch(answer.textContent.replace(/What controls were used\?|How many rounds\?/g,''),/FOLLOW/);
+ const chips=[...answer.querySelectorAll('.sc-ra-followups button')];
+ assert.deepEqual(chips.map(b=>b.textContent.trim()),['What controls were used?','How many rounds?']);
+ assert.ok(chips.every(b=>b.getAttribute('data-opens')==='ai'),'they call the AI and say so');
+ assert.equal(f.sessionOf().data.chat.at(-1).content,'Libraries were screened (Methods, p. 3).');
+ f.aiReplies.push('Controls were empty vectors (Methods, p. 3).');
+ f.press(chips[0]);await settle(30);
+ const sent=f.requests.filter(r=>r.body).at(-1).body.messages;
+ assert.equal(sent.at(-1).content,'What controls were used?');
+ assert.doesNotMatch(JSON.stringify(sent.slice(1,-1)),/FOLLOW-UPS/,'the earlier answer goes back without its follow-ups');
+ assert.equal(f.panel().querySelectorAll('.sc-ra-followups').length,0,'only the newest answer offers them');
+ f.stop();
+});
+
+test('"AI에게 묻기" in the selection popup asks about the selected text with its page; without a selection it is not offered',async()=>{
+ const f=fixture();await f.sync();
+ const made=[];f.service.selectionPopup({reader:f.reader,doc:f.doc,params:{annotation:{text:'Variant M7 retained 80 percent activity',position:{pageIndex:3,rects:[[80,664,200,676]]}}},append:(...n)=>made.push(...n)});
+ assert.equal(made.length,2);assert.equal(made[0].textContent,'Listen from here');
+ const ask=made[1];assert.equal(ask.textContent,'Ask AI');assert.equal(ask.getAttribute('data-opens'),'ai');assert.equal(ask.getAttribute('data-tabstop'),'1');
+ f.aiReplies.push('It is the main result (Results, p. 4).');
+ ask.dispatchEvent(new f.win.Event('click'));await settle(40);
+ assert.equal(f.panel().hidden,false,'the panel opens on the conversation');
+ const body=f.requests.filter(r=>r.body).at(-1).body;
+ assert.match(body.messages[0].content,/SELECTED PASSAGE \(the reader selected this on p\. 4[^)]*\):\n"Variant M7 retained 80 percent activity"/);
+ assert.equal(body.messages.at(-1).content,PC.quickPrompt('passage',I18N.t).question);
+ assert.match(f.panel().querySelector('.sc-ra-msg-user').textContent,/^“Variant M7 retained 80 percent activity”/,'the conversation shows what was asked about');
+ const none=[];f.service.selectionPopup({reader:f.reader,doc:f.doc,params:{annotation:{position:{pageIndex:3,rects:[[80,664,200,676]]}}},append:(...n)=>none.push(...n)});
+ assert.equal(none.length,1);
+ f.stop();
+});
+
+test('an answer the server stopped partway is kept and marked, not passed off as whole; the same for a summary',async()=>{
+ const f=fixture();await f.open();
+ const cut=options=>{const listeners={};const xhr={readyState:3,responseText:'',getResponseHeader:()=> 'text/event-stream',addEventListener:(n,fn)=>(listeners[n]||=[]).push(fn)};
+  options.requestObserver(xhr);xhr.responseText='data: {"choices":[{"delta":{"content":"Partly (Methods, p. 3)"}}]}\n\ndata: {"error":{"message":"The answer stopped early","type":"upstream_error"}}\n\n';for(const fn of listeners.progress)fn();
+  return {status:200,responseText:xhr.responseText,getResponseHeader:()=> 'text/event-stream'};};
+ f.aiReplies.push(cut);typeText(f,'How?');f.press(f.byText('Send'));await settle(30);
+ const answer=f.panel().querySelector('.sc-ra-msg-assistant');
+ assert.match(answer.textContent,/Partly/);assert.match(answer.querySelector('.sc-ra-error').textContent,/stopped partway/);
+ assert.equal(f.sessionOf().data.chat.at(-1).incomplete,'error');
+ f.aiReplies.push(cut);f.press(f.byText('Make summary'));await settle(30);
+ assert.match(f.panel().querySelector('.sc-ra-summary .sc-ra-note').textContent,/summary stopped partway/);
  f.stop();
 });

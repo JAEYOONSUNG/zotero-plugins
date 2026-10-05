@@ -20,7 +20,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(root){
  'use strict';
  const HTML='http://www.w3.org/1999/xhtml',SVG='http://www.w3.org/2000/svg';
- const WIDTH=372,MIN_WIDTH=280,RAIL_WIDTH=52,TOP=41,MAX_CHAT=20,CHAT_LIMIT=4000;
+ const WIDTH=372,MIN_WIDTH=280,RAIL_WIDTH=52,TOP=41,MAX_CHAT=200,CHAT_LIMIT=4000;
  // The PDF keeps at least this much of the reader's split area; below it the panel narrows, then folds to the rail.
  const MIN_PDF=360;
  // The panel's text buttons are pills; the button added to the reader's selection popup has the same corners.
@@ -186,7 +186,9 @@
   // Readers a live self-check opened for itself: sync() leaves them alone, so no ordinary session (one that may save) is made.
   const reserved=new WeakSet();
   const setting=(key,fallback)=>{try{const v=runtime.getSetting(key);return v===undefined||v===null?fallback:v;}catch(_){return fallback;}};
-  const language=()=>setting('aiLanguage','Korean');
+  /* The answer language: "auto" (the default) follows the panel's own language, so an English panel gets English
+     summaries; a person who chose Korean or English keeps it. */
+  const language=()=>{const v=setting('aiLanguage','auto');if(v&&v!=='auto')return v;try{return runtime.i18n&&typeof runtime.i18n.isKorean==='function'&&runtime.i18n.isKorean()?'Korean':'English';}catch(_){return 'English';}};
   /* A wait that the job's Stop ends at once. The work behind it (the paper's text, which other features share)
      goes on; only this job stops waiting for it. */
   const cancelledError=()=>Object.assign(new Error('중지했습니다.'),{code:'cancelled',own:true});
@@ -617,6 +619,28 @@
    const a=aiSettings(),legacy=all[a.model+'|'+a.language];
    return all[summaryKeyOf(a)]||(legacy&&!legacy.rev?legacy:null)||null;
   }
+  /* What the reader already has around this paper (paper-chat.libraryBlock): its tags and memo, the collections it
+     is in and up to 15 other papers there, those sharing the most tags first. Titles only; '' when there is none. */
+  function libraryContext(item){
+   try{
+    if(!item)return '';
+    const tags=(item.getTags?.()||[]).map(x=>String(x.tag||x)).filter(Boolean);
+    const memo=String(runtime.entry?.(item)?.remark||'');
+    const collections=[],seen=new Set([item.id]),pool=[];
+    for(const id of (item.getCollections?.()||[]).slice(0,6)){
+     const c=Z.Collections&&Z.Collections.get?Z.Collections.get(id):null;if(!c)continue;
+     collections.push(String(c.name||''));
+     for(const other of (c.getChildItems?.(false)||[]).slice(0,400)){
+      if(!other||seen.has(other.id)||(other.isRegularItem&&!other.isRegularItem()))continue;seen.add(other.id);
+      const theirs=new Set((other.getTags?.()||[]).map(x=>String(x.tag||x)));
+      pool.push({other,shared:tags.filter(x=>theirs.has(x)).length,added:String(fieldOf(other,'dateAdded')||other.dateAdded||'')});
+     }
+    }
+    pool.sort((a,b)=>b.shared-a.shared||(b.added>a.added?1:b.added<a.added?-1:0));
+    const neighbours=pool.slice(0,15).map(({other})=>({title:fieldOf(other,'title'),year:(/\d{4}/.exec(fieldOf(other,'date'))||[''])[0]}));
+    return PC.libraryBlock({memo,tags,collections,neighbours});
+   }catch(error){log(error);return '';}
+  }
   const NO_AI='설정에서 AI 서버 주소와 모델을 먼저 입력하세요. 이 Mac의 Claude·ChatGPT 계정을 쓰려면 bridge/install.sh로 AI 브리지를 설치하세요.';
   /* Where a press sends the paper: the bridge's account, or the server's host. */
   const aiPlace=()=>{try{const s=runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;if(!s||!s.available)return '';return s.source==='bridge'?byLabel(s.provider||'claude'):String(s.label||'');}catch(_){return '';}};
@@ -627,12 +651,17 @@
    const has=!!entry&&state!=='loading';
    for(const b of [ui.summaryCopy,ui.summaryMemo,ui.summaryNoteSave,ui.summaryAgain])b.hidden=!has;
    ui.summaryStart.hidden=has||state==='loading';
-   if(state==='loading'){el(session.doc,'p',{'class':'sc-ra-muted',text:t('요약하는 중…')},ui.summaryBody);}
+   if(state==='loading'){
+    // The summary as it streams in: what has arrived, then the line saying more is coming.
+    const draft=String(session.summaryDraft||'');
+    if(draft){const box=el(session.doc,'div',{},ui.summaryBody);renderMarkdown(session.doc,box,draft,{pages:pageCount(session.reader),onPage:page=>goToPage(session,page)});}
+    el(session.doc,'p',{'class':'sc-ra-muted',text:t('요약하는 중…')},ui.summaryBody);
+   }
    else if(entry){
     renderMarkdown(session.doc,ui.summaryBody,entry.text,{pages:pageCount(session.reader),onPage:page=>goToPage(session,page)});
-    ui.summaryNote.textContent=T('{0} · {1}',byLabel(entry.by)||entry.model||t('모델 미표기'),new Date(entry.at).toLocaleDateString())+(entry.by==='codex'?' · '+t(FALLBACK_NOTE):'')+(entry.truncated?' · '+t('긴 논문이라 일부만 읽혔습니다'):'');
+    ui.summaryNote.textContent=T('{0} · {1}',byLabel(entry.by)||entry.model||t('모델 미표기'),new Date(entry.at).toLocaleDateString())+(entry.by==='codex'?' · '+t(FALLBACK_NOTE):'')+(entry.truncated?' · '+t('긴 논문이라 일부만 읽혔습니다'):'')+(entry.incomplete?' · '+t('요약이 중간에 끊겼습니다. 다시 만들어 보세요.'):'');
    }else if(state==='error'){el(session.doc,'p',{'class':'sc-ra-error',text:session.summaryError||''},ui.summaryBody);}
-   else ui.summaryNote.textContent=configured?(aiPlace()?T('눌러야 보냅니다 · {0}. 본문 일부와 제목·초록만 전송합니다.',aiPlace()):t('눌러야 AI 서버로 보냅니다. 본문 일부와 제목·초록만 전송합니다.')):t(NO_AI);
+   else ui.summaryNote.textContent=configured?(aiPlace()?T('눌러야 보냅니다 · {0}. 본문 일부, 제목·초록, 이 논문의 태그·메모와 같은 컬렉션 논문 제목을 보냅니다.',aiPlace()):t('눌러야 AI 서버로 보냅니다. 본문 일부, 제목·초록, 이 논문의 태그·메모와 같은 컬렉션 논문 제목을 보냅니다.')):t(NO_AI);
   }
   async function runSummary(session,{force=false,auto=false}={}){
    if(session.summaryState==='loading')return;
@@ -647,9 +676,14 @@
     if(session.destroyed||token.cancelled)return;
     // Frozen as the request starts, and the key it is filed under when it returns, whatever the settings are by then.
     const frozen=aiSettings(),key=summaryKeyOf(frozen);
-    const text=await runtime.assist.paperSummary({title:input.title,abstract:input.abstract,text:input.text},{language:frozen.language,signal:token});
+    session.summaryDraft='';let timer=null;
+    const refresh=()=>{timer=null;if(!session.destroyed&&session.summaryState==='loading'&&session.summaryToken===token)renderSummary(session);};
+    const onDelta=(piece,all)=>{if(token.cancelled)return;session.summaryDraft=all;if(timer===null&&!session.destroyed&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);};
+    let text,incomplete=null;
+    try{text=await runtime.assist.paperSummary({title:input.title,abstract:input.abstract,text:input.text,library:libraryContext(item)},{language:frozen.language,signal:token,onDelta,onFinish:f=>{incomplete=f&&f.incomplete||null;}});}
+    finally{session.summaryDraft='';if(timer!==null){try{session.doc.defaultView.clearTimeout(timer);}catch(_){}}}
     if(session.destroyed)return;
-    session.data.summary[key]={text,at:Date.now(),model:frozen.model,language:frozen.language,endpoint:frozen.endpoint,rev:frozen.rev,truncated:input.truncated,by:answeredBy()||undefined};
+    session.data.summary[key]={text,at:Date.now(),model:frozen.model,language:frozen.language,endpoint:frozen.endpoint,rev:frozen.rev,truncated:input.truncated,incomplete:incomplete||undefined,by:answeredBy()||undefined};
     const keys=Object.keys(session.data.summary);if(keys.length>6)delete session.data.summary[keys[0]];
     session.summaryState='done';saveSoon(session);
    }catch(error){session.summaryState='error';session.summaryError=describe(error);}
@@ -674,9 +708,10 @@
     const long=m.role==='assistant'&&!m.streaming&&String(m.content||'').length>LONG_ANSWER;
     if(long)bubble.setAttribute('data-folded',String(index!==newest&&!open.has(m.at)));
     const body=el(doc,'div',{'class':'sc-ra-md'},bubble);
-    if(m.role==='assistant')renderMarkdown(doc,body,m.content||(m.streaming?'…':''),{pages:pageCount(session.reader),onPage:page=>goToPage(session,page)});
+    if(m.role==='assistant')renderMarkdown(doc,body,(m.streaming?PC.splitFollowUps(m.content).body:m.content)||(m.streaming?'…':''),{pages:pageCount(session.reader),onPage:page=>goToPage(session,page)});
     else body.textContent=m.content;
     if(m.error)el(doc,'p',{'class':'sc-ra-error',text:m.error},bubble);
+    else if(m.role==='assistant'&&m.incomplete&&!m.streaming)el(doc,'p',{'class':'sc-ra-error',text:t('답변이 중간에 끊겼습니다. 다시 물어보세요.')},bubble);
     if(m.role==='assistant'&&m.by==='codex'&&!m.streaming)el(doc,'p',{'class':'sc-ra-msg-by',text:t(FALLBACK_NOTE)},bubble);
     if(m.role==='assistant'&&!m.streaming&&m.content){
      const actions=el(doc,'div',{'class':'sc-ra-actions sc-ra-msg-actions'},bubble);
@@ -688,6 +723,12 @@
        fold.setAttribute('aria-expanded',String(!next));
       }});
       fold.setAttribute('aria-expanded',String(!folded()));
+     }
+     // Follow-up questions under the newest answer: one press asks it.
+     if(index===newest&&Array.isArray(m.followUps)&&m.followUps.length){
+      const next=group(el(doc,'div',{'class':'sc-ra-chips sc-ra-followups','aria-label':t('이어서 물어보기')},bubble));
+      bubble.insertBefore(next,actions);
+      for(const q of m.followUps)button(session,next,{label:q,cls:'sc-ra-chip',mark:'ai',onClick:()=>{if(session.chatBusy){say(session,t('답변이 끝나면 보낼 수 있습니다. 질문은 그대로 두었습니다.'));return;}return sendQuestion(session,q,{});}});
      }
      button(session,actions,{title:'답변 복사',iconName:'copy',cls:'sc-ra-icon',mark:'view',onClick:()=>copyText(session,m.content)});
      button(session,actions,{title:'메모에 넣기',iconName:'note',cls:'sc-ra-icon',mark:'memo',onClick:()=>toMemo(session,m.content,t('AI 답변'))});
@@ -706,7 +747,7 @@
   }
   function trimChat(session){
    const clean_=session.data.chat.filter(m=>!m.streaming);
-   session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined,model:m.model||undefined,by:m.by||undefined}));
+   session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined,model:m.model||undefined,by:m.by||undefined,incomplete:m.incomplete||undefined,picked:Array.isArray(m.picked)?m.picked.slice(0,12):undefined,followUps:Array.isArray(m.followUps)&&m.followUps.length?m.followUps.slice(0,3).map(q=>String(q).slice(0,200)):undefined}));
   }
   /* The question box is an editable <div> (see buildAsk): its text, line breaks included. */
   const inputText=session=>{const n=session.ui.input;const v=typeof n.innerText==='string'?n.innerText:n.textContent;return String(v||'');};
@@ -714,13 +755,23 @@
   // While an answer is still coming, Enter keeps the typed question in the box (it was emptied and then dropped).
   const sendTyped=session=>{const q=clean(inputText(session));if(!q)return;if(session.chatBusy){say(session,t('답변이 끝나면 보낼 수 있습니다. 질문은 그대로 두었습니다.'));return;}setInputText(session,'');return sendQuestion(session,q,{});};
   const sendQuick=(session,id)=>{const q=PC.quickPrompt(id,t);return sendQuestion(session,q.question,{forcePage:q.forcePage,mine:q.mine,intent:q.intent});};
-  async function sendQuestion(session,question,{forcePage=false,mine=false,intent=null}={}){
+  /* A passage selected in the PDF, asked about from the selection popup: the question names it, the model is given
+     it whole with its page. While another answer is still coming, it waits rather than being lost. */
+  function askPassage(session,text,page){
+   const passage={text:clean(text).slice(0,2500),page};if(!passage.text)return;
+   setOpen(session,true);showTab(session,'ask');
+   if(session.chatBusy){say(session,t('답변이 끝나면 보낼 수 있습니다. 질문은 그대로 두었습니다.'));if(!clean(inputText(session)))setInputText(session,'“'+passage.text.slice(0,300)+'” ');return;}
+   const q=PC.quickPrompt('passage',t);
+   return sendQuestion(session,q.question,{passage,shown:'“'+passage.text.slice(0,240)+(passage.text.length>240?'…':'')+'”\n'+q.question});
+  }
+  async function sendQuestion(session,question,{forcePage=false,mine=false,intent=null,passage=null,shown=''}={}){
    if(session.chatBusy)return;
    // The conversation the question belongs to: the answer is written there, even if the panel's conversation is
    // cleared or replaced meanwhile.
    const thread=session.data.chat;
    const history=thread.filter(m=>!m.error).slice();
-   const user={role:'user',content:question.slice(0,CHAT_LIMIT),at:Date.now()},answer={role:'assistant',content:'',streaming:true,at:Date.now()};
+   // What the conversation shows and sends back later: the question, with the passage it was about.
+   const user={role:'user',content:(shown||question).slice(0,CHAT_LIMIT),at:Date.now()},answer={role:'assistant',content:'',streaming:true,at:Date.now()};
    // The job and the busy state start at the click, so Stop works while the paper's text is still being read:
    // Stop cancels this question only, not a summary or a translation beside it.
    const chatToken=session.chatToken=TR.token();
@@ -740,11 +791,15 @@
     const entry=summaryEntry(session);
     // Frozen as the request starts: the answer records the model and server it was asked of.
     const frozen=aiSettings();answer.model=frozen.model;
-    const {messages}=PC.chatMessages({question,history,chunks:session.chunks,summary:entry?entry.text:'',language:frozen.language,viewing,mine:own,forcePage,intent});
+    const library=mine?libraryContext(item):'';
+    const {messages,picked}=PC.chatMessages({question,history,chunks:session.chunks,summary:entry?entry.text:'',language:frozen.language,viewing,mine:own,forcePage,intent,passage,library});
+    answer.picked=picked.map(c=>c.id);
     session.ui.chatNote.textContent=notice;
     if(session.destroyed||chatToken.cancelled)throw cancelledError();
-    const text=await runtime.assist.chat(messages,{signal:chatToken,onDelta:(piece,all)=>{answer.content=all;if(timer===null&&!session.destroyed&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);}});
-    answer.content=text;answer.by=answeredBy()||undefined;
+    const text=await runtime.assist.chat(messages,{signal:chatToken,onFinish:f=>{if(f&&f.incomplete)answer.incomplete=f.incomplete;},onDelta:(piece,all)=>{answer.content=all;if(timer===null&&!session.destroyed&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);}});
+    // The suggested follow-ups are kept apart from the answer: copied, saved and sent back without them.
+    const split=PC.splitFollowUps(text);answer.content=split.body||text;if(split.followUps.length)answer.followUps=split.followUps;
+    answer.by=answeredBy()||undefined;
    }catch(error){answer.error=describe(error);}
    answer.streaming=false;if(session.chatToken===chatToken){session.chatBusy=false;session.chatToken=null;}if(timer!==null){try{session.doc.defaultView.clearTimeout(timer);}catch(_){}}
    if(!answer.content&&answer.error){
@@ -1352,6 +1407,17 @@
    b.textContent=t('여기서부터 듣기');
    b.style.cssText=`display:block;width:100%;margin-top:4px;padding:4px 10px;border-radius:${BUTTON_RADIUS};text-align:center;color:var(--fill-primary);background:var(--material-button);box-shadow:0 .5px 2.5px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.05);`;
    const r=Array.from(position.rects[0]).map(Number),pageIndex=position.pageIndex;
+   /* "AI에게 묻기" beside it when text is selected: the passage goes to the chat with its page. */
+   const selected=clean(params&&params.annotation&&params.annotation.text);
+   let ask=null;
+   if(selected){
+    ask=el(doc,'button',{type:'button','class':'sc-ra-selection-ask','data-opens':'ai','data-tabstop':'1',title:t('선택한 부분을 AI에게 묻기')});
+    ask.textContent=t('AI에게 묻기');ask.style.cssText=b.style.cssText;
+    ask.addEventListener('click',()=>{
+     const session=sessions.get(reader)||createSession(reader);if(!session)return;
+     Promise.resolve(askPassage(session,selected,pageIndex+1)).catch(error=>say(session,describe(error),true));
+    });
+   }
    b.addEventListener('click',()=>{
     const session=sessions.get(reader)||createSession(reader);if(!session)return;
     structure(session).then(()=>{
@@ -1360,7 +1426,7 @@
      return playAt(session,pageIndex,a*x+c*y+e,b_*x+d*y+f);
     }).catch(error=>say(session,describe(error),true));
    });
-   append(b);
+   if(ask)append(b,ask);else append(b);
   }
 
   /* ---- open, close, tabs ----------------------------------------------------
@@ -1798,7 +1864,7 @@
      fresh: the reader was opened by the check itself; any session sync() made for it is replaced by a probe session
      and release() destroys it (the leak check counts what is left). Otherwise the reader is the user's: release()
      only puts the panel back the way it was. */
-  const OURS_IN_DOC='[data-sc-ra],[data-sc-ra-style],.sc-ra-selection-listen',OURS_IN_VIEW='[data-sc-ra-hl]';
+  const OURS_IN_DOC='[data-sc-ra],[data-sc-ra-style],.sc-ra-selection-listen,.sc-ra-selection-ask',OURS_IN_VIEW='[data-sc-ra-hl]';
   const countIn=(doc,sel)=>{try{return doc?doc.querySelectorAll(sel).length:0;}catch(_){return 0;}};
   function diagnose(reader,{fresh=false}={}){
    if(stopped||!reader)return null;
@@ -1868,12 +1934,16 @@
       refresh:async()=>{try{return runtime.assist&&typeof runtime.assist.refresh==='function'?await runtime.assist.refresh():null;}catch(_){return null;}},
       language:()=>aiSettings().language,
       pages:()=>pageCount(reader),
-      /* One summary, exactly as the "요약 만들기" button makes it (force: an earlier one is not reused). */
-      async summary(){
+      /* One summary, exactly as the "요약 만들기" button makes it (force: an earlier one is not reused). firstMs: when
+         the first streamed text reached the panel (null when the server sent it in one piece). */
+      async summary({poll=20}={}){
        keep();await ensureReady(session);
-       const t0=Date.now();await runSummary(session,{force:true});
+       const t0=Date.now();let done=false,firstMs=null;
+       const running=runSummary(session,{force:true});running.then(()=>{done=true;},()=>{done=true;});
+       while(!done&&!session.destroyed&&firstMs===null){if(session.summaryDraft)firstMs=Date.now()-t0;else await wait(poll);}
+       await running.catch(()=>{});
        const entry=summaryEntry(session);
-       return {state:session.summaryState||'idle',error:session.summaryError||'',text:entry&&session.summaryState==='done'?String(entry.text||''):'',ms:Date.now()-t0,truncated:!!(entry&&entry.truncated)};
+       return {state:session.summaryState||'idle',error:session.summaryError||'',text:entry&&session.summaryState==='done'?String(entry.text||''):'',ms:Date.now()-t0,firstMs,truncated:!!(entry&&entry.truncated)};
       },
       /* One quick-prompt question, as its chip sends it. firstMs: when the first text reached the panel's answer.
          stopAfterFirst: the panel's Stop button is pressed as soon as that happens. */
