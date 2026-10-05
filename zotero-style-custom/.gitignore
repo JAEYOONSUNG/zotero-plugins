@@ -13,3 +13,6 @@ data/journal-registry.json
 data/if-jcr-2025.json
 # Assembled by scripts/build.py from the if-*.json sources; not a source itself.
 data/if-catalog.open.json
+
+# Real-paper extractions for test/paper-text.test.mjs: the user's own PDFs as positioned text, local only.
+test/fixtures/paper-text/

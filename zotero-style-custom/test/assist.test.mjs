@@ -46,3 +46,62 @@ test('an empty or overlong answer from the AI server is reported as such, not as
  h.respond({status:200,response:{choices:[{message:{content:'x'.repeat(100001)}}]}});
  await assert.rejects(h.api.run('translate',{title:'T'}),/너무 깁니다/);
 });
+
+/* ---- paper tasks: summary, chat (streamed or not), paragraph translation ---- */
+import PC from '../src/paper-chat.js';
+const summaryInput={title:'T',abstract:'Abstract text',text:'TITLE: T\nABSTRACT: Abstract text\nSECTIONS: A\n\nEXCERPTS:\n[A, p. 1] body'};
+test('paperSummary sends the prepared text with the five-part prompt in the output language, to the configured endpoint only',async()=>{
+ const h=harness();
+ assert.equal(await h.api.run('paperSummary',summaryInput,{language:'English'}),'Result');
+ const r=h.requests[0],body=JSON.parse(r.options.body);
+ assert.equal(r.url,'https://example.org/v1/chat/completions');assert.equal(r.options.headers.Authorization,'Bearer secret');
+ assert.match(body.messages[0].content,/Write in English/);assert.match(body.messages[0].content,/## Key findings/);
+ assert.equal(body.messages[1].content,summaryInput.text);assert.equal(body.store,false);assert.equal(body.stream,undefined);
+ await assert.rejects(h.api.run('paperSummary',{text:'x'}),/초록/);
+ const off=harness({aiEndpoint:''});await assert.rejects(off.api.paperSummary(summaryInput),/서버 주소/);assert.equal(off.requests.length,0);
+ const bad=harness({aiEndpoint:'http://remote.test/x'});await assert.rejects(bad.api.paperSummary(summaryInput));assert.equal(bad.requests.length,0);
+});
+test('chat asks for a stream, reads server-sent events as they arrive and returns the whole answer',async()=>{
+ const h=harness();const seen=[];
+ h.respond(options=>{
+  const listeners={};const xhr={readyState:0,responseText:'',getResponseHeader:()=> 'text/event-stream',addEventListener:(n,f)=>(listeners[n]||=[]).push(f)};
+  options.requestObserver(xhr);
+  const feed=text=>{xhr.readyState=3;xhr.responseText+=text;for(const f of listeners.progress||[])f();};
+  feed('data: {"choices":[{"delta":{"content":"Hel"}}]}\n\ndata: {"choices":[{"delta":{"con');
+  feed('tent":"lo (Results, p. 4)"}}]}\n\ndata: [DONE]\n\n');
+  return {status:200,responseText:xhr.responseText,getResponseHeader:()=> 'text/event-stream'};
+ });
+ const text=await h.api.chat([{role:'system',content:'S'},{role:'user',content:'Q'}],{onDelta:(piece,all)=>seen.push(all)});
+ assert.equal(text,'Hello (Results, p. 4)');assert.deepEqual(seen,['Hel','Hello (Results, p. 4)']);
+ assert.equal(JSON.parse(h.requests[0].options.body).stream,true);
+});
+test('chat falls back to one JSON answer when the server does not stream',async()=>{
+ const h=harness();const seen=[];
+ h.respond(options=>{options.requestObserver({readyState:2,getResponseHeader:()=> 'application/json',addEventListener(){}});return {status:200,response:null,responseText:'{"choices":[{"message":{"content":"Whole"}}]}',getResponseHeader:()=> 'application/json'};});
+ assert.equal(await h.api.chat([{role:'user',content:'Q'}],{onDelta:(p,a)=>seen.push(a)}),'Whole');assert.deepEqual(seen,['Whole']);
+ assert.equal(h.requests[0].options.responseType,undefined,'streaming requests read text, not json');
+});
+test('chat can be cancelled mid-stream and never echoes the key on failure',async()=>{
+ const h=harness();let cancelled=0;h.respond(options=>new Promise(()=>{options.cancellerReceiver(()=>cancelled++);}));
+ const running=h.api.chat([{role:'user',content:'Q'}]);h.api.cancel();await assert.rejects(running,/중지/);assert.equal(cancelled,1);
+ h.respond(()=>{throw Error('Bearer secret');});await assert.rejects(h.api.chat([{role:'user',content:'Q'}]),e=>!e.message.includes('secret'));
+ await assert.rejects(h.api.chat([]),/질문/);
+});
+test('chat messages from paper-chat reach the endpoint unchanged and never carry the email or key',async()=>{
+ const h=harness();const {messages}=PC.chatMessages({question:'Q?',chunks:[],language:'English'});
+ await h.api.chat(messages,{stream:false});
+ const sent=JSON.parse(h.requests[0].options.body);assert.deepEqual(sent.messages,messages);assert.doesNotMatch(h.requests[0].options.body,/secret/);
+});
+test('translateParagraphs sends a JSON batch and reads it back; a batch that does not parse is redone one paragraph at a time',async()=>{
+ const h=harness();
+ h.respond(options=>{const body=JSON.parse(options.body);const user=body.messages[1].content;return {status:200,response:{choices:[{message:{content:/^\[/.test(user)?JSON.stringify(JSON.parse(user).map(p=>'KO '+p.text)):'x'}}]}};});
+ assert.deepEqual(await h.api.translateParagraphs(['One.','Two.'],{language:'Korean'}),['KO One.','KO Two.']);
+ assert.match(JSON.parse(h.requests[0].options.body).messages[0].content,/JSON array of 2 strings/);
+ const g=harness();let n=0;
+ g.respond(options=>{n++;const user=JSON.parse(options.body).messages[1].content;return {status:200,response:{choices:[{message:{content:/^\[/.test(user)?'not json':'Single '+n}}]}};});
+ assert.deepEqual(await g.api.translateParagraphs(['A.','B.']),['Single 2','Single 3']);
+ assert.deepEqual(await g.api.translateParagraphs([]),[]);
+});
+test('available() says whether an endpoint and model are set, without calling anything',()=>{
+ assert.equal(harness().api.available(),true);assert.equal(harness({aiModel:''}).api.available(),false);
+});

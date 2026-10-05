@@ -10,9 +10,13 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "attention", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "workspace", "assist", "library", "reader-tools", "workbench", "marquee", "item-cells", "reading", "updater", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "attention", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "workspace", "paper-chat", "paper-translate", "read-aloud", "assist", "library", "reader-assist", "reader-tools", "workbench", "marquee", "item-cells", "reading", "updater", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
+    // The text extraction for the reader panel. Optional at load time: without it the panel
+    // falls back to Zotero's plain-text index (no positions, so no highlight on the page).
+    try { Services.scriptloader.loadSubScript(rootURI + "src/paper-text.js", globalThis); }
+    catch (error) { Zotero.debug("Style Custom: paper-text not loaded: " + (error && error.message)); }
     const path = PathUtils.join(Zotero.DataDirectory.dir, "style-custom.json");
     let legacy = {};
     try {

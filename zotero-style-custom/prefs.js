@@ -21,6 +21,14 @@ pref("extensions.style-custom.panelFontSize", 13);
 pref("extensions.style-custom.aiEndpoint", "");
 pref("extensions.style-custom.aiModel", "");
 pref("extensions.style-custom.aiKey", "");
+// Reader panel: the summary is made on opening only when this is on (it costs the user's AI endpoint).
+pref("extensions.style-custom.aiSummaryOnOpen", false);
+pref("extensions.style-custom.deeplApiKey", "");
+pref("extensions.style-custom.translateTarget", "auto");
+pref("extensions.style-custom.translateFormality", "default");
+pref("extensions.style-custom.readAloudSpeed", 100);
+pref("extensions.style-custom.readAloudVoice", "");
+pref("extensions.style-custom.readAloudCredit", true);
 pref("extensions.style-custom.journalRankKey", "");
 pref("extensions.style-custom.touchDateOnRead", false);
 

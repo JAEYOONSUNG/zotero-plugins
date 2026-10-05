@@ -55,6 +55,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.libraryService=Library.create({Zotero:this.Z,runtime:this});
     this.readerTools=Reader.create({Zotero:this.Z,runtime:this});
     this.assist=Assist.create({Zotero:this.Z,runtime:this});
+    // Listening, a summary, a chat and a translation inside the reader. Idle until a reader opens the panel.
+    const ReaderAssist=typeof CustomStyleReaderAssist!=="undefined"?CustomStyleReaderAssist:require("./reader-assist.js");
+    this.readerAssist=ReaderAssist.create({Zotero:this.Z,runtime:this});
   }
   // English unless the chosen language is Korean (the setting, not the OS).
   text(english, korean) { return this.i18n ? (this.i18n.isKorean() ? korean : english) : english; }
@@ -7553,7 +7556,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.stopPromise=(async()=>{
       const errors=[];
       const attempt=async fn=>{try{await fn();}catch(error){errors.push(error);}};
-      await attempt(()=>this.assist.stop());await attempt(()=>this.readerTools.stop());
+      await attempt(()=>this.assist.stop());await attempt(()=>this.readerAssist.stop());await attempt(()=>this.readerTools.stop());
       if(this.itemObserver!=null){const observer=this.itemObserver;this.itemObserver=null;await attempt(()=>this.Z.Notifier.unregisterObserver(observer));}
       if(this.metadataTimer!=null){const timer=this.metadataTimer;this.metadataTimer=null;await attempt(()=>this.metadataTimerWindow.clearTimeout(timer));}
       this.metadataIDs.clear();

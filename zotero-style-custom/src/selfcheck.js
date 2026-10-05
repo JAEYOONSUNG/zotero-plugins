@@ -1358,6 +1358,18 @@
       return taken.join(' · ') + ' · ' + columnsNote + ' → ' + dir;
     }));
 
+    /* The reader panel (listen, summary, chat, translation) on whatever readers are open: measured, never pressed. The probe
+       opens the panel for a moment, reads sizes, colours and overflow on each tab, checks that every button declares what it
+       does (data-safe / data-opens / data-writes), and puts the panel back. It does not call the speaker, an AI or a translator. */
+    results.push(await attempt('the reader panel lays out on an open reader and presses nothing', async () => {
+      if (!runtime.readerAssist || typeof runtime.readerAssist.probeAll !== 'function') throw new Error('the reader panel is not loaded');
+      const probes = await runtime.readerAssist.probeAll();
+      if (!probes.length) return 'no PDF reader is open, so there is nothing to measure';
+      const problems = probes.flatMap(p => p.problems.map(x => `reader ${p.reader}: ${x}`));
+      if (problems.length) throw new Error(problems.slice(0, 6).join(' ; ') + (problems.length > 6 ? ` ; and ${problems.length - 6} more` : ''));
+      return `${probes.length} reader(s), ${probes.reduce((n, p) => n + p.checked, 0)} elements measured on three tabs, player ${probes.map(p => p.player).join('/')}`;
+    }));
+
     const passed = results.filter(row => row.pass).length;
     return {
       version: runtime.version, when: new Date().toISOString(),

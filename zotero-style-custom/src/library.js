@@ -329,6 +329,13 @@
       note.setNote('<div>'+String(text??'').split(/\r?\n/).map(line=>'<p>'+escape(line)+'</p>').join('')+'</div>');
       await mutate([parent],()=>note.save());return String(note.id);
     }
+    /* A child note from HTML the plugin built itself (every text in it already escaped): the bilingual translation note. */
+    async function createNoteHTML(parentID,html) {
+      const parent=await get(parentID);if(!parent.isRegularItem?.())throw new Error('A regular parent item is required');guard([parent]);
+      const note=new Z.Item('note');note.libraryID=parent.libraryID;note.parentID=parent.id;
+      note.setNote(String(html??''));
+      await mutate([parent],()=>note.save());return String(note.id);
+    }
     async function noteFromAnnotations(ids) {
       if(!Array.isArray(ids))throw new Error('Select annotations explicitly');
       const input=await selected(ids);if(!input.length||input.some(i=>!i.isAnnotation?.()))throw new Error('Select annotations to extract');guard(input);
@@ -759,7 +766,7 @@
       }
       return items.length;
     }
-    return {trashItems,snapshot,graph,neighbours,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,noteFromAnnotations,synthesisNote,setRemark,memoToNote,memoConflict,resolveMemoConflict,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
+    return {trashItems,snapshot,graph,neighbours,tagTree,notes,annotations,annotationCounts,childCounts,attachments,backlinks,createNote,createNoteHTML,noteFromAnnotations,synthesisNote,setRemark,memoToNote,memoConflict,resolveMemoConflict,setTags,addTags,removeTags,restoreTags,renameTagBranch,recolorAnnotations,mergeAnnotations,setAnnotationComment,relate,unrelate,openItem,saveToCollection,collectionItems,collections};
   }
   const api={create};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CustomStyleLibrary=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

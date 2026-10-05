@@ -163,6 +163,7 @@
         const core=reader._internalReader;if(typeof core.toggleSidebar==='function'){state.sidebars.set(reader,{original:!!core._state?.sidebarOpen,applied:state.sidebarVisible});core.toggleSidebar(state.sidebarVisible);}
       }
       try{paintCards(win,state);paintRail(win,state);}catch(error){report(error);}
+      try{runtime.readerAssist?.sync(win,[...available],tabHost(win)?.Zotero_Tabs?.selectedID);}catch(error){report(error);}
       for(const[reader,control]of state.toolbars)if(!available.has(reader)){control.remove();state.toolbars.delete(reader);}
       for(const header of state.backlinkHeaders)if(!available.has(header.reader)||!header.node.isConnected){header.remove();state.backlinkHeaders.delete(header);}
       if(state.backlinkRevision!==backlinkRevision){state.backlinkRevision=backlinkRevision;for(const header of state.backlinkHeaders)header.reload();}
@@ -170,7 +171,7 @@
     function attach(win){
       alive();detached.delete(win);if(windows.has(win))return windows.get(win).cleanup;
       const state={themes:new Map(),cards:new Map(),toolbars:new Map(),backlinkHeaders:new Set(),backlinkRevision,sidebars:new Map(),theme:settings().theme,margins:settings().marginAnnotations===true,sidebarVisible:typeof settings().sidebarVisible==='boolean'?settings().sidebarVisible:undefined,verticalTabs:settings().verticalTabs===true};
-      const cleanup=()=>{if(!windows.has(win))return;detached.add(win);windows.delete(win);win.clearInterval(state.timer);win.removeEventListener('unload',cleanup);removeCards(state);state.rail?.remove();for(const c of state.toolbars.values())c.remove();state.toolbars.clear();for(const h of state.backlinkHeaders)h.remove();state.backlinkHeaders.clear();for(const[r,s]of state.sidebars)try{if(r._internalReader?._state?.sidebarOpen===s.applied)r._internalReader.toggleSidebar(s.original);}catch(e){report(e);}state.sidebars.clear();for(const [r,o]of state.themes)restoreTheme(r,o);state.themes.clear();};
+      const cleanup=()=>{if(!windows.has(win))return;try{runtime.readerAssist?.releaseWindow(win);}catch(e){report(e);}detached.add(win);windows.delete(win);win.clearInterval(state.timer);win.removeEventListener('unload',cleanup);removeCards(state);state.rail?.remove();for(const c of state.toolbars.values())c.remove();state.toolbars.clear();for(const h of state.backlinkHeaders)h.remove();state.backlinkHeaders.clear();for(const[r,s]of state.sidebars)try{if(r._internalReader?._state?.sidebarOpen===s.applied)r._internalReader.toggleSidebar(s.original);}catch(e){report(e);}state.sidebars.clear();for(const [r,o]of state.themes)restoreTheme(r,o);state.themes.clear();};
       preferredState(state);state.cleanup=cleanup;windows.set(win,state);
       state.timer=win.setInterval(()=>refresh(win,state),1000);win.addEventListener('unload',cleanup);refresh(win,state);for(const r of readers(win))r._internalReader._updateState?.({});return cleanup;
     }
@@ -404,6 +405,7 @@
       const win=reader._window;if(win.closed||detached.has(win))return;if(!windows.has(win))attach(win);const state=windows.get(win);
       state.toolbars.get(reader)?.remove();
       const container=doc.createElement('span'),button=doc.createElement('button'),menu=doc.createElement('div');
+      let assistButtons=null;try{assistButtons=runtime.readerAssist?.mountToolbar({reader,doc,container});}catch(e){report(e);}
       button.type='button';button.textContent=t('스타일');button.className='toolbar-button';button.title=t('Style Custom 리더 도구');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label',t('Style Custom 리더 도구'));container.appendChild(button);
       menu.hidden=true;menu.setAttribute('aria-label',t('리더 모양과 작업 공간'));
       menu.style.cssText='position:fixed;right:8px;top:42px;z-index:10000;padding:10px;width:235px;max-height:calc(100vh - 58px);overflow:auto;border:1px solid GrayText;border-radius:2px;background:Canvas;color:CanvasText;font:12px system-ui;';
@@ -455,7 +457,7 @@
       button.addEventListener('click',()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));});
       const key=event=>{if(event.key==='Escape')close();};doc.addEventListener('keydown',key);
       (doc.body||doc.documentElement).appendChild(menu);append(container);
-      state.toolbars.set(reader,{remove(){doc.removeEventListener('keydown',key);container.remove();menu.remove();}});
+      state.toolbars.set(reader,{remove(){doc.removeEventListener('keydown',key);assistButtons?.remove();container.remove();menu.remove();}});
     }
     function tabHost(win){return win.Zotero_Tabs?win:Z.getMainWindow?.()||win;}
     function tabs(win){win=tabHost(win);return(win.Zotero_Tabs?._tabs||[]).map(tab=>({id:tab.id,title:String(tab.title||'Library'),itemID:tab.data?.itemID??null,selected:tab.id===win.Zotero_Tabs.selectedID}));}

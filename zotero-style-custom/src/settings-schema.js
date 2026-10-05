@@ -817,6 +817,33 @@
       ]
     },
     {
+      "key": "readAloudSpeed",
+      "category": "reader",
+      "label": "읽어주기 속도 (%)",
+      "type": "number",
+      "default": 100,
+      "min": 80,
+      "max": 180,
+      "step": 10,
+      "description": "논문 읽어주기의 속도입니다. 리더 패널의 속도 막대로도 바꿀 수 있고, 마지막에 고른 값을 기억합니다."
+    },
+    {
+      "key": "readAloudVoice",
+      "category": "reader",
+      "label": "읽어주기 목소리",
+      "type": "text",
+      "default": "",
+      "description": "비워 두면 논문 언어에 맞는 시스템 음성을 자동으로 고릅니다. 리더 패널의 ‘목소리’ 메뉴에서 고르면 여기에 저장됩니다. 음성은 내 컴퓨터에 설치된 것만 쓰며 인터넷으로 보내지 않습니다."
+    },
+    {
+      "key": "readAloudCredit",
+      "category": "reader",
+      "label": "듣는 시간도 읽은 시간으로 기록",
+      "type": "boolean",
+      "default": true,
+      "description": "읽어주기로 들은 문장의 시간이 그 쪽의 읽은 시간과 진행률에 더해집니다. 이미 리더를 만지며 읽는 시간으로 세어지는 동안은 겹쳐 더하지 않습니다."
+    },
+    {
       "key": "marginWidth",
       "category": "reader",
       "label": "여백 주석 너비 (px)",
@@ -1180,6 +1207,87 @@
       "options": [
         { "value": "Korean", "label": "한국어" },
         { "value": "English", "label": "English" }
+      ]
+    },
+    {
+      "key": "aiSummaryOnOpen",
+      "category": "ai",
+      "label": "논문을 열면 AI 요약을 자동으로 만들기",
+      "type": "boolean",
+      "default": false,
+      "description": "켜면 논문을 열 때(논문마다 한 번) 제목·초록·본문 일부를 위에 입력한 AI 서버로 보내 요약을 만듭니다. 서버가 요금을 받는 서비스라면 열 때마다 비용이 듭니다. 그래서 기본은 꺼짐이고, 꺼져 있으면 리더 패널의 ‘요약 만들기’ 버튼을 눌러야만 보냅니다. 내 컴퓨터의 무료 로컬 모델(Ollama 등, http://localhost:11434/v1/chat/completions)을 연결하면 비용 없이 켜 둘 수 있습니다. 한 번 만든 요약은 저장해 두고 다시 보냅니다."
+    },
+    {
+      "key": "deeplApiKey",
+      "category": "ai",
+      "label": "DeepL API 키 (논문 번역)",
+      "type": "password",
+      "default": "",
+      "secret": true,
+      "description": "리더 패널의 ‘번역’에서 문단별 번역에만 씁니다. deepl.com에서 무료 키(:fx로 끝남, 한 달 50만 자)를 받을 수 있고, 키 끝으로 무료/유료 서버를 알아서 고릅니다. 키는 DeepL 서버의 인증 헤더에만 보내며 번역 버튼을 눌렀을 때만 사용합니다. 비워 두면 위의 AI 서버, 그다음 Translate for Zotero 플러그인이 있으면 그것을 씁니다."
+    },
+    {
+      "key": "translateTarget",
+      "category": "ai",
+      "label": "논문 번역 언어",
+      "type": "select",
+      "default": "auto",
+      "description": "자동은 패널 언어(한국어면 한국어, 영어면 English)를 따릅니다.",
+      "options": [
+        {
+          "value": "auto",
+          "label": "패널 언어를 따름"
+        },
+        {
+          "value": "KO",
+          "label": "한국어"
+        },
+        {
+          "value": "EN-US",
+          "label": "English"
+        },
+        {
+          "value": "JA",
+          "label": "日本語"
+        },
+        {
+          "value": "ZH-HANS",
+          "label": "中文(简体)"
+        },
+        {
+          "value": "DE",
+          "label": "Deutsch"
+        },
+        {
+          "value": "FR",
+          "label": "Français"
+        },
+        {
+          "value": "ES",
+          "label": "Español"
+        }
+      ]
+    },
+    {
+      "key": "translateFormality",
+      "category": "ai",
+      "label": "번역 말투 (DeepL)",
+      "type": "select",
+      "default": "default",
+      "description": "독일어·프랑스어·일본어 등 격식 구분이 있는 언어에만 적용됩니다. 한국어에는 DeepL이 말투 선택을 지원하지 않습니다.",
+      "options": [
+        {
+          "value": "default",
+          "label": "기본"
+        },
+        {
+          "value": "prefer_more",
+          "label": "격식체 쪽"
+        },
+        {
+          "value": "prefer_less",
+          "label": "편한 말투 쪽"
+        }
       ]
     },
     {
