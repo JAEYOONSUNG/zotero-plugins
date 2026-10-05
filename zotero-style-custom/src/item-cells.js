@@ -264,7 +264,12 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       listen(doc.documentElement, "mouseleave", leave, false);
       const treeNode = doc.querySelector?.(TREE);
       if (treeNode) listen(treeNode, "mouseleave", leave, false);
-      listen(doc, "mouseout", out, true);
+      /* In Zotero the document-level capture listener for mouseout never fired (the
+         self-check counted 0), while the same registration for mouseover did; the
+         window sees the capture phase first, before anything on the document can
+         stop it, and the tree itself hears the bubble. */
+      listen(win, "mouseout", out, true);
+      if (treeNode) listen(treeNode, "mouseout", out, false);
       // A scroll moves rows under a still pointer; the mark would sit on a row that is no longer hovered.
       listen(doc, "scroll", leave, true);
       listen(win, "blur", leave, false);

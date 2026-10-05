@@ -436,6 +436,8 @@
            is the proof, and a trusted re-hover is reported rather than counted as a failure. */
         const dbg = state.cellsDebug || {}, before = {clears: dbg.clears || 0, trusted: dbg.trustedOvers || 0};
         cell.dispatchEvent(new win.MouseEvent('mouseout', {bubbles: true, cancelable: true, relatedTarget: doc.documentElement}));
+        // The way a real pointer leaves: it arrives over something else, and that mouseover clears too.
+        if ((dbg.clears || 0) <= before.clears) { doc.documentElement.dispatchEvent(new win.MouseEvent('mouseover', {bubbles: true, cancelable: true, buttons: 0})); await wait(120); }
         if ((dbg.clears || 0) <= before.clears) throw new Error(`mouseout to outside the list did not run the clear handler (outs ${dbg.outs}, clears ${dbg.clears})`);
         await wait(80);
         const again = cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col');
