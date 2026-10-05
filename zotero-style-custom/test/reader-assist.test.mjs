@@ -69,7 +69,7 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
   return {status:200,response:{choices:[{message:{content}}]},responseText:JSON.stringify({choices:[{message:{content}}]}),getResponseHeader:()=> 'application/json'};
  }};
  const allPrefs={aiEndpoint:'https://example.org/v1/chat/completions',aiModel:'m1',aiKey:'secret-key',deeplApiKey:'',translateTarget:'KO',translateFormality:'default',...prefs};
- const allSettings={aiLanguage:'English',aiSummaryOnOpen:false,readAloudSpeed:100,readAloudVoice:'',readAloudCredit:true,...settings};
+ const allSettings={aiLanguage:'English',aiSummaryOnOpen:false,readAloudSpeed:100,readAloudVoice:'',readAloudVoiceKo:'',readAloudHeadings:false,readAloudCredit:true,...settings};
  const remarks=new Map(),memoCalls=[],notes=[],readings=[];
  const Z={Items:{get:id=>id===11?attachment:id===10?parent:null},HTTP:http,DataDirectory:{dir:'/data'},logError:e=>{(Z.errors||(Z.errors=[])).push(e);},Reader:{_readers:[reader]},PDFWorker:{async getFullText(){return {text:'Abstract\n\nPlain text. Second sentence.'};}},isMac:true};
  const runtime={cache:runtimeState||{},dirty:false,rootURI:'file:///plugin/',io:fileIO,paths:{join:(...p)=>p.join('/')},i18n:{isKorean:()=>false},t:I18N.t,
@@ -400,9 +400,9 @@ test('the player bar: play/pause, skip sentence, skip section, rate, voice and t
  const f=fixture();await f.open();
  f.press(f.byText('Read body only'));await settle(20);f.synth.begin();await settle();
  f.press(f.byText('Next sentence'));await settle();
- assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 degrees Celsius.');
  f.press(f.byText('Next section'));await settle();
- assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Variant M7 retained 80 percent activity after 30 minutes at 95 C.');
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Variant M7 retained 80 percent activity after 30 minutes at 95 degrees Celsius.');
  f.press(f.byText('Previous section'));await settle();
  f.press(f.byText('Pause'));await settle();assert.ok(f.synth.log.some(l=>l[0]==='pause'));
  f.press(f.byText('Carry on reading'));await settle();assert.ok(f.synth.log.some(l=>l[0]==='resume'));
@@ -442,7 +442,7 @@ test('the last position is remembered and offered as "이어서 듣기" in the n
  const g=fixture({io});await g.open();await settle(10);
  const resume=g.panel().querySelector('.sc-ra-more .sc-ra-link');assert.equal(resume.hidden,false);assert.match(resume.textContent,/Continue listening · p\. 3/);
  g.press(resume);await settle(20);
- assert.equal(g.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
+ assert.equal(g.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 degrees Celsius.');
  g.stop();
 });
 
@@ -456,7 +456,7 @@ test('Alt(Option)+double-click on the page starts reading at the sentence there,
  dbl(122,false);await settle(30);assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak'),[],'a plain double-click is how a word is selected');
  assert.match(f.byText('Read body only').title,/Alt\(Option\)\+double-click/,'the gesture is in the tooltip');
  dbl(122,true);await settle(30);
- assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 degrees Celsius.');
  f.stop();
 });
 
@@ -691,7 +691,7 @@ test('the selection popup offers "여기서부터 듣기", which starts at the s
  let node=null;f.service.selectionPopup({reader:f.reader,doc:f.doc,params:{annotation:{position:{pageIndex:2,rects:[[80,792-128,200,792-116]]}}},append:n=>{node=n;}});
  assert.ok(node);assert.equal(node.textContent,'Listen from here');assert.equal(node.getAttribute('data-opens'),'audio');
  node.dispatchEvent(new f.win.Event('click'));await settle(30);
- assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 degrees Celsius.');
  f.stop();
 });
 
@@ -1036,7 +1036,7 @@ test('Alt+double-click on a page the reader has turned 90° reads the sentence u
  const at={x:a*ux+c*uy+e,y:b*ux+d*uy+g};
  const dbl=(doc,node,x,y)=>{const ev=new doc.defaultView.Event('dblclick',{bubbles:true});Object.assign(ev,{clientX:x,clientY:y,altKey:true});Object.defineProperty(ev,'target',{value:node});node.dispatchEvent(ev);};
  dbl(f.viewDoc,page,at.x,at.y);await settle(30);
- assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)?.[1],'Kinetics were measured at 72 C.');
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)?.[1],'Kinetics were measured at 72 degrees Celsius.');
  // the second pane of a split view
  const second=parseHTML('<html><body><div class="page" data-page-number="4"></div></body></html>');
  f.reader._internalReader._secondaryView={_iframeWindow:{document:second.document,PDFViewerApplication:{pdfViewer:{getPageView:()=>({viewport:ReaderAssist.viewportFor([0,0,612,792],0)})}}}};
@@ -1044,7 +1044,7 @@ test('Alt+double-click on a page the reader has turned 90° reads the sentence u
  const p4=second.document.querySelector('.page');p4.getBoundingClientRect=()=>({left:0,top:0,width:612,height:792});
  f.synth.log.length=0;
  dbl(second.document,p4,100,106);await settle(30);
- assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)?.[1],'Variant M7 retained 80 percent activity after 30 minutes at 95 C.');
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)?.[1],'Variant M7 retained 80 percent activity after 30 minutes at 95 degrees Celsius.');
  f.stop();
 });
 
@@ -1157,7 +1157,7 @@ test('keys: Option+Shift+K plays and pauses from the PDF with the panel closed, 
  assert.deepEqual(spoken(f),['Libraries were screened by compartmentalised self-replication.'],'from the page on screen, like the toolbar ▶');
  assert.equal(f.panel().hidden,true,'the panel stays closed');
  f.synth.begin();await settle();
- keyDown(f,page,'KeyL');await settle(10);assert.equal(spoken(f).at(-1),'Kinetics were measured at 72 C.');
+ keyDown(f,page,'KeyL');await settle(10);assert.equal(spoken(f).at(-1),'Kinetics were measured at 72 degrees Celsius.');
  keyDown(f,page,'KeyJ');await settle(10);assert.equal(spoken(f).at(-1),'Libraries were screened by compartmentalised self-replication.');
  f.synth.begin();await settle();
  keyDown(f,f.doc.body,'KeyK');await settle(10);
@@ -1332,5 +1332,44 @@ test('translating through the local bridge counts against the Mac\'s Claude/Chat
  const text=f.panel().querySelector('.sc-ra-tr').textContent;
  assert.doesNotMatch(text,/fees|charges|billed/i);
  assert.match(text,/Tokens through the AI bridge: about \d+ · from the allowance of Claude account \(this Mac\)/);
+ f.stop();
+});
+
+/* ---- what the listener hears (round 3) ---- */
+test('with headings on (the default), each section begins with its heading, said once as its own utterance',async()=>{
+ const f=fixture({settings:{readAloudHeadings:true}});await f.sync();
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);
+ assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak').map(l=>l[1]),['Methods.','Libraries were screened by compartmentalised self-replication.'],'the heading, then the sentence');
+ f.synth.begin();await settle();
+ assert.equal(f.sessionOf().player.state().index,f.sessionOf().player.units().findIndex(u=>/^Libraries/.test(u.text)),'the heading highlights its first sentence');
+ f.stop();
+});
+const koreanPaper=()=>({title:'유전자 발현 연구',abstract:'We measured gene expression.',
+ sections:[{heading:'Abstract',level:1,page:0,kind:'abstract',paragraphs:[para(0,'We measured gene expression in bacteria.','The abstract is in English.')]},
+  {heading:'서론',level:1,page:1,kind:'body',paragraphs:[para(1,'본 연구에서는 유전자 발현과 단백질 수준을 측정하였다.','세포를 37 °C에서 배양하였다.','결과는 유의하였다.','다음 실험을 진행하였다.')]},
+  {heading:'결과',level:1,page:2,kind:'body',paragraphs:[para(2,'단백질 수준이 두 배 증가하였다.','전사량도 함께 늘었다.','이 효과는 반복 실험에서도 같았다.')]}],
+ captions:[],references:[],footnotes:[],skipped:{headers:[],footers:[],pageNumbers:[]},stats:{bodyChars:400,totalChars:500,pages:3,columns:1}});
+test('a Korean paper with an English abstract is read with a Korean voice, which is remembered apart from the English one',async()=>{
+ const f=fixture({structured:koreanPaper(),settings:{readAloudVoice:'v-en'}});await f.open();f.press(f.byText('Read body only'));await settle(20);
+ const p=f.sessionOf().player;
+ assert.equal(p.state().voiceURI,'v-ko','the body decides, not the opening English abstract');
+ assert.match(f.synth.log.filter(l=>l[0]==='speak').map(l=>l[1]).join(' '),/[가-힣]/);
+ const toggle=f.panel().querySelector('[aria-label="Choose a voice"]');f.press(toggle);await settle();
+ const items=[...f.panel().querySelectorAll('.sc-ra-menu-item')];
+ assert.ok(items.some(i=>/Yuna/.test(i.textContent))&&!items.some(i=>/Samantha/.test(i.textContent)),'Korean voices are offered');
+ f.press(items.find(i=>/Yuna/.test(i.textContent)));await settle();
+ assert.equal(f.allSettings.readAloudVoiceKo,'v-ko','saved for Korean papers');
+ assert.equal(f.allSettings.readAloudVoice,'v-en','the English papers\' voice is left alone');
+ f.stop();
+});
+test('choosing 자동 (Automatic) gives the player the ranked voice, not the system default',async()=>{
+ const voices=[{voiceURI:'v-fred',name:'Fred',lang:'en-US',localService:true,default:true},{voiceURI:'v-aman',name:'Aman',lang:'en-IN',localService:true},{voiceURI:'v-sam',name:'Samantha',lang:'en-US',localService:true}];
+ const f=fixture({voices});await f.open();f.press(f.byText('Read body only'));await settle(20);
+ const p=f.sessionOf().player;assert.equal(p.state().voiceURI,'v-sam','the first ▶ picks Samantha');
+ const toggle=()=>f.panel().querySelector('[aria-label="Choose a voice"]');
+ f.press(toggle());await settle();f.press([...f.panel().querySelectorAll('.sc-ra-menu-item')].find(i=>/Aman/.test(i.textContent)));await settle();
+ assert.equal(p.state().voiceURI,'v-aman');
+ f.press(toggle());await settle();f.press([...f.panel().querySelectorAll('.sc-ra-menu-item')].find(i=>/Automatic/.test(i.textContent)));await settle();
+ assert.equal(p.state().voiceURI,'v-sam','Automatic is the same choice as the first ▶');assert.equal(f.allSettings.readAloudVoice,'');
  f.stop();
 });

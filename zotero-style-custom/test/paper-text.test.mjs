@@ -958,3 +958,12 @@ test("the shipped module has no dependency on the DOM or on Zotero", () => {
   assert.equal(typeof globalThis.StyleCustomPaperText, "object");
   assert.equal(globalThis.StyleCustomPaperText, PT);
 });
+
+test("a name with a number range or a product code is not taken for a glued citation in the spoken text", () => {
+  assert.equal(PT.spokenOf("with other synthetic DNA1,4,45."), "with other synthetic DNA.");
+  assert.equal(PT.spokenOf("as reported for plasmids3–5."), "as reported for plasmids.");
+  // pnas p7, science p10, nature methods, nar2025: identifiers, not citations
+  assert.equal(PT.spokenOf("such as the SMC1–6 complexes in humans."), "such as the SMC1–6 complexes in humans.");
+  assert.equal(PT.spokenOf("8 μl of DAPI and FM4-64 stain mix (5 μg/ml FM4-64) were spotted."), "8 μl of DAPI and FM4-64 stain mix (5 μg/ml FM4-64) were spotted.");
+  assert.equal(PT.spokenOf("the Native Barcoding Kit (SQK-NBD112-24) and FF520-Di01-25, as before."), "the Native Barcoding Kit (SQK-NBD112-24) and FF520-Di01-25, as before.");
+});

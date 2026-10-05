@@ -212,7 +212,14 @@ const sourceFiles = fs.readdirSync(srcDir).filter(name => name.endsWith(".js") &
    - draft keys and query-string keys: identifiers, not words.
    - the Korean search examples: shown only when the panel is Korean, with the
      English set (title:word ...) shown otherwise.
-   - the language setting itself: each language is named in its own language. */
+   - the language setting itself: each language is named in its own language.
+   - read-aloud.js's speech words ("마이크로몰", "알파" ...): what a Korean voice says for a symbol in a paper,
+     chosen by the voice's language, never shown on screen. They sit between two markers in that file. */
+const speechWords = (name, source) => {
+  if (name !== "read-aloud.js") return () => false;
+  const a = source.indexOf("/* ---- what the voice is given"), b = source.indexOf("/* ---- engines");
+  return index => a >= 0 && b > a && index > a && index < b;
+};
 const KEEP_KOREAN = new Set([
   "\n\n--- 이 컴퓨터의 메모 ---\n", "|새 노트 내용|0",
   "-단어", "“구절”", "제목:단어", "-저자:김", "연도:2018-2022", "태그:methods", "저널:Nat Methods", "컬렉션:Review",
@@ -228,10 +235,11 @@ test("every Korean string in the source has English", () => {
   let total = 0;
   for (const name of sourceFiles) {
     if (name === "selfcheck.js") continue;
-    const {out} = koreanLiterals(fs.readFileSync(new URL(name, srcDir), "utf8"));
-    for (const {text, line} of out) {
+    const source = fs.readFileSync(new URL(name, srcDir), "utf8"), spoken = speechWords(name, source);
+    const {out} = koreanLiterals(source);
+    for (const {text, line, index} of out) {
       total++;
-      if (KEEP_KOREAN.has(text)) continue;
+      if (KEEP_KOREAN.has(text) || spoken(index)) continue;
       if (/[가-힣]/.test(i18n.t(text))) gaps.push(`${name}:${line} ${JSON.stringify(text).slice(0, 90)}`);
     }
   }

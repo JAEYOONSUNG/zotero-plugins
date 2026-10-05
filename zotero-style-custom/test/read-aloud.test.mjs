@@ -30,8 +30,8 @@ test('sentences split at ends, not at abbreviations, initials or decimals; Korea
   ['We grew E. coli in LB, e.g. at 37 degrees.','Fig. 2 shows 3.5-fold growth.','J. Smith agreed.','결과는 유의했다.','다음 실험을 했다!']);
 });
 
-test('a sentence over 200 characters is cut at clause commas for the engine and never mid-word',()=>{
- const long='alpha beta gamma delta, '.repeat(14)+'omega.';
+test('a sentence over the engine limit is cut at clause commas for the engine and never mid-word',()=>{
+ const long='alpha beta gamma delta, '.repeat(24)+'omega.';
  const chunks=RA.splitForEngine(long);
  assert.ok(chunks.length>=2);assert.ok(chunks.every(c=>c.length<=RA.CHUNK_MAX));
  assert.equal(chunks.join(' ').replace(/\s+/g,' '),long.replace(/\s+/g,' ').trim());
@@ -362,4 +362,140 @@ test('destroy cancels the queue only while this engine owns the utterance, and d
 test('the plain-text headings recognise Korean section names',()=>{
  const s=RA.plainTextStructure('서론\n\n첫 문단입니다. 둘째 문장입니다.\n\n방법\n\n방법 문단입니다.\n\n결과\n\n결과 문단입니다.');
  assert.deepEqual(s.sections.map(x=>x.heading),['서론','방법','결과']);
+});
+
+/* ---- what the listener hears (round 3) ------------------------------------------------------------------
+   Every case below is a sentence taken from the 17 real-paper fixtures (or the exact form it has there). */
+test('symbols, units and signs are spoken as words, not read as glyphs or dropped',()=>{
+ const S=t=>RA.speechText(t,'en');
+ assert.equal(S('stored at 4°C until use, then 72 ◦C, 4ºC and −20 °C.'),'stored at 4 degrees Celsius until use, then 72 degrees Celsius, 4 degrees Celsius and minus 20 degrees Celsius.');
+ assert.equal(S('collecting additional data at a −30° tilt.'),'collecting additional data at a minus 30 degrees tilt.');
+ assert.equal(S('Kinetic parameters for riboflavin (0–250 μM) and NADH (10 µM).'),'Kinetic parameters for riboflavin (0 to 250 micromolar) and NADH (10 micromolar).');
+ assert.equal(S('with 1 mM IPTG and 200 μg/mL X-gal; 190 μl were dispensed; 1 μg/ml lysozyme.'),'with 1 millimolar IPTG and 200 micrograms per milliliter X-gal; 190 microliters were dispensed; 1 microgram per milliliter lysozyme.');
+ assert.equal(S('selection for the helper plasmid (+5, 5 μg ml⁻¹ tetracycline)'),'selection for the helper plasmid (plus 5, 5 micrograms per milliliter tetracycline)');
+ assert.equal(S('restrained (20 kcal·mol⁻¹·Å⁻²) at 2.8 Å over ~4000 Å².'),'restrained (20 kilocalories per mole per square angstrom) at 2.8 angstroms over about 4000 square angstroms.');
+ assert.equal(S('were 68 ± 3.3 and 44.3 ± 2.2 U/mg'),'were 68 plus or minus 3.3 and 44.3 plus or minus 2.2 units per milligram');
+ assert.equal(S('centrifuged at 11,000 × g for 1h, then 48 h and 10 min, vortexed for 5 s.'),'centrifuged at 11,000 times g for 1 hour, then 48 hours and 10 minutes, vortexed for 5 seconds.');
+ assert.equal(S('approximately 1x10⁸ CFU/ml; adjusted P value <1 × 10⁻⁵; more than 10⁴ SNPs; 2 × 10^5 cells'),'approximately 1 times 10 to the 8 CFU per milliliter; adjusted P value less than 1 times 10 to the minus 5; more than 10 to the 4 SNPs; 2 times 10 to the 5 cells');
+ assert.equal(S('* = p < 0.05; q value < 0.05; P = 0.002; a defense score of >0.3 and size >=10 and score ≥ 0.4, q ≤ 0.05'),'p less than 0.05; q value less than 0.05; P = 0.002; a defense score of more than 0.3 and size greater than or equal to 10 and score greater than or equal to 0.4, q less than or equal to 0.05');
+ assert.equal(S('(monomer Mr ~27 kDa) for ∼4 h at an OD600 of ∼0.3, detected by 10∼15 probes (≈ 27 kDa)'),'(monomer Mr about 27 kilodaltons) for about 4 hours at an OD600 of about 0.3, detected by 10 to 15 probes (about 27 kilodaltons)');
+ assert.equal(S('the CTD exhibits a β-α-β-β-β topology; helix α6; strain DH5α; ΔpyrF and λ-red; a ∆G of 2 kcal'),'the CTD exhibits a beta-alpha-beta-beta-beta topology; helix alpha 6; strain DH5 alpha; delta pyrF and lambda-red; a delta G of 2 kilocalories');
+});
+test('ions, primes, citations set as superscripts and the glyph quirks of real PDFs',()=>{
+ const S=t=>RA.speechText(t,'en');
+ assert.equal(S('depletes cellular NAD⁺ and Mg²⁺ but not Cl⁻.'),'depletes cellular NAD plus and Mg 2 plus but not Cl minus.');
+ assert.equal(S('the 5′-UTR, the 3′ -end mRNA and Arg200′ of the other subunit'),'the 5 prime UTR, the 3 prime end mRNA and Arg200 prime of the other subunit');
+ assert.equal(S('both of which have 5’-GAGCC-3’ sites; 25 bp 3’ to the site; the 5⁰-AGACT-3⁰ was modified'),'both of which have 5 prime GAGCC 3 prime sites; 25 base pairs 3 prime to the site; the 5 prime AGACT 3 prime was modified');
+ assert.equal(S('misincorporation of 8-hydroxy-2=-deoxyguanosine and 2=,7=-dichlorodihydrofluorescein; n=3'),'misincorporation of 8-hydroxy-2 prime deoxyguanosine and 2 prime, 7 prime dichlorodihydrofluorescein; n=3');
+ assert.equal(S('transitions (i.e., A ¡ G and C ¡ T)'),'transitions (that is, A to G and C to T)');
+ assert.equal(S('performed using WARP v1.09⁵¹, then cryoSPARC v3.2⁵² and Sniffles2⁵⁰; T3 is susceptible to restriction ³.'),'performed using WARP v1.09, then cryoSPARC v3.2 and Sniffles2; T3 is susceptible to restriction.');
+ assert.equal(S('labeled with ′ Alexa ′ Fluor 514'),'labeled with Alexa Fluor 514');
+ assert.equal(S('using dual-indexing sequencing primers, a prime-boost and primed cells.'),'using dual-indexing sequencing primers, a prime-boost and primed cells.','the word prime is left alone');
+ assert.equal(S('EM·DNT and msf·GFP; Sigma−Aldrich and qRT−PCR'),'EM DNT and msf GFP; Sigma-Aldrich and qRT-PCR');
+});
+test('ranges, dashes, abbreviations, figure references and links',()=>{
+ const S=t=>RA.speechText(t,'en');
+ assert.equal(S('residues 88–123 and cycles 2–4; RMF–HPF–100S dimers; SDS– PAGE; host and—at least in some cases—DNA damage'),'residues 88 to 123 and cycles 2 to 4; RMF-HPF-100S dimers; SDS-PAGE; host and, at least in some cases, DNA damage');
+ assert.equal(S('Some systems (e.g. type III), as shown (Fig. 2A; Figs. 3–5; Eq. 3) by Mural et al. vs. wild type, cf. Ref. 4'),'Some systems (for example type III), as shown (Figure 2A; Figures 3 to 5; Equation 3) by Mural et al versus wild type, compare Reference 4');
+ assert.equal(S('We sequenced ca. 100 clones from Burkholderia sp. R34 at pH8.0 (Supplementary Table S3).'),'We sequenced about 100 clones from Burkholderia species R34 at pH 8.0 (Supplementary Table S3).');
+ assert.equal(S('designed (GC%: 50, https://faculty.ucr.edu/~mmaduro/ random.htm), see doi:10.1038/s41586-020-1234-5 or www.example.org.'),'designed (GC%: 50, a web link random.htm), see a DOI or a web link.');
+ assert.equal(S('taking into consideration that (i) degradation results in ROS and (ii) damage, and (iii) more'),'taking into consideration that (1) degradation results in ROS and (2) damage, and (3) more');
+ assert.equal(S('A plain sentence stays exactly as it is.'),'A plain sentence stays exactly as it is.');
+ // pnas: an en dash set as a minus; nar2025: "<∼10"; crampton: "20 l" whose µ the font lost is not "20 liters"
+ assert.equal(S('defocus: –0.8 to –2.2 μm, ranges 10 – 20 and 10–20'),'defocus: minus 0.8 to minus 2.2 micrometers, ranges 10 to 20 and 10 to 20');
+ assert.equal(S('the average pause lifetime was <∼10 s.'),'the average pause lifetime was less than about 10 seconds.');
+ assert.equal(S('in a final volume of 20 l, or 2 L.'),'in a final volume of 20 l, or 2 liters.');
+});
+test('a Korean voice hears Korean words for the same symbols',()=>{
+ const K=t=>RA.speechText(t,'ko');
+ assert.equal(K('37 °C에서 50 μM, 68 ± 3.3, 10–20 분, ~5 h, p < 0.05, α-나선'),'37도에서 50 마이크로몰, 68 플러스 마이너스 3.3, 10에서 20 분, 약 5 시간, p 0.05 미만, 알파-나선');
+ assert.equal(K('100 μg/mL 암피실린, NAD⁺, 10⁻³, 예: Fig. 2'),'100 마이크로그램 퍼 밀리리터 암피실린, NAD 플러스, 10의 마이너스 3승, 예: 그림 2');
+});
+test('a unit used as an adjective stays singular; a bracketed name is not a comparison',()=>{
+ const S=t=>RA.speechText(t,'en');
+ assert.equal(S('loaded onto a 5 ml Ni-NTA cartridge in 5 ml buffer'),'loaded onto a 5 milliliter Ni-NTA cartridge in 5 milliliters buffer');
+ assert.equal(S('the ratio (<3′ -end mRNA>/<5′ -end mRNA>) at P<0.05 and q>0.1'),'the ratio (3 prime end mRNA/5 prime end mRNA) at P less than 0.05 and q greater than 0.1');
+ assert.equal(S('targeting substrates with a 5’ovh, as in Blow et al.,.'),'targeting substrates with a 5 prime ovh, as in Blow et al.');
+});
+test('pause, then next, then resume: the paused speech queue is resumed, so the new sentence is heard',()=>{
+ const {p,engine}=player();
+ p.play();engine.begin();p.pause();
+ p.next();p.resume();
+ const log=engine.log.map(l=>l[0]+(l[1]?':'+l[1]:''));
+ const lastSpeak=log.lastIndexOf('speak:Two.');
+ assert.ok(lastSpeak>0);
+ assert.ok(log.slice(log.lastIndexOf('pause')).includes('resume'),'the engine left paused by pause() is resumed: '+log.join(' '));
+ assert.ok(log.lastIndexOf('resume')<lastSpeak,'before the new sentence is queued');
+ assert.equal(p.state().status,'playing');
+ // a plain play after a seek while nothing was paused does not resume anything
+ const b=player();b.p.seek(2);b.p.play();assert.ok(!b.engine.log.some(l=>l[0]==='resume'));
+});
+test('each section is announced by its heading once, empty parent headings included; units carry their paragraph',async()=>{
+ const PT=(await import('../src/paper-text.js')).default;
+ const s=(text,page=0)=>({text,spoken:text,page,rects:[]});
+ const structured={sections:[
+  {heading:'RESULTS',spoken:'Results',level:1,kind:'body',page:0,paragraphs:[]},
+  {heading:'2.1. Data-driven culturomics',spoken:'2.1. Data-driven culturomics',level:2,kind:'body',page:0,paragraphs:[{sentences:[s('One.'),s('Two.')]},{sentences:[s('Three.')]}]},
+  {heading:'Discussion',spoken:'Discussion',level:1,kind:'body',page:1,paragraphs:[{sentences:[s('Discussion of it follows.',1)]}]},
+  {heading:'',level:1,kind:'body',page:1,paragraphs:[{sentences:[s('Unheaded.',1)]}]}]};
+ const units=RA.composeUnits(structured,{},PT);
+ assert.deepEqual(units.map(u=>u.lead||null),['Results. Data-driven culturomics',null,null,null,null]);
+ assert.deepEqual(units.map(u=>u.paragraphIndex),[0,0,1,0,0]);
+ assert.equal(units[3].lead,undefined,'a heading the first sentence already says is not said twice');
+ const wiley=RA.composeUnits({sections:[{heading:'| Materials and methods',kind:'body',paragraphs:[{sentences:[s('Cells grew.')]}]}]},{},PT);
+ assert.equal(wiley[0].lead,'Materials and methods','a layout bar before the heading (Wiley) is not said');
+});
+test('the player says the heading before a section, and pauses at paragraph and section ends',()=>{
+ const timers=new Map();let id=0;
+ const engine=fakeEngine();
+ const u=(text,si,pi,extra={})=>({...unit(text,1,si,extra),paragraphIndex:pi});
+ const units=[u('One.',1,0,{lead:'Results'}),u('Two.',1,0),u('Three.',1,1),u('Four.',2,0,{lead:'Discussion'})];
+ const p=RA.create({engine,watchdogMs:0,pauses:{paragraph:500,section:900},timers:{set:(fn,ms)=>{timers.set(++id,{fn,ms});return id;},clear:k=>timers.delete(k)}});
+ p.load(units);p.play();
+ const said=()=>engine.log.filter(l=>l[0]==='speak').map(l=>l[1]);
+ assert.deepEqual(said(),['Results.','One.'],'the heading goes first, as its own utterance');
+ engine.step();assert.equal(p.state().index,0,'the heading belongs to the first sentence');
+ engine.step();assert.deepEqual(said(),['Results.','One.','Two.'],'same paragraph: queued at once, no gap');
+ engine.step();assert.deepEqual(said(),['Results.','One.','Two.'],'a new paragraph waits');
+ const [k,t]=[...timers][0];assert.equal(t.ms,500);timers.delete(k);t.fn();
+ assert.deepEqual(said().slice(-1),['Three.']);
+ engine.step();const [k2,t2]=[...timers][0];assert.equal(t2.ms,900,'a longer pause before a new section');
+ p.pause();assert.equal(timers.size,0,'pausing in the gap cancels it');assert.equal(p.state().index,3,'and moves on to the sentence that was due');
+ p.resume();assert.deepEqual(said().slice(-2),['Discussion.','Four.']);
+ p.setRate(1.5);engine.begin();engine.finish();engine.step();assert.equal(p.state().status,'done');
+});
+/* The voices this Mac's Gecko lists, in its order (NSSpeechSynthesizer.availableVoices, alphabetical), system default Korean. */
+const MAC_VOICES=[['Albert','com.apple.speech.synthesis.voice.Albert','en-US'],['Aman','com.apple.voice.Aman','en-IN'],['Bad News','com.apple.speech.synthesis.voice.BadNews','en-US'],
+ ['Daniel','com.apple.voice.compact.en-GB.Daniel','en-GB'],['Eddy (영어(미국))','com.apple.eloquence.en-US.Eddy','en-US'],['Eddy (한국어(한국))','com.apple.eloquence.ko-KR.Eddy','ko-KR'],
+ ['Flo (한국어(한국))','com.apple.eloquence.ko-KR.Flo','ko-KR'],['Fred','com.apple.speech.synthesis.voice.Fred','en-US'],['Grandma (영어(미국))','com.apple.eloquence.en-US.Grandma','en-US'],
+ ['Karen','com.apple.voice.compact.en-AU.Karen','en-AU'],['Rocko (한국어(한국))','com.apple.eloquence.ko-KR.Rocko','ko-KR'],['Samantha (영어(미국))','com.apple.voice.compact.en-US.Samantha','en-US'],
+ ['Superstar','com.apple.speech.synthesis.voice.Princess','en-US'],['Wobble','com.apple.speech.synthesis.voice.Deranged','en-US'],['Yuna (한국어(한국))','com.apple.voice.compact.ko-KR.Yuna','ko-KR',true]]
+ .map(([name,id,lang,def])=>({name,voiceURI:'urn:moz-tts:osx:'+id,lang,localService:true,default:!!def}));
+test('automatic voice: a natural voice for the language, never an Indian-English, Eloquence or novelty voice that sorts first',()=>{
+ assert.match(RA.pickVoice(MAC_VOICES,'en').name,/^Samantha/,'not Aman, the first English voice in the list');
+ assert.match(RA.pickVoice(MAC_VOICES,'ko').name,/^Yuna/,'not Eddy, the first Korean voice in the list');
+ const v=(name,id,lang='en-US',extra={})=>({name,voiceURI:id,lang,localService:true,...extra});
+ assert.equal(RA.pickVoice([v('Fred','fred',undefined,{default:true}),v('Samantha','sam'),v('Alex','alex')],'en').voiceURI,'sam','a default novelty voice still loses');
+ assert.equal(RA.pickVoice([v('Daniel (Enhanced)','com.apple.voice.enhanced.en-GB.Daniel','en-GB'),v('Samantha (Premium)','com.apple.voice.premium.en-US.Samantha')],'en').name,'Samantha (Premium)');
+ assert.equal(RA.pickVoice([v('Samantha','com.apple.voice.compact.en-US.Samantha'),v('Ava (Premium)','com.apple.voice.premium.en-US.Ava')],'en').name,'Ava (Premium)','a premium voice beats a compact one');
+ assert.equal(RA.pickVoice([v('Samantha','com.apple.voice.compact.en-US.Samantha'),v('Samantha (Enhanced)','com.apple.voice.enhanced.en-US.Samantha')],'en').name,'Samantha (Enhanced)');
+});
+test('the paper\'s language is judged across its body, not from an English abstract at the start',()=>{
+ const en=Array.from({length:70},(_,i)=>({kind:'body',text:'We measured gene expression in sample '+i+'.'}));
+ const ko=Array.from({length:200},(_,i)=>({kind:'body',text:'본 연구에서는 유전자 발현과 단백질 수준을 측정하였다 '+i+'.'}));
+ assert.equal(RA.paperLanguage([...en,...ko]),'ko');
+ assert.equal(RA.paperLanguage(en),'en');
+ assert.equal(RA.paperLanguage([...ko.slice(0,5),...en,...en,...en]),'en');
+ assert.equal(RA.paperLanguage([]),'en');
+});
+test('long sentences: most are one utterance; a cut falls at a clause near the middle, never leaving a two-word scrap or splitting a name',()=>{
+ // akkaya p1, 291 characters: was cut into "To this end, | ...isolate | Burkholderia species R34)."
+ const s1='To this end, the genetically tractable strain Pseudomonas putida EM173 was implanted with the whole genetic complement necessary for the complete biodegradation of 2,4-DNT (recruited from the environmental isolate Burkholderia species R34).';
+ assert.deepEqual(RA.splitForEngine(s1),[s1],'under the limit: one utterance, one intonation');
+ const s2='We compared the abundance of each amplicon sequence variant in the bulk feces with the number of isolates recovered from it, which appeared to be positively correlated across donors, timepoints and culture media; still, we identified a set of abundant yet difficult-to-culture bacteria, including Faecalibacterium, Prevotella, Oscillibacter and Clostridium species that were missed by colony picking at random and only recovered by morphology-guided picking.';
+ const c=RA.splitForEngine(s2);
+ assert.equal(c.length,2);assert.match(c[0],/culture media;$/,'cut at the semicolon, the clause boundary nearest the middle');
+ assert.ok(c.every(x=>x.length<=RA.CHUNK_MAX&&x.split(' ').length>=8));
+ const s3='The cells were grown in 50 micrograms per milliliter kanamycin '+'and further selective media containing several antibiotics '.repeat(7)+'until saturation.';
+ for(const x of RA.splitForEngine(s3))assert.ok(!/^(?:micrograms|per|milliliter)\b/.test(x),'a quantity stays whole: '+x.slice(0,30));
 });

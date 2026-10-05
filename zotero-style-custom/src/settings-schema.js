@@ -836,6 +836,22 @@
       "description": "비워 두면 논문 언어에 맞는 시스템 음성을 자동으로 고릅니다. 리더 패널의 ‘목소리’ 메뉴에서 고르면 여기에 저장됩니다. 음성은 내 컴퓨터에 설치된 것만 쓰며 인터넷으로 보내지 않습니다."
     },
     {
+      "key": "readAloudVoiceKo",
+      "category": "reader",
+      "label": "한국어 논문 읽어주기 목소리",
+      "type": "text",
+      "default": "",
+      "description": "한국어 논문에 쓰는 목소리입니다. 비워 두면 설치된 한국어 음성 중 가장 좋은 것(Yuna 등)을 고릅니다. 한국어 논문을 연 리더 패널의 ‘목소리’ 메뉴에서 고르면 여기에 저장되어, 영어 논문의 목소리와 따로 기억됩니다."
+    },
+    {
+      "key": "readAloudHeadings",
+      "category": "reader",
+      "label": "읽어주기에서 절 제목 알려주기",
+      "type": "boolean",
+      "default": true,
+      "description": "새 절이 시작될 때 ‘Results’처럼 절 제목을 먼저 짧게 읽고, 문단과 절이 바뀔 때 잠깐 쉽니다."
+    },
+    {
       "key": "readAloudCredit",
       "category": "reader",
       "label": "듣는 시간도 읽은 시간으로 기록",

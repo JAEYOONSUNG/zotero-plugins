@@ -1374,7 +1374,9 @@
     });
     out = out.replace(CITE_AUTHOR, '');
     // superscript citations the PDF set as plain digits glued to the word: "with other synthetic DNA1,4,45."
-    out = out.replace(/(\p{L}{2,})(\d{1,3}(?:[,\u2013\u2014-]\d{1,3})+)(?=[.,;:!?)]*(?:\s|$))/gu, '$1');
+    // A run with only a range and no clause end after it is a name ("SMC1–6 complexes"), and a hyphen joins a
+    // product code ("FM4-64", "SQK-NBD112-24"): those stay.
+    out = out.replace(/(?<![-\p{L}\p{N}])(\p{L}{2,})(\d{1,3}(?:[,\u2013\u2014]\d{1,3})+)(?=([.,;:!?)]*)(?:\s|$))/gu, (all, word, run, after) => run.includes(',') || /[.,;:!?]/.test(after) ? word : all);
     out = out.replace(/\s+([.,;:!?)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
     return out || text;
   }

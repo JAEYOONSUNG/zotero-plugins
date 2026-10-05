@@ -518,6 +518,10 @@
   }
 
   /* -- the player bar -- */
+  /* Where the chosen voice is kept: Korean papers have their own. */
+  const voiceKey=lang=>String(lang||'').toLowerCase().startsWith('ko')?'readAloudVoiceKo':'readAloudVoice';
+  /* A breath at a paragraph end and a longer one before a section (ms at 1×), as a person reading aloud does. */
+  const SPEECH_PAUSES={paragraph:450,section:900};
   const PLAY_TIP='본문만 읽어 줍니다. 그림·표 캡션, 참고문헌, 머리말·꼬리말·쪽 번호는 건너뜁니다(Zotero의 읽어주기는 페이지의 글을 모두 읽습니다). PDF에서 Alt(Option)+더블클릭하거나 글을 선택해 ‘여기서부터 듣기’를 누르면 그 문장부터 읽습니다.';
   function buildPlayer(session,parent){
    const doc=session.doc,ui=session.ui;
@@ -1067,12 +1071,15 @@
     // Everything is composed once; the player's own switches decide what is read.
     const units=RA.composeUnits(structured,{captions:true,references:true},tools(session));
     if(!units.length)throw new Error('읽을 본문이 없습니다. 아래 ‘건너뛴 내용’을 열어 보세요.');
-    const lang=RA.detectLanguage(units.slice(0,60).map(u=>u.text).join(' '));
+    const lang=RA.paperLanguage(units);
     const voices=engine.voices();
-    const saved=String(setting('readAloudVoice','')||'');
+    // Korean papers keep a voice of their own, so choosing Yuna for one does not replace Samantha for the rest
+    const saved=String(setting(voiceKey(lang),'')||'');
     const savedVoice=voices.find(v=>v.voiceURI===saved);
     const voice=RA.pickVoice(voices,lang,savedVoice&&String(savedVoice.lang||'').toLowerCase().startsWith(lang)?saved:'');
+    const headings=setting('readAloudHeadings',true)!==false;
     const player=RA.create({engine,lang:voice&&voice.lang||lang,voiceURI:voice?voice.voiceURI:'',rate:Number(setting('readAloudSpeed',100))/100,filters,
+     headings,pauses:headings?SPEECH_PAUSES:{},
      onChange:event=>onPlayerEvent(session,event),onCredit:(unit,seconds)=>credit(session,unit,seconds)});
     const resume=session.data.position&&session.data.position.sig?session.data.position:null;
     player.load(units,{resume:null});
@@ -1089,7 +1096,8 @@
   function fillVoices(session,voices,lang,current){
    const same=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith(lang));
    const items=[{value:'',label:t('자동')},...(same.length?same:voices).slice(0,60).map(v=>({value:v.voiceURI,label:v.name+(v.lang?' · '+v.lang:'')}))];
-   session.ui.voice.set({items,current:setting('readAloudVoice','')&&items.some(i=>i.value===setting('readAloudVoice',''))?setting('readAloudVoice',''):'',label:current?current.name:t('목소리')});
+   const saved=setting(voiceKey(lang),'');
+   session.ui.voice.set({items,current:saved&&items.some(i=>i.value===saved)?saved:'',label:current?current.name:t('목소리')});
   }
   async function withPlayer(session,fn){if(session.destroyed)return;const p=await ensurePlayer(session);if(!session.destroyed)fn(p);}
   const isMacOS=()=>{try{if(typeof Z.isMac==='boolean')return Z.isMac;}catch(_){}try{return /Mac/i.test(String(root.navigator&&root.navigator.platform||''));}catch(_){return true;}};
@@ -1174,10 +1182,13 @@
    session.ui.rateText.textContent=rate.toFixed(1)+'×';
   }
   function setVoice(session,uri){
-   setSettingQuiet('readAloudVoice',uri);
+   const voices=session.engine?session.engine.voices()||[]:[];
+   const chosen=uri?voices.find(x=>x.voiceURI===uri):null;
+   setSettingQuiet(voiceKey(chosen?String(chosen.lang||''):session.langCode||''),uri);
    const p=session.player;if(!p)return;
-   const v=(session.engine.voices()||[]).find(x=>x.voiceURI===uri);
-   p.setVoice(uri,v?v.lang:session.langCode);
+   // 자동 is the same choice the first ▶ makes, not whatever the system default voice happens to be
+   const v=chosen||RA.pickVoice(voices,session.langCode,'');
+   p.setVoice(v?v.voiceURI:'',v?v.lang:session.langCode);
    session.ui.voice.set({current:uri,label:v?v.name:t('목소리')});
   }
   function setSettingQuiet(key,value){try{Promise.resolve(runtime.setSetting(key,value,{apply:false})).catch(log);}catch(error){log(error);}}
