@@ -73,6 +73,45 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
+	/* A PubMed or arXiv result without a DOI is the same paper as the held item that carries its PMID
+	   ("PMID: …" in Extra, as the import writes it) or its arXiv id (Extra, Archive ID or the arXiv URL).
+	   Without this, a short DOI-less title (under four words, too weak for the title rule) was saved twice. */
+	const bareArxiv = value => String(value || "").trim().toLowerCase().replace(/^arxiv:\s*/, "").replace(/v\d+$/, "");
+	function idsOf(fieldName, value) {
+		let text = String(value || ""), out = [];
+		if (fieldName === "extra") {
+			for (let m of text.matchAll(/^\s*PMID:\s*(\d+)\s*$/gim)) out.push("pmid:" + m[1]);
+			for (let m of text.matchAll(/^\s*arXiv:\s*(\S+)\s*$/gim)) out.push("arxiv:" + bareArxiv(m[1]));
+		}
+		else if (fieldName === "archiveID") { let m = /^\s*arXiv:\s*(\S+)/i.exec(text); if (m) out.push("arxiv:" + bareArxiv(m[1])); }
+		else if (fieldName === "url") { let m = /arxiv\.org\/(?:abs|pdf)\/([^\s?#]+?)(?:\.pdf)?(?:[?#].*)?$/i.exec(text); if (m) out.push("arxiv:" + bareArxiv(m[1])); }
+		return out;
+	}
+	async function findByIdentifier(libraryID, rec) {
+		let wanted = [rec?.pmid && /^\d+$/.test(String(rec.pmid).trim()) ? "pmid:" + String(rec.pmid).trim() : null, rec?.arxiv ? "arxiv:" + bareArxiv(rec.arxiv) : null].filter(Boolean);
+		if (!wanted.length) return null;
+		try {
+			for (let id of wanted) {
+				let needle = id.slice(id.indexOf(":") + 1);
+				let like = "%" + needle.replace(/[\\%_]/g, ch => "\\" + ch) + "%";
+				let sql = "SELECT I.itemID, F.fieldName, IDV.value FROM items I "
+					+ "JOIN itemData ID ON I.itemID = ID.itemID "
+					+ "JOIN itemDataValues IDV ON ID.valueID = IDV.valueID "
+					+ "JOIN fields F ON ID.fieldID = F.fieldID "
+					+ "WHERE I.libraryID = ? AND F.fieldName IN ('extra', 'archiveID', 'url') AND LOWER(IDV.value) LIKE ? ESCAPE '\\' "
+					+ "AND I.itemID NOT IN (SELECT itemID FROM deletedItems)";
+				let rows = await Zotero.DB.queryAsync(sql, [libraryID, like]);
+				let hit = (rows || []).find(row => idsOf(row.fieldName, row.value).includes(id));
+				if (hit) return hit.itemID;
+			}
+			return null;
+		}
+		catch (e) {
+			Zotero.logError(e);
+			throw new Error("Could not check the library for duplicates: " + (e.message || e));
+		}
+	}
+
 	/* The same paper, when neither copy has a DOI to match on.
 
 	   Duplicate detection was DOI-only. In a library like this one that leaves
@@ -545,6 +584,8 @@ var ZotPoPImporter = (function () {
 				// The DOI is the reliable answer; the title is what is left when
 				// one side has no DOI to compare.
 				let existingID = rec.doi ? await findByDOI(libraryID, rec.doi) : null;
+				// A result without a DOI: its PubMed or arXiv id is as good as one.
+				if (!existingID && !rec.doi && (rec.pmid || rec.arxiv)) existingID = await findByIdentifier(libraryID, rec);
 				/* Same title and year, different DOIs: a preprint and the paper it
 				   became, or two versions -- two records, not one. The title is the
 				   fallback for when one side has no DOI, never an override of two
@@ -658,5 +699,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, fillPDF, localPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, dispose, getReadingStates, getCollectionPaths, addTranslatedNote };
+	return { manualItemType, importRecord, fillPDF, localPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByIdentifier, findByTitle, flatTitle, forgetTitleIndex, dispose, getReadingStates, getCollectionPaths, addTranslatedNote };
 })();

@@ -20,6 +20,8 @@ pref("extensions.zotpop.maxResults", 1000);
 pref("extensions.zotpop.attachPDF", true);
 pref("extensions.zotpop.skipDuplicates", true);
 pref("extensions.zotpop.citationsInExtra", true);
+// "Add to reading queue" in the add options (Style Custom installed); remembered between windows.
+pref("extensions.zotpop.queueOnAdd", false);
 pref("extensions.zotpop.enrichCitations", true);
 pref("extensions.zotpop.journalMetrics", true);
 // First and corresponding author labs, their country and standing, from OpenAlex.

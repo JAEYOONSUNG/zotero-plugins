@@ -100,7 +100,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	// The author tab opens on the combined provider; tests of the other providers start from Scholar unless they save their own choice.
 	const startOnScholar = !("lastAuthorQuery" in prefs);
 	if (startOnScholar) prefs.lastAuthorQuery = JSON.stringify({ provider: "scholar" });
-	const copied = [], reloads = [];
+	const copied = [], reloads = [], selection = { current: null };
 	const elements = new Map(), errors = [], events = new Map(), counts = { created: 0 };
 	const get = id => {
 		if (!elements.has(id)) { const node = mockElement(); node.connected = true; elements.set(id, node); }
@@ -146,7 +146,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		paper("popular", { title: "Broad review", citations: 10000, year: 2020 })];
 	const context = vm.createContext({
 		AbortController, setTimeout, clearTimeout, ...globals,
-		window: { location: { reload() { reloads.push(1); } }, addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog, arguments: mainWindow ? [{ mainWindow }] : undefined },
+		window: { getSelection: () => selection.current, location: { reload() { reloads.push(1); } }, addEventListener(name, fn) { events.set(name, fn); winEvents.addEventListener(name, fn); }, openDialog, arguments: mainWindow ? [{ mainWindow }] : undefined },
 		document,
 		Zotero: { Prefs: { get: key => { let k = key.replace("extensions.zotpop.", ""); return k in prefs ? prefs[k] : true; }, set: (key, value) => { prefs[key.replace("extensions.zotpop.", "")] = value; } }, debug() {}, logError: e => errors.push(e), launchURL, Utilities: { Internal: { copyTextToClipboard: text => copied.push(String(text)) } },
 			Libraries: { userLibraryID: 1 },
@@ -194,5 +194,5 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 	`);
 	vm.runInContext(code, context);
 	if (startOnScholar) context.harness.setAuthorProvider("scholar");
-	return { copied, reloads, counts, Z: context.Zotero, ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
+	return { copied, reloads, counts, selection, Z: context.Zotero, ...context.harness, get, errors, events, prefs, emitDocument: (name, event) => docEvents.emit(name, event), emitWindow: (name, event) => winEvents.emit(name, event) };
 }

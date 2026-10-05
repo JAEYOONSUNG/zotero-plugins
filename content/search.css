@@ -716,6 +716,7 @@ label.cb { display: flex; align-items: center; gap: 8px; height: 32px; padding: 
 .histmenu .histempty { padding: 8px 12px; color: var(--muted); }
 .histmenu .histclear { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-row); cursor: pointer; color: var(--muted); }
 .histmenu .histclear:hover { background: var(--row-hover); color: var(--text); }
+.histmenu .histclear.armed { color: var(--err); font-weight: 600; }
 
 /* ---------------------------------------------------------------- dropdowns */
 .sel { position: relative; display: flex; }

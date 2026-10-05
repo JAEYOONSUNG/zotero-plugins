@@ -202,6 +202,9 @@
 		return String(text || "").replace(/(https?:\/\/[^\s?]+)\?\S*/g, "$1");
 	}
 
+	/* Requests that never reached a server (status 0 or none): counted, so a search that failed for want of a
+	   connection can say so instead of quoting the network layer, and can offer the run saved last time. */
+	let networkFailures = 0;
 	function httpError(e, url) {
 		if (e?.name === "AbortError") return e;
 		// Reading responseText throws outright when responseType is "json", so probe the
@@ -223,6 +226,7 @@
 		let err = new Error(msg + " · " + host);
 		err.url = url.split("?")[0];
 		err.status = status;
+		if (status == null || status === 0) { networkFailures++; err.offline = true; }
 		// The server's own wait, so the retry waits that long instead of 1.5 s and failing as a bare 429.
 		try { let after = e?.xmlhttp?.getResponseHeader?.("Retry-After"); if (after != null && after !== "") err.retryAfter = after; } catch (ignored) {}
 		// sources.js distinguishes an exhausted OpenAlex budget from a transient 429
@@ -376,6 +380,8 @@
 		$("opt-skip").checked = PREF("skipDuplicates") !== false;
 		$("opt-extra").checked = PREF("citationsInExtra") !== false;
 		$("opt-trnote").checked = PREF("keepTranslatedAbstract") === true;
+		// Kept like the other options: it was unticked again in every new window.
+		$("opt-queue").checked = PREF("queueOnAdd") === true;
 		tip($("opt-trnote-wrap"), t("optTrNoteTip"));
 		tip($("opt-queue-wrap"), t("optQueueTip"));
 
@@ -472,10 +478,10 @@
 		for (let key of COMBINED_SOURCES) $("multi-source-" + key)?.addEventListener("change", () => { cancelCacheRestore(); saveQuery(); });
 
 		setupColumnOrder();
-		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "opt-trnote", "opt-fillpdf", "maxResults"]) {
+		for (let id of ["source", "sort", "opt-pdf", "opt-skip", "opt-extra", "opt-trnote", "opt-fillpdf", "opt-queue", "maxResults"]) {
 			$(id).addEventListener("change", savePrefs);
 		}
-		for (let id of ["target", "opt-pdf", "opt-skip", "opt-extra", "opt-trnote", "opt-fillpdf"]) $(id).addEventListener("change", () => syncImportBar());
+		for (let id of ["target", "opt-pdf", "opt-skip", "opt-extra", "opt-trnote", "opt-fillpdf", "opt-queue"]) $(id).addEventListener("change", () => syncImportBar());
 		$("import-opts-toggle")?.addEventListener("click", () => { state.optsOpen = !state.optsOpen; syncImportBar(); });
 		// detail actions
 		// An owned paper's main action shows its library copy; any other adds it.
@@ -656,6 +662,7 @@
 		PREF("skipDuplicates", $("opt-skip").checked);
 		PREF("citationsInExtra", $("opt-extra").checked);
 		PREF("keepTranslatedAbstract", $("opt-trnote").checked);
+		PREF("queueOnAdd", $("opt-queue").checked);
 		let m = parseInt($("maxResults").value, 10);
 		if (m > 0) PREF("maxResults", m);
 	}
@@ -1015,6 +1022,8 @@
 		state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
 		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
+		// The rows just drawn are the ones the library is asked about: title matches, reading state, collections.
+		refreshLibraryFlags().catch(e => log("library flags after restore: " + e.message));
 		setStatus(query.authorAction === "profiles" ? t("authorProfilesFound", session.profiles.length) : t("historyRestored", entry.records.length));
 		showBanner(t("historyRestoredNotice", new Date(entry.savedAt).toLocaleString(t.locale || undefined), Boolean(entry.partial))
 			+ (query.authorAction === "name-papers" ? " " + t("authorNameUnverified") : provider === "orcid" ? " " + t("authorOrcidHelp") : popHistoryNotice(entry)));
@@ -1388,11 +1397,12 @@
 			try {
 				let records = await ZotPoPSources.search("scholar", query, { getJSON: noNetwork, getText: noNetwork }, ctx);
 				if (!active() || !records.length) return;
-				await refreshLibraryFlags();
-				if (!active()) return;
 				state.sortKey = "rank";
 				state.sortDir = "asc";
 				displaySearchResults(records);
+				// Asked after the rows are in place: a lookup run before them flagged the previous list.
+				await refreshLibraryFlags();
+				if (!active()) return;
 				let captured = new Date(metadata.capturedAt).toLocaleString(t.locale || undefined);
 				setStatus(t("cacheRestored", records.length));
 				showBanner(t("cacheRestoredNotice", captured));
@@ -1407,7 +1417,8 @@
 
 	// ------------------------------------------------------------ recent searches
 	function stripDisplayFields(records) {
-		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, isNew, collections, ...rest }) => {
+		// What the library said about a row is asked again on restore, never read back from the snapshot.
+		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, isNew, collections, libraryItemID, readState, localPDFPath, related, ...rest }) => {
 			if (rest.popOriginal) rest.rank = rank;
 			return rest;
 		});
@@ -1418,7 +1429,8 @@
 	async function rememberSearch(sourceKey, query, records, partial) {
 		if (records?.length) noteCitationSnapshots(records);
 		if (!history || !records?.length) return;
-		try { await history.save({ source: sourceKey, query, records: stripDisplayFields(records), partial }); }
+		// A run stopped or failed part-way never replaces a complete saved run of the same search that holds as many or more.
+		try { await history.save({ source: sourceKey, query, records: stripDisplayFields(records), partial, keepComplete: true }); }
 		catch (e) { log("saving search history failed: " + e.message); }
 	}
 
@@ -1431,7 +1443,6 @@
 		let originalCount = records.length;
 		if (entry.query?.engine !== "pop" && ZotPoPSources.filterRecords) records = ZotPoPSources.filterRecords(records, { ...entry.query, keywords: "" });
 		let removed = originalCount - records.length;
-		await refreshLibraryFlags();
 		if (!active()) return false;
 		state.sortKey = entry.query?.engine === "pop" ? "popOrdinal" : "rank";
 		state.sortDir = "asc";
@@ -1440,6 +1451,10 @@
 		state.queryText = history?.describe(entry.query || {}) || "";
 		state.lastSig = entry.id || null;
 		displaySearchResults(records);
+		/* The library is asked about these rows, after they are drawn. Asked before, the lookup ran over the
+		   list that was on screen and the restored rows kept only their DOI matches: a held paper found by
+		   its title read as new, with no reading state or collections. */
+		await refreshLibraryFlags();
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
 		showBanner(t("historyRestoredNotice", captured, Boolean(entry.partial))
@@ -1654,6 +1669,17 @@
 				acts.appendChild(menuAction(t("pinAction"), t("pinActionTip"), async () => { await pinEntry(e.id); await openHistoryMenu(); }));
 				d.appendChild(acts);
 			}
+			{
+				// One stale or mistyped search goes on its own; "forget all" was the only way before.
+				let acts = d.querySelector?.(".h-acts");
+				if (!acts) { acts = document.createElement("span"); acts.className = "h-acts"; d.appendChild(acts); }
+				let drop = menuAction(t("historyRemove"), t("historyRemoveTip"), async () => {
+					try { await history.remove(e.id); } catch (err) { log("removing a saved search failed: " + err.message); }
+					await openHistoryMenu();
+				});
+				drop.setAttribute("data-writes", "history");
+				acts.appendChild(drop);
+			}
 			tip(d, label.textContent + "\n" + new Date(e.savedAt).toLocaleString(t.locale || undefined));
 			d.tabIndex = 0;
 			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
@@ -1669,9 +1695,14 @@
 			if (pins.length) tip(clear, t("historyClearKeepsPins"));
 			clear.className = "histclear";
 			clear.setAttribute("role", "menuitem");
-			clear.appendChild(iconNode("ic-clear")); clear.appendChild(document.createTextNode(t("historyClear")));
+			clear.setAttribute("data-writes", "history");
+			let clearLabel = document.createTextNode(t("historyClear"));
+			clear.appendChild(iconNode("ic-clear")); clear.appendChild(clearLabel);
+			// Every saved result goes at once and cannot come back, so the first press only asks.
+			let armed = false;
 			clear.addEventListener("click", async ev => {
 				ev.stopPropagation();
+				if (!armed) { armed = true; clearLabel.textContent = t("historyClearConfirm"); clear.classList.add("armed"); return; }
 				closeHistoryMenu();
 				try { await history.clear(); setStatus(t("historyCleared")); }
 				catch (e) { log("clearing history failed: " + e.message); }
@@ -2303,10 +2334,14 @@
 		if (state.importing) return;
 		// A second request while one runs used to vanish, prefill included: the
 		// running one is stopped and waited out, and the new one goes.
-		if (state.searching) { state.searchController?.abort(); state.cancelled = true; try { await state.searchDone; } catch (e) {} }
-		if (state.searching) return;
-		cancelCacheRestore();
 		let q = readQuery();
+		// A query the sources would refuse is named here, before the rows, checks and filters on screen are cleared.
+		if (engineValue() !== "pop") {
+			let year = v => v == null || (Number.isInteger(v) && v >= 1500 && v <= 2100);
+			if (!year(q.yearFrom) || !year(q.yearTo)) { setStatus(t("badYear"), "err"); return; }
+			if (q.yearFrom != null && q.yearTo != null && q.yearFrom > q.yearTo) { setStatus(t("badYearOrder", q.yearFrom, q.yearTo), "err"); return; }
+			if (!Number.isInteger(q.maxResults) || q.maxResults < 1 || q.maxResults > 2000) { setStatus(t("badLimit"), "err"); return; }
+		}
 		if (engineValue() !== "pop" && $("source").value === "multi" && !q.sources.length) {
 			setStatus(t("needSources"), "err");
 			if ($("combined-options")) $("combined-options").open = true;
@@ -2320,6 +2355,9 @@
 			$("keywords").focus();
 			return;
 		}
+		if (state.searching) { state.searchController?.abort(); state.cancelled = true; try { await state.searchDone; } catch (e) {} }
+		if (state.searching) return;
+		cancelCacheRestore();
 		saveQuery();
 		savePrefs();
 		let sourceKey = $("source").value;
@@ -2335,6 +2373,7 @@
 		let controller = new AbortController();
 		state.searchController = controller;
 		let active = () => state.searchController === controller && !controller.signal.aborted;
+		let netBefore = networkFailures;
 		hideBanner();
 		state.records = [];
 		state.condOpen = false;
@@ -2432,11 +2471,21 @@
 				// An exhausted OpenAlex budget is the commonest failure and "HTTP 429" tells
 				// the user nothing they can act on.
 				let quota = e?.status === 429 && /budget|insufficient|credit/i.test(e?.body || e?.message || "");
-				let text = quota ? t("openAlexQuota") : t("searchFailed", e.message || e);
-				setStatus(text, "err");
+				// No source answered because there was no connection: say that, not the network layer's words.
+				let offline = !quota && (e?.offline || (networkFailures > netBefore && !(Number(e?.status) > 0))
+					|| (typeof navigator !== "undefined" && navigator?.onLine === false));
+				let text = quota ? t("openAlexQuota") : offline ? t("searchOffline") : t("searchFailed", e.message || e);
+				state.lastPartial = true;
+				let received = state.records.length;
+				if (received) rememberSearch(sourceKey, q, state.records, true);
+				let retry = { label: t("searchRetry"), run: () => { hideBanner(); runSearch(); } };
 				// Scholar's walls carry their own cure: a window inside Zotero and a retry.
-				if (e.wall) scholarWallBanner(e, () => runSearch()); else showBanner(text, null, { warn: true });
-				if (state.records.length) rememberSearch(sourceKey, q, state.records, true);
+				if (e.wall) { setStatus(text, "err"); scholarWallBanner(e, () => runSearch()); }
+				else if (offline && !received && await showSavedRun(sourceKey, q, () => state.searchController === controller)) {
+					setStatus(text, "err");
+					showBanner(t("offlineSaved", new Date(state.offlineSavedAt).toLocaleString(t.locale || undefined)), retry, { warn: true });
+				}
+				else { setStatus(text, "err"); showBanner(text, retry, { warn: true }); }
 			}
 		}
 		finally {
@@ -2451,6 +2500,19 @@
 			render();
 			saveCaches();
 		}
+	}
+
+	/* Offline, the last saved run of the same search is better than an empty table: shown as saved, dated. */
+	async function showSavedRun(sourceKey, q, stillMine) {
+		try {
+			let saved = history && await history.find(sourceKey, q);
+			let entry = saved && await history.get(saved.id);
+			if (!entry?.records?.length || !stillMine()) return false;
+			if (!await showHistoryEntry(entry, stillMine)) return false;
+			state.offlineSavedAt = entry.savedAt;
+			return true;
+		}
+		catch (e) { log("no saved run to show offline: " + e.message); return false; }
 	}
 
 	let flagsGeneration = 0;
@@ -2493,21 +2555,24 @@
 			if (id) r.libraryItemID = id;
 			else { r.libraryItemID = null; r.readState = null; r.collections = null; }
 		}
-		// Style Custom's reading state, for the items just found only.
+		if (!await readHeldDetails(records, stale)) return;
+		render();
+	}
+	/* Style Custom's reading state and the collections each owned paper is filed in, for the items found only:
+	   one query each, no network. False when a newer lookup took over meanwhile. */
+	async function readHeldDetails(records, stale = () => false) {
+		let ids = () => records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID);
 		try {
-			let states = typeof ZotPoPImporter.getReadingStates === "function"
-				? await ZotPoPImporter.getReadingStates(records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
-			if (stale()) return;
+			let states = typeof ZotPoPImporter.getReadingStates === "function" ? await ZotPoPImporter.getReadingStates(ids()) : new Map();
+			if (stale()) return false;
 			for (let r of records) r.readState = r.inLibrary && states.get(r.libraryItemID) || null;
 		} catch (e) { /* only a hint */ }
-		// The collections each owned paper is filed in, for the detail: one query, no network.
 		try {
-			let paths = typeof ZotPoPImporter.getCollectionPaths === "function"
-				? await ZotPoPImporter.getCollectionPaths(records.filter(r => r.inLibrary && r.libraryItemID).map(r => r.libraryItemID)) : new Map();
-			if (stale()) return;
+			let paths = typeof ZotPoPImporter.getCollectionPaths === "function" ? await ZotPoPImporter.getCollectionPaths(ids()) : new Map();
+			if (stale()) return false;
 			for (let r of records) r.collections = r.inLibrary && paths.get(r.libraryItemID) || null;
 		} catch (e) { /* only a hint */ }
-		render();
+		return true;
 	}
 
 	function clearAll() {
@@ -4419,7 +4484,9 @@
 			try { if (flying) await flying; else await ensureAbstracts([r], { force: true }); }
 			finally { if (state.trBusy === id) state.trBusy = null; }
 		}
-		if (!r.abstract && !wantTitle) { trSet(r, t("trNoText"), true); renderTranslate(r); return; }
+		// The reader may have moved to another paper while the abstract was awaited: this one's answer stays with it.
+		if (!r.abstract && !wantTitle) { if (detailRecord() === r) { trSet(r, t("trNoText"), true); renderTranslate(r); } else trNote = { key: r.key, text: t("trNoText"), err: true }; return; }
+		if (detailRecord() !== r) return;
 		state.trBusy = id; trNote = null;
 		renderTranslate(r);
 		try {
@@ -5119,6 +5186,8 @@
 		if (/^button$/i.test(document.activeElement?.tagName || "") && (e.key === "Enter" || e.key === " ")) return;
 		if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); selectVisible(true); return; }
 		if (mod && e.key.toLowerCase() === "c") {
+			// Text the reader selected (a sentence of the abstract) is copied as text, by the platform.
+			try { let picked = window.getSelection?.(); if (picked && !picked.isCollapsed && String(picked).trim()) return; } catch (err) { /* no selection API */ }
 			// The focused row's citation, or with Shift its DOI: what a reader reaches for most.
 			let r = state.visible.find(row => row.key === state.focusKey);
 			if (!r) return;
@@ -5338,6 +5407,8 @@
 		let wantQueue = Boolean(queueApi() && (queue === undefined ? $("opt-queue").checked : queue)), toQueue = [];
 		state.importing = true;
 		state.cancelled = false;
+		// The destination is fixed for the run: switched half-way, A's papers were marked as held in B.
+		$("target").disabled = true; syncSel($("target"));
 		$("import-btn").disabled = true;
 		$("search-btn").disabled = true;
 		$("stop-btn").disabled = false;
@@ -5384,7 +5455,9 @@
 				r.libraryItemID = res.item?.id;
 				let filled = String(res.pdf || "").startsWith("pdf");
 				if (filled) pdfs++;
-				setRowStatus(r, (res.addedToCollection ? t("statusExistsFiled") : t("statusExists")) + (filled ? " · " + t("statusPdfFilled") : ""), filled ? "ok" : "warn");
+				if (r.doi && res.item?.id != null) state.doiMap.set(r.doi, res.item.id);
+				// Held already: filed where asked (or its PDF filled) is what the add was for; nothing to warn about either way.
+				setRowStatus(r, (res.addedToCollection ? t("statusExistsFiled") : t("statusExists")) + (filled ? " · " + t("statusPdfFilled") : ""), filled || res.addedToCollection ? "ok" : "");
 			}
 			else {
 				failed++;
@@ -5398,15 +5471,20 @@
 			setProgress(i + 1, recs.length);
 		}
 		state.importing = false;
+		$("target").disabled = false; syncSel($("target"));
 		$("search-btn").disabled = false;
 		$("stop-btn").disabled = true;
 		setProgress(null);
 		// Redrawn, not just repainted: an added paper leaves "not owned", and the counts say so.
 		render();
 		let queued = wantQueue ? await queueItems(toQueue.filter(item => !isQueuedItem(item))) : 0;
+		/* Where the papers are filed now and their reading state, for the detail: read again, not guessed. Only the rows
+		   just added or filed are asked; their held mark is the import's own answer. After the queue, so its state is the new one. */
+		let touched = recs.filter(r => r.inLibrary && r.libraryItemID);
+		if (touched.length && await readHeldDetails(touched).catch(() => false)) render();
 		setStatus(t("importDone", added, pdfs, exists, failed, state.cancelled) + (queued > 0 ? " · " + t("queuedN", queued) : ""));
 		if (queued < 0) showBanner(t("queueFailed"), null, { warn: true });
-		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs); } }, { warn: true });
+		if (failed) showBanner(pdfMissedCount ? t("importFailuresPdf", failed, pdfMissedCount) : t("importFailures", failed), { label: t("importRetry", failed), run: () => { hideBanner(); importRecords(failedRecs, { queue: wantQueue }); } }, { warn: true });
 		else if (pdfMissedCount) showBanner(t("importPdfMissed", pdfMissedCount), null, { warn: true });
 		else if (proxyLoginNeeded) showBanner(t("loginNeeded"), null, { warn: true });
 	}

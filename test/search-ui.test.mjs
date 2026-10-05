@@ -983,13 +983,15 @@ test("the keyboard reaches what the mouse reaches: copy, deselect, jump to eithe
 test("a result limit that is not a whole number reaches the validator instead of becoming 200", async () => {
 	// The engine refuses "Result limit must be an integer from 1 to 2000"; it never saw
 	// the mistake, because the box turned 0 and "twenty" into a silent 200.
-	for (const [typed, expected] of [["0", 0], ["twenty", "twenty"], ["-4", -4], ["", 200], ["50", 50]]) {
-		let asked;
+	// Since round 2 the window names the mistake itself, before the results on screen are cleared, and never searches.
+	for (const [typed, expected] of [["0", null], ["twenty", null], ["-4", null], ["", 200], ["50", 50]]) {
+		let asked = null;
 		const ui = uiHarness({ search: async (_source, query) => { asked = query; return []; } });
 		ui.get("maxResults").value = typed;
 		ui.get("keywords").value = "geobacillus";
 		await ui.runSearch();
-		assert.deepEqual(asked.maxResults, expected, `"${typed}" is passed on as typed`);
+		if (expected == null) { assert.equal(asked, null, `"${typed}" is refused before searching`); assert.equal(ui.get("status").textContent, "badLimit"); }
+		else assert.deepEqual(asked.maxResults, expected, `"${typed}" is passed on as typed`);
 	}
 	await assert.rejects(() => Sources.search("openalex", { keywords: "x", maxResults: "twenty" }, { getJSON: async () => ({}) }, {}),
 		/Result limit must be an integer/);

@@ -158,7 +158,7 @@ var ZotPoPHistory = (function () {
 			return entries.slice().sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
 		}
 
-		async function save({ source, query, records, partial = false, label = "" }) {
+		async function save({ source, query, records, partial = false, label = "", keepComplete = false }) {
 			let profiles = query?.mode === "author" && ["scholar", "orcid", "combined"].includes(query.authorProvider) && Array.isArray(query.authorProfiles)
 				? query.authorProfiles.filter(profile => profile && profile.provider === query.authorProvider && typeof profile.id === "string" && profile.id.trim()) : [];
 			if (!source || !Array.isArray(records) || !records.length && !profiles.length) return null;
@@ -170,6 +170,11 @@ var ZotPoPHistory = (function () {
 			return serial(async () => {
 				await load();
 				await loadPins();
+				// keepComplete: a partial run (stopped, a source failed) does not overwrite a complete one at least as large.
+				if (partial && keepComplete) {
+					let held = index.find(e => e.id === id);
+					if (held && !held.partial && Number(held.count) >= records.length) return null;
+				}
 				await io.writeText(path(id + ".json"), body);
 				index = index.filter(e => e.id !== id);
 				let profileOnly = query?.mode === "author" && query.authorAction === "profiles";
