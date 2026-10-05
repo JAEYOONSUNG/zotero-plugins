@@ -852,3 +852,39 @@ test("a closed plugin stops the full-works fetch too, and an untouched fetch sti
   assert.equal(out.works.length, 3);
   assert.equal(Object.keys(fine.cache.authorWorks).length, 1);
 });
+
+// Stored rows that already hold twins (Keasling, Elowitz, Baker) are cleaned at load, and a mark made on the preprint carries over.
+test("stored news twins are merged at load, persisted with the next flush, and the preprint's seen mark moves to the journal version", () => {
+  const row = person("A1", {name: "Keasling", news: [
+    {id: "W4409654112", title: "Optogenetic control of gene expression in yeast", doi: "10.1/a", date: "2026-09-02"},
+    {id: "W4409654112", title: "Optogenetic control of gene expression in yeast", doi: "10.1/a", date: "2026-09-02"},
+    {id: "W7", title: "Pathway engineering in yeast", doi: "10.1101/2026.01.01", date: "2026-05-01", preprint: true, venue: "bioRxiv"},
+    {id: "W8", title: "Pathway Engineering in Yeast", doi: "10.1038/x", date: "2026-08-01", venue: "Nature"},
+    {id: "W9", title: "Design of a Cyclic Peptide Binder", doi: "10.1002/ange.1", date: "2026-07-01"},
+    {id: "W10", title: "Design of a cyclic peptide binder", doi: "10.1002/anie.1", date: "2026-07-01"}]});
+  const h = host({rows: [row], pages: []});
+  h.cache.workbenchUI = {inboxSeen: {"1:10.1101/2026.01.01": "2026-09-01"}};
+  h.dedupeStoredNews = Runtime.prototype.dedupeStoredNews;
+  h.dedupeNews = Runtime.prototype.dedupeNews;
+  h.carrySeen = Runtime.prototype.carrySeen;
+  h.dirty = false;
+  assert.equal(h.dedupeStoredNews(), 3, "three duplicates removed");
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id).filter(id => id === "W4409654112" || id === "W8").sort(), ["W4409654112", "W8"]);
+  assert.equal(saved.news.length, 3);
+  assert.ok(saved.news.some(n => n.id === "W8" && n.preprintOf), "the journal version stays and notes the preprint");
+  assert.equal(h.dirty, true, "written with the next ordinary flush");
+  assert.equal(h.cache.workbenchUI.inboxSeen["10.1038/x"], "2026-09-01", "marked seen on the preprint, so not unread again on the journal version");
+  assert.equal(h.dedupeStoredNews(), 0, "idempotent");
+});
+
+test("keepNews carries a seen mark from a dropped twin to the one that stays", () => {
+  const ctx = {NEWS_LIMIT: 50, cache: {workbenchUI: {inboxSeen: {"10.1101/p": "2026-09-01"}}}, dirty: false};
+  ctx.panelSeenKeys = Runtime.prototype.panelSeenKeys;
+  ctx.carrySeen = Runtime.prototype.carrySeen;
+  const out = Runtime.prototype.keepNews.call(ctx, [
+    {id: "W7", title: "Pathway engineering in yeast", doi: "10.1101/p", date: "2026-05-01", preprint: true},
+    {id: "W8", title: "Pathway Engineering in Yeast", doi: "10.1038/j", date: "2026-08-01"}], ctx.panelSeenKeys(), 50);
+  assert.deepEqual(out.map(n => n.id), ["W8"]);
+  assert.equal(ctx.cache.workbenchUI.inboxSeen["10.1038/j"], "2026-09-01");
+});

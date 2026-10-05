@@ -1089,6 +1089,20 @@ test('P1-2 the authors tab lists one paper once even when a stored row holds twi
  f.bench.destroy();
 });
 
+test('news saved before the namesake check carries a small 미분류 chip; a classified one does not',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[
+  {id:'W1',title:'Old stored paper',doi:'10.1/old',date:'2026-09-01',unclassified:true},
+  {id:'W2',title:'Checked paper',doi:'10.1/ok',date:'2026-08-01',verified:'place'}]}];
+ await f.bench.show('authors');
+ const rows=[...f.body().querySelectorAll('.sc-author-inbox-row')];
+ assert.equal(rows.length,2);
+ const chips=rows.map(r=>r.querySelector('.sc-unclassified'));
+ assert.ok(chips[0]);assert.equal(chips[0].textContent,'미분류 · 다음 조회 때 확인');
+ assert.equal(chips[1],null);
+ f.bench.destroy();
+});
+
 test('a new paper marked 확인함 leaves the unseen list, is found under 확인함, comes back, and the search reads names',async()=>{
  const f=fixture();
  f.runtime.watchedAuthorsByNews=()=>[
@@ -6119,6 +6133,23 @@ test('r22 the clean-up list: merge a preprint into its published version with an
  await f.click('PDF 모두 찾기 · 2편');
  assert.deepEqual(sweep,[['4','5']]);
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/PDF 1편을 찾아 붙였습니다 · 못 찾음 1편/);
+ f.bench.destroy();
+});
+
+test('tag findings are listed in the clean-up fold, each with a data-writes repair button the self-check never presses',async()=>{
+ const f=fixture();
+ f.runtime.attachmentFindings=async()=>({supplementary:[],duplicate:[],foreign:[],orphan:[],unknown:[],unread:0,missing:[]});
+ f.runtime.cleanupFindings=async()=>({merge:[],copies:[]});
+ f.runtime.tagFindings=async()=>({status:[{id:'1',title:'Z2U',year:'2024',tags:['/unread','/reading','/done'],shown:'done'}],ratingTags:[{id:'9',title:'2LSGZGCV',year:'',tags:['style-custom:rating:4']}]});
+ const log=[];
+ f.runtime.fixStatusTags=async ids=>{log.push(['status',ids]);return {fixed:1};};
+ f.runtime.removeOrphanRatingTags=async ids=>{log.push(['rating',ids]);return {removed:1};};
+ await f.bench.show('attachments');
+ const summary=f.bench.panel.querySelector('.sc-attachment-findings summary').textContent;
+ assert.match(summary,/상태 태그 여러 개 1/);assert.match(summary,/붙을 곳 없는 별점 태그 1/);
+ for(const label of ['상태 태그 정리','태그 삭제']){const b=f.findButton(label);assert.equal(b.getAttribute('data-writes'),'library',label);assert.notEqual(b.getAttribute('data-safe'),'view');}
+ await f.click('상태 태그 정리');await f.click('태그 삭제');
+ assert.deepEqual(log,[['status',['1']],['rating',['9']]]);
  f.bench.destroy();
 });
 

@@ -396,7 +396,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.cache = loaded; this.active = true;
     this.retireLooseMoves();
-    try { this.reclassifyStoredNews(); } catch (error) { this.Z.logError?.(error); }
+    try { this.dedupeStoredNews(); this.reclassifyStoredNews(); } catch (error) { this.Z.logError?.(error); }
+    try { this.dedupePaperPeople(); } catch (error) { this.Z.logError?.(error); }
     try { if (this.recheckStoredLinks()) this.dirty = true; } catch (error) { this.Z.logError?.(error); }
     for (const entry of Object.values(loaded.items)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
@@ -2242,6 +2243,56 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       reason: rows.some(row => via.get(row.id) === 'doi') ? 'doi' : 'title', items: rows
     })).sort((a, b) => b.items.length - a.items.length || String(a.items[0].title).localeCompare(String(b.items[0].title)));
   }
+  /* Two things in the tags that no automatic rule should settle for the reader:
+     a paper carrying more than one of /unread /reading /done, and a rating tag on
+     a standalone attachment (no paper to move it to). Found read-only; each has a
+     repair the reader presses (fixStatusTags, removeOrphanRatingTags). */
+  async tagFindings(libraryID) {
+    const status = [], ratingTags = [];
+    const field = (item, key) => { try { return String(item.getField?.(key) || '').trim(); } catch (_) { return ''; } };
+    for (const item of await this.libraryItems(libraryID)) {
+      if (!item || item.deleted) continue;
+      let tags = [];
+      try { tags = (item.getTags?.() || []).map(tag => String(tag?.tag ?? tag)); } catch (_) {}
+      if (this.isRegular(item)) {
+        const kinds = new Set(tags.map(tag => /^\/(unread|reading|done)$/i.exec(tag.trim())?.[1]?.toLowerCase()).filter(Boolean));
+        if (kinds.size > 1) status.push({id: String(item.id), title: field(item, 'title'), year: field(item, 'date').match(/\b(1[5-9]|20)\d{2}\b/)?.[0] || '',
+          tags: [...kinds].map(kind => '/' + kind), shown: this.state(item).status});
+      } else if (!(item.parentItemID ?? item.parentID) && tags.some(tag => /^style-custom:rating:[0-5]$/.test(tag))) {
+        ratingTags.push({id: String(item.id), key: item.key, title: field(item, 'title') || String(item.key || item.id), year: '',
+          tags: tags.filter(tag => /^style-custom:rating:[0-5]$/.test(tag))});
+      }
+    }
+    return {status, ratingTags};
+  }
+  // Keep the state the plugin shows now, drop the other status tags (edit() writes one status tag and removes the rest).
+  async fixStatusTags(ids) {
+    const byStatus = new Map();
+    for (const id of ids || []) {
+      const item = await this.Z.Items.getAsync(Number(id));
+      if (!this.canEdit(item)) continue;
+      const status = this.state(item).status;
+      if (!byStatus.has(status)) byStatus.set(status, []);
+      byStatus.get(status).push(item);
+    }
+    let fixed = 0;
+    for (const [status, items] of byStatus) { await this.edit(items, {status}); fixed += items.length; }
+    return {fixed};
+  }
+  // A rating tag on an attachment with no parent paper has nowhere to go; the reader chose to delete it.
+  async removeOrphanRatingTags(ids) {
+    let removed = 0;
+    for (const id of ids || []) {
+      const item = await this.Z.Items.getAsync(Number(id));
+      if (!item || this.isRegular(item) || (item.parentItemID ?? item.parentID) || item.isEditable?.() === false) continue;
+      const kept = (item.getTags() || []).filter(tag => !/^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)));
+      if (kept.length === (item.getTags() || []).length) continue;
+      item.setTags(kept);
+      if (typeof item.saveTx === 'function') await item.saveTx(); else await item.save();
+      removed++;
+    }
+    return {removed};
+  }
   async cleanupFindings(libraryID) {
     const items = (await this.libraryItems(libraryID)).filter(item => this.isRegular(item) && !item.deleted);
     const field = (item, key) => { try { return String(item.getField?.(key) || '').trim(); } catch (_) { return ''; } };
@@ -3049,7 +3100,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      author; marked ones only fill what is left, so the oldest dropped are
      always ones the reader has already dealt with. */
   keepNews(works, panelSeen = this.panelSeenKeys(), limit = this.NEWS_LIMIT) {
-    const sorted = CustomStyleRuntime.dedupeNews(works).sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
+    const sorted = CustomStyleRuntime.dedupeNews(works, (winner, twin) => { if (this.carrySeen?.(winner, twin)) panelSeen.add(CustomStyleRuntime.seenWorkKey(winner)); }).sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
     const open = sorted.filter(work => !panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, limit);
     const room = Math.max(0, limit - open.length);
     const done = sorted.filter(work => panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, room);
@@ -3104,7 +3155,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      its journal version all arrived as separate news. By id first, then by
      the full normalised title; of a preprint/article pair the journal version
      stays and carries a note of the preprint. */
-  static dedupeNews(works) {
+  static dedupeNews(works, onMerge) {
     const byID = new Map(), list = [];
     for (const work of works || []) {
       if (!work) continue;
@@ -3130,6 +3181,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (index === best) continue;
         drop.add(index);
         const twin = list[index];
+        if (typeof onMerge === 'function') onMerge(winner, twin);
         if (twin.preprint && !winner.preprint && !winner.preprintOf) winner.preprintOf = {id: twin.id, venue: twin.venue || '', doi: twin.doi || '', date: twin.date || ''};
         if (twin.inLibrary) winner.inLibrary = true;
       }
@@ -3213,8 +3265,62 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return {moved: moved.length, unclassified};
   }
 
+  /* One person once on a stored work. 240 of 1,140 stored people lists named someone twice; the sweep
+     already writes them clean, but rows stored before that stayed as they were and asking OpenAlex again
+     (metered) was the only cure. Cleaned in memory at load, same person by id, else by normalised name
+     and position, and written with the next ordinary flush. */
+  static dedupePeople(list) {
+    const seen = new Map(), out = [];
+    for (const person of list || []) {
+      if (!person) continue;
+      const name = String(person.name || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      const key = person.id ? 'id:' + person.id : name ? 'n:' + name + '|' + String(person.position || '') : '';
+      if (!key) { out.push(person); continue; }
+      if (seen.has(key)) { const kept = seen.get(key); if (person.corresponding && !kept.corresponding) kept.corresponding = true; continue; }
+      const copy = {...person};
+      seen.set(key, copy); out.push(copy);
+    }
+    return out;
+  }
+  dedupePaperPeople() {
+    let cleaned = 0;
+    for (const work of Object.values(this.paperWorks())) {
+      if (!work || !Array.isArray(work.people)) continue;
+      const next = CustomStyleRuntime.dedupePeople(work.people);
+      if (next.length !== work.people.length) { work.people = next; cleaned++; }
+    }
+    if (cleaned) this.dirty = true;
+    this.peopleCleaned = cleaned;
+    return cleaned;
+  }
+
+  /* A paper marked 확인함 under one record stays marked when a twin takes its place (the preprint
+     marked seen, then merged into its journal version): the mark is copied to the survivor. */
+  carrySeen(winner, twin) {
+    const store = this.cache?.workbenchUI?.inboxSeen;
+    if (!store || typeof store !== 'object') return false;
+    const bare = key => key.replace(/^\d*:/, '');
+    const from = CustomStyleRuntime.seenWorkKey(twin), to = CustomStyleRuntime.seenWorkKey(winner);
+    if (from === to) return false;
+    const mine = Object.keys(store).find(key => bare(key) === from);
+    if (!mine) return false;
+    if (Object.keys(store).some(key => bare(key) === to)) return true;
+    store[to] = store[mine];
+    this.dirty = true;
+    return true;
+  }
+  // Rows stored with twins (the same id, ange/anie, a preprint beside its journal version) are merged at load.
+  dedupeStoredNews() {
+    let removed = 0;
+    for (const row of this.watchedAuthors?.() || []) {
+      if (!Array.isArray(row.news) || row.news.length < 2) continue;
+      const next = CustomStyleRuntime.dedupeNews(row.news, (winner, twin) => this.carrySeen?.(winner, twin));
+      if (next.length !== row.news.length) { removed += row.news.length - next.length; row.news = next; this.dirty = true; }
+    }
+    return removed;
+  }
   // The panel's safety net: the same one-paper-once rule, asked through the instance.
-  dedupeNews(list) { return CustomStyleRuntime.dedupeNews(list); }
+  dedupeNews(list) { return CustomStyleRuntime.dedupeNews(list, (winner, twin) => this.carrySeen?.(winner, twin)); }
 
   reclassifyStoredNews() {
     let moved = 0;

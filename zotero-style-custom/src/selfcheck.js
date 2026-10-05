@@ -129,7 +129,9 @@
 
   // Followed authors whose news has never been through a sweep's classifier.
   function newsWithoutClassification(rows) {
-    return (rows || []).filter(row => row && Array.isArray(row.news) && row.news.length && !Array.isArray(row.placesSeen)).map(row => row.name || row.id);
+    // A row went through the classifier when a sweep recorded places, or the load-time pass marked its papers `unclassified` (nothing to judge by yet).
+    return (rows || []).filter(row => row && Array.isArray(row.news) && row.news.length && !Array.isArray(row.placesSeen)
+      && !row.news.some(work => work && (work.unclassified || work.verified))).map(row => row.name || row.id);
   }
 
   // Followed authors whose stored news lists one paper twice, by the rule the sweep itself uses.
@@ -144,7 +146,9 @@
       const seen = new Set();
       let dup = false;
       for (const person of (work && work.people) || []) {
-        const key = person.id || String(person.name || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        const name = String(person.name || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        // The same rule the load-time cleaning uses: by id, else normalised name and position.
+        const key = person.id || (name ? name + '|' + String(person.position || '') : '');
         if (!key) continue;
         if (seen.has(key)) dup = true; else seen.add(key);
       }
@@ -183,10 +187,10 @@
   }
 
   // A check that read the data: duplicate people lists are a failure, not a footnote.
-  function requireNoDuplicatePeople(works) {
+  function requireNoDuplicatePeople(works, cleaned = 0) {
     const dup = worksWithDuplicatePeople(works);
-    const said = `중복 저자 목록이 남은 논문 ${dup}편 / ${works.length}편`;
-    if (dup) throw new Error(said + ' (다시 조회하면 정리됨)');
+    const said = `중복 저자 목록이 남은 논문 ${dup}편 / ${works.length}편` + (cleaned ? ` · 불러올 때 메모리에서 정리한 논문 ${cleaned}편` : '');
+    if (dup) throw new Error(said);
     return said;
   }
 
@@ -425,9 +429,14 @@
           throw new Error('mouseover set no data-sc-hover-cell on the cell');
         }
         if (!tree.getAttribute('data-sc-hover-col')) throw new Error('the tree did not record the hovered column');
-        cell.dispatchEvent(new win.MouseEvent('mouseout', {bubbles: true, cancelable: true, relatedTarget: null}));
-        if (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col')) throw new Error('mouseout left the hover attributes behind');
-        return 'mouseover set the cell and the column; mouseout cleared both';
+        // What Zotero fires when the pointer leaves the list: mouseout to an element outside it, then mouseleave of the tree.
+        cell.dispatchEvent(new win.MouseEvent('mouseout', {bubbles: true, cancelable: true, relatedTarget: doc.documentElement}));
+        if (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col')) throw new Error('mouseout to outside the list left the hover attributes behind');
+        cell.dispatchEvent(new win.MouseEvent('mouseover', {bubbles: true, cancelable: true, buttons: 0}));
+        for (let waited = 0; waited < 600 && !cell.hasAttribute('data-sc-hover-cell'); waited += 50) await wait(50);
+        tree.dispatchEvent(new win.MouseEvent('mouseleave', {bubbles: false}));
+        if (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col')) throw new Error('mouseleave of the list left the hover attributes behind');
+        return 'mouseover set the cell and the column; mouseout to outside and mouseleave each cleared both';
       } finally {
         cell.removeAttribute('data-sc-hover-cell');
         if (tree) tree.removeAttribute('data-sc-hover-col');
@@ -973,23 +982,32 @@
       return names.join(', ');
     }));
 
-    results.push(await attempt('reading status agrees with tags', () => {
-      const bad = statusContradictions(all.map(item => ({id: item.key || item.id, tags: item.getTags(), status: runtime.state(item).status, seconds: runtime.state(item).seconds})));
-      if (bad.length) throw new Error(`${bad.length}건: 태그와 표시된 상태가 어긋남 — 상태 태그가 둘 이상이거나 /unread인데 다른 상태 (${bad.slice(0, 5).join(', ')})`);
-      return `${all.length}편 중 모순 0건`;
+    // A finding about the reader's own tags is reported, not failed: nothing in the plugin is wrong, and a step
+    // that stays red until tags are edited by hand is noise. The 정리 list in the panel holds the repair buttons;
+    // only the repair run fixes them here.
+    results.push(await attempt('reading status agrees with tags', async () => {
+      const rows = all.map(item => ({id: item.key || item.id, numeric: item.id, tags: item.getTags(), status: runtime.state(item).status, seconds: runtime.state(item).seconds}));
+      const bad = statusContradictions(rows);
+      if (!bad.length) return `${all.length}편 중 모순 0건`;
+      const ids = rows.filter(row => bad.includes(row.id)).map(row => row.numeric);
+      if (repair) {
+        const out = await runtime.fixStatusTags(ids);
+        return `${bad.length}건 발견 → 표시 중인 상태만 남기고 정리 ${out.fixed}건 (${bad.slice(0, 5).join(', ')})`;
+      }
+      return `${bad.length}건 발견 — 라이브러리 정리에 나열됨 (${bad.slice(0, 5).join(', ')})`;
     }));
 
     results.push(await attempt('corresponding authors are counted once', () => {
       const works = Object.values(runtime.paperWorks()).filter(work => work && !work.missing);
-      return requireNoDuplicatePeople(works);
+      return requireNoDuplicatePeople(works, runtime.peopleCleaned || 0);
     }));
 
     results.push(await attempt('followed authors\' stored news went through the classifier', () => {
       const rows = runtime.watchedAuthors();
       const unclassified = newsWithoutClassification(rows);
-      if (unclassified.length) throw new Error(`placesSeen 없이 news만 있는 관심 저자 ${unclassified.length}명 (동명이인 검사를 거치지 않음): ${unclassified.slice(0, 5).join(', ')} — 다음 조회에서 분류됩니다`);
+      if (unclassified.length) throw new Error(`placesSeen도 미분류 표시도 없이 news만 있는 관심 저자 ${unclassified.length}명 (동명이인 검사를 거치지 않음): ${unclassified.slice(0, 5).join(', ')}`);
       const loose = rows.reduce((n, row) => n + (row.news || []).filter(work => work && work.unclassified).length, 0);
-      return `${rows.length}명 · 분류 안 된 논문 ${loose}편`;
+      return `${rows.length}명 · 미분류 논문 ${loose}편 (다음 조회 때 확인)`;
     }));
 
     results.push(await attempt('followed authors\' news lists no paper twice', () => {
@@ -1007,8 +1025,12 @@
         rows.push({id: item.id, key: item.key, regular: false, hasParent: !!(item.parentItemID ?? item.parentID), tags: item.getTags ? item.getTags() : []});
       }
       const orphans = orphanRatingTags(rows);
-      if (orphans.length) throw new Error(`부모 논문이 없는 첨부에 별점 태그가 남음 ${orphans.length}건 (${orphans.slice(0, 5).join(', ')}) — 읽기 전용 확인, 지우지 않았습니다`);
-      return '없음';
+      if (!orphans.length) return '없음';
+      if (repair) {
+        const out = await runtime.removeOrphanRatingTags(rows.filter(row => orphans.includes(row.key || row.id)).map(row => row.id));
+        return `${orphans.length}건 발견 → 태그 삭제 ${out.removed}건 (${orphans.slice(0, 5).join(', ')})`;
+      }
+      return `${orphans.length}건 발견 — 라이브러리 정리에 나열됨 (${orphans.slice(0, 5).join(', ')}) · 읽기 전용 확인, 지우지 않았습니다`;
     }));
 
     results.push(await attempt('the panel reports what is still empty', async () => {

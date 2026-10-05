@@ -4228,7 +4228,14 @@
     catch(error){runtime.Z.logError?.(error);}
     if(token!==epoch||disposed)return null;
    }
-   const total=found.supplementary.length+found.duplicate.length+found.foreign.length+(found.orphan||[]).length+found.missing.length+(found.broken||[]).length+found.cleanup.merge.length+found.cleanup.copies.length;
+   // Tag trouble the reader settles: several status tags on one paper, a rating tag on a lone attachment.
+   found.cleanup.statusTags=[];found.cleanup.ratingTags=[];
+   if(typeof runtime.tagFindings==='function'){
+    try{const tags=await runtime.tagFindings(win.ZoteroPane?.getSelectedLibraryID?.());found.cleanup.statusTags=tags.status||[];found.cleanup.ratingTags=tags.ratingTags||[];}
+    catch(error){runtime.Z.logError?.(error);}
+    if(token!==epoch||disposed)return null;
+   }
+   const total=found.cleanup.statusTags.length+found.cleanup.ratingTags.length+found.supplementary.length+found.duplicate.length+found.foreign.length+(found.orphan||[]).length+found.missing.length+(found.broken||[]).length+found.cleanup.merge.length+found.cleanup.copies.length;
    if(!total&&!found.unread)return null;
    return found;
   }
@@ -4241,7 +4248,7 @@
    if(state.attachmentFindingsOpen)details.open=true;
    details.addEventListener('toggle',()=>{state.attachmentFindingsOpen=details.open;});
    // Only the findings that exist: a row of zeros says nothing.
-   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length],['파일 연결 끊김',(found.broken||[]).length],['합칠 프리프린트',(found.cleanup?.merge||[]).length],['여러 번 보유',(found.cleanup?.copies||[]).length]].filter(([,count])=>count>0);
+   const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length],['파일 연결 끊김',(found.broken||[]).length],['합칠 프리프린트',(found.cleanup?.merge||[]).length],['여러 번 보유',(found.cleanup?.copies||[]).length],['상태 태그 여러 개',(found.cleanup?.statusTags||[]).length],['붙을 곳 없는 별점 태그',(found.cleanup?.ratingTags||[]).length]].filter(([,count])=>count>0);
    node('summary',T('자료 점검')+' · '+(facts.length?facts.map(([label,count])=>`${T(label)} ${count}`).join(' · '):T('이상 없음')),details);
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
@@ -4352,7 +4359,7 @@
     void sweepButton;
    }
    // Papers held twice over: a preprint whose published version is also here, and the same DOI or title.
-   const cleanup=found.cleanup||{merge:[],copies:[]};
+   const cleanup=found.cleanup||{merge:[],copies:[],statusTags:[],ratingTags:[]};
    section('merge','프리프린트와 게재본을 둘 다 보유 · 합치기 제안',cleanup.merge.map(row=>({...row,why:`게재본: ${row.publishedTitle||row.publishedID}`})),'warn',(row,actions)=>{
     button('게재본으로 옮기기',()=>run(async()=>{
      const result=await runtime.mergePreprintIntoPublished(row.id,{publishedID:row.publishedID});
@@ -4367,6 +4374,21 @@
      await runtime.showInDuplicatesPane(win,win.ZoteroPane?.getSelectedLibraryID?.(),row.ids);
      message('Zotero 중복 항목 화면을 열었습니다. 합치기는 거기서 고르세요.');
     }),actions,{'data-opens':'pane',title:T('Zotero 본창의 중복 항목 화면에서 이 문헌들을 보여 줍니다. 새 창은 열리지 않습니다')});
+   });
+   // Tag trouble: each repair is the reader's press (data-writes), never the sweep's.
+   section('statusTags','상태 태그가 여러 개인 문헌',(cleanup.statusTags||[]).map(row=>({...row,why:F('{0} · 지금 표시되는 상태: {1}',D(row.tags.join(' ')),T({unread:'안 읽음',reading:'읽는 중',done:'완료'}[row.shown]||row.shown)).text})),'warn',(row,actions)=>{
+    button('상태 태그 정리',()=>run(async()=>{
+     const result=await runtime.fixStatusTags([row.id]);
+     message(F('상태 태그를 정리했습니다 · {0}편',result.fixed).text);
+     await render();
+    }),actions,{'data-writes':'library',title:T('지금 표시되는 상태만 남기고 나머지 상태 태그(/unread /reading /done)를 지웁니다')});
+   });
+   section('ratingTags','붙을 곳 없는 별점 태그',(cleanup.ratingTags||[]).map(row=>({...row,why:F('{0} · 부모 논문이 없는 첨부파일',D(row.tags.join(' '))).text})),'warn',(row,actions)=>{
+    button('태그 삭제',()=>run(async()=>{
+     const result=await runtime.removeOrphanRatingTags([row.id]);
+     message(F('별점 태그를 지웠습니다 · {0}개',result.removed).text);
+     await render();
+    }),actions,{'data-writes':'library',title:T('이 첨부파일에 남은 style-custom:rating 태그만 지웁니다. 별점은 옮길 논문이 없어 사라집니다')});
    });
    // The file is linked but not there (an old Dropbox path, a missing relative file). Downloading
    // would add a second copy; the fix is to point the link at the file again.
@@ -6670,6 +6692,8 @@
     const meta=node('p',null,text,{class:'sc-hit-meta sc-inbox-meta'});
     const preprint=isPreprintWork(work);
     if(preprint)node('span','Preprint',meta,{class:'sc-preprint',title:T('아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.')});
+    // Saved before the namesake check existed, and not judged yet: said so, so nobody takes it as verified.
+    if(work.unclassified)node('span',T('미분류 · 다음 조회 때 확인'),meta,{class:'sc-tag sc-unclassified',title:T('이 논문은 동명이인 검사가 도입되기 전에 저장되어 아직 확인되지 않았습니다. 다음 조회 때 이 저자의 논문인지 가려집니다.')});
     const parts=[];
     const venueName=preprint?serverName(work.venue):String(work.venue||'').trim();
     if(venueName)parts.push(el=>{const v=venueSpan(el,venueName);if(venueName!==work.venue)v.title=work.venue;});
@@ -6996,6 +7020,8 @@
     const meta=node('p',null,text,{class:'sc-hit-meta sc-inbox-meta'});
     const preprint=isPreprintWork(work);
     if(preprint)node('span','Preprint',meta,{class:'sc-preprint',title:T('아직 심사 전 원고입니다. 정식 게재본은 나중에 따로 나올 수 있습니다.')});
+    // Saved before the namesake check existed, and not judged yet: said so, so nobody takes it as verified.
+    if(entry.copies.some(copy=>copy?.unclassified))node('span',T('미분류 · 다음 조회 때 확인'),meta,{class:'sc-tag sc-unclassified',title:T('이 논문은 동명이인 검사가 도입되기 전에 저장되어 아직 확인되지 않았습니다. 다음 조회 때 이 저자의 논문인지 가려집니다.')});
     const parts=[];
     const venueName=preprint?serverName(work.venue):String(work.venue||'').trim();
     if(venueName)parts.push(el=>{const v=venueSpan(el,venueName);if(venueName!==work.venue)v.title=work.venue;});

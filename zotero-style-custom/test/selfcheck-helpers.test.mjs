@@ -74,6 +74,9 @@ test('followed rows with news but no placesSeen were never classified', () => {
   const rows = [{id: 'A1', name: 'Huimin Zhao', news: [{id: 'W1'}]}, {id: 'A2', name: 'Ok', news: [{id: 'W2'}], placesSeen: []},
     {id: 'A3', name: 'Quiet', news: []}];
   assert.deepEqual(SelfCheck.newsWithoutClassification(rows), ['Huimin Zhao']);
+  // The load-time pass marks legacy papers `unclassified`: that counts as having gone through it.
+  rows[0].news[0].unclassified = true;
+  assert.deepEqual(SelfCheck.newsWithoutClassification(rows), []);
 });
 
 test('duplicate news in a row is counted using the real dedupe rule', () => {
@@ -84,6 +87,7 @@ test('duplicate news in a row is counted using the real dedupe rule', () => {
 
 test('corresponding-author duplicates are a failure, not a note', () => {
   assert.throws(() => SelfCheck.requireNoDuplicatePeople([{people: [{id: 'A'}, {id: 'A'}]}, {people: [{id: 'B'}]}]), /1편/);
+  assert.match(SelfCheck.requireNoDuplicatePeople([{people: [{id: 'B'}]}], 240), /메모리에서 정리한 논문 240편/);
   assert.equal(SelfCheck.requireNoDuplicatePeople([{people: [{id: 'B'}]}]), '중복 저자 목록이 남은 논문 0편 / 1편');
 });
 
@@ -151,4 +155,30 @@ test('a flush that happens outside a press (a timer) passes through untouched', 
   const out = await SelfCheck.sweepSafeButtons({bench, runtime, tabs: ['one'], wait: async () => {}});
   assert.deepEqual(out.broken, []);
   assert.equal(real.flushed, 1, 'a background write between presses is not blamed on a button');
+});
+
+// The README says how many checks there are; the number is read off the registered steps, not counted by hand.
+import fs from 'node:fs';
+export function countSteps(src) {
+  const re = /results\.push\(await attempt\(/g;
+  const total = [...src.matchAll(re)].length;
+  let conditional = 0;
+  for (const name of ['seed', 'repair', 'fill', 'shots']) {
+    const m = new RegExp('\\n    if \\(' + name + '\\)').exec(src);
+    if (!m) continue;
+    const start = m.index + 1, line = src.slice(start, src.indexOf('\n', start));
+    let end;
+    if (/\{\s*$/.test(line)) { let depth = 0, i = src.indexOf('{', start); for (; i < src.length; i++) { if (src[i] === '{') depth++; else if (src[i] === '}' && !--depth) break; } end = i; }
+    else end = src.indexOf('\n    }));', start) + 8;
+    conditional += [...src.slice(start, end).matchAll(re)].length;
+  }
+  return {total, byDefault: total - conditional};
+}
+test('both READMEs state the self-check count the registered steps give', () => {
+  const {total, byDefault} = countSteps(fs.readFileSync(new URL('../src/selfcheck.js', import.meta.url), 'utf8'));
+  assert.ok(total > byDefault && byDefault > 40, `counted ${total} / ${byDefault}`);
+  for (const file of ['../README.md', '../../README.md']) {
+    const text = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.ok(text.includes(`up to ${total} checks, ${byDefault} by default`), `${file} should say "up to ${total} checks, ${byDefault} by default"`);
+  }
 });

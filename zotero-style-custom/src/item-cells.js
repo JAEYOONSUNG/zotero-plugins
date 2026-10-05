@@ -221,6 +221,11 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     const clear = () => {
       if (lastCell) { lastCell.removeAttribute("data-sc-hover-cell"); lastCell = null; }
       if (rootNode) { rootNode.removeAttribute("data-sc-hover-col"); rootNode = null; }
+      // Rows are recycled while scrolling: a mark can sit on a cell this closure no longer holds.
+      try {
+        for (const stale of doc.querySelectorAll?.("[data-sc-hover-cell]") || []) stale.removeAttribute("data-sc-hover-cell");
+        for (const stale of doc.querySelectorAll?.(TREE + "[data-sc-hover-col]") || []) stale.removeAttribute("data-sc-hover-col");
+      } catch (_) {}
     };
     const apply = target => {
       const cell = target?.closest?.(".cell");
@@ -244,10 +249,20 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
         const id = frame(win, () => { raf = 0; try { apply(pending); } catch (error) { rt.Z.logError?.(error); } });
         if (raf === -1) raf = id;
       };
-      const out = event => { if (!event.relatedTarget) { pending = null; clear(); } };
+      // Leaving the tree: mouseout with nowhere to go or a target outside it, and mouseleave of the tree itself (or the window).
+      const out = event => {
+        const to = event.relatedTarget;
+        if (!to || !(to.closest?.(TREE))) { pending = null; clear(); }
+      };
+      const leave = () => { pending = null; clear(); };
       listen(doc, "mouseover", over, true);
-      listen(doc.documentElement, "mouseleave", () => { pending = null; clear(); }, false);
+      listen(doc.documentElement, "mouseleave", leave, false);
+      const treeNode = doc.querySelector?.(TREE);
+      if (treeNode) listen(treeNode, "mouseleave", leave, false);
       listen(doc, "mouseout", out, true);
+      // A scroll moves rows under a still pointer; the mark would sit on a row that is no longer hovered.
+      listen(doc, "scroll", leave, true);
+      listen(win, "blur", leave, false);
     }
 
     // The column the right click landed on; Zotero opens its menu afterwards.

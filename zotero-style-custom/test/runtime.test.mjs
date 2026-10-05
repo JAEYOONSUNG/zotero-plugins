@@ -89,6 +89,47 @@ test('A7 a language change registers every column again under its new title and 
  }finally{i18n.use('ko-KR');plugin.windows.clear();await plugin.stop();}
 });
 
+test('tag findings: a multi-status paper and an orphan rating tag are found read-only and repaired only on request',async()=>{
+ const {plugin,item,Z}=fixture();Z.Libraries.userLibraryID=1;plugin.active=true;
+ const multi=item(1,{tags:[{tag:'/unread',type:0},{tag:'/reading',type:0},{tag:'/done',type:0}]});
+ const fine=item(2,{tags:[{tag:'/done',type:0}]});
+ const orphan=item(3,{tags:[{tag:'style-custom:rating:4',type:0},{tag:'keep',type:0}]});
+ const child=item(4,{tags:[{tag:'style-custom:rating:2',type:0}]});
+ for(const ref of [multi,fine])ref.isRegularItem=()=>true;
+ for(const ref of [orphan,child])ref.isRegularItem=()=>false;
+ child.parentItemID=1;
+ const all=[multi,fine,orphan,child];
+ Z.Items={...(Z.Items||{}),getAll:async()=>all,getAsync:async id=>all.find(i=>i.id===id)};
+ const before=JSON.stringify(all.map(i=>i.getTags()));
+ const found=await plugin.tagFindings(1);
+ assert.deepEqual(found.status.map(r=>r.id),['1']);assert.equal(found.status[0].shown,'done','the state the plugin shows now');
+ assert.deepEqual(found.ratingTags.map(r=>r.id),['3'],'a child attachment is not an orphan');
+ assert.equal(JSON.stringify(all.map(i=>i.getTags())),before,'finding changes nothing');
+ // Repairs.
+ const edits=[];plugin.edit=async(items,patch)=>{edits.push([items.map(i=>i.id),patch]);};plugin.canEdit=()=>true;
+ await plugin.fixStatusTags(['1']);
+ assert.deepEqual(edits,[[[1],{status:'done'}]],'keeps what is displayed; edit() removes the other status tags');
+ orphan.isEditable=()=>true;orphan.saveTx=async()=>{orphan.saved=true;};orphan.setTags=tags=>{orphan.tags=tags;orphan.getTags=()=>tags;};
+ const out=await plugin.removeOrphanRatingTags(['3','4']);
+ assert.equal(out.removed,1);assert.deepEqual(orphan.getTags().map(t=>t.tag),['keep']);
+ assert.ok(child.getTags().some(t=>/rating/.test(t.tag)),'a child attachment is not touched here');
+});
+
+test('duplicate people on stored works are cleaned in memory at load, with no request, and marked for the next flush',async()=>{
+ const {plugin}=fixture();
+ plugin.cache.works={
+  a:{doi:'10.1/a',people:[{id:'A1',name:'Ada',position:'first'},{id:'A1',name:'Ada L',position:'first',corresponding:true},{name:'Bo Lee',position:'last'},{name:'bo  lee',position:'last'},{name:'Bo Lee',position:'middle'}]},
+  b:{doi:'10.1/b',people:[{id:'A2',name:'Cy'}]},c:{missing:true}};
+ plugin.dirty=false;
+ assert.equal(plugin.dedupePaperPeople(),1,'one row needed cleaning');
+ assert.deepEqual(plugin.cache.works.a.people.map(p=>p.id||p.name),['A1','Bo Lee','Bo Lee'],'same id once; same name and position once; a different position stays');
+ assert.equal(plugin.cache.works.a.people[0].corresponding,true,'the flag survives the merge');
+ assert.equal(plugin.dirty,true);assert.equal(plugin.peopleCleaned,1);
+ assert.equal(plugin.dedupePaperPeople(),0,'idempotent');
+ const SelfCheck=require('../src/selfcheck.js');
+ assert.equal(SelfCheck.worksWithDuplicatePeople(Object.values(plugin.cache.works)),0,'so the self-check step passes without a re-query');
+});
+
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });

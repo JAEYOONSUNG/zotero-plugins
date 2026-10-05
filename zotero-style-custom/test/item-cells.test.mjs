@@ -191,3 +191,22 @@ test('the self-check never right-clicks a cell or presses the more button', () =
   const cells = fs.readFileSync(new URL('../src/runtime.js', import.meta.url), 'utf8');
   assert.match(cells, /setAttribute\("data-opens", "menu"\)/, 'the button says it opens a menu');
 });
+
+test('hover clears on what Zotero fires: mouseout to outside the tree, mouseleave of the tree, body scroll, window blur, and stale marks go too', async () => {
+  const {document, window} = await page();
+  Cells.attach(window, {listeners: []}, fakeRT(window), {hover: true});
+  const tree = document.getElementById('zotero-items-tree');
+  const cell = () => document.querySelector('.row .cell.ext-if .in');
+  const hover = () => { cell().dispatchEvent(new window.Event('mouseover', {bubbles: true})); assert.ok(tree.hasAttribute('data-sc-hover-col'), 'hovered'); };
+  const clear = () => assert.ok(!tree.hasAttribute('data-sc-hover-col') && document.querySelectorAll('[data-sc-hover-cell]').length === 0);
+  const mouseout = related => { const e = new window.Event('mouseout', {bubbles: true}); e.relatedTarget = related; cell().dispatchEvent(e); };
+  hover(); mouseout(document.body); clear();                       // to an element outside the tree
+  hover(); mouseout(null); clear();                                 // to nowhere
+  hover(); mouseout(document.querySelector('.row .cell.title')); assert.ok(tree.hasAttribute('data-sc-hover-col'), 'a move inside the tree keeps it');
+  tree.dispatchEvent(new window.Event('mouseleave')); clear();
+  hover(); document.body.dispatchEvent(new window.Event('scroll', {bubbles: true})); clear();
+  hover(); window.dispatchEvent(new window.Event('blur')); clear();
+  // A mark left on another cell (a recycled row) is swept too.
+  document.querySelector('.row .cell.title').setAttribute('data-sc-hover-cell', '');
+  hover(); mouseout(null); clear();
+});
