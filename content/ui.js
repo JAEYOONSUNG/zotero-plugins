@@ -1064,7 +1064,16 @@
 			email: String(PREF("email") || ""), openAlexApiKey: String(PREF("openAlexApiKey") || ""), openAlexSpent: openAlexHeld(),
 			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && ZotPoPPoPBridge.searchSource ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
 			onProgress: (msg, n, total) => { if (active()) { setStatus(msg); setProgress(n, total); } },
-			onResults: records => { if (active()) { received = records; state.sortKey = records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc"; displaySearchResults(records, { stream: true }); } }, log };
+			onResults: records => { if (active()) { received = records; defaultSort(records); displaySearchResults(records, { stream: true }); } }, log };
+		/* The list's own order is set once, by the first batch (or the final list when nothing streamed):
+		   a column the reader sorts by while the rest streams in stays sorted. An ORCID person's papers
+		   read newest first, whichever source they came from, from the first batch on. */
+		let orcidWorks = action === "publications" && q.authorProvider !== "scholar", sortSet = false;
+		let defaultSort = records => {
+			if (sortSet) return;
+			sortSet = true;
+			state.sortKey = orcidWorks ? "year" : records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = orcidWorks ? "desc" : "asc";
+		};
 		try {
 			let options = { maxResults: q.maxResults, popOutputSort: "rank" };
 			let task = action === "profiles" ? ZotPoPAuthors.searchProfiles(q.authorProvider, input, http, ctx)
@@ -1078,9 +1087,7 @@
 					if (action === "publications" && session.profiles.some(item => item.id === session.profile.id)) session.profiles = session.profiles.map(item => item.id === session.profile.id ? session.profile : item);
 					else session.profiles = [session.profile];
 				}
-				let orcidWorks = action === "publications" && q.authorProvider !== "scholar";
-				// An ORCID person's papers read newest first, whichever source they came from.
-				state.sortKey = orcidWorks ? "year" : result.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = orcidWorks ? "desc" : "asc";
+				defaultSort(result);
 				displaySearchResults(result); await refreshLibraryFlags(); if (!active()) throw abortError();
 				let partial = Boolean(result.partial || ctx.errors.length);
 				if (orcidWorks) setStatus(q.authorProvider === "combined" ? t("authorCombinedWorks", session.profile.name || session.profile.id, result.length, Boolean(result.partial)) : t("authorOrcidWorks", session.profile.name || session.profile.id, session.profile.id, result.length, Boolean(result.partial)));
@@ -1529,7 +1536,7 @@
 		if (!f) return;
 		try {
 			if (typeof f.text === "string") $("filter").value = f.text;
-			if (Array.isArray(f.rules)) state.rules = f.rules;
+			if (Array.isArray(f.rules)) state.rules = Filters.reviveRules(f.rules);
 			if (f.yearRange && Number.isFinite(f.yearRange.from) && Number.isFinite(f.yearRange.to)) state.yearRange = f.yearRange;
 			render();
 		}
@@ -2133,7 +2140,10 @@
 				e.preventDefault();
 				e.stopPropagation();
 				let startX = e.clientX;
-				let startW = state.colWidths[key] || DEFAULT_COLS[key];
+				/* From the width on screen: the window fits the title column to the room it has without
+				   changing the stored width, and a 1px drag from the stored 200 turned a fitted 340 into 201. */
+				let col = document.querySelector(`#cols col[data-k="${key}"]`);
+				let startW = parseFloat(col?.style?.width) || state.colWidths[key] || DEFAULT_COLS[key];
 				let move = ev => {
 					state.colWidths[key] = Math.min(MAX_COL, Math.max(MIN_COL, startW + (ev.clientX - startX)));
 					applyColumnWidths();
@@ -2270,7 +2280,9 @@
 		affiliationMemo = new WeakMap();
 		// A merged record may acquire a different source key. Carry row interaction
 		// state through a shared identifier as well as an unchanged key.
-		let previous = new Map();
+		// A row can also leave one streamed batch and come back in a later one (a source that asks
+		// one journal at a time, a re-ranked pool): its check waits for it until the search ends.
+		let previous = new Map(state.searching && state.streamCarry || []);
 		for (let r of state.records) {
 			for (let id of recordIdentities(r)) {
 				let flags = previous.get(id) || {};
@@ -2300,6 +2312,12 @@
 		state.selected = selected;
 		state.focusKey = focusKey;
 		state.detailKey = detailKey;
+		state.streamCarry = null;
+		if (stream && state.searching) {
+			let shown = new Set(state.records.flatMap(recordIdentities)), carry = new Map();
+			for (let [id, flags] of previous) if (flags.selected && !shown.has(id)) carry.set(id, { selected: true });
+			if (carry.size) state.streamCarry = carry;
+		}
 		// Keep received rows readable; progress continues in the status bar.
 		$("busy").hidden = !state.searching || state.records.length > 0;
 		if (stream) renderStreamed(); else render();
@@ -2383,6 +2401,7 @@
 		state.sortDir = "asc";
 		resetFilters();
 		state.selected.clear();
+		state.streamCarry = null;
 		state.focusKey = null;
 		state.detailKey = null;
 		$("search-btn").disabled = true;
@@ -2623,6 +2642,13 @@
 		let v = r[k];
 		if (v == null) return ["citations", "year", "rank", "journalIF", "journalOA2y"].includes(k) ? -1 : "";
 		return typeof v === "string" ? v.toLowerCase() : v;
+	}
+
+	// What sortValue gives for a missing value: the -1 of a figure, the empty text, the lab-less "9".
+	const UNKNOWN_BELOW_ZERO = new Set(["citations", "year", "rank", "journalIF", "journalOA2y", "cpy", "tier"]);
+	function sortUnknown(v, k) {
+		if (v === -1) return UNKNOWN_BELOW_ZERO.has(k);
+		return v === "" || (k === "affiliation" && v === "9");
 	}
 
 	function hasPDF(r) { return Boolean((r.pdfUrls || []).length || r.pdfUrl || r.pmcid || r.arxiv); }
@@ -3025,9 +3051,11 @@
 
 	// ---- words for a rule
 	function rangeText(rule) {
-		let { min, max } = rule, f = v => Number.isInteger(v) ? String(v) : fmt(v, 1);
-		if (min != null && max != null) return min === max ? f(min) : f(min) + "–" + f(max);
-		return min != null ? "≥ " + f(min) : "≤ " + f(max);
+		// A threshold reads as typed: IF ≥ 2.25 is not shown as ≥ 2.3.
+		let { min, max } = rule, f = v => Number.isInteger(v) ? String(v) : String(Number(v.toFixed(2)));
+		let text = min != null && max != null ? (min === max ? f(min) : f(min) + "–" + f(max)) : min != null ? "≥ " + f(min) : "≤ " + f(max);
+		// Papers with no value kept in: the chip says so, or the count beside it looks wrong.
+		return rule.includeUnknown && rule.mode !== "exclude" && Filters.UNKNOWN_KINDS.includes(rule.kind) ? text + " " + t("filterUnknownChip") : text;
 	}
 	function valueLabel(rule, key) {
 		if (rule.kind === "text") return key;
@@ -3063,6 +3091,7 @@
 		state.rules = state.rules.filter(r => r.id !== id);
 		if (state.filterEdit === id) state.filterEdit = null;
 		if (state.filterQ) delete state.filterQ[id];
+		if (state.filterDraft) delete state.filterDraft[id];
 		filtersChanged();
 	}
 	function toggleRuleValue(rule, key, label, on) {
@@ -3082,7 +3111,7 @@
 	function dropEmptyRules() { state.rules = state.rules.filter(Filters.ruleActive); }
 	function resetFilters() {
 		let box = $("filter"); if (box) box.value = "";
-		state.facet = null; state.yearRange = null; state.priorKeys = null; state.rules = []; state.filterEdit = null; state.filterQ = {};
+		state.facet = null; state.yearRange = null; state.priorKeys = null; state.rules = []; state.filterEdit = null; state.filterQ = {}; state.filterDraft = {};
 		if (state.filterOpen) closeFilterPop(false);
 	}
 	function clearAllFilters() {
@@ -3168,6 +3197,8 @@
 		let active = document.activeElement, keep = active && pop.contains?.(active) ? active.getAttribute?.("data-fid") : null;
 		let caret = keep && active.selectionStart != null ? [active.selectionStart, active.selectionEnd] : null;
 		let scroll = pop.querySelector?.(".fp-body")?.scrollTop || 0;
+		// A long option list scrolled to the third value keeps its place when one is ticked or a batch arrives.
+		let listScroll = new Map([...(pop.querySelectorAll?.(".fp-opts") || [])].map(list => [list.getAttribute("data-fid"), list.scrollTop || 0]));
 		pop.textContent = "";
 		pop.setAttribute("aria-label", t("filterPopTitle"));
 
@@ -3212,6 +3243,7 @@
 		pop.appendChild(body);
 		positionFilterPop();
 		body.scrollTop = scroll;
+		for (let list of pop.querySelectorAll?.(".fp-opts") || []) { let top = listScroll.get(list.getAttribute("data-fid")); if (top) list.scrollTop = top; }
 		if (keep) {
 			let again = pop.querySelector?.(`[data-fid="${keep}"]`);
 			if (again) { again.focus?.(); if (caret) try { again.setSelectionRange(caret[0], caret[1]); } catch (e) {} }
@@ -3272,7 +3304,11 @@
 		let row = fel("div", "fp-addrow");
 		let input = fel("input"); input.type = "text"; input.setAttribute("placeholder", t("filterWordsPh")); input.setAttribute("aria-label", t("filterWordsPh"));
 		input.setAttribute("data-fid", "rule:" + rule.id + ":first");
-		let commit = () => { let v = input.value.trim(); if (!v) return; if (!rule.values.includes(v)) rule.values.push(v); input.value = ""; filtersChanged(); };
+		// Words typed but not yet added survive a redraw (a batch of results arriving redraws the popover).
+		state.filterDraft ||= {};
+		input.value = state.filterDraft[rule.id] || "";
+		input.addEventListener("input", () => { state.filterDraft[rule.id] = input.value; });
+		let commit = () => { let v = input.value.trim(); if (!v) return; if (!rule.values.includes(v)) rule.values.push(v); input.value = ""; delete state.filterDraft[rule.id]; filtersChanged(); };
 		input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); commit(); } });
 		row.appendChild(input);
 		let add = fbutton("", t("filterAddWord"), null, commit); add.setAttribute("data-fid", "rule:" + rule.id + ":add");
@@ -3307,22 +3343,41 @@
 		row.appendChild(fel("span", "dash", "–"));
 		row.appendChild(make("max", t("filterMax")));
 		box.appendChild(row);
-		// A journal figure a paper may not have: say what happens to those papers, off by default.
-		if (Filters.UNKNOWN_KINDS.includes(rule.kind) && rule.mode !== "exclude") {
+		// A figure a paper may not have: say how many papers that is and what happens to them, off by default.
+		// With every paper carrying it (a year, nearly always) there is nothing to decide and no toggle.
+		let missing = Filters.UNKNOWN_KINDS.includes(rule.kind) && rule.mode !== "exclude" ? baseFor(rule).filter(r => Filters.numberOf(rule.kind, r, filterEnv) == null).length : 0;
+		if (missing || rule.includeUnknown && rule.mode !== "exclude" && Filters.UNKNOWN_KINDS.includes(rule.kind)) {
 			let unk = fel("label", "fp-opt"); tip(unk, t("filterUnknownTip"));
 			let cb = fel("input"); cb.type = "checkbox"; cb.checked = rule.includeUnknown === true; cb.setAttribute("data-fid", "unknown:" + rule.id);
 			cb.addEventListener("change", () => { rule.includeUnknown = cb.checked; filtersChanged(); });
-			unk.appendChild(cb); unk.appendChild(fel("span", "fp-opt-name", t("filterUnknownIn")));
+			unk.appendChild(cb); unk.appendChild(fel("span", "fp-opt-name", t("filterUnknownIn", missing)));
 			box.appendChild(unk);
 		}
 		return box;
+	}
+	/* What a reader may type for a journal in the journal rule's search: the abbreviation a reference list
+	   prints, the one the source gave, and the acronym ("PNAS", "JACS"). Read from lists already loaded. */
+	let catalogByName = null, catalogByNameOf = null;
+	function journalAlts(name, fromRecords) {
+		let alts = [], key = Filters.flat(name);
+		if (typeof ZotPoPJournalMarks !== "undefined") alts.push(ZotPoPJournalMarks.abbreviate(name), ZotPoPJournalMarks.abbreviateByWords(name));
+		alts.push(J.acronymOf(name), ...(fromRecords?.get(key) || []));
+		if (journalCatalog && catalogByNameOf !== journalCatalog) { catalogByNameOf = journalCatalog; catalogByName = new Map(journalCatalog.entries.map(e => [e.n, e])); }
+		let entry = journalCatalog ? catalogByName.get(J.flat(name)) : null;
+		if (entry) alts.push(...entry.abbrevs, ...entry.a);
+		return [...new Set(alts.filter(Boolean))];
+	}
+	function sourceAbbreviations() {
+		let map = new Map();
+		for (let r of state.records) if (r.journalAbbrev && r.venue) { let k = Filters.flat(r.venue); if (!map.has(k)) map.set(k, []); map.get(k).push(r.journalAbbrev); }
+		return map;
 	}
 	// Multi-value rules: a search box over the options, each with how many results it would leave.
 	const FILTER_OPTION_LIMIT = 60;
 	function optionEditor(rule, box) {
 		state.filterQ ||= {};
 		let fixed = rule.kind === "type" || rule.kind === "pdf" || rule.kind === "source";
-		let list = fel("div", "fp-opts"); list.setAttribute("role", "group"); list.setAttribute("aria-label", t("filterKind", rule.kind));
+		let list = fel("div", "fp-opts"); list.setAttribute("role", "group"); list.setAttribute("aria-label", t("filterKind", rule.kind)); list.setAttribute("data-fid", "opts:" + rule.id);
 		let fill = () => {
 			list.textContent = "";
 			let tally = Filters.tally(rule.kind, baseFor(rule));
@@ -3331,7 +3386,8 @@
 			let chosen = rule.values.map(key => ({ key, n: counts.get(key)?.n || 0 }));
 			let rest = tally.filter(o => !rule.values.includes(o.key));
 			let named = key => valueLabel({ ...rule, labels: { ...rule.labels, [key]: counts.get(key)?.label || rule.labels[key] || key } }, key);
-			let all = [...chosen, ...rest].map(o => ({ key: o.key, n: o.n, label: named(o.key) }));
+			let given = rule.kind === "journal" && (state.filterQ[rule.id] || "").trim() ? sourceAbbreviations() : null;
+			let all = [...chosen, ...rest].map(o => ({ key: o.key, n: o.n, label: named(o.key), alts: given ? journalAlts(named(o.key), given) : undefined }));
 			let found = Filters.searchOptions(all, state.filterQ[rule.id] || "");
 			if (!found.length) list.appendChild(fel("p", "fp-hint", t("filterNoOptions")));
 			for (let o of found.slice(0, FILTER_OPTION_LIMIT)) {
@@ -3464,6 +3520,9 @@
 		let k = state.sortKey, dir = state.sortDir === "asc" ? 1 : -1;
 		list.sort((a, b) => {
 			let va = sortValue(a, k), vb = sortValue(b, k);
+			// A paper with no year, journal or figure is not the oldest or the smallest: it goes last either way.
+			let ua = sortUnknown(va, k), ub = sortUnknown(vb, k);
+			if (ua !== ub) return ua ? 1 : -1;
 			if (va < vb) return -dir;
 			if (va > vb) return dir;
 			return a.popOriginal && b.popOriginal ? a.popOrdinal - b.popOrdinal : a.rank - b.rank;
@@ -4194,6 +4253,10 @@
 		let tr = citeTrend(r);
 		if (!tr || !tr.last || !tr.prev || (tr.direction !== "up" && tr.direction !== "down")) return null;
 		let text = t(tr.direction === "up" ? "citeMarkUp" : "citeMarkDown", t("citeYearLine", tr.last.year, tr.last.n) + " / " + t("citeYearLine", tr.prev.year, tr.prev.n), tr.yoy);
+		// The yearly series is OpenAlex's. Beside another index's count (Semantic Scholar's 150 next to a
+		// falling OpenAlex 40 → 30) the arrow says whose years it read.
+		let headline = r.citationSource || r.source;
+		if (headline && headline !== "openalex") text += " · " + t("citeTrendOf", sourceLabel("openalex"));
 		return { direction: tr.direction, glyph: tr.direction === "up" ? "▲" : "▼", text };
 	}
 	function decorateCiteCell(cell, r) {
@@ -5256,14 +5319,30 @@
 
 	// One person's institution, country and h-index, from the same record: values of two labs are never mixed.
 	const personCells = p => [p?.institution ?? "", p?.country ?? "", p?.hIndex ?? ""];
+	/* The corresponding author's columns, and on what basis: flagged by the source, or the last author
+	   assumed because nobody was flagged. A first author flagged corresponding is the corresponding author
+	   too, though the row shows them once. */
+	function correspondingCells(aff) {
+		if (!aff) return [...personCells(null), ""];
+		let who = aff.corresponding || (aff.correspondingKnown ? aff.first : null);
+		if (!who) return [...personCells(null), ""];
+		return [...personCells(who), t(aff.correspondingKnown ? "csvCorrFlagged" : "csvCorrLastAuthor")];
+	}
 	function csvText() {
-		let esc = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+		// A cell that starts with = + - or @ is a formula to Excel and LibreOffice ("=HYPERLINK(...)" in a
+		// scraped title runs on open); a leading apostrophe keeps it text. Numbers are left as numbers.
+		let esc = v => {
+			let s = String(v == null ? "" : v);
+			if (typeof v !== "number" && /^[=+\-@\t\r]/.test(s) && !/^-?\d+(?:\.\d+)?$/.test(s)) s = "'" + s;
+			return '"' + s.replace(/"/g, '""') + '"';
+		};
 		let lines = [t("csvHead").join(",")];
 		for (let r of state.visible) {
+			let cpy = ZotPoPMetrics.citesPerYear(r);
 			lines.push([
-				r.citations ?? "", fmt(ZotPoPMetrics.citesPerYear(r)), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
+				r.citations ?? "", cpy == null || !Number.isFinite(cpy) ? "" : fmt(cpy), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
 				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.journalIF == null ? "" : (r.journalIFSource || "JCR"), r.journalOA2y == null ? "" : fmt(r.journalOA2y, 2),
-				...personCells(affiliationOf(r)?.first), ...personCells(affiliationOf(r)?.corresponding),
+				...personCells(affiliationOf(r)?.first), ...correspondingCells(affiliationOf(r)),
 				r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")
 			].map(esc).join(","));

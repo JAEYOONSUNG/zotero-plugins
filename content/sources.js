@@ -456,11 +456,16 @@ var ZotPoPSources = (function () {
 	function perJournal(fn) {
 		return async function (q, http, ctx) {
 			if (!Array.isArray(q.venues) || q.venues.length < 2) return fn(q, http, ctx);
-			let out = [], failed = null;
+			let out = [], failed = null, report = ctx.onResults;
 			for (let v of q.venues) {
 				throwIfCancelled(ctx);
+				/* Each journal's search streams only its own rows. Reported as they are, the second
+				   journal's first page replaced the first journal's rows on screen, and a paper checked
+				   there lost its checkmark. What is streamed is every journal so far plus this one. */
+				if (report) ctx.onResults = (rows, info) => report(sortSearchResults(dedupe([...out, ...rows]), q).slice(0, q.maxResults || 200), info);
 				try { out.push(...await fn(Object.assign({}, q, { venue: v.name, venues: undefined }), http, ctx)); }
 				catch (e) { if (e.name === "AbortError") throw e; failed = failed || e; }
+				finally { if (report) ctx.onResults = report; }
 			}
 			if (failed && !out.length) throw failed;
 			if (failed) (ctx.errors || (ctx.errors = [])).push(failed.message);

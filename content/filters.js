@@ -17,8 +17,9 @@ var ZotPoPFilters = (function () {
 	const KINDS = ["text", "author", "journal", "inst", "country", "type", "source", "year", "cites", "cpy", "if", "oa2y", "pdf"];
 	const MULTI_KINDS = ["author", "journal", "inst", "country", "type", "source", "pdf"];
 	const RANGE_KINDS = ["year", "cites", "cpy", "if", "oa2y"];
-	// Journal figures a paper may simply not have: an include rule on one lets such a paper in only when asked to.
-	const UNKNOWN_KINDS = ["if", "oa2y"];
+	/* Figures a paper may simply not have -- a journal without a JIF, a PubMed or arXiv result without a
+	   citation count, a record without a year: an include rule on one lets such a paper in only when asked to. */
+	const UNKNOWN_KINDS = ["year", "cites", "cpy", "if", "oa2y"];
 	const TEXT_FIELDS = ["all", "title", "abstract", "author", "journal", "inst"];
 	const TYPES = ["article", "preprint", "review", "book", "other"];
 
@@ -236,6 +237,19 @@ var ZotPoPFilters = (function () {
 	function newRule(kind, mode = "include") {
 		return { id: "r" + nextId++, kind, mode: mode === "exclude" ? "exclude" : "include", field: "all", values: [], labels: {}, min: null, max: null, includeUnknown: false };
 	}
+	/* Rules saved with a pinned search come back in a later session, where the counter has started over:
+	   kept as saved, a saved "r1" and the next new "r1" were one rule to Remove and to the popover. Each
+	   comes back with a fresh id and the fields a rule has; anything that is not a known rule is dropped. */
+	function reviveRules(list) {
+		if (!Array.isArray(list)) return [];
+		return list.filter(r => r && KINDS.includes(r.kind)).map(r => Object.assign(newRule(r.kind, r.mode), {
+			field: TEXT_FIELDS.includes(r.field) ? r.field : "all",
+			values: Array.isArray(r.values) ? r.values.slice() : [],
+			labels: r.labels && typeof r.labels === "object" ? Object.assign({}, r.labels) : {},
+			min: Number.isFinite(r.min) ? r.min : null, max: Number.isFinite(r.max) ? r.max : null,
+			includeUnknown: r.includeUnknown === true
+		}));
+	}
 	function ruleActive(rule) {
 		if (!rule) return false;
 		if (RANGE_KINDS.includes(rule.kind)) return rule.min != null || rule.max != null;
@@ -294,13 +308,16 @@ var ZotPoPFilters = (function () {
 		return list.sort((a, b) => b.n - a.n || String(a.label).localeCompare(String(b.label)));
 	}
 	// Options of a kind matching what the reader typed into the picker's search box, folded like everything else.
+	/* An option may carry alts, other names it is known by (a journal's "Nat Methods", "PNAS"). Those are
+	   compared with punctuation ignored, so "Nat. Methods" finds "Nat Methods". */
 	function searchOptions(options, query) {
-		let q = fold(query);
-		return q ? options.filter(o => fold(o.label).includes(q)) : options;
+		let q = fold(query), qf = flat(query);
+		if (!q) return options;
+		return options.filter(o => fold(o.label).includes(q) || (qf && (o.alts || []).some(a => flat(a).includes(qf))));
 	}
 
 	return { KINDS, MULTI_KINDS, RANGE_KINDS, UNKNOWN_KINDS, TEXT_FIELDS, TYPES, fold, flat, parseQuick, parseRange, authorKeys, institutions, countries, typeOf, hasPDF, sourcesOf,
-		countryCodeFor, COUNTRY_NAMES, newRule, ruleActive, compile, matches, ruleHolds, tally, offered, searchOptions, numberOf };
+		countryCodeFor, COUNTRY_NAMES, newRule, reviveRules, ruleActive, compile, matches, ruleHolds, tally, offered, searchOptions, numberOf };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPFilters;

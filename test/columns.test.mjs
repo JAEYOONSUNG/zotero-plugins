@@ -179,3 +179,13 @@ test("a layout saved before the institution column moved keeps its widths and or
 	assert.equal(h.state.colWidths.title, 333);
 	assert.equal(h.state.colWidths.venue, 177);
 });
+
+test("a drag on a column the window fitted starts from the width on screen, not the stored default", () => {
+	const h = setup();
+	const th = h.header("title"), grip = th.querySelector(".rz"), col = h.get("cols").children.find(c => c.dataset.k === "title");
+	col.style.width = "340px";   // what fitTitleColumn sets in a wide window, leaving the stored width alone
+	event(grip, "mousedown", { clientX: 10 });
+	h.emitDocument("mousemove", { clientX: 11 }); h.emitDocument("mouseup");
+	assert.equal(h.state.colWidths.title, 341, "one pixel to the right is one pixel wider");
+	assert.equal(col.style.width, "341px");
+});
