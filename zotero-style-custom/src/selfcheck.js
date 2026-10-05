@@ -430,13 +430,22 @@
         }
         if (!tree.getAttribute('data-sc-hover-col')) throw new Error('the tree did not record the hovered column');
         // What Zotero fires when the pointer leaves the list: mouseout to an element outside it, then mouseleave of the tree.
+        /* The handler must clear; whether the attributes stay gone depends on the real pointer:
+           Gecko synthesises a trusted mouseover under a resting pointer after any relayout, and
+           the user's mouse may well be over the list while this runs. So the handler's own count
+           is the proof, and a trusted re-hover is reported rather than counted as a failure. */
+        const dbg = state.cellsDebug || {}, before = {clears: dbg.clears || 0, trusted: dbg.trustedOvers || 0};
         cell.dispatchEvent(new win.MouseEvent('mouseout', {bubbles: true, cancelable: true, relatedTarget: doc.documentElement}));
-        if (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col')) throw new Error('mouseout to outside the list left the hover attributes behind');
+        if ((dbg.clears || 0) <= before.clears) throw new Error(`mouseout to outside the list did not run the clear handler (outs ${dbg.outs}, clears ${dbg.clears})`);
+        await wait(80);
+        const again = cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col');
+        if (again && (dbg.trustedOvers || 0) <= before.trusted) throw new Error(`mouseout to outside the list left the hover attributes behind (outs ${dbg.outs}, clears ${dbg.clears}, applies ${dbg.applies}, trusted overs ${dbg.trustedOvers})`);
+        const rehover = again ? ' · the real pointer re-hovered the list afterwards (trusted mouseover), which is expected' : '';
         cell.dispatchEvent(new win.MouseEvent('mouseover', {bubbles: true, cancelable: true, buttons: 0}));
         for (let waited = 0; waited < 600 && !cell.hasAttribute('data-sc-hover-cell'); waited += 50) await wait(50);
         tree.dispatchEvent(new win.MouseEvent('mouseleave', {bubbles: false}));
-        if (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col')) throw new Error('mouseleave of the list left the hover attributes behind');
-        return 'mouseover set the cell and the column; mouseout to outside and mouseleave each cleared both';
+        if ((dbg.clears || 0) <= before.clears + 1 && (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col'))) throw new Error('mouseleave of the list left the hover attributes behind');
+        return 'mouseover set the cell and the column; mouseout to outside and mouseleave each ran the clear' + rehover;
       } finally {
         cell.removeAttribute('data-sc-hover-cell');
         if (tree) tree.removeAttribute('data-sc-hover-col');

@@ -3110,3 +3110,8 @@
 #style-custom-workbench .sc-papers-year { display: flex; align-items: center; gap: var(--sc-space-2); margin: var(--sc-space-2) var(--sc-space-1) 0; color: var(--sc-muted); font: var(--sc-fw-strong) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
 #style-custom-workbench .sc-papers-foot { display: flex; align-items: center; gap: var(--sc-space-3); margin: 0; padding: 0 var(--sc-space-1); }
 #style-custom-workbench .sc-person-work[data-new="true"] .sc-tag { margin-inline-start: var(--sc-space-1); }
+
+/* 자료 점검 summary: the title and one chip per finding, wrapping as chips rather than as one long line. */
+#style-custom-workbench .sc-attachment-findings > summary.sc-findings-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); }
+#style-custom-workbench .sc-findings-title { font-weight: var(--sc-fw-strong); color: var(--sc-text); }
+#style-custom-workbench .sc-findings-fact { display: inline-flex; align-items: center; min-height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: 999px; background: var(--sc-fill); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); white-space: nowrap; }

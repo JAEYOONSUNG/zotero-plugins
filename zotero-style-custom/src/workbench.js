@@ -4249,7 +4249,11 @@
    details.addEventListener('toggle',()=>{state.attachmentFindingsOpen=details.open;});
    // Only the findings that exist: a row of zeros says nothing.
    const facts=[['보충자료',found.supplementary.length],['중복',found.duplicate.length],['다른 논문',found.foreign.length],['보충자료만 있는 문헌',(found.orphan||[]).length],['첨부 없음',found.missing.length],['파일 연결 끊김',(found.broken||[]).length],['합칠 프리프린트',(found.cleanup?.merge||[]).length],['여러 번 보유',(found.cleanup?.copies||[]).length],['상태 태그 여러 개',(found.cleanup?.statusTags||[]).length],['붙을 곳 없는 별점 태그',(found.cleanup?.ratingTags||[]).length]].filter(([,count])=>count>0);
-   node('summary',T('자료 점검')+' · '+(facts.length?facts.map(([label,count])=>`${T(label)} ${count}`).join(' · '):T('이상 없음')),details);
+   // One chip per finding: the English line is long, and a single text node wrapping across lines reads as a layout fault.
+   const summary=node('summary',null,details,{class:'sc-findings-summary'});
+   node('span',T('자료 점검'),summary,{class:'sc-findings-title'});
+   if(facts.length)for(const [label,count] of facts)node('span',`${T(label)} ${count}`,summary,{class:'sc-findings-fact'});
+   else node('span',T('이상 없음'),summary,{class:'sc-findings-fact'});
    if(found.unread){
     button(`아직 안 읽은 ${found.unread}개 판별`,()=>run(async()=>{
      const items=await runtime.libraryItems(win.ZoteroPane?.getSelectedLibraryID?.());

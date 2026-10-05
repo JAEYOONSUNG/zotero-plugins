@@ -194,6 +194,7 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     };
     const escape = s => (win.CSS?.escape ? win.CSS.escape(s) : String(s).replace(/([^\w-])/g, "\\$1"));
     let style = null, known = new Set(), rootNode = null, lastCell = null, pending = null, raf = 0;
+    const debug = state.cellsDebug = {overs: 0, trustedOvers: 0, outs: 0, clears: 0, applies: 0};
 
     const ensureStyle = () => {
       if (style) return style;
@@ -219,6 +220,7 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       ensureStyle().textContent = baseCSS() + (hover ? hoverCSS(keys, escape) : "");
     };
     const clear = () => {
+      debug.clears++;
       if (lastCell) { lastCell.removeAttribute("data-sc-hover-cell"); lastCell = null; }
       if (rootNode) { rootNode.removeAttribute("data-sc-hover-col"); rootNode = null; }
       // Rows are recycled while scrolling: a mark can sit on a cell this closure no longer holds.
@@ -236,12 +238,14 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       const key = keyOf(cell);
       if (!key) { clear(); return; }
       if (!known.has(key)) rules(visibleKeys());
+      debug.applies++;
       if (lastCell) lastCell.removeAttribute("data-sc-hover-cell");
       lastCell = cell; cell.setAttribute("data-sc-hover-cell", "");
       rootNode = tree; tree.setAttribute("data-sc-hover-col", key);
     };
     if (hover) {
       const over = event => {
+        debug.overs++; if (event.isTrusted) debug.trustedOvers++;
         if (event.buttons) return;
         pending = event.target;
         if (raf) return;
@@ -251,6 +255,7 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       };
       // Leaving the tree: mouseout with nowhere to go or a target outside it, and mouseleave of the tree itself (or the window).
       const out = event => {
+        debug.outs++;
         const to = event.relatedTarget;
         if (!to || !(to.closest?.(TREE))) { pending = null; clear(); }
       };
