@@ -1095,3 +1095,41 @@ test('wording: skipped content, the figure chip, and the plain-text banner',asyn
  assert.doesNotMatch(fs.readFileSync(new URL('../src/reader-assist.js',import.meta.url),'utf8'),/이라 무료|무료\)|\(free\)|so free/,'a model on this Mac is not called free');
  f.stop();
 });
+
+/* ---- 0.59.24 live check: Xray wrappers and listener options ------------------------------------
+   In Zotero, reader._internalReader is a waived content object, so the viewer document reached through it is
+   content: a chrome options dictionary handed to its addEventListener cannot be read there (capture comes out
+   false), while what a chrome await gets back from a content promise is an Xray that hides pdf.js's methods. */
+function xray(real){return {wrappedJSObject:real};}         // methods and fields visible only once waived
+function contentTarget(doc){
+ // a content document: an options object from chrome reads as opaque, so only a boolean capture is honoured
+ const reg=new Set();const key=(t,fn,c)=>t+'|'+c+'|'+(fn.__id||(fn.__id=Math.random()));
+ const add=doc.addEventListener.bind(doc),remove=doc.removeEventListener.bind(doc);
+ doc.addEventListener=(t,fn,o)=>{const c=o===true;reg.add(key(t,fn,c));add(t,fn,c);};
+ doc.removeEventListener=(t,fn,o)=>{const c=o===true;reg.delete(key(t,fn,c));remove(t,fn,c);};
+ return reg;
+}
+test('pdf.js reached through Xray wrappers: pages, text and fonts are read once waived, and copied into plain objects',async()=>{
+ const f=fixture({structCache:false});
+ const realPage={view:[0,0,612,792],rotate:0,
+  getTextContent:async()=>xray({items:[{str:'We study polymerases. They are useful.',transform:[10,0,0,10,72,680],width:200,height:10,fontName:'f2'}],styles:{f2:{fontFamily:'serif'}}}),
+  getOperatorList:async()=>({}),commonObjs:xray({has:()=>true,get:()=>xray({name:'Serif-Bold',bold:true})})};
+ const page={wrappedJSObject:realPage};                       // no getTextContent until waived
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:1,getPage:async()=>page}};
+ const handle=f.service.diagnose(f.reader,{fresh:true});
+ const got=await handle.readPages([1]);
+ assert.equal(got.pages.length,1);assert.equal(got.fonts.named,1,'the font was named through commonObjs');
+ const out=await f.service.probe(f.reader);
+ assert.equal(out.extraction.fallback,false,out.extraction.error);assert.ok(out.extraction.sentences>0);
+ handle.release();f.stop();
+});
+test('every listener on the reader and viewer documents is removed on destroy, also where a content document ignores a chrome options object',async()=>{
+ const f=fixture();
+ const view=contentTarget(f.viewDoc),readerDoc=contentTarget(f.doc);
+ const second=parseHTML('<html><body></body></html>').document;const sreg=contentTarget(second);
+ f.reader._internalReader._secondaryView={_iframeWindow:{document:second}};
+ await f.open();
+ assert.ok(view.size>=5&&readerDoc.size>=6&&sreg.size>=5,`${view.size}/${readerDoc.size}/${sreg.size} registered`);
+ f.stop();
+ assert.deepEqual([...view],[],'viewer document');assert.deepEqual([...readerDoc],[],'reader document');assert.deepEqual([...sreg],[],'second pane');
+});

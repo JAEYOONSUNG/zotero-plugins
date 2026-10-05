@@ -45,6 +45,16 @@
   try{if(C&&C.utils&&typeof C.utils.cloneInto==='function'&&win)return C.utils.cloneInto(value,win,{cloneFunctions:true});}catch(_){}
   return value;
  }
+ /* What chrome code gets back from pdf.js is an Xray: a promise from content resolves, on the chrome side, to an
+    Xray wrapper that shows none of pdf.js's own methods or fields (page.getTextContent was "not a function" in
+    Zotero 9.0.6). Zotero's own reader code reaches content with .wrappedJSObject; Cu.waiveXrays does the same for
+    any value. Everything read through a waived object is copied into plain chrome values before it is used. */
+ function waive(value){
+  if(value===null||value===undefined||(typeof value!=='object'&&typeof value!=='function'))return value;
+  const C=root.Components||globalThis.Components;
+  try{if(C&&C.utils&&typeof C.utils.waiveXrays==='function')return C.utils.waiveXrays(value);}catch(_){}
+  try{return value.wrappedJSObject||value;}catch(_){return value;}
+ }
  function contentFunction(fn,win){
   const C=root.Components||globalThis.Components;
   try{if(C&&C.utils&&typeof C.utils.exportFunction==='function'&&win)return C.utils.exportFunction(fn,win);}catch(_){}
@@ -214,7 +224,7 @@
   const pageCount=reader=>{const n=stats(reader).pagesCount;return Number.isInteger(n)&&n>0?n:0;};
   // The reader's views: the primary one, and the second pane of a split view.
   const viewOf=(reader,which='primary')=>coreOf(reader)?.[which==='secondary'?'_secondaryView':'_primaryView'];
-  const viewerWindow=(reader,which='primary')=>{const w=viewOf(reader,which)?._iframeWindow;return w?(w.wrappedJSObject||w):null;};
+  const viewerWindow=(reader,which='primary')=>{const w=viewOf(reader,which)?._iframeWindow;return w?waive(w):null;};
   const viewerDoc=(reader,which='primary')=>{try{return viewOf(reader,which)?._iframeWindow?.document||null;}catch(_){return null;}};
   const attachmentOf=reader=>Z.Items.get(reader.itemID);
   const itemOf=reader=>{const a=attachmentOf(reader);return a&&a.parentID?Z.Items.get(a.parentID):a;};
@@ -237,26 +247,26 @@
 
   /* ---- the paper's text, once per attachment ------------------------------ */
   const sleepIn=(win,ms)=>new Promise(resolve=>(win&&win.setTimeout?win:globalThis).setTimeout(resolve,ms));
-  const plainContent=content=>({items:Array.from(content.items||[]).map(i=>({str:String(i.str||''),dir:i.dir,transform:Array.from(i.transform||[]),width:Number(i.width)||0,height:Number(i.height)||0,fontName:i.fontName,hasEOL:!!i.hasEOL})),styles:JSON.parse(JSON.stringify(content.styles||{}))});
+  const plainContent=content=>({items:Array.from(content.items||[]).map(raw=>{const i=waive(raw);return {str:String(i.str||''),dir:i.dir==null?undefined:String(i.dir),transform:Array.from(i.transform||[]).map(Number),width:Number(i.width)||0,height:Number(i.height)||0,fontName:i.fontName==null?undefined:String(i.fontName),hasEOL:!!i.hasEOL};}),styles:JSON.parse(JSON.stringify(waive(content.styles)||{}))});
   /* A font reaches commonObjs only once pdf.js has bound it, a moment after the operator list: wait a little, then go without its name. */
   async function fontsOf(page,content,win,{waitMs=400}={}){
    const fonts={},ids=Object.keys(content.styles||{});
-   const has=id=>{try{return typeof page.commonObjs.has==='function'?page.commonObjs.has(id):true;}catch(_){return false;}};
+   const has=id=>{try{const objs=waive(page.commonObjs);return typeof objs.has==='function'?!!objs.has(id):true;}catch(_){return false;}};
    for(let waited=0;ids.some(id=>!has(id))&&waited<waitMs;waited+=25)await sleepIn(win,25);
-   for(const id of ids){if(!has(id))continue;try{const font=page.commonObjs.get(id);if(font)fonts[id]={name:String(font.name||''),bold:!!font.bold||!!font.black,italic:!!font.italic};}catch(_){}}
+   for(const id of ids){if(!has(id))continue;try{const font=waive(waive(page.commonObjs).get(id));if(font)fonts[id]={name:String(font.name||''),bold:!!font.bold||!!font.black,italic:!!font.italic};}catch(_){}}
    return fonts;
   }
   async function pdfDocumentOf(session,{tries=60}={}){
    const win=session.doc.defaultView;
-   for(let i=0;i<tries;i++){if(session.destroyed)return null;const app=viewerWindow(session.reader)?.PDFViewerApplication;if(app&&app.pdfDocument)return app.pdfDocument;await sleepIn(win,250);}
+   for(let i=0;i<tries;i++){if(session.destroyed)return null;const app=waive(viewerWindow(session.reader)?.PDFViewerApplication);if(app&&app.pdfDocument)return waive(app.pdfDocument);await sleepIn(win,250);}
    return null;
   }
   /* One page through pdf.js into the extraction module's page shape, and its size. Nothing chrome-made is passed to pdf.js. */
   async function readPage(session,pdf,number,{fonts=true,stats=null}={}){
    const win=session.doc.defaultView;
-   const page=await pdf.getPage(number);
-   const viewport=viewportFor(Array.from(page.view||[0,0,612,792]),Number(page.rotate)||0,{userUnit:Number(page.userUnit)||1});
-   const content=await page.getTextContent();
+   const page=waive(await waive(pdf).getPage(number));
+   const viewport=viewportFor(Array.from(page.view||[0,0,612,792]).map(Number),Number(page.rotate)||0,{userUnit:Number(page.userUnit)||1});
+   const content=waive(await page.getTextContent());
    // Bold and italic come from the fonts pdf.js has loaded for the page; without them the extractor infers headings from glyph widths.
    let fontMap={};
    if(fonts)try{await page.getOperatorList();fontMap=await fontsOf(page,content,win);}catch(_){}
@@ -459,8 +469,8 @@
    // The remembered tab is drawn from the start, so an open panel is never an empty grey column.
    paintTab(session,validTab(session.tab));
    // A click anywhere else closes an open menu.
-   session.onDocClick=()=>{for(const m of session.menus)m.close();};doc.addEventListener('click',session.onDocClick);
-   session.onKey=event=>{if(event.key==='Escape')for(const m of session.menus)m.close();};doc.addEventListener('keydown',session.onKey);
+   session.onDocClick=()=>{for(const m of session.menus)m.close();};on(session,doc,'click',session.onDocClick);
+   session.onKey=event=>{if(event.key==='Escape')for(const m of session.menus)m.close();};on(session,doc,'keydown',session.onKey);
    return rootEl;
   }
   /* Zotero 9's own Read Aloud shares the speech queue: offer to stop it rather than fight it. The reader where it
@@ -1125,8 +1135,8 @@
   }
   function liveViewport(session,page,which='primary'){
    try{
-    const app=viewerWindow(session.reader,which)?.PDFViewerApplication,view=app&&app.pdfViewer&&app.pdfViewer.getPageView&&app.pdfViewer.getPageView(page-1);
-    const v=view&&view.viewport;if(!v||!(v.width>0))return null;
+    const app=waive(viewerWindow(session.reader,which)?.PDFViewerApplication),pv=app&&waive(app.pdfViewer),view=pv&&pv.getPageView&&waive(pv.getPageView(page-1));
+    const v=view&&waive(view.viewport);if(!v||!(v.width>0))return null;
     return {width:Number(v.width),height:Number(v.height),transform:Array.from(v.transform||[]).map(Number)};
    }catch(_){return null;}
   }
@@ -1153,7 +1163,8 @@
    // Scroll only when the sentence is not on screen.
    let visible=false;
    try{const win=viewerDoc(session.reader)?.defaultView,r=first.getBoundingClientRect();visible=r.height>0&&r.top>=48&&r.bottom<=win.innerHeight-48;}catch(_){}
-   if(!visible)try{first.scrollIntoView({block:'nearest',inline:'nearest'});}catch(error){log(error);}
+   // The viewer document is content: the options go over as a content object, or pdf.js's page would jump to the top.
+   if(!visible)try{first.scrollIntoView(toContent({block:'nearest',inline:'nearest'},viewerDoc(session.reader)?.defaultView));}catch(error){log(error);}
   }
   function redrawMarks(session){
    if(session.destroyed||!session.markedUnit||uiState().follow===false)return;
@@ -1294,7 +1305,7 @@
      try{
       const w=view&&view._iframeWindow;if(!w)continue;
       if(typeof w.dispatchEvent==='function'&&w.Event)w.dispatchEvent(new w.Event('resize'));
-      const app=(w.wrappedJSObject||w).PDFViewerApplication,pv=app&&app.pdfViewer;
+      const app=waive(waive(w).PDFViewerApplication),pv=app&&waive(app.pdfViewer);
       const scale=pv&&pv.currentScaleValue;
       if(typeof scale==='string'&&/^(?:page-width|page-fit|auto|page-actual)$/.test(scale))pv.currentScaleValue=scale;
      }catch(error){log(error);}
@@ -1325,7 +1336,7 @@
    // window loses focus, and when the panel goes: never a drag that keeps resizing on the next move.
    const end=()=>{if(!drag)return;const id=drag.pointer;drag=null;try{if(id!==undefined&&handle.hasPointerCapture&&handle.hasPointerCapture(id))handle.releasePointerCapture(id);}catch(_){}persistUI();};
    for(const name of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(name,end);
-   session.onBlur=end;try{doc.defaultView.addEventListener('blur',session.onBlur);}catch(_){}
+   session.onBlur=end;on(session,doc.defaultView,'blur',session.onBlur);
    session.endDrag=end;
    handle.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setWidth(panelWidth(session)+(event.key==='ArrowLeft'?16:-16),true);}});
   }
@@ -1367,6 +1378,24 @@
 
   /* ---- sessions per reader ------------------------------------------------- */
   const ACTIVITY=['pointermove','pointerdown','keydown','wheel'];
+  /* Every listener on the reader's documents and window goes through on() and is removed by off() with the same
+     function and the same capture flag. The capture flag is always a plain boolean: the viewer documents are reached
+     through Zotero's waived _internalReader, so they are content, and a chrome options object such as
+     {capture:true,passive:true} cannot be read there (it registered as capture=false, and removing it with
+     capture=true left four activity listeners behind in the live check). Firefox already treats wheel listeners
+     on a document as passive. */
+  function on(session,target,type,fn,capture=false){
+   if(!target||typeof fn!=='function')return;
+   try{target.addEventListener(type,fn,!!capture);}catch(error){log(error);return;}
+   (session.listening||(session.listening=[])).push({target,type,fn,capture:!!capture});
+  }
+  function off(session,target=null){
+   session.listening=(session.listening||[]).filter(r=>{
+    if(target&&r.target!==target)return true;
+    try{r.target.removeEventListener(r.type,r.fn,r.capture);}catch(_){}
+    return false;
+   });
+  }
   /* The viewer document is replaced when the reader reloads the file: listeners and the render watch follow it. */
   function attachViewer(session){
    const vdoc=viewerDoc(session.reader),second=viewerDoc(session.reader,'secondary');
@@ -1374,8 +1403,8 @@
     detachPrimary(session);
     if(vdoc){
      session.onDbl=session.onDbl||(event=>onDoubleClick(session,event,'primary'));
-     vdoc.addEventListener('dblclick',session.onDbl,true);
-     for(const name of ACTIVITY)vdoc.addEventListener(name,session.onActivity,{capture:true,passive:true});
+     on(session,vdoc,'dblclick',session.onDbl,true);
+     for(const name of ACTIVITY)on(session,vdoc,name,session.onActivity,true);
      session.vdoc=vdoc;session.marks=[];
      watchRendering(session);
     }
@@ -1385,19 +1414,19 @@
     detachSecondary(session);
     if(second&&second!==vdoc){
      session.onDbl2=session.onDbl2||(event=>onDoubleClick(session,event,'secondary'));
-     second.addEventListener('dblclick',session.onDbl2,true);
-     for(const name of ACTIVITY)second.addEventListener(name,session.onActivity,{capture:true,passive:true});
+     on(session,second,'dblclick',session.onDbl2,true);
+     for(const name of ACTIVITY)on(session,second,name,session.onActivity,true);
      session.vdoc2=second;
     }
    }
   }
   function detachPrimary(session){
    const vdoc=session.vdoc;session.vdoc=null;unwatchRendering(session);if(!vdoc)return;
-   try{vdoc.removeEventListener('dblclick',session.onDbl,true);for(const name of ACTIVITY)vdoc.removeEventListener(name,session.onActivity,true);}catch(_){}
+   off(session,vdoc);
   }
   function detachSecondary(session){
    const vdoc=session.vdoc2;session.vdoc2=null;if(!vdoc)return;
-   try{vdoc.removeEventListener('dblclick',session.onDbl2,true);for(const name of ACTIVITY)vdoc.removeEventListener(name,session.onActivity,true);}catch(_){}
+   off(session,vdoc);
   }
   function detachViewer(session){detachPrimary(session);detachSecondary(session);}
   /* probe: a session the live self-check made for itself (never saves). quiet: made by a check on the user's reader;
@@ -1411,11 +1440,11 @@
    stylesheet().then(css=>{if(session.destroyed||!css)return;const style=doc.createElementNS(HTML,'style');style.setAttribute('data-sc-ra-style','1');style.textContent=css;(doc.head||doc.documentElement).appendChild(style);session.style=style;});
    // Let the panel know the reader's pointer activity, so listening is credited only when the person is not already being counted.
    session.onActivity=()=>{session.lastActivity=Date.now();};
-   for(const name of ACTIVITY)doc.addEventListener(name,session.onActivity,{capture:true,passive:true});
+   for(const name of ACTIVITY)on(session,doc,name,session.onActivity,true);
    attachViewer(session);
    // A window resize keeps the panel within half the reader.
    session.onResize=()=>{if(session.open)applyLayout(session);};
-   try{doc.defaultView.addEventListener('resize',session.onResize);}catch(_){}
+   on(session,doc.defaultView,'resize',session.onResize);
    session.say=(m,e)=>say(session,m,e);
    sessions.set(reader,session);
    ensureReady(session).then(()=>{
@@ -1435,10 +1464,9 @@
    clearHighlight(session);
    try{session.open=false;applyLayout(session);}catch(_){}
    try{session.ui.root.remove();}catch(_){}try{session.style&&session.style.remove();}catch(_){}
-   try{session.doc.removeEventListener('click',session.onDocClick);session.doc.removeEventListener('keydown',session.onKey);for(const name of ACTIVITY)session.doc.removeEventListener(name,session.onActivity,true);}catch(_){}
-   try{session.doc.defaultView.removeEventListener('resize',session.onResize);}catch(_){}
-   try{session.endDrag&&session.endDrag();session.doc.defaultView.removeEventListener('blur',session.onBlur);}catch(_){}
+   try{session.endDrag&&session.endDrag();}catch(_){}
    detachViewer(session);
+   off(session);          // everything else on the reader's document and window: click, keydown, activity, resize, blur
    try{if(session.saveTimer)session.doc.defaultView.clearTimeout(session.saveTimer);if(session.sayTimer)session.doc.defaultView.clearTimeout(session.sayTimer);}catch(_){}
    try{session.toolbarState=null;}catch(_){}
   }
