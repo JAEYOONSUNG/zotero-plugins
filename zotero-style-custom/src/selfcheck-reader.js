@@ -773,7 +773,11 @@
       const ai = handle && handle.ai;
       const wall = () => Date.now();
       const since = wall() - 2000;
-      const logPath = opts.bridgeLog || (paths && paths.homeDir ? paths.join(paths.homeDir, 'Library', 'Logs', 'StyleCustomBridge.log') : null);
+      // PathUtils.homeDir is absent in Zotero 9's Gecko; the directory service's Home is the fallback.
+      let home = null;
+      try { home = paths && paths.homeDir; } catch (e) {}
+      if (!home) { try { home = Services.dirsvc.get('Home', Ci.nsIFile).path; } catch (e) {} }
+      const logPath = opts.bridgeLog || (paths && home ? paths.join(home, 'Library', 'Logs', 'StyleCustomBridge.log') : null);
       const pages = (ai && ai.pages()) || (extraction && extraction.structured && extraction.structured.stats && extraction.structured.stats.pages) || 0;
       const readLog = async () => {
         if (!io || !logPath) throw new Error('no way to read the bridge log');
