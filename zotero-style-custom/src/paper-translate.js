@@ -176,6 +176,17 @@
    if(signal)off=signal.onCancel(()=>reject(cancelledError()));
   });
   const check=signal=>{if(signal&&signal.cancelled)throw cancelledError();};
+  /* A wait that Stop ends at once, for a call that cannot itself be aborted. */
+  const orCancel=(promise,signal)=>{
+   if(!signal)return Promise.resolve(promise);
+   return new Promise((resolve,reject)=>{
+    if(signal.cancelled){reject(cancelledError());return;}
+    const off=signal.onCancel(()=>reject(cancelledError()));
+    Promise.resolve(promise).then(v=>{off();resolve(v);},e=>{off();reject(e);});
+   });
+  };
+  /* A job token that also stops when the caller's own token does (the panel makes its token at the click). */
+  const linked=signal=>{const job=token();if(signal){if(signal.cancelled)job.cancel();else{const off=signal.onCancel(()=>job.cancel());job.onCancel(off);}}return job;};
 
   async function deeplBatch(texts,settings,signal,sourceLang=''){
    const key=deeplKey(),t=settings.target;
@@ -203,7 +214,9 @@
    const api=pdfTranslate();const out=[];
    for(const text of texts){
     check(signal);
-    const reply=await api.translate(text,{langto:settings.target.pdft,pluginID:'style-custom@sungjaeyoon.dev'});
+    // Translate for Zotero has no way to abort a request: Stop ends our wait at once (the reply, when it comes, is
+    // dropped) and no further paragraph is sent. The plugin's own request may still finish in the background.
+    const reply=await orCancel(api.translate(text,{langto:settings.target.pdft,pluginID:'style-custom@sungjaeyoon.dev'}),signal);
     check(signal);
     const value=typeof reply==='string'?reply:reply&&(reply.result||reply.text||reply.translation);
     if(typeof value!=='string'||!value.trim()){const e=new Error('번역 플러그인이 아무 내용도 보내지 않았습니다.');e.code='empty';e.own=true;throw e;}
@@ -228,13 +241,15 @@
   }
 
   /* One paragraph's translation, cached; `force` bypasses the cache for 다시 번역. */
-  async function translateOne(paragraph,{provider,force=false,target:targetCode=null}={}){
+  async function translateOne(paragraph,{provider,force=false,target:targetCode=null,signal:outer=null}={}){
    const chosen=pickProvider(provider);if(!chosen){const e=new Error('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요.');e.code='none';e.own=true;throw e;}
    const settings=settingsFor(chosen,targetCode||target().code),key=keyFor(settings,paragraph.text);
    if(!force){const hit=store.get(key);if(hit)return {text:hit,provider:chosen,target:settings.target.code,cached:true};}
-   const signal=token();tokens.add(signal);
+   const signal=linked(outer);tokens.add(signal);
    try{
+    check(signal);
     const parts=splitParagraph(paragraph.text),out=await runBatch(settings,parts,signal);
+    check(signal);
     const text=out.join(' ');store.set(key,text);if(chosen==='deepl')addUsage(clean(paragraph.text).length);await store.save();
     return {text,provider:chosen,target:settings.target.code,cached:false};
    }finally{tokens.delete(signal);}
@@ -243,10 +258,10 @@
   /* Translate from `start` to the end (or `limit` paragraphs) in reading order.
      Cached paragraphs are used as they are. Resolves with a summary; never throws
      for a stop (quota, cancel): the summary says why. */
-  async function translateAll(paragraphs,{start=0,limit=Infinity,provider,target:targetCode=null,onParagraph=()=>{},onProgress=()=>{}}={}){
+  async function translateAll(paragraphs,{start=0,limit=Infinity,provider,target:targetCode=null,signal=null,onParagraph=()=>{},onProgress=()=>{}}={}){
    if(running)throw Object.assign(new Error('이미 번역하는 중입니다.'),{code:'busy',own:true});
    const chosen=pickProvider(provider);if(!chosen){const e=new Error('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요.');e.code='none';e.own=true;throw e;}
-   const settings=settingsFor(chosen,targetCode||target().code),job=token();job.target=settings.target.code;running=job;tokens.add(job);
+   const settings=settingsFor(chosen,targetCode||target().code),job=linked(signal);job.target=settings.target.code;running=job;tokens.add(job);
    const summary={provider:chosen,target:settings.target.code,done:0,cached:0,total:0,chars:0,stopped:'',error:null};
    try{
     const slice=paragraphs.slice(Math.max(0,start),Number.isFinite(limit)?Math.max(0,start)+limit:undefined);summary.total=slice.length;
@@ -258,6 +273,7 @@
     onProgress({...summary});
     const parts=[];for(const p of todo)splitParagraph(p.text).forEach((text,i,all)=>parts.push({paragraph:p,i,n:all.length,text}));
     const results=new Map();
+    if(job.cancelled&&todo.length)summary.stopped='cancelled';
     for(const batch of planBatches(parts.map((part,index)=>({...part,index})))){
      if(job.cancelled){summary.stopped='cancelled';break;}
      let out;
@@ -280,28 +296,56 @@
    }finally{running=null;tokens.delete(job);}
    return summary;
   }
+  /* The translation shown for each paragraph in one language: the first provider (in the order above) whose
+     cached result was made under the current settings. A result made under other settings (another AI model, a
+     formality) is not current and is not returned. Map id -> {text, provider}. */
+  function resolved(paragraphs,targetCode=null){
+   const code=targetCode||target().code,out=new Map(),list=providers();
+   const all=['deepl','pdftranslate','ai'].filter(p=>list.includes(p));
+   const settings=all.map(p=>settingsFor(p,code));
+   for(const p of paragraphs||[])for(const s of settings){const hit=store.get(keyFor(s,p.text));if(hit){out.set(p.id,{text:hit,provider:s.provider});break;}}
+   return out;
+  }
   /* Stops the run and any single re-translation: the request in flight, a back-off sleep, and everything after. */
   const cancel=()=>{for(const t of [...tokens])t.cancel();};
-  return {providers,providerLabel,pickProvider,nextProvider,usage,refreshUsage,estimate,translateOne,translateAll,cancel,target,formality,
+  return {providers,providerLabel,pickProvider,nextProvider,usage,refreshUsage,estimate,translateOne,translateAll,cancel,target,formality,resolved,
    get busy(){return !!running;},get runningTarget(){return running?running.target:null;},
    cached:(provider,text,targetCode=null)=>store.get(keyFor(settingsFor(provider,targetCode||target().code),text))};
  }
+
+ /* Which provider made which paragraphs, as 1-based runs in reading order: [{provider, ranges:[[from,to],...]}],
+    providers in the order they first appear. */
+ function providerSpans(paragraphs,found){
+  const by=new Map();
+  (paragraphs||[]).forEach((p,i)=>{
+   const hit=found&&found.get(p.id);if(!hit)return;
+   const ranges=by.get(hit.provider)||[];const last=ranges[ranges.length-1];
+   if(last&&last[1]===i)last[1]=i+1;else ranges.push([i+1,i+1]);
+   by.set(hit.provider,ranges);
+  });
+  return [...by].map(([provider,ranges])=>({provider,ranges}));
+ }
+ const rangeText=ranges=>ranges.map(([a,b])=>a===b?String(a):a+'–'+b).join(', ');
+ /* The paragraphs of one language that no provider has finished: what "continue with another translator" sends. */
+ const unfinished=(paragraphs,found)=>(paragraphs||[]).filter(p=>!(found&&found.has(p.id)));
 
  /* ---- the bilingual note ------------------------------------------------- */
  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
  /* Original and translation, paragraph by paragraph under the section headings.
     Only paragraphs that have a translation are written; the note says how many. */
- function noteHTML({title,target,provider,date,paragraphs,translations}){
+ function noteHTML({title,target,provider,date,paragraphs,translations,sources=null}){
   const lines=[`<h1>${esc(title||'')} (${esc(target)})</h1>`,`<p><em>${esc(provider)} · ${esc(date||'')}</em></p>`];
   let heading=null,count=0;
+  // Each paragraph names its translator only when more than one made the note.
+  const mixed=!!sources&&new Set([...paragraphs].map(p=>sources.get(p.id)).filter(Boolean)).size>1;
   for(const p of paragraphs){
    const text=translations.get?translations.get(p.id):translations[p.id];if(!text)continue;
    if(p.heading!==heading){heading=p.heading;if(heading)lines.push(`<h2>${esc(heading)}${p.page?' (p. '+esc(p.page)+')':''}</h2>`);}
-   lines.push(`<p>${esc(p.text)}</p>`,`<blockquote><p>${esc(text)}</p></blockquote>`);count++;
+   lines.push(`<p>${esc(p.text)}</p>`,`<blockquote><p>${esc(text)}</p>${mixed&&sources.get(p.id)?`<p><em>${esc(sources.get(p.id))}</em></p>`:''}</blockquote>`);count++;
   }
   return {html:'<div>'+lines.join('')+'</div>',count};
  }
 
- const api={create,hash,cacheKey,settingsRevision,token,deeplEndpoint,usageEndpoint,isFreeKey,buildRequest,deeplError,paragraphsOf,splitParagraph,planBatches,noteHTML,targetOf,TARGETS,FREE_LIMIT,MAX_PARAGRAPH,MAX_BATCH_COUNT,MAX_BATCH_BYTES,bytes};
+ const api={create,hash,cacheKey,settingsRevision,token,deeplEndpoint,usageEndpoint,isFreeKey,buildRequest,deeplError,paragraphsOf,splitParagraph,planBatches,noteHTML,providerSpans,rangeText,unfinished,targetOf,TARGETS,FREE_LIMIT,MAX_PARAGRAPH,MAX_BATCH_COUNT,MAX_BATCH_BYTES,bytes};
  root.CustomStylePaperTranslate=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

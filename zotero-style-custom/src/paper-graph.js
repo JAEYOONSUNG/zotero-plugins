@@ -567,6 +567,92 @@
     return sides;
   }
 
+  /* Labels that never sit on anything: each candidate is tried at eight places round its
+     node (right first, then left, above, below and the corners) and kept at the first place
+     that is inside the frame, misses every label already placed and every other node's dot;
+     among clean places the one crossing fewest lines wins. A node with no clean place goes
+     unlabelled -- its name comes with hover, focus or the find box -- except the chosen ones
+     (`first`), which take the place sitting on the fewest labels -- but never on a dot.
+
+     Returns id -> {anchor, dx, dy}: where the text goes relative to the node's centre. */
+  const LABEL_SIDES = ['right', 'left', 'above', 'below', 'above-right', 'below-right', 'above-left', 'below-left'];
+  function labelBox(node, side, w, lineHeight, gap) {
+    const r = node.r || node.rad || 6, d = r + gap, k = d * 0.72;
+    const at = (x, y, anchor, dx, dy) => ({x, y, w, h: lineHeight, anchor, dx, dy});
+    switch (side) {
+      case 'left': return at(node.x - d - w, node.y - lineHeight / 2, 'end', -d, 3.5);
+      case 'above': return at(node.x - w / 2, node.y - d - lineHeight, 'middle', 0, -d - 3);
+      case 'below': return at(node.x - w / 2, node.y + d, 'middle', 0, d + lineHeight - 3);
+      case 'above-right': return at(node.x + k, node.y - k - lineHeight, 'start', k, -k - 3);
+      case 'above-left': return at(node.x - k - w, node.y - k - lineHeight, 'end', -k, -k - 3);
+      case 'below-right': return at(node.x + k, node.y + k, 'start', k, k + lineHeight - 3);
+      case 'below-left': return at(node.x - k - w, node.y + k, 'end', -k, k + lineHeight - 3);
+      default: return at(node.x + d, node.y - lineHeight / 2, 'start', d, 3.5);
+    }
+  }
+  function placeLabelsAround(nodes, {lineHeight = 14, pad = 2, gap = 4, limit = 60, width = Infinity, height = Infinity, first = null, edges = [], text = null} = {}) {
+    const firstIDs = new Set([...(first || [])].map(String));
+    const wanted = [...nodes].sort((a, b) => (firstIDs.has(String(b.id)) - firstIDs.has(String(a.id)))
+      || (b.kind === 'external') - (a.kind === 'external')
+      || (b.rank || 0) - (a.rank || 0) || (b.degree || 0) - (a.degree || 0));
+    const byID = new Map(nodes.map(n => [String(n.id), n]));
+    const segments = [];
+    for (const e of edges || []) {
+      const a = byID.get(String(e.source)), b = byID.get(String(e.target));
+      if (a && b) segments.push({a, b});
+    }
+    const overlaps = (p, q) => p.x - pad < q.x + q.w + pad && p.x + p.w + pad > q.x - pad && p.y < q.y + q.h && p.y + p.h > q.y;
+    const hitsNode = (box, n) => {
+      const r = (n.r || n.rad || 6) + 1;
+      const nx = Math.max(box.x - pad, Math.min(n.x, box.x + box.w + pad));
+      const ny = Math.max(box.y - pad, Math.min(n.y, box.y + box.h + pad));
+      return Math.hypot(n.x - nx, n.y - ny) < r;
+    };
+    const crosses = (box, seg) => {
+      const x0 = seg.a.x, y0 = seg.a.y, dx = seg.b.x - x0, dy = seg.b.y - y0;
+      let t0 = 0, t1 = 1;
+      for (const [p, q] of [[-dx, x0 - box.x], [dx, box.x + box.w - x0], [-dy, y0 - box.y], [dy, box.y + box.h - y0]]) {
+        if (p === 0) { if (q < 0) return false; continue; }
+        const t = q / p;
+        if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+        else { if (t < t0) return false; if (t < t1) t1 = t; }
+      }
+      return t0 <= t1;
+    };
+    const placed = [], out = new Map();
+    for (const node of wanted) {
+      if (out.size >= limit) break;
+      const words = String(text ? text(node) : node.labelText == null ? node.label : node.labelText);
+      if (!words) continue;
+      const w = textWidth(words);
+      let best = null, bestCross = Infinity;
+      for (const side of LABEL_SIDES) {
+        const box = labelBox(node, side, w, lineHeight, gap);
+        if (box.x < 0 || box.y < 0 || box.x + box.w > width || box.y + box.h > height) continue;
+        if (placed.some(other => overlaps(box, other))) continue;
+        if (nodes.some(other => other !== node && hitsNode(box, other))) continue;
+        let cross = 0;
+        for (const seg of segments) if (seg.a !== node && seg.b !== node && crosses(box, seg)) cross++;
+        if (cross < bestCross) { best = box; bestCross = cross; if (!cross) break; }
+      }
+      // A chosen node with no clean place takes the side that sits on the fewest labels -- never one on a dot.
+      if (!best && firstIDs.has(String(node.id))) {
+        let fewest = Infinity;
+        for (const side of LABEL_SIDES) {
+          const box = labelBox(node, side, w, lineHeight, gap);
+          if (box.x < 0 || box.y < 0 || box.x + box.w > width || box.y + box.h > height) continue;
+          if (nodes.some(other => other !== node && hitsNode(box, other))) continue;
+          const clash = placed.filter(other => overlaps(box, other)).length;
+          if (clash < fewest) { fewest = clash; best = box; }
+        }
+      }
+      if (!best) continue;
+      placed.push(best);
+      out.set(node.id, {anchor: best.anchor, dx: best.dx, dy: best.dy});
+    }
+    return out;
+  }
+
   // Node size: citation counts span orders of magnitude, so the radius follows
   // the log, and a paper with none is still a dot rather than a point.
   function radiusOf(citations, {min = 3.5, max = 13} = {}) {
@@ -836,7 +922,7 @@
     return {nodes, edges: graph.edges};
   }
 
-  const api = {collectionItemIDs, outsideCited, clusterCount, egoGraph, egoLayout, build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, textWidth};
+  const api = {collectionItemIDs, outsideCited, clusterCount, egoGraph, egoLayout, build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, placeLabelsAround, labelBox, textWidth};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

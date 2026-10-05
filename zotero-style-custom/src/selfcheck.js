@@ -198,7 +198,24 @@
     return names.filter(name => !target || typeof target[name] === 'undefined');
   }
 
-  async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false, seed = ''} = {}) {
+  /* The live reader check (src/selfcheck-reader.js): opt-in through extensions.style-custom.selfCheckReader. It opens a
+     PDF in a background reader tab, measures the reader panel on it and closes the tab; without the flag nothing here
+     touches Zotero.Reader, so the default self-check never opens a reader. Returns null when not asked for. */
+  async function readerCheck(Zotero, runtime, {reader = false, timeoutMs} = {}) {
+    if (reader !== true) return null;
+    return attempt('the reader features work in a real reader', async () => {
+      const live = root.CustomStyleSelfCheckReader || (typeof require === 'function' ? require('./selfcheck-reader.js') : null);
+      if (!live || typeof live.run !== 'function') throw new Error('selfcheck-reader.js is not loaded');
+      const report = await live.run(Zotero, runtime, timeoutMs ? {timeoutMs} : {});
+      const where = report.path ? ' → ' + report.path : '';
+      const failed = report.steps.filter(step => !step.pass);
+      if (failed.length) throw new Error(`${failed.length} of ${report.steps.length} reader steps failed: ` + failed.map(step => `${step.name}: ${step.detail}`).join(' ; ') + where);
+      return `${report.steps.length} reader steps passed on item ${report.attachment ? report.attachment.itemID : '?'} in ${report.timings.total} ms (${report.mode || 'no reader'}): `
+        + report.steps.map(step => step.name).join(' · ') + where;
+    });
+  }
+
+  async function run(Zotero, runtime, {network = true, repair = false, fill = false, shots = false, seed = '', reader = false} = {}) {
     const results = [];
     const win = Zotero.getMainWindow && Zotero.getMainWindow();
     const doc = win && win.document;
@@ -1375,6 +1392,10 @@
       return `${probes.length} reader(s), ${probes.reduce((n, p) => n + p.checked, 0)} elements measured on three tabs, no overlap with the PDF, page 1 extracted: ${pages}, player ${probes.map(p => p.player).join('/')}`;
     }));
 
+    // Last, so the probe above measured only the readers the user had open, and nothing below shares its time.
+    const live = await readerCheck(Zotero, runtime, {reader});
+    if (live) results.push(live);
+
     const passed = results.filter(row => row.pass).length;
     return {
       version: runtime.version, when: new Date().toISOString(),
@@ -1442,7 +1463,7 @@
     return {pressed, broken};
   }
 
-  const api = {run, safeButtons, sweepSafeButtons, journalLayerReport, jcrPrecedence, statusContradictions, orphanRatingTags, newsWithoutClassification, rowsWithDuplicateNews, worksWithDuplicatePeople, requireNoDuplicatePeople, staleRows, planCoverage, moreButtonProblems, missingMembers};
+  const api = {run, readerCheck, safeButtons, sweepSafeButtons, journalLayerReport, jcrPrecedence, statusContradictions, orphanRatingTags, newsWithoutClassification, rowsWithDuplicateNews, worksWithDuplicatePeople, requireNoDuplicatePeople, staleRows, planCoverage, moreButtonProblems, missingMembers};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleSelfCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

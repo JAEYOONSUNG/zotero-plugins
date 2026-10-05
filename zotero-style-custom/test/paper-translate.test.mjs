@@ -321,3 +321,59 @@ test('DeepL 429 is "a moment", not a daily quota',()=>{
  const e=T.deeplError(429);
  assert.equal(e.code,'rate');assert.match(e.message,/잠시 후 다시/);assert.doesNotMatch(e.message,/하루|자정|일일/);
 });
+
+/* ---- 0.59.24: one job from the click, and the provider of every paragraph ---------- */
+test('a job token cancelled before the run starts sends nothing; cancelled mid-run, it stops the run like Stop',async()=>{
+ const h=harness();const job=T.token();job.cancel();
+ const summary=await h.service.translateAll([para('a','Hello.')],{signal:job});
+ assert.equal(summary.stopped,'cancelled');assert.equal(h.calls.length,0,'no POST after Stop');
+ const job2=T.token();let release;
+ const g=harness({replies:()=>new Promise(r=>{release=()=>r({status:200,json:{translations:[{text:'KO:x'}]}});})});
+ const run=g.service.translateAll(Array.from({length:60},(_,i)=>para('p'+i,'Text '+i+'.')),{signal:job2});await tick();
+ job2.cancel();release();
+ assert.equal((await run).stopped,'cancelled');assert.equal(g.calls.length,1);
+});
+test('one paragraph again takes the job token too: Stop ends it and stores nothing',async()=>{
+ let release;const h=harness({replies:()=>new Promise(r=>{release=()=>r({status:200,json:{translations:[{text:'KO:late'}]}});})});
+ const job=T.token();
+ const run=h.service.translateOne(para('a','Hello.'),{force:true,signal:job});await tick();
+ job.cancel();release();
+ await assert.rejects(run,e=>e.code==='cancelled');
+ assert.equal(h.store.size,0,'a reply after Stop is not kept');
+});
+test('Translate for Zotero has no abort: Stop ends the wait at once, and the late reply is dropped',async()=>{
+ const pdf={translate:()=>new Promise(()=>{})};          // never answers
+ const h=harness({prefs:{translateTarget:'KO'},pdf});const job=T.token();
+ const run=h.service.translateAll([para('a','One.'),para('b','Two.')],{signal:job});await tick();
+ job.cancel();
+ const summary=await Promise.race([run,new Promise(r=>setTimeout(()=>r('hung'),200))]);
+ assert.notEqual(summary,'hung','the UI does not wait for the plugin');assert.equal(summary.stopped,'cancelled');
+});
+test('every finished paragraph is found with the provider that made it, and the ranges read "DeepL Free · 1–2, Translate for Zotero · 3"',async()=>{
+ const pdf={translate:t=>Promise.resolve({result:'PDF:'+t})};
+ const h=harness({pdf});
+ const rows=[para('a','One.'),para('b','Two.'),para('c','Three.'),para('d','Four.')];
+ await h.service.translateAll(rows.slice(0,2),{provider:'deepl'});
+ await h.service.translateAll(rows.slice(2,3),{provider:'pdftranslate'});
+ const found=h.service.resolved(rows);
+ assert.deepEqual([...found].map(([id,v])=>[id,v.provider]),[['a','deepl'],['b','deepl'],['c','pdftranslate']]);
+ assert.equal(found.get('c').text,'PDF:Three.');
+ assert.deepEqual(T.providerSpans(rows,found),[{provider:'deepl',ranges:[[1,2]]},{provider:'pdftranslate',ranges:[[3,3]]}]);
+ assert.deepEqual(T.unfinished(rows,found).map(p=>p.id),['d']);
+});
+test('a result made under other settings (another model) is not shown as current',async()=>{
+ const prefs={translateTarget:'KO',aiModel:'m1',aiEndpoint:'https://x/v1'};
+ const ai={available:()=>true,translate:async texts=>texts.map(t=>'AI:'+t)};
+ const h=harness({prefs,ai});
+ await h.service.translateAll([para('a','One.')]);
+ assert.equal(h.service.resolved([para('a','One.')]).get('a').text,'AI:One.');
+ prefs.aiModel='m2';
+ assert.equal(h.service.resolved([para('a','One.')]).size,0,'the m1 translation is not the current one');
+});
+test('the note names the provider of each run of paragraphs',()=>{
+ const rows=[para('a','One.'),para('b','Two.')];
+ const translations=new Map([['a','KO:One.'],['b','KO:Two.']]);
+ const made=T.noteHTML({title:'T',target:'KO',provider:'DeepL Free · 1, Translate for Zotero · 2',date:'2026-10-05',paragraphs:rows,translations,sources:new Map([['a','DeepL Free'],['b','Translate for Zotero']])});
+ assert.match(made.html,/DeepL Free · 1, Translate for Zotero · 2/);
+ assert.match(made.html,/KO:Two\.<\/p><p><em>Translate for Zotero<\/em><\/p>/);
+});

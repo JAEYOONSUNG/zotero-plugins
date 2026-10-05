@@ -5,9 +5,52 @@
  /* Seconds without a byte before a paper request is given up. Not a total: a slow local model that keeps
     streaming is never cut off mid-answer, and one that is still thinking about a long prompt gets minutes. */
  const QUIET_STREAM_MS=180000,QUIET_WHOLE_MS=300000;
- function create({Zotero,runtime,timers=null}){
+ /* The local AI bridge (bridge/ai-bridge.mjs): with no address in settings, the plugin looks for
+    ~/Library/Application Support/StyleCustomBridge/bridge.json and talks to 127.0.0.1:<port> with the
+    token kept there. The bridge answers with the Claude account first and the ChatGPT account when Claude
+    cannot, and says which one answered in the x-bridge-provider header. An address in settings always wins. */
+ const BRIDGE_LABEL={claude:'Claude 계정 (이 Mac)',codex:'ChatGPT 계정 (이 Mac)'};
+ const BRIDGE_MODELS=/^(?:claude|sonnet|opus|haiku|fable|chatgpt)$/i;
+ const BRIDGE_RECHECK_MS=30000;
+ function bridgeConfig(text){
+  let json;try{json=JSON.parse(String(text||''));}catch(_){return null;}
+  const port=Number(json&&json.port),token=json&&json.token;
+  if(!Number.isInteger(port)||port<1024||port>65535||typeof token!=='string'||!/^[A-Za-z0-9_-]{32,256}$/.test(token))return null;
+  return {port,token,url:`http://127.0.0.1:${port}/v1/chat/completions`};
+ }
+ function providerOf(response){
+  try{const value=String(response&&response.getResponseHeader&&response.getResponseHeader('x-bridge-provider')||'').trim().toLowerCase();return value==='codex'||value==='claude'?value:null;}catch(_){return null;}
+ }
+ function create({Zotero,runtime,timers=null,io=null,paths=null}){
   let active=true;const jobs=new Set();
   const timer=timers||{set:(fn,ms)=>setTimeout(fn,ms),clear:id=>clearTimeout(id)};
+  /* ---- bridge detection: read on every request (cheap), cached for the synchronous available() ---- */
+  const bridgeState={config:null,checkedAt:0,loading:null,provider:null};let cancelEpoch=0;
+  const fileIO=()=>io||runtime.io||(typeof IOUtils!=='undefined'?IOUtils:null);
+  const pathTools=()=>paths||runtime.paths||(typeof PathUtils!=='undefined'?PathUtils:null);
+  const explicitEndpoint=()=>String(runtime.pref('aiEndpoint','')||'').trim();
+  function bridgePath(){
+   const p=pathTools();if(!p)return null;
+   let home=null;try{home=p.homeDir;}catch(_){}
+   if(!home)return null;
+   return p.join(home,'Library','Application Support','StyleCustomBridge','bridge.json');
+  }
+  function detectBridge(){
+   if(bridgeState.loading)return bridgeState.loading;
+   bridgeState.loading=(async()=>{
+    let config=null;
+    try{
+     const file=fileIO(),where=bridgePath();
+     if(file&&where&&(!file.exists||await file.exists(where)))config=bridgeConfig(file.readUTF8?await file.readUTF8(where):new TextDecoder().decode(await file.read(where)));
+    }catch(_){config=null;}
+    if(!config||!bridgeState.config||bridgeState.config.port!==config.port)bridgeState.provider=null;
+    bridgeState.config=config;bridgeState.checkedAt=Date.now();
+    return config;
+   })().finally(()=>{bridgeState.loading=null;});
+   return bridgeState.loading;
+  }
+  // Look once at start, so the panel knows before the first request; failures stay silent.
+  try{if(!explicitEndpoint())detectBridge().catch(()=>{});}catch(_){}
   async function run(task,item,{language='Korean'}={}){
    if(!active)throw new Error('플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.');
    if(task==='paperSummary')return paperSummary(item,{language});
@@ -33,9 +76,8 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    const capability={tags:'AIGenerateTags',remark:'AIGenerateRemark',summary:'tldr'}[task];if(capability&&runtime.featureEnabled?.(capability)===false)throw new Error('설정에서 이 기능을 켜세요.');
    if(task==='tags')prompts.tags=String(runtime.pref('aiTagsPrompt',prompts.tags)||prompts.tags);
    if(task==='remark')prompts.remark=String(runtime.pref('aiRemarkPrompt',prompts.remark)||prompts.remark)+'\nOutput language: '+language;
-   if(!String(runtime.pref('aiEndpoint','')||'').trim())throw new Error('설정에서 AI 서버 주소와 모델을 먼저 입력하세요.');
-   const model=String(runtime.pref('aiModel','')).trim();if(!model)throw new Error('설정에서 AI 모델을 지정하세요.');
-   const url=endpoint(runtime.pref('aiEndpoint',''));
+   let target=resolve();if(typeof target.then==='function')target=await target;
+   const {model,url,headers,bridge}=target;
    if(task==='compare'){
     const list=Array.isArray(item)?item:[];
     if(list.length<2)throw new Error('비교하려면 문헌을 둘 이상 선택하세요.');
@@ -48,7 +90,6 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
     :JSON.stringify({title:item.title||'',abstract:item.abstract||''});
    if(!content||task!=='translate'&&task!=='compare'&&!String(item.abstract||'').trim())throw new Error('먼저 논문의 제목과 초록을 가져오세요.');
    if(content.length>50000)throw new Error('선택한 텍스트가 너무 깁니다. 50,000자 이하로 줄이세요.');
-   const headers={'Content-Type':'application/json'},key=runtime.pref('aiKey','');if(key)headers.Authorization='Bearer '+key;
    const job={cancel:null,cancelled:false,transportCancelled:false};jobs.add(job);
    const cancelTransport=()=>{if(job.cancel&&!job.transportCancelled){job.transportCancelled=true;try{job.cancel();}catch(_){}}};
    try{
@@ -62,12 +103,13 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
      }catch(error){finish(reject,error);}
     });
     if(!active||job.cancelled)throw new Error('요청이 중지되었습니다.');
-    if(result.status<200||result.status>=300)throw new Error('AI 서비스 응답 오류: HTTP '+result.status);
+    if(bridge)noteProvider(result);
+    if(result.status<200||result.status>=300)throw statusError(result.status,bridge);
     const output=result.response?.choices?.[0]?.message?.content;if(typeof output!=='string'||!output.trim())throw new Error('AI 서버가 아무 내용도 보내지 않았습니다. 모델 이름을 확인하고 다시 시도하세요.');
     if(output.length>100000)throw new Error('AI 서버 응답이 너무 깁니다. 더 짧은 글을 고르거나 모델을 바꾸세요.');
     if(task==='tags'){let parsed;try{parsed=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,''));}catch(_){throw new Error('AI가 태그를 목록으로 주지 않았습니다. 다시 시도하거나 다른 모델을 쓰세요.');}if(!Array.isArray(parsed)||!parsed.length||parsed.length>20||parsed.some(t=>typeof t!=='string'||!t.trim()||t.length>100||/[\r\n]/.test(t)))throw new Error('태그 목록으로 읽을 수 없는 답이 왔습니다. 다시 시도하세요.');return [...new Set(parsed.map(t=>t.trim()))];}
     return output.trim();
-   }catch(error){if(error?.own||/^AI 서|요청|태그|올바른/.test(error.message))throw error;throw new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');}
+   }catch(error){if(error?.own||/^AI 서|요청|태그|올바른/.test(error.message))throw error;throw unreachable(bridge);}
    finally{jobs.delete(job);}
   }
   /* The paper itself, not just its abstract: three tasks that share one transport.
@@ -77,19 +119,62 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
      Same rules as run(): only on an explicit call, only to the configured endpoint, the key only
      in the Authorization header, localhost or https only. */
   const chatTools=()=>root.CustomStylePaperChat||(typeof require==='function'?require('./paper-chat.js'):null);
-  function configured(){
-   if(!active)throw new Error('플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.');
-   if(!String(runtime.pref('aiEndpoint','')||'').trim())throw new Error('설정에서 AI 서버 주소와 모델을 먼저 입력하세요.');
+  /* Where a request goes. An address in settings wins and needs a model; without one, the local bridge
+     (if installed) answers, with its own token and never the API key from settings. */
+  function explicitConfig(){
    const model=String(runtime.pref('aiModel','')).trim();if(!model)throw new Error('설정에서 AI 모델을 지정하세요.');
    const url=endpoint(runtime.pref('aiEndpoint',''));
    const headers={'Content-Type':'application/json'},key=runtime.pref('aiKey','');if(key)headers.Authorization='Bearer '+key;
-   return {model,url,headers};
+   return {model,url,headers,bridge:false};
   }
-  function available(){try{configured();return true;}catch(_){return false;}}
+  function bridgeRequest(config){
+   const chosen=String(runtime.pref('aiModel','')||'').trim();
+   return {model:BRIDGE_MODELS.test(chosen)?chosen.toLowerCase():'claude',url:config.url,headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token},bridge:true};
+  }
+  /* Synchronous for an address in settings, so a request starts in the same tick as the call (cancel() right
+     after run() must find it). The bridge needs one file read; a cancel() during that read still counts. */
+  function resolve(){
+   if(!active)throw new Error('플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.');
+   if(explicitEndpoint())return explicitConfig();
+   return resolveBridge();
+  }
+  async function resolveBridge(){
+   const epoch=cancelEpoch;
+   const config=await detectBridge();
+   if(epoch!==cancelEpoch||!active)throw new Error('요청이 중지되었습니다.');
+   if(!config)throw new Error('설정에서 AI 서버 주소와 모델을 먼저 입력하세요. 이 Mac의 Claude·ChatGPT 계정을 쓰려면 bridge/install.sh로 AI 브리지를 설치하세요.');
+   return bridgeRequest(config);
+  }
+  function noteProvider(response){const provider=providerOf(response);if(provider)bridgeState.provider=provider;}
+  function statusError(code,bridge){
+   if(bridge&&code===429){const e=new Error('이 Mac의 Claude·ChatGPT 계정 모두 사용 한도에 도달했습니다. 한도가 풀린 뒤 다시 시도하세요.');e.own=true;return e;}
+   if(bridge&&(code===401||code===403)){bridgeState.checkedAt=0;const e=new Error('AI 브리지가 요청을 거절했습니다. 터미널에서 bridge/install.sh를 다시 실행하세요.');e.own=true;return e;}
+   if(bridge&&code===502){const e=new Error('이 Mac의 Claude·ChatGPT 계정이 모두 답하지 못했습니다. 터미널에서 claude와 codex에 로그인되어 있는지 확인하세요.');e.own=true;return e;}
+   return new Error('AI 서비스 응답 오류: HTTP '+code);
+  }
+  function unreachable(bridge){
+   if(bridge){const e=new Error('이 Mac의 AI 브리지가 응답하지 않습니다. 터미널에서 bridge/install.sh를 다시 실행하세요.');e.own=true;return e;}
+   return new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');
+  }
+  /* Synchronous, for the panels: an address in settings, or a bridge seen by the last look (refreshed in
+     the background every 30 s, so a bridge installed while Zotero runs shows up without a restart). */
+  function available(){return status().available;}
+  function status(){
+   if(!active)return {available:false,source:'none',provider:null,label:null};
+   if(explicitEndpoint()){
+    try{const {url}=explicitConfig();let host='';try{host=new URL(url).host;}catch(_){}return {available:true,source:'endpoint',provider:null,label:host||null};}
+    catch(_){return {available:false,source:'endpoint',provider:null,label:null};}
+   }
+   if(!bridgeState.loading&&Date.now()-bridgeState.checkedAt>BRIDGE_RECHECK_MS){try{detectBridge().catch(()=>{});}catch(_){}}
+   if(!bridgeState.config)return {available:false,source:'none',provider:null,label:null};
+   const provider=bridgeState.provider||'claude';
+   return {available:true,source:'bridge',provider,label:BRIDGE_LABEL[provider]};
+  }
   /* `signal` is the caller's own cancel token ({cancelled, onCancel(fn)}): Stop on one chat cancels that request
      only, not a summary or a translation running beside it. `quietMs` is the inactivity limit (see QUIET_*). */
   async function transport(messages,{stream=false,onDelta=null,signal=null,quietMs=stream?QUIET_STREAM_MS:QUIET_WHOLE_MS}={}){
-   const {model,url,headers}=configured();
+   let target=resolve();if(typeof target.then==='function')target=await target;
+   const {model,url,headers,bridge}=target;
    const total=messages.reduce((n,m)=>n+String(m.content||'').length,0);
    if(total>120000)throw new Error('선택한 텍스트가 너무 깁니다. 50,000자 이하로 줄이세요.');
    if(signal&&signal.cancelled)throw new Error('요청이 중지되었습니다.');
@@ -113,7 +198,7 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
        quiet();
        if(!stream)return;
        try{
-        if(!sniffed&&xhr.readyState>=2){sniffed=true;eventStream=chatTools().isEventStream(xhr.getResponseHeader&&xhr.getResponseHeader('Content-Type'));}
+        if(!sniffed&&xhr.readyState>=2){sniffed=true;eventStream=chatTools().isEventStream(xhr.getResponseHeader&&xhr.getResponseHeader('Content-Type'));if(bridge)noteProvider(xhr);}
         if(eventStream&&xhr.readyState>=3)reader.update(xhr.responseText);
        }catch(_){}
       };
@@ -124,7 +209,8 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
      try{Promise.resolve(Zotero.HTTP.request('POST',url,options)).then(value=>finish(resolve,value),error=>finish(reject,error));}catch(error){finish(reject,error);}
     });
     if(!active||job.cancelled)throw new Error('요청이 중지되었습니다.');
-    if(result.status<200||result.status>=300)throw new Error('AI 서비스 응답 오류: HTTP '+result.status);
+    if(bridge)noteProvider(result);
+    if(result.status<200||result.status>=300)throw statusError(result.status,bridge);
     let output;
     if(stream){
      const type=eventStream||/text\/event-stream/i.test(String(result.getResponseHeader&&result.getResponseHeader('Content-Type')||''));
@@ -139,7 +225,7 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
     if(typeof output!=='string'||!output.trim())throw new Error('AI 서버가 아무 내용도 보내지 않았습니다. 모델 이름을 확인하고 다시 시도하세요.');
     if(output.length>100000)throw new Error('AI 서버 응답이 너무 깁니다. 더 짧은 글을 고르거나 모델을 바꾸세요.');
     return output.trim();
-   }catch(error){if(error?.own||/^AI 서|요청|태그|올바른|설정|플러그인|선택한/.test(error.message))throw error;throw new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');}
+   }catch(error){if(error?.own||/^AI 서|요청|태그|올바른|설정|플러그인|선택한/.test(error.message))throw error;throw unreachable(bridge);}
    finally{stopQuiet();off();jobs.delete(job);}
   }
   async function paperSummary(input,{language='Korean',signal=null}={}){
@@ -176,9 +262,9 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    }
    return out;
   }
-  function cancel(){for(const job of jobs)job.abort?.();}
+  function cancel(){cancelEpoch++;for(const job of jobs)job.abort?.();}
   function stop(){active=false;cancel();jobs.clear();}
-  return {run,chat,paperSummary,translateParagraphs,available,cancel,stop};
+  return {run,chat,paperSummary,translateParagraphs,available,status,cancel,stop};
  }
- const api={create,endpoint};root.CustomStyleAssist=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+ const api={create,endpoint,bridgeConfig,BRIDGE_LABEL};root.CustomStyleAssist=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

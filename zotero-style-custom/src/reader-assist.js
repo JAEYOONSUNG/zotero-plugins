@@ -21,6 +21,10 @@
  'use strict';
  const HTML='http://www.w3.org/1999/xhtml',SVG='http://www.w3.org/2000/svg';
  const WIDTH=372,MIN_WIDTH=280,RAIL_WIDTH=52,TOP=41,MAX_CHAT=20,CHAT_LIMIT=4000;
+ // The PDF keeps at least this much of the reader's split area; below it the panel narrows, then folds to the rail.
+ const MIN_PDF=360;
+ // The panel's text buttons are pills; the button added to the reader's selection popup has the same corners.
+ const BUTTON_RADIUS='999px';
  // The cached structure's own version: v2 is the extraction that reads the viewport itself (v1 often fell back to plain text).
  const STRUCT_VERSION=2,CACHE_PAPERS=200,CACHE_BYTES=100*1024*1024;
  const need=(name,file)=>root[name]||(typeof require==='function'?require(file):null);
@@ -72,6 +76,20 @@
    const L=Math.min(...xs),T=Math.min(...ys),R=Math.max(...xs),Bm=Math.max(...ys);
    return {left:L/v.width*100,top:T/v.height*100,width:(R-L)/v.width*100,height:(Bm-T)/v.height*100};
   });
+ }
+
+ /* A point on the page element (fractions of its box) in the extraction's page space: the page element shows the
+    live viewport (the reader's zoom and its own rotation), so the point goes back through that viewport to PDF user
+    space and forward through the extraction's viewport. Without a live viewport the page is taken as unturned. */
+ function pointToPage(fx,fy,live,size){
+  if(!size||!(size.width>0))return null;
+  const ok=v=>v&&Array.isArray(v.transform)&&v.transform.length>=6&&v.width>0&&v.height>0;
+  if(!ok(live)||!Array.isArray(size.transform))return [fx*size.width,fy*size.height];
+  const [a,b,c,d,e,f]=live.transform.map(Number),det=a*d-b*c;if(!det)return [fx*size.width,fy*size.height];
+  const vx=fx*live.width,vy=fy*live.height;
+  const ux=(d*(vx-e)-c*(vy-f))/det,uy=(-b*(vx-e)+a*(vy-f))/det;
+  const [A,B,C,D,E,F]=size.transform.map(Number);
+  return [A*ux+C*uy+E,B*ux+D*uy+F];
  }
 
  /* ---- small DOM helpers ------------------------------------------------- */
@@ -139,9 +157,25 @@
   // A message this plugin wrote for its reader is shown as written; only transport errors go through the generic wording (whose 429 means a daily quota).
   const describe=error=>{if(error&&error.own)return t(String(error.message));const fail=root.CustomStyleFailures;return t(fail?fail.describe(error):String(error&&error.message||error));};
   const paperText=()=>root.StyleCustomPaperText||RA.fallbackPaperText;
-  const sessions=new Map();let stopped=false,cssPromise=null,sequence=0,probing=0;
+  const sessions=new Map();let stopped=false,cssPromise=null,sequence=0,probing=0,guard=null;
+  // Readers a live self-check opened for itself: sync() leaves them alone, so no ordinary session (one that may save) is made.
+  const reserved=new WeakSet();
   const setting=(key,fallback)=>{try{const v=runtime.getSetting(key);return v===undefined||v===null?fallback:v;}catch(_){return fallback;}};
   const language=()=>setting('aiLanguage','Korean');
+  /* A wait that the job's Stop ends at once. The work behind it (the paper's text, which other features share)
+     goes on; only this job stops waiting for it. */
+  const cancelledError=()=>Object.assign(new Error('중지했습니다.'),{code:'cancelled',own:true});
+  const untilCancelled=(promise,tok)=>new Promise((resolve,reject)=>{
+   if(tok&&tok.cancelled){reject(cancelledError());return;}
+   const off=tok?tok.onCancel(()=>reject(cancelledError())):()=>{};
+   Promise.resolve(promise).then(v=>{off();resolve(v);},e=>{off();reject(e);});
+  });
+  const isCancel=(error,tok)=>!!(tok&&tok.cancelled)||!!(error&&error.code==='cancelled');
+  /* What an AI result was made with: model, language, server and prompt revision. Taken in the same tick as the
+     request starts (assist.js resolves its own config synchronously then), and filed under it on completion. */
+  const endpointTag=()=>{const e=String(runtime.pref('aiEndpoint','')||'').trim();return e?TR.hash(e).slice(0,8):'bridge';};
+  const aiSettings=()=>({model:String(runtime.pref('aiModel','')).trim(),language:language(),endpoint:endpointTag(),rev:String(PC.PROMPT_REVISION||'1')});
+  const summaryKeyOf=a=>[a.model,a.language,a.endpoint,a.rev].join('|');
   const owner=(runtime.id||'style-custom')+'/reader-assist-'+Math.random().toString(36).slice(2);
 
   /* ---- the plugin's own cache folder ------------------------------------ */
@@ -150,12 +184,13 @@
   const folder=()=>paths().join(Z.DataDirectory.dir,'style-custom-reader');
   const safeName=name=>/^[\w.-]{1,80}$/.test(name)?name:null;
   const store={
-   async read(name){
+   async read(name,{touch=true}={}){
     try{
      const file=safeName(name)&&paths().join(folder(),name+'.json');if(!file||!await io().exists(file))return null;
      if((await io().stat(file)).size>16*1024*1024)return null;
      const value=JSON.parse(await io().readUTF8(file));
-     try{if(io().setModificationTime)await io().setModificationTime(file);}catch(_){}      // a read is a use: the cache drops the least recently used papers
+     // A read is a use: the cache drops the least recently used papers. A self-check's read is not a use and writes nothing.
+     if(touch)try{if(io().setModificationTime)await io().setModificationTime(file);}catch(_){}
      return value;
     }catch(error){log(error);return null;}
    },
@@ -177,8 +212,10 @@
   const stats=reader=>coreOf(reader)?._state?.primaryViewStats||{};
   const currentPage=reader=>{const p=stats(reader).pageIndex;return Number.isInteger(p)&&p>=0?p+1:null;};
   const pageCount=reader=>{const n=stats(reader).pagesCount;return Number.isInteger(n)&&n>0?n:0;};
-  const viewerWindow=reader=>{const w=coreOf(reader)?._primaryView?._iframeWindow;return w?(w.wrappedJSObject||w):null;};
-  const viewerDoc=reader=>{try{return coreOf(reader)?._primaryView?._iframeWindow?.document||null;}catch(_){return null;}};
+  // The reader's views: the primary one, and the second pane of a split view.
+  const viewOf=(reader,which='primary')=>coreOf(reader)?.[which==='secondary'?'_secondaryView':'_primaryView'];
+  const viewerWindow=(reader,which='primary')=>{const w=viewOf(reader,which)?._iframeWindow;return w?(w.wrappedJSObject||w):null;};
+  const viewerDoc=(reader,which='primary')=>{try{return viewOf(reader,which)?._iframeWindow?.document||null;}catch(_){return null;}};
   const attachmentOf=reader=>Z.Items.get(reader.itemID);
   const itemOf=reader=>{const a=attachmentOf(reader);return a&&a.parentID?Z.Items.get(a.parentID):a;};
   const fieldOf=(item,name)=>{try{return clean(item&&item.getField(name));}catch(_){return '';}};
@@ -215,7 +252,7 @@
    return null;
   }
   /* One page through pdf.js into the extraction module's page shape, and its size. Nothing chrome-made is passed to pdf.js. */
-  async function readPage(session,pdf,number,{fonts=true}={}){
+  async function readPage(session,pdf,number,{fonts=true,stats=null}={}){
    const win=session.doc.defaultView;
    const page=await pdf.getPage(number);
    const viewport=viewportFor(Array.from(page.view||[0,0,612,792]),Number(page.rotate)||0,{userUnit:Number(page.userUnit)||1});
@@ -223,6 +260,8 @@
    // Bold and italic come from the fonts pdf.js has loaded for the page; without them the extractor infers headings from glyph widths.
    let fontMap={};
    if(fonts)try{await page.getOperatorList();fontMap=await fontsOf(page,content,win);}catch(_){}
+   // The live self-check counts how many of the page's fonts pdf.js resolved to a name.
+   if(stats){const ids=Object.keys(content.styles||{});stats.fonts+=ids.length;stats.named+=ids.filter(id=>fontMap[id]&&fontMap[id].name).length;stats.pages++;}
    return {page:paperText().pageFromPdfjs(number-1,viewport,plainContent(content),{fonts:fontMap}),size:{width:viewport.width,height:viewport.height,transform:viewport.transform,rotation:viewport.rotation}};
   }
   async function extractWithPdfjs(session,progress){
@@ -253,7 +292,7 @@
    const meta={title:fieldOf(item,'title'),abstract:fieldOf(item,'abstractNote')};
    const sig=await fileSignature(session);
    const name=session.name+'.struct';
-   const saved=await store.read(name);
+   const saved=await store.read(name,{touch:!session.probing});
    // A structure made from plain text is not kept once the real extractor is there to do better.
    if(saved&&sig&&saved.sig===sig&&saved.structured&&saved.v===STRUCT_VERSION&&saved.extractor===extractorVersion()&&(!saved.fallback||saved.unreadable||!root.StyleCustomPaperText)){session.pageSizes=saved.sizes||[];session.unreadable=!!saved.unreadable;return {structured:saved.structured,fallback:!!saved.fallback,unreadable:!!saved.unreadable,fromCache:true};}
    let structured=null,fallback=false,sizes=[],unreadable=false;
@@ -291,7 +330,7 @@
   /* ---- per-paper saved state -------------------------------------------- */
   /* Summary, chat and translations belong to the file they were made from: a replaced PDF starts them over (the listening position stays; it finds its sentence by text). */
   async function loadData(session){
-   const [saved,sig]=await Promise.all([store.read(session.name+'.state'),fileSignature(session)]);
+   const [saved,sig]=await Promise.all([store.read(session.name+'.state',{touch:!session.probing}),fileSignature(session)]);
    const fp=fingerprintOf(sig);
    if(saved&&saved.v===1){
     const stale=fp&&saved.fp&&saved.fp!==fp;
@@ -365,6 +404,25 @@
    session.menus.add(handle);return handle;
   }
 
+  /* Keyboard: the reader's FocusManager owns Tab (it calls preventDefault and moves between [data-tabstop] groups,
+     then focuses the group's first [tabindex="-1"] item) and moves inside a group with the arrow keys. So the
+     panel is built the same way: each visible block is a group, its controls are tabindex=-1, and nothing hidden
+     is a stop (the FocusManager only skips `.hidden`, not [hidden]). Marked here, kept current by tabstops(). */
+  const group=node=>{node.setAttribute('data-sc-ra-group','1');return node;};
+  const ITEMS='button,input,summary,[contenteditable="true"]';
+  function tabstops(session){
+   const ui=session.ui,root_=ui&&ui.root;if(!root_)return;
+   const folded=isFolded(session);
+   const shown=node=>{
+    if(!session.open||node.closest('[hidden]'))return false;
+    return node.closest('.sc-ra-rail')?folded:!folded;          // the rail when folded; the panel and its edge otherwise
+   };
+   for(const g of root_.querySelectorAll('[data-sc-ra-group]')){
+    if(shown(g)&&(g.hasAttribute('tabindex')||g.querySelector(ITEMS)))g.setAttribute('data-tabstop','1');else g.removeAttribute('data-tabstop');
+   }
+   for(const n of root_.querySelectorAll(ITEMS)){if(n===ui.resizer)continue;if(shown(n))n.setAttribute('tabindex','-1');else n.removeAttribute('tabindex');}
+  }
+
   const TABS=[['ask','AI','message','요약과 논문에 대한 대화'],['translate','번역','translate','문단별 번역'],['listen','문장','list','읽을 문장 목록']];
   const validTab=id=>TABS.some(x=>x[0]===id)?id:'ask';
   function buildPanel(session){
@@ -372,24 +430,24 @@
    const rootEl=el(doc,'aside',{'class':'sc-ra','data-sc-ra':'1','aria-label':t('논문 도우미'),role:'complementary',hidden:true,'data-collapsed':'false'});
    ui.root=rootEl;
    // The left edge is a drag handle for the width (and arrow keys when it has focus).
-   ui.resizer=el(doc,'div',{'class':'sc-ra-resizer',role:'separator','aria-orientation':'vertical','aria-label':t('패널 너비 조절'),title:t('끌어서 패널 너비 조절'),tabindex:'0'},rootEl);
+   ui.resizer=group(el(doc,'div',{'class':'sc-ra-resizer',role:'separator','aria-orientation':'vertical','aria-label':t('패널 너비 조절'),title:t('끌어서 패널 너비 조절'),tabindex:'-1'},rootEl));
    wireResizer(session);
    // The slim rail when collapsed: the player and the two tabs stay one click away while the paper has the room.
-   ui.rail=el(doc,'nav',{'class':'sc-ra-rail','aria-label':t('논문 도우미 접힘')},rootEl);
-   button(session,ui.rail,{title:'패널 펼치기',iconName:'expand',cls:'sc-ra-icon',mark:'view',onClick:()=>setCollapsed(session,false)});
+   ui.rail=group(el(doc,'nav',{'class':'sc-ra-rail','aria-label':t('논문 도우미 접힘')},rootEl));
+   ui.railExpand=button(session,ui.rail,{title:'패널 펼치기',iconName:'expand',cls:'sc-ra-icon',mark:'view',onClick:()=>setCollapsed(session,false)});
    ui.railPlay=button(session,ui.rail,{title:'본문만 읽기',iconName:'play',cls:'sc-ra-icon sc-ra-rail-play',mark:'audio',onClick:()=>togglePlay(session)});
    button(session,ui.rail,{title:'AI 요약·대화',iconName:'message',cls:'sc-ra-icon',mark:'view',onClick:()=>{setCollapsed(session,false);showTab(session,'ask');}});
    button(session,ui.rail,{title:'번역',iconName:'translate',cls:'sc-ra-icon',mark:'view',onClick:()=>{setCollapsed(session,false);showTab(session,'translate');}});
    const main=ui.main=el(doc,'div',{'class':'sc-ra-main'},rootEl);
-   const head=el(doc,'header',{'class':'sc-ra-head'},main);
+   const head=group(el(doc,'header',{'class':'sc-ra-head'},main));
    el(doc,'strong',{'class':'sc-ra-title',text:t('논문 도우미')},head);
    ui.status=el(doc,'span',{'class':'sc-ra-status',role:'status','aria-live':'polite'},head);
    button(session,head,{title:'패널 접기',iconName:'collapse',cls:'sc-ra-icon',mark:'view',onClick:()=>setCollapsed(session,true)});
    button(session,head,{title:'패널 닫기',iconName:'close',cls:'sc-ra-icon',mark:'view',onClick:()=>setOpen(session,false)});
-   ui.unreadable=el(doc,'p',{'class':'sc-ra-banner',hidden:true,text:t('이 PDF는 글자층이 깨져 본문을 구분할 수 없습니다')+' '+t('Zotero 전문 색인의 글자로 읽고 대화합니다.')},main);
+   ui.unreadable=el(doc,'p',{'class':'sc-ra-banner',hidden:true,text:t('이 PDF는 글자층이 깨져 본문을 구분할 수 없습니다')+' '+t('Zotero가 추출한 일반 텍스트를 사용합니다')},main);
    buildClash(session,main);
    buildPlayer(session,main);
-   const tabs=el(doc,'nav',{'class':'sc-ra-tabs',role:'tablist','aria-label':t('도우미 메뉴')},main);ui.tabs={};
+   const tabs=group(el(doc,'nav',{'class':'sc-ra-tabs',role:'tablist','aria-label':t('도우미 메뉴')},main));ui.tabs={};
    for(const[id,label,ic,title]of TABS){
     const b=el(doc,'button',{type:'button',role:'tab','class':'sc-ra-tab','data-safe':'view','data-tab':id,'aria-selected':'false',title:t(title)},tabs);
     b.appendChild(icon(doc,ic,14));el(doc,'span',{'class':'sc-ra-tab-text',text:t(label)},b);ui.tabs[id]={button:b,badge:el(doc,'span',{'class':'sc-ra-badge',hidden:true},b)};
@@ -405,21 +463,22 @@
    session.onKey=event=>{if(event.key==='Escape')for(const m of session.menus)m.close();};doc.addEventListener('keydown',session.onKey);
    return rootEl;
   }
-  /* Zotero 9's own Read Aloud shares the speech queue: offer to stop it rather than fight it. */
+  /* Zotero 9's own Read Aloud shares the speech queue: offer to stop it rather than fight it. The reader where it
+     plays is kept with the pending start, so the one that is stopped is that reader, not this one. */
   function buildClash(session,parent){
    const doc=session.doc,ui=session.ui;
-   ui.clash=el(doc,'section',{'class':'sc-ra-card sc-ra-clash',hidden:true,role:'alert'},parent);
-   el(doc,'p',{'class':'sc-ra-note',text:t('Zotero의 읽어주기가 재생 중입니다. 둘이 같은 음성을 써서 함께 들을 수 없습니다.')},ui.clash);
+   ui.clash=group(el(doc,'section',{'class':'sc-ra-card sc-ra-clash',hidden:true,role:'alert'},parent));
+   el(doc,'p',{'class':'sc-ra-note',text:t('다른 읽어주기가 재생 중입니다. 중지하고 시작할까요?')},ui.clash);
    const row=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},ui.clash);
-   button(session,row,{label:'Zotero 읽어주기 멈추고 듣기',cls:'sc-ra-primary',mark:'audio',onClick:()=>{const go=session.pendingPlay;session.pendingPlay=null;ui.clash.hidden=true;stopBuiltIn(session.reader);if(go)return go();}});
-   button(session,row,{label:'취소',cls:'sc-ra-secondary',mark:'view',onClick:()=>{session.pendingPlay=null;ui.clash.hidden=true;}});
+   button(session,row,{label:'중지하고 시작',cls:'sc-ra-primary',mark:'audio',onClick:()=>{const pending=session.pendingPlay;session.pendingPlay=null;ui.clash.hidden=true;tabstops(session);if(!pending)return;stopBuiltIn(pending.reader);return pending.go();}});
+   button(session,row,{label:'취소',cls:'sc-ra-secondary',mark:'view',onClick:()=>{session.pendingPlay=null;ui.clash.hidden=true;tabstops(session);}});
   }
 
   /* -- the player bar -- */
   const PLAY_TIP='본문만 읽어 줍니다. 그림·표 캡션, 참고문헌, 머리말·꼬리말·쪽 번호는 건너뜁니다(Zotero의 읽어주기는 페이지의 글을 모두 읽습니다). PDF에서 Alt(Option)+더블클릭하거나 글을 선택해 ‘여기서부터 듣기’를 누르면 그 문장부터 읽습니다.';
   function buildPlayer(session,parent){
    const doc=session.doc,ui=session.ui;
-   const bar=el(doc,'section',{'class':'sc-ra-card sc-ra-player','aria-label':t('읽어주기')},parent);
+   const bar=group(el(doc,'section',{'class':'sc-ra-card sc-ra-player','aria-label':t('읽어주기')},parent));
    const row=el(doc,'div',{'class':'sc-ra-row sc-ra-transport'},bar);
    ui.sectionPrev=button(session,row,{title:'이전 섹션',iconName:'sectionPrev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prevSection())});
    ui.prev=button(session,row,{title:'이전 문장',iconName:'prev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prev())});
@@ -444,7 +503,7 @@
    ui.more=el(doc,'div',{'class':'sc-ra-row sc-ra-more',hidden:true},bar);
    ui.resume=button(session,ui.more,{label:'이어서 듣기',iconName:'play',cls:'sc-ra-link',mark:'audio',onClick:()=>resumeListening(session)});
    const why=el(doc,'details',{'class':'sc-ra-why'},bar);
-   const sum=el(doc,'summary',{text:t('왜 건너뛰었나')},why);void sum;
+   const sum=el(doc,'summary',{text:t('건너뛴 내용')},why);void sum;
    ui.why=el(doc,'pre',{'class':'sc-ra-pre'},why);
    why.addEventListener('toggle',()=>{if(why.open)fillWhy(session);});
   }
@@ -458,7 +517,7 @@
   /* -- summary and chat -- */
   function buildAsk(session,pane){
    const doc=session.doc,ui=session.ui;
-   const card=el(doc,'section',{'class':'sc-ra-card sc-ra-summary','aria-label':t('AI 요약')},pane);
+   const card=group(el(doc,'section',{'class':'sc-ra-card sc-ra-summary','aria-label':t('AI 요약')},pane));
    const head=el(doc,'div',{'class':'sc-ra-card-head'},card);el(doc,'h3',{'class':'sc-ra-h3',text:t('AI 요약')},head);
    ui.summaryActions=el(doc,'div',{'class':'sc-ra-actions'},head);
    ui.summaryCopy=button(session,ui.summaryActions,{title:'요약 복사',iconName:'copy',cls:'sc-ra-icon',mark:'view',onClick:()=>copyText(session,summaryEntry(session)?.text||'')});
@@ -469,15 +528,28 @@
    ui.summaryNote=el(doc,'p',{'class':'sc-ra-note'},card);
    const chat=el(doc,'section',{'class':'sc-ra-card sc-ra-chat','aria-label':t('논문과 대화')},pane);
    const chead=el(doc,'div',{'class':'sc-ra-card-head'},chat);el(doc,'h3',{'class':'sc-ra-h3',text:t('논문과 대화')},chead);
-   const cactions=el(doc,'div',{'class':'sc-ra-actions'},chead);
+   const cactions=group(el(doc,'div',{'class':'sc-ra-actions'},chead));
    ui.chatClear=button(session,cactions,{title:'대화 지우기',iconName:'trash',cls:'sc-ra-icon',mark:'cache',onClick:()=>clearChat(session)});
-   const chips=el(doc,'div',{'class':'sc-ra-chips'},chat);
+   const chips=group(el(doc,'div',{'class':'sc-ra-chips'},chat));
    for(const id of Object.keys(PC.QUICK)){
     const q=PC.QUICK[id];button(session,chips,{label:q.label,cls:'sc-ra-chip',mark:'ai',onClick:()=>sendQuick(session,id)});
    }
-   ui.chatList=el(doc,'div',{'class':'sc-ra-messages',role:'log','aria-live':'polite'},chat);
-   const composer=el(doc,'div',{'class':'sc-ra-composer'},chat);
-   ui.input=el(doc,'textarea',{'class':'sc-ra-input',rows:'2',placeholder:t('이 논문에 대해 물어보세요'),'aria-label':t('질문 입력')},composer);
+   ui.chatList=group(el(doc,'div',{'class':'sc-ra-messages',role:'log','aria-live':'polite'},chat));
+   const composer=group(el(doc,'div',{'class':'sc-ra-composer'},chat));
+   /* The question box is an editable <div>, not a <textarea>: the reader's KeyboardManager treats a key as a
+      shortcut unless isTextBox(target) — <input type="text"> or contenteditable="true" — so in a textarea "r" or
+      "l" started Zotero's Read Aloud and the arrows moved focus. Its window listeners run in the capture phase
+      before anything on this panel, so the box has to be one Zotero recognises. */
+   ui.input=el(doc,'div',{'class':'sc-ra-input',contenteditable:'true',role:'textbox','aria-multiline':'true',spellcheck:'false','data-placeholder':t('이 논문에 대해 물어보세요'),'aria-label':t('질문 입력')},composer);
+   // Only plain text goes in: a paste or a drop of formatted text would otherwise bring its markup along.
+   const plain=(event,data)=>{
+    const text=data&&typeof data.getData==='function'?String(data.getData('text/plain')||''):'';
+    event.preventDefault();if(!text)return;
+    let done=false;try{done=!!doc.execCommand('insertText',false,text);}catch(_){}
+    if(!done)ui.input.appendChild(doc.createTextNode(text));
+   };
+   ui.input.addEventListener('paste',event=>plain(event,event.clipboardData));
+   ui.input.addEventListener('drop',event=>plain(event,event.dataTransfer));
    ui.send=button(session,composer,{title:'보내기',iconName:'send',cls:'sc-ra-send',mark:'ai',onClick:()=>sendTyped(session)});
    ui.stop=button(session,composer,{title:'중지',iconName:'stop',cls:'sc-ra-send',mark:'view',onClick:()=>{session.chatToken&&session.chatToken.cancel();}});ui.stop.hidden=true;
    ui.input.addEventListener('keydown',event=>{
@@ -486,8 +558,13 @@
    });
    ui.chatNote=el(doc,'p',{'class':'sc-ra-note'},chat);
   }
-  const summaryKey=()=>String(runtime.pref('aiModel','')).trim()+'|'+language();
-  const summaryEntry=session=>session.data&&session.data.summary[summaryKey()]||null;
+  /* The summary for the current settings: model, language, server and prompt revision. A summary saved before
+     0.59.24 (keyed "model|language" only) is still shown for the same model and language. */
+  function summaryEntry(session){
+   const all=session.data&&session.data.summary;if(!all)return null;
+   const a=aiSettings(),legacy=all[a.model+'|'+a.language];
+   return all[summaryKeyOf(a)]||(legacy&&!legacy.rev?legacy:null)||null;
+  }
   function renderSummary(session){
    const ui=session.ui,entry=summaryEntry(session),state=session.summaryState||'idle';
    const configured=!!runtime.assist?.available?.();
@@ -505,16 +582,19 @@
   async function runSummary(session,{force=false,auto=false}={}){
    if(session.summaryState==='loading')return;
    if(!force&&summaryEntry(session)){renderSummary(session);return;}
+   // The job starts at the click: closing the reader cancels it through the extraction too.
+   const token=session.summaryToken=TR.token();
    session.summaryState='loading';session.summaryError='';renderSummary(session);
    try{
-    let structured=null;try{structured=(await structure(session)).structured;}catch(error){log(error);}
+    let structured=null;try{structured=(await untilCancelled(structure(session),token)).structured;}catch(error){if(isCancel(error,token))throw error;log(error);}
     const item=itemOf(session.reader),meta={title:fieldOf(item,'title'),abstract:fieldOf(item,'abstractNote')};
     const input=PC.summaryInput(structured||{},{meta,pageBase:PAGE_BASE});
+    if(session.destroyed||token.cancelled)return;
+    // Frozen as the request starts, and the key it is filed under when it returns, whatever the settings are by then.
+    const frozen=aiSettings(),key=summaryKeyOf(frozen);
+    const text=await runtime.assist.paperSummary({title:input.title,abstract:input.abstract,text:input.text},{language:frozen.language,signal:token});
     if(session.destroyed)return;
-    session.summaryToken=TR.token();
-    const text=await runtime.assist.paperSummary({title:input.title,abstract:input.abstract,text:input.text},{language:language(),signal:session.summaryToken});
-    if(session.destroyed)return;
-    session.data.summary[summaryKey()]={text,at:Date.now(),model:String(runtime.pref('aiModel','')).trim(),language:language(),truncated:input.truncated};
+    session.data.summary[key]={text,at:Date.now(),model:frozen.model,language:frozen.language,endpoint:frozen.endpoint,rev:frozen.rev,truncated:input.truncated};
     const keys=Object.keys(session.data.summary);if(keys.length>6)delete session.data.summary[keys[0]];
     session.summaryState='done';saveSoon(session);
    }catch(error){session.summaryState='error';session.summaryError=describe(error);}
@@ -541,26 +621,36 @@
     }
    });
    const busy=!!session.chatBusy;
-   ui.send.hidden=busy;ui.stop.hidden=!busy;ui.input.disabled=false;
-   setBadge(session,'ask',messages.length);
+   ui.send.hidden=busy;ui.stop.hidden=!busy;
+   setBadge(session,'ask',messages.length);tabstops(session);
    if(list.scrollTo)try{list.scrollTop=list.scrollHeight;}catch(_){}
   }
   function trimChat(session){
    const clean_=session.data.chat.filter(m=>!m.streaming);
-   session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined}));
+   session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined,model:m.model||undefined}));
   }
-  const sendTyped=session=>{const q=clean(session.ui.input.value);if(!q)return;session.ui.input.value='';return sendQuestion(session,q,{});};
+  /* The question box is an editable <div> (see buildAsk): its text, line breaks included. */
+  const inputText=session=>{const n=session.ui.input;const v=typeof n.innerText==='string'?n.innerText:n.textContent;return String(v||'');};
+  const setInputText=(session,text)=>{session.ui.input.textContent=text||'';};
+  const sendTyped=session=>{const q=clean(inputText(session));if(!q)return;setInputText(session,'');return sendQuestion(session,q,{});};
   const sendQuick=(session,id)=>{const q=PC.quickPrompt(id,t);return sendQuestion(session,q.question,{forcePage:q.forcePage,mine:q.mine,intent:q.intent});};
   async function sendQuestion(session,question,{forcePage=false,mine=false,intent=null}={}){
    if(session.chatBusy)return;
-   const history=session.data.chat.filter(m=>!m.error).slice();
+   // The conversation the question belongs to: the answer is written there, even if the panel's conversation is
+   // cleared or replaced meanwhile.
+   const thread=session.data.chat;
+   const history=thread.filter(m=>!m.error).slice();
    const user={role:'user',content:question.slice(0,CHAT_LIMIT),at:Date.now()},answer={role:'assistant',content:'',streaming:true,at:Date.now()};
-   session.data.chat.push(user,answer);session.chatBusy=true;renderChat(session);
+   // The job and the busy state start at the click, so Stop works while the paper's text is still being read:
+   // Stop cancels this question only, not a summary or a translation beside it.
+   const chatToken=session.chatToken=TR.token();
+   thread.push(user,answer);session.chatBusy=true;renderChat(session);
    let timer=null;const refresh=()=>{timer=null;if(!session.destroyed)renderChat(session);};
    try{
     if(!runtime.assist?.available?.())throw new Error('설정에서 AI 서버 주소와 모델을 먼저 입력하세요.');
     let structured=null,notice='';
-    try{structured=(await structure(session)).structured;}catch(error){log(error);notice=t('본문을 읽지 못해 초록만 참고했습니다.');}
+    try{structured=(await untilCancelled(structure(session),chatToken)).structured;}catch(error){if(isCancel(error,chatToken))throw error;log(error);notice=t('본문을 읽지 못해 초록만 참고했습니다.');}
+    if(chatToken.cancelled)throw cancelledError();
     const item=itemOf(session.reader);
     const doc=structured||{title:fieldOf(item,'title'),abstract:fieldOf(item,'abstractNote'),sections:[]};
     session.chunks=session.chunks||PC.buildChunks(doc,{pageBase:PAGE_BASE});
@@ -568,19 +658,28 @@
     const viewing={page,sectionIndex,section:sectionIndex>=0?clean(structured.sections[sectionIndex].heading):''};
     const own=mine?{memo:String(runtime.entry?.(item)?.remark||''),tags:(item?.getTags?.()||[]).map(x=>String(x.tag||x))}:null;
     const entry=summaryEntry(session);
-    const {messages}=PC.chatMessages({question,history,chunks:session.chunks,summary:entry?entry.text:'',language:language(),viewing,mine:own,forcePage,intent});
+    // Frozen as the request starts: the answer records the model and server it was asked of.
+    const frozen=aiSettings();answer.model=frozen.model;
+    const {messages}=PC.chatMessages({question,history,chunks:session.chunks,summary:entry?entry.text:'',language:frozen.language,viewing,mine:own,forcePage,intent});
     session.ui.chatNote.textContent=notice;
-    if(session.destroyed)return;
-    // Stop cancels this question only, not a summary or a translation beside it.
-    const chatToken=session.chatToken=TR.token();
+    if(session.destroyed||chatToken.cancelled)throw cancelledError();
     const text=await runtime.assist.chat(messages,{signal:chatToken,onDelta:(piece,all)=>{answer.content=all;if(timer===null&&!session.destroyed&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);}});
     answer.content=text;
    }catch(error){answer.error=describe(error);}
-   answer.streaming=false;session.chatBusy=false;if(timer!==null){try{session.doc.defaultView.clearTimeout(timer);}catch(_){}}
-   if(!answer.content&&answer.error){session.data.chat.splice(session.data.chat.indexOf(answer),1);session.data.chat.splice(session.data.chat.indexOf(user),1);session.ui.chatNote.textContent=answer.error;session.ui.input.value=question;}
-   trimChat(session);saveSoon(session);if(!session.destroyed)renderChat(session);
+   answer.streaming=false;if(session.chatToken===chatToken){session.chatBusy=false;session.chatToken=null;}if(timer!==null){try{session.doc.defaultView.clearTimeout(timer);}catch(_){}}
+   if(!answer.content&&answer.error){
+    for(const m of [answer,user]){const i=thread.indexOf(m);if(i>=0)thread.splice(i,1);}
+    session.ui.chatNote.textContent=answer.error;
+    if(thread===session.data.chat&&!clean(inputText(session)))setInputText(session,question);
+   }
+   if(thread===session.data.chat)trimChat(session);
+   saveSoon(session);if(!session.destroyed)renderChat(session);
   }
-  function clearChat(session){session.data.chat=[];saveSoon(session);renderChat(session);}
+  function clearChat(session){
+   // A question still running stays with the conversation it was asked in, which is the one being cleared.
+   try{session.chatToken&&session.chatToken.cancel();}catch(_){}
+   session.data.chat=[];session.chatBusy=false;session.chatToken=null;saveSoon(session);renderChat(session);
+  }
 
   /* -- the memo and the clipboard -- */
   async function toMemo(session,text,heading){
@@ -612,22 +711,23 @@
   /* -- translation -- */
   function buildTranslate(session,pane){
    const doc=session.doc,ui=session.ui;
-   const card=el(doc,'section',{'class':'sc-ra-card sc-ra-tr','aria-label':t('번역')},pane);
+   const card=group(el(doc,'section',{'class':'sc-ra-card sc-ra-tr','aria-label':t('번역')},pane));
    const head=el(doc,'div',{'class':'sc-ra-card-head'},card);el(doc,'h3',{'class':'sc-ra-h3',text:t('문단별 번역')},head);
    const bar=el(doc,'div',{'class':'sc-ra-actions'},head);
    ui.trTarget=menu(session,bar,{label:'번역 언어',ariaLabel:'번역할 언어 고르기',items:[],current:'',mark:'view',onPick:value=>setTarget(session,value)});
    ui.trProvider=el(doc,'p',{'class':'sc-ra-note'},card);
+   ui.trSources=el(doc,'p',{'class':'sc-ra-note',hidden:true},card);
    ui.trEstimate=el(doc,'p',{'class':'sc-ra-note'},card);
    const row=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
    ui.trPage=button(session,row,{label:'현재 페이지부터',cls:'sc-ra-primary',mark:'ai',onClick:()=>runTranslate(session,'page')});
    ui.trAll=button(session,row,{label:'전체 번역',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'all')});
-   ui.trStop=button(session,row,{label:'중지',cls:'sc-ra-secondary',mark:'view',onClick:()=>{if(session.tr)session.tr.service.cancel();}});ui.trStop.hidden=true;
+   ui.trStop=button(session,row,{label:'중지',cls:'sc-ra-secondary',mark:'view',onClick:()=>{if(session.trJob)session.trJob.cancel();if(session.tr)session.tr.service.cancel();}});ui.trStop.hidden=true;
    ui.trNext=button(session,row,{label:'다른 번역기로 이어서',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'resume',{next:true})});ui.trNext.hidden=true;
    const row2=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
    ui.trUsage=button(session,row2,{label:'사용량 새로고침',iconName:'refresh',cls:'sc-ra-link',mark:'network',onClick:()=>refreshUsage(session)});
    ui.trNote=button(session,row2,{label:'노트로 저장',iconName:'note',cls:'sc-ra-link',mark:'note',onClick:()=>saveTranslationNote(session)});
    ui.trProgress=el(doc,'p',{'class':'sc-ra-note',role:'status'},card);
-   ui.trRows=el(doc,'div',{'class':'sc-ra-rows'},pane);
+   ui.trRows=group(el(doc,'div',{'class':'sc-ra-rows'},pane));
   }
   function translator(session){
    if(session.tr)return session.tr;
@@ -649,8 +749,9 @@
     pdfTranslate:()=>Z.PDFTranslate&&Z.PDFTranslate.api,
     ai:{available:()=>!!runtime.assist?.available?.(),translate:(texts,o)=>runtime.assist.translateParagraphs(texts,o)},
     uiKorean:runtime.i18n?.isKorean?.()!==false});
-   // Translations shown are kept per target language: switching the menu shows that language's set, never another's.
-   return session.tr={service,paragraphs:[],byTarget:new Map(),texts(code){if(!this.byTarget.has(code))this.byTarget.set(code,new Map());return this.byTarget.get(code);}};
+   // What is shown comes from the cache under the current settings (service.resolved): switching the language, the
+   // formality or the AI model shows that setting's translations, never another's.
+   return session.tr={service,paragraphs:[]};
   }
   async function prepareTranslate(session){
    if(session.probing)return;
@@ -661,9 +762,14 @@
    }catch(error){tr.paragraphs=[];session.ui.trProgress.textContent=describe(error);}
    renderTranslate(session);
   }
+  /* "DeepL Free · 문단 1–12, Translate for Zotero · 문단 13–40": who translated which paragraphs. */
+  function sourcesText(service,paragraphs,found){
+   return TR.providerSpans(paragraphs,found).map(x=>T('{0} · 문단 {1}',service.providerLabel(x.provider),TR.rangeText(x.ranges))).join(', ');
+  }
+  const trBusy=session=>!!session.trJob||!!(session.tr&&session.tr.service.busy);
   function renderTranslate(session){
    const ui=session.ui,tr=translator(session),doc=session.doc,service=tr.service;
-   const providers=service.providers(),current=service.pickProvider(),target=service.target(),texts=tr.texts(target.code);
+   const providers=service.providers(),current=service.pickProvider(),target=service.target(),busy=trBusy(session);
    ui.trTarget.set({items:TR.TARGETS.map(x=>({value:x.code,label:x.label})),current:target.code,label:target.label});
    ui.trProvider.textContent=current?T('번역기: {0}',service.providerLabel(current))+(providers.length>1?' · '+T('대체: {0}',providers.slice(providers.indexOf(current)+1).map(service.providerLabel).join(', ')||'—'):''):t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요. DeepL 무료 키는 한 달 50만 자까지 쓸 수 있습니다.');
    const usage=service.usage();
@@ -674,63 +780,106 @@
    ui.trEstimate.textContent=!tr.paragraphs.length?t('번역할 본문을 아직 읽지 못했습니다.'):
     T('전체 약 {0}자 · 이미 번역한 {1}문단은 제외',est.chars.toLocaleString(),est.cached)+' · '+T('현재 페이지부터 약 {0}자',pageEst.chars.toLocaleString())
     +(current==='deepl'?' · '+T('이번 달 {0} / {1}자 사용',usage.chars.toLocaleString(),limitText)+(usage.free?'':' · '+t('유료 키')):'')
-    +(current==='ai'&&est.chars?' · '+(isLocalAI()?T('AI 서버로 약 {0}토큰 (내 컴퓨터의 모델이라 무료)',est.tokens.toLocaleString()):T('AI 서버로 약 {0}토큰을 보내고 받습니다. 모델 요금이 붙습니다.',est.tokens.toLocaleString())):'')
+    +(current==='ai'&&est.chars?' · '+(isLocalAI()?T('AI 서버로 약 {0}토큰 (이 Mac에서 실행)',est.tokens.toLocaleString()):T('AI 서버로 약 {0}토큰을 보내고 받습니다. 모델 요금이 붙습니다.',est.tokens.toLocaleString())):'')
     +(current==='deepl'&&!est.fits?' · '+t('전체는 남은 한도를 넘습니다. 한도에 닿으면 거기서 멈추고 번역한 부분은 남습니다.'):'');
-   for(const b of [ui.trPage,ui.trAll])b.disabled=!current||!tr.paragraphs.length||service.busy;
-   ui.trStop.hidden=!service.busy;ui.trUsage.hidden=!service.providers().includes('deepl');ui.trNote.disabled=!tr.paragraphs.length;
-   // rows
+   for(const b of [ui.trPage,ui.trAll])b.disabled=!current||!tr.paragraphs.length||busy;
+   ui.trStop.hidden=!busy;ui.trUsage.hidden=!service.providers().includes('deepl');ui.trNote.disabled=!tr.paragraphs.length;
+   if(busy)ui.trNext.hidden=true;
+   // rows: each paragraph's current translation and the translator that made it
+   const found=service.resolved(tr.paragraphs,target.code);
+   const sources=sourcesText(service,tr.paragraphs,found);
+   ui.trSources.textContent=sources?T('번역: {0}',sources):'';ui.trSources.hidden=!sources;
    ui.trRows.replaceChildren();let done=0;
-   tr.paragraphs.forEach((p,i)=>{
-    const text=(current?service.cached(current,p.text,target.code):'')||texts.get(p.id)||'';
-    if(text){texts.set(p.id,text);done++;}
-    const row=el(doc,'article',{'class':'sc-ra-row-card','data-id':p.id,'data-state':text?'done':'todo'},ui.trRows);
+   tr.paragraphs.forEach(p=>{
+    const hit=found.get(p.id),text=hit?hit.text:'';
+    if(text)done++;
+    const row=el(doc,'article',{'class':'sc-ra-row-card','data-id':p.id,'data-state':text?'done':'todo','data-provider':hit?hit.provider:undefined},ui.trRows);
     const meta=el(doc,'button',{type:'button','class':'sc-ra-row-meta','data-safe':'view',title:(p.heading?p.heading+' — ':'')+t('이 문단으로 이동')},row);
     meta.textContent=(p.heading||'—')+(p.page?' · p. '+p.page:'');
     meta.addEventListener('click',()=>goToPage(session,p.page,p.rects));
     const body=el(doc,'p',{'class':'sc-ra-tr-text'},row);body.textContent=text||'—';
-    const orig=el(doc,'details',{'class':'sc-ra-orig'},row);el(doc,'summary',{text:t('원문')},orig);el(doc,'p',{'class':'sc-ra-orig-text'},orig).textContent=p.text;
+    const orig=el(doc,'details',{'class':'sc-ra-orig'},row);el(doc,'summary',{text:hit?t('원문')+' · '+service.providerLabel(hit.provider):t('원문')},orig);el(doc,'p',{'class':'sc-ra-orig-text'},orig).textContent=p.text;
     const again=button(session,row,{label:'다시 번역',cls:'sc-ra-link',mark:'ai',onClick:()=>retranslate(session,p)});
-    void i;void again;
+    again.disabled=busy||!current;
    });
    setBadge(session,'translate',tr.paragraphs.length?done+'/'+tr.paragraphs.length:0);
+   tabstops(session);
   }
-  function paintParagraph(session,p,text,code){
-   const tr=translator(session);tr.texts(code).set(p.id,text);
-   if(code!==tr.service.target().code)return;      // a run for another language: stored, not shown here
+  function paintParagraph(session,p,text,code,provider){
+   const tr=translator(session);
+   if(code!==tr.service.target().code)return;      // a run for another language: stored in the cache, not shown here
    const row=session.ui.trRows.querySelector('[data-id="'+p.id+'"]');
-   if(row){row.setAttribute('data-state','done');const body=row.querySelector('.sc-ra-tr-text');if(body)body.textContent=text;}
+   if(row){row.setAttribute('data-state','done');if(provider)row.setAttribute('data-provider',provider);const body=row.querySelector('.sc-ra-tr-text');if(body)body.textContent=text;}
   }
   const isLocalAI=()=>/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\//i.test(String(runtime.pref('aiEndpoint','')||'').trim());
   const usageLine=u=>T('이번 달 {0} / {1}자 사용',u.chars.toLocaleString(),u.limit===null?t('한도 미확인'):u.limit.toLocaleString());
+  /* One translation job at a time, whole paragraphs or one paragraph again. The job's token and the busy state are
+     made at the click, so Stop works from the first moment: while the paper's text is read, while DeepL's usage is
+     asked, and between every batch; each await is followed by a look at the token. */
   async function runTranslate(session,mode,{next=false}={}){
    const tr=translator(session),service=tr.service,ui=session.ui;
-   if(service.busy)return;
-   if(!tr.paragraphs.length)await prepareTranslate(session);
-   if(session.destroyed)return;
-   let provider=service.pickProvider();
-   if(next)provider=service.nextProvider(session.trProvider||provider)||provider;
-   if(!provider){ui.trProgress.textContent=t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요.');return;}
-   session.trProvider=provider;ui.trNext.hidden=true;
-   // Fixed for this run: the language the menu shows now.
-   const code=service.target().code;
-   let start=0;
-   if(mode==='page')start=Math.max(0,tr.paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1)));
-   ui.trStop.hidden=false;for(const b of [ui.trPage,ui.trAll])b.disabled=true;
-   // DeepL's own count (free to ask) before spending it; a failure here only means the local count is used.
-   if(provider==='deepl'){try{await service.refreshUsage();}catch(error){log(error);}if(session.destroyed)return;}
-   const summary=await service.translateAll(tr.paragraphs,{start,provider,target:code,
-    onParagraph:(p,text)=>{if(!session.destroyed)paintParagraph(session,p,text,code);},
-    onProgress:p=>{if(session.destroyed)return;ui.trProgress.textContent=T('번역 {0}/{1}문단 · {2}',p.done,p.total,service.providerLabel(provider))+(provider==='deepl'?' · '+usageLine(service.usage()):'');}}).catch(error=>({provider,done:0,total:0,stopped:error.code||'failed',error}));
-   if(session.destroyed)return;
-   ui.trProgress.textContent=summary.stopped==='cancelled'?T('중지했습니다. {0}문단 번역됨',summary.done):summary.stopped?describe(summary.error)+(summary.error&&summary.error.detail?' ('+summary.error.detail+')':'')+' · '+T('{0}문단 번역됨',summary.done):T('{0}문단 번역을 마쳤습니다.',summary.done);
-   if(summary.stopped&&['quota','key','rate','server','failed','shape'].includes(summary.stopped)&&service.nextProvider(provider))ui.trNext.hidden=false;
+   if(trBusy(session))return;
+   const job=session.trJob=TR.token();
    renderTranslate(session);
+   let summary=null,provider=null;
+   try{
+    if(!tr.paragraphs.length)await untilCancelled(prepareTranslate(session),job);
+    if(session.destroyed)return;
+    if(job.cancelled)throw cancelledError();
+    provider=service.pickProvider();
+    if(next)provider=service.nextProvider(session.trProvider||provider)||provider;
+    if(!provider){ui.trProgress.textContent=t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요.');return;}
+    session.trProvider=provider;ui.trNext.hidden=true;
+    // Fixed for this run: the language the menu shows now.
+    const code=service.target().code,found=service.resolved(tr.paragraphs,code);
+    let list;
+    if(next){
+     // Another translator carries on where the last one stopped: only what no translator has finished in this
+     // language, from where that run began. Nothing already translated is sent (or paid for) twice.
+     list=TR.unfinished(tr.paragraphs.slice(session.trStart||0),found);
+    }else{
+     const start=mode==='page'?Math.max(0,tr.paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1))):0;
+     session.trStart=start;
+     // A paragraph another translator already finished is left as it is ("다시 번역" redoes one on purpose).
+     list=tr.paragraphs.slice(start).filter(p=>{const hit=found.get(p.id);return !hit||hit.provider===provider;});
+    }
+    // DeepL's own count (free to ask) before spending it; a failure here only means the local count is used.
+    if(provider==='deepl'){try{await service.refreshUsage({signal:job});}catch(error){if(!job.cancelled)log(error);}}
+    if(session.destroyed)return;
+    if(job.cancelled)throw cancelledError();
+    summary=await service.translateAll(list,{provider,target:code,signal:job,
+     onParagraph:(p,text)=>{if(!session.destroyed)paintParagraph(session,p,text,code,provider);},
+     onProgress:p=>{if(session.destroyed)return;ui.trProgress.textContent=T('번역 {0}/{1}문단 · {2}',p.done,p.total,service.providerLabel(provider))+(provider==='deepl'?' · '+usageLine(service.usage()):'');}}).catch(error=>({provider,done:0,total:0,stopped:error.code||'failed',error}));
+   }catch(error){
+    if(!isCancel(error,job))throw error;
+    summary={provider,done:0,total:0,stopped:'cancelled'};
+   }finally{
+    if(session.trJob===job)session.trJob=null;
+    if(!summary&&!session.destroyed)renderTranslate(session);
+   }
+   if(session.destroyed||!summary)return;
+   ui.trProgress.textContent=summary.stopped==='cancelled'?T('중지했습니다. {0}문단 번역됨',summary.done):summary.stopped?describe(summary.error)+(summary.error&&summary.error.detail?' ('+summary.error.detail+')':'')+' · '+T('{0}문단 번역됨',summary.done):T('{0}문단 번역을 마쳤습니다.',summary.done);
+   renderTranslate(session);
+   if(summary.stopped&&['quota','key','rate','server','failed','shape'].includes(summary.stopped)&&service.nextProvider(provider))ui.trNext.hidden=false;
+   tabstops(session);
   }
   async function retranslate(session,paragraph){
-   const tr=translator(session),code=tr.service.target().code;
-   const result=await tr.service.translateOne(paragraph,{provider:tr.service.pickProvider(),force:true,target:code});
-   if(session.destroyed)return;
-   paintParagraph(session,paragraph,result.text,code);session.ui.trProgress.textContent=T('다시 번역했습니다 · {0}',tr.service.providerLabel(result.provider));
+   const tr=translator(session);
+   if(trBusy(session))return;
+   const job=session.trJob=TR.token(),code=tr.service.target().code;
+   renderTranslate(session);
+   try{
+    const result=await tr.service.translateOne(paragraph,{provider:tr.service.pickProvider(),force:true,target:code,signal:job});
+    if(session.destroyed)return;
+    session.ui.trProgress.textContent=T('다시 번역했습니다 · {0}',tr.service.providerLabel(result.provider));
+   }catch(error){
+    if(session.destroyed)return;
+    if(!isCancel(error,job))throw error;
+    session.ui.trProgress.textContent=t('중지했습니다.');
+   }finally{
+    if(session.trJob===job)session.trJob=null;
+    if(!session.destroyed)renderTranslate(session);
+   }
   }
   async function refreshUsage(session){
    const tr=translator(session);const u=await tr.service.refreshUsage();
@@ -741,12 +890,14 @@
    try{await runtime.setSetting('translateTarget',code,{apply:false});}catch(error){log(error);}
    if(!session.destroyed)renderTranslate(session);
   }
-  /* The note is the language the menu shows, with that language's translations only. */
+  /* The note is the language the menu shows, with that language's current translations only, and says which
+     translator made which paragraphs. */
   async function saveTranslationNote(session){
-   const tr=translator(session),item=itemOf(session.reader),library=runtime.libraryService;
+   const tr=translator(session),item=itemOf(session.reader),library=runtime.libraryService,service=tr.service;
    if(!item||!library?.createNoteHTML)throw new Error('Note creation is unavailable');
-   const provider=tr.service.pickProvider()||'',code=tr.service.target().code;
-   const made=TR.noteHTML({title:fieldOf(item,'title'),target:code,provider:tr.service.providerLabel(provider),date:new Date().toISOString().slice(0,10),paragraphs:tr.paragraphs,translations:tr.texts(code)});
+   const code=service.target().code,found=service.resolved(tr.paragraphs,code);
+   const translations=new Map([...found].map(([id,v])=>[id,v.text])),sources=new Map([...found].map(([id,v])=>[id,service.providerLabel(v.provider)]));
+   const made=TR.noteHTML({title:fieldOf(item,'title'),target:code,provider:sourcesText(service,tr.paragraphs,found)||service.providerLabel(service.pickProvider()||''),date:new Date().toISOString().slice(0,10),paragraphs:tr.paragraphs,translations,sources});
    if(!made.count){say(session,t('저장할 번역이 아직 없습니다.'),true);return;}
    await library.createNoteHTML(item.id,made.html);
    say(session,T('원문·번역 {0}문단을 노트로 저장했습니다.',made.count));
@@ -755,14 +906,14 @@
   /* -- listen -- */
   function buildListen(session,pane){
    const doc=session.doc,ui=session.ui;
-   const card=el(doc,'section',{'class':'sc-ra-card sc-ra-listen','aria-label':t('듣기 목록')},pane);
+   const card=group(el(doc,'section',{'class':'sc-ra-card sc-ra-listen','aria-label':t('듣기 목록')},pane));
    const head=el(doc,'div',{'class':'sc-ra-card-head'},card);el(doc,'h3',{'class':'sc-ra-h3',text:t('듣기 목록')},head);
    const follow=el(doc,'label',{'class':'sc-ra-check'},head);
    ui.follow=el(doc,'input',{type:'checkbox','data-safe':'view','aria-label':t('PDF에서 따라가기')},follow);ui.follow.checked=uiState().follow!==false;
    el(doc,'span',{text:t('PDF에서 따라가기')},follow);
    ui.follow.addEventListener('change',()=>{uiState().follow=ui.follow.checked;persistUI();if(!ui.follow.checked)clearHighlight(session);});
    ui.listenNote=el(doc,'p',{'class':'sc-ra-note'},card);
-   ui.transcript=el(doc,'div',{'class':'sc-ra-transcript'},pane);
+   ui.transcript=group(el(doc,'div',{'class':'sc-ra-transcript'},pane));
   }
   function renderTranscript(session){
    const ui=session.ui,doc=session.doc,player=session.player;
@@ -792,6 +943,8 @@
    b.textContent=String(count);b.hidden=!count;
   }
   function spawnSay(args,onexit){
+   // The live self-check blocks every process launch while it runs, and counts the attempt.
+   if(guard&&guard('nsIProcess /usr/bin/say'))return {kill(){}};
    const C=root.Components||globalThis.Components;
    const file=C.classes['@mozilla.org/file/local;1'].createInstance(C.interfaces.nsIFile);file.initWithPath('/usr/bin/say');
    const proc=C.classes['@mozilla.org/process/util;1'].createInstance(C.interfaces.nsIProcess);proc.init(file);
@@ -822,7 +975,7 @@
     const filters=session.filters||{captions:false,references:false};
     // Everything is composed once; the player's own switches decide what is read.
     const units=RA.composeUnits(structured,{captions:true,references:true},tools(session));
-    if(!units.length)throw new Error('읽을 본문이 없습니다. 아래 ‘왜 건너뛰었나’를 열어 보세요.');
+    if(!units.length)throw new Error('읽을 본문이 없습니다. 아래 ‘건너뛴 내용’을 열어 보세요.');
     const lang=RA.detectLanguage(units.slice(0,60).map(u=>u.text).join(' '));
     const voices=engine.voices();
     const saved=String(setting('readAloudVoice','')||'');
@@ -855,14 +1008,22 @@
   }
   /* Everything that starts sound goes through here: never after the reader closed, never over Zotero's own
      Read Aloud without asking, and only one of our players at a time across readers. */
-  async function startPlayback(session,go){
+  /* The reader whose own Read Aloud is playing, this one or any other open reader. */
+  function clashingReader(skip){
+   const readers=new Set([...sessions.values()].map(s=>s.reader));
+   try{for(const r of Z.Reader?._readers||[])readers.add(r);}catch(_){}
+   for(const r of readers)if(r!==skip&&builtInPlaying(r))return r;
+   return null;
+  }
+  async function startPlayback(session,go,{ignore=null}={}){
    if(session.destroyed)return;
-   const builtIn=[...sessions.values()].some(s=>builtInPlaying(s.reader));
-   if(builtIn){
-    session.pendingPlay=()=>startPlayback(session,go);
+   const other=clashingReader(ignore);
+   if(other){
+    // Kept with the start: "중지하고 시작" stops the reader where it was found playing, then starts this one.
+    session.pendingPlay={reader:other,go:()=>startPlayback(session,go,{ignore:other})};
     if(!session.open)setOpen(session,true,{remember:false});
-    if(session.collapsed)setCollapsed(session,false,{remember:false});
-    session.ui.clash.hidden=false;return;
+    if(isFolded(session))setCollapsed(session,false,{remember:false});
+    session.ui.clash.hidden=false;tabstops(session);return;
    }
    const p=await ensurePlayer(session);
    if(session.destroyed||p.destroyed)return;
@@ -962,9 +1123,9 @@
    for(const n of session.marks||[]){try{n.remove();}catch(_){}}session.marks=[];session.markedPage=null;
    if(!keepUnit)session.markedUnit=null;
   }
-  function liveViewport(session,page){
+  function liveViewport(session,page,which='primary'){
    try{
-    const app=viewerWindow(session.reader)?.PDFViewerApplication,view=app&&app.pdfViewer&&app.pdfViewer.getPageView&&app.pdfViewer.getPageView(page-1);
+    const app=viewerWindow(session.reader,which)?.PDFViewerApplication,view=app&&app.pdfViewer&&app.pdfViewer.getPageView&&app.pdfViewer.getPageView(page-1);
     const v=view&&view.viewport;if(!v||!(v.width>0))return null;
     return {width:Number(v.width),height:Number(v.height),transform:Array.from(v.transform||[]).map(Number)};
    }catch(_){return null;}
@@ -1033,17 +1194,20 @@
     return startPlayback(session,p=>{const at=p.indexNear(pageIndex,x,y);if(at>=0)p.play(at);});
    }).catch(error=>say(session,describe(error),true));
   }
-  /* Alt(Option)+double-click on the page starts reading there. A plain double-click is how people select a word, so it is left alone. */
-  function onDoubleClick(session,event){
+  /* Alt(Option)+double-click on the page starts reading there. A plain double-click is how people select a word, so it is left alone.
+     The point goes through the view's live viewport, so a page the reader has turned still finds the sentence under the pointer. */
+  function onDoubleClick(session,event,which='primary'){
    if(!session.open||!event||!event.altKey)return;
    try{
     const target=event.target,pageEl=target&&target.closest&&target.closest('.page[data-page-number]');if(!pageEl||!pageEl.getBoundingClientRect)return;
     const page=Number(pageEl.getAttribute('data-page-number')),rect=pageEl.getBoundingClientRect();
     if(!(rect.width>0&&rect.height>0))return;
     const fx=(event.clientX-rect.left)/rect.width,fy=(event.clientY-rect.top)/rect.height;
+    const live=liveViewport(session,page,which);
     structure(session).then(()=>{
      const size=session.pageSizes&&session.pageSizes[page-1];if(!size||!(size.width>0))return;
-     return playAt(session,page-1,fx*size.width,fy*size.height);
+     const at=pointToPage(fx,fy,live,size);if(!at)return;
+     return playAt(session,page-1,at[0],at[1]);
     }).catch(error=>say(session,describe(error),true));
    }catch(error){log(error);}
   }
@@ -1053,9 +1217,10 @@
    if(stopped||!reader||reader.type!=='pdf'||typeof append!=='function')return;
    const position=params&&params.annotation&&params.annotation.position;
    if(!position||!Number.isInteger(position.pageIndex)||!position.rects||!position.rects.length)return;
-   const b=el(doc,'button',{type:'button','class':'sc-ra-selection-listen','data-opens':'audio',title:t(PLAY_TIP)});
+   // Its own tab stop in the popup, as Zotero's "Add to note" is; the corners of the panel's buttons.
+   const b=el(doc,'button',{type:'button','class':'sc-ra-selection-listen','data-opens':'audio','data-tabstop':'1',title:t(PLAY_TIP)});
    b.textContent=t('여기서부터 듣기');
-   b.style.cssText='display:block;width:100%;margin-top:4px;padding:4px 6px;border-radius:5px;text-align:center;color:var(--fill-primary);background:var(--material-button);box-shadow:0 .5px 2.5px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.05);';
+   b.style.cssText=`display:block;width:100%;margin-top:4px;padding:4px 10px;border-radius:${BUTTON_RADIUS};text-align:center;color:var(--fill-primary);background:var(--material-button);box-shadow:0 .5px 2.5px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.05);`;
    const r=Array.from(position.rects[0]).map(Number),pageIndex=position.pageIndex;
    b.addEventListener('click',()=>{
     const session=sessions.get(reader)||createSession(reader);if(!session)return;
@@ -1073,19 +1238,40 @@
      where the panel begins, and pdf.js is told to fit again, so the paper is never under the panel. The width is
      the user's (dragged on the left edge, 280 px to half the reader), and the panel folds to a 52 px rail. */
   const docWidth=session=>{try{return Number(session.doc.documentElement.clientWidth)||Number(session.doc.defaultView.innerWidth)||0;}catch(_){return 0;}};
-  function panelWidth(session){
-   const saved=Number(uiState().width)||WIDTH,total=docWidth(session);
-   const max=total>0?Math.max(MIN_WIDTH,Math.floor(total*0.5)):Math.max(MIN_WIDTH,saved);
-   return Math.round(Math.min(max,Math.max(MIN_WIDTH,saved)));
-  }
-  const occupied=session=>!session.open?0:session.collapsed?RAIL_WIDTH:panelWidth(session);
   const viewContainers=session=>{try{return [...session.doc.querySelectorAll('#split-view, .split-view')];}catch(_){return [];}};
+  /* What the reader's own sidebar (annotations, thumbnails, outline) takes at the start of the split area: the view
+     container begins after it. Our inset is at the other end, so this does not move as the panel opens. */
+  function sidebarWidth(session){
+   const total=docWidth(session),rtl=(()=>{try{return (session.doc.documentElement.getAttribute('dir')||'ltr')==='rtl';}catch(_){return false;}})();
+   for(const node of viewContainers(session)){
+    let r=null;try{r=node.getBoundingClientRect&&node.getBoundingClientRect();}catch(_){r=null;}
+    if(!r||!(r.width>0||r.left>0||r.right>0))continue;
+    const side=rtl?total-Number(r.right):Number(r.left);
+    if(Number.isFinite(side))return Math.max(0,Math.min(total,side));
+   }
+   return 0;
+  }
+  /* The widest the panel may be: half the reader, and never so wide that the PDF gets less than MIN_PDF. */
+  function maxPanelWidth(session){
+   const total=docWidth(session);if(!(total>0))return Infinity;
+   return Math.min(Math.floor(total*0.5),total-sidebarWidth(session)-MIN_PDF);
+  }
+  function panelWidth(session){
+   const saved=Number(uiState().width)||WIDTH,max=maxPanelWidth(session);
+   return Math.round(Math.min(Math.max(MIN_WIDTH,max),Math.max(MIN_WIDTH,saved)));
+  }
+  /* Folded: by the user, or by the window when even the narrowest panel would leave the PDF under MIN_PDF. The
+     second is not remembered and undoes itself when the room comes back. */
+  const isFolded=session=>!!(session.collapsed||session.autoFolded);
+  const occupied=session=>!session.open?0:isFolded(session)?RAIL_WIDTH:panelWidth(session);
   function applyLayout(session,open){
    if(open!==undefined)session.open=!!open;
+   session.autoFolded=!!(session.open&&!session.collapsed&&maxPanelWidth(session)<MIN_WIDTH);
    const w=occupied(session),root_=session.ui.root;
    root_.hidden=!session.open;
-   root_.setAttribute('data-collapsed',String(!!session.collapsed));
-   try{root_.style.setProperty('--sc-ra-w',(session.collapsed?RAIL_WIDTH:panelWidth(session))+'px');}catch(_){}
+   root_.setAttribute('data-collapsed',String(isFolded(session)));
+   try{root_.style.setProperty('--sc-ra-w',(isFolded(session)?RAIL_WIDTH:panelWidth(session))+'px');}catch(_){}
+   if(session.ui.railExpand)session.ui.railExpand.title=session.autoFolded?t('창이 좁아 접어 두었습니다. 창을 넓히면 다시 펼쳐집니다.'):t('패널 펼치기');
    for(const node of viewContainers(session)){
     if(!node.style)continue;
     if(!session.layoutOriginal)session.layoutOriginal=new Map();
@@ -1096,6 +1282,7 @@
    }
    if(w===0)session.layoutOriginal=null;
    if(session.appliedWidth!==w){session.appliedWidth=w;refit(session);}
+   tabstops(session);
   }
   /* pdf.js fits "page width" and "auto" again only when it hears a resize: say so to each view, after layout. */
   function refit(session){
@@ -1116,25 +1303,30 @@
   }
   function setCollapsed(session,collapsed,{remember=true}={}){
    session.collapsed=!!collapsed;applyLayout(session);
+   if(!collapsed&&session.autoFolded)say(session,t('창이 좁아 접어 두었습니다. 창을 넓히면 다시 펼쳐집니다.'));
    if(remember&&!session.probing){uiState().collapsed=session.collapsed;persistUI();}
   }
   function wireResizer(session){
    const handle=session.ui.resizer,doc=session.doc;
    const setWidth=(w,save)=>{
-    const total=docWidth(session),max=total>0?Math.max(MIN_WIDTH,Math.floor(total*0.5)):w;
-    uiState().width=Math.round(Math.min(max,Math.max(MIN_WIDTH,w)));
+    const max=maxPanelWidth(session);
+    uiState().width=Math.round(Math.min(Math.max(MIN_WIDTH,max),Math.max(MIN_WIDTH,w)));
     handle.setAttribute('aria-valuenow',String(uiState().width));applyLayout(session);
     if(save)persistUI();
    };
    let drag=null;
    handle.addEventListener('pointerdown',event=>{
     if(event.button!==undefined&&event.button!==0)return;
-    drag={x:event.clientX,width:panelWidth(session)};try{handle.setPointerCapture(event.pointerId);}catch(_){}
+    drag={x:event.clientX,width:panelWidth(session),pointer:event.pointerId};try{handle.setPointerCapture(event.pointerId);}catch(_){}
     event.preventDefault&&event.preventDefault();
    });
    handle.addEventListener('pointermove',event=>{if(!drag)return;const ltr=(doc.documentElement.getAttribute('dir')||'ltr')!=='rtl';setWidth(drag.width+(ltr?drag.x-event.clientX:event.clientX-drag.x),false);});
-   const end=()=>{if(!drag)return;drag=null;persistUI();};
-   handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+   // A drag ends on release, on a cancelled pointer, when the capture is lost (another window, a menu), when the
+   // window loses focus, and when the panel goes: never a drag that keeps resizing on the next move.
+   const end=()=>{if(!drag)return;const id=drag.pointer;drag=null;try{if(id!==undefined&&handle.hasPointerCapture&&handle.hasPointerCapture(id))handle.releasePointerCapture(id);}catch(_){}persistUI();};
+   for(const name of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(name,end);
+   session.onBlur=end;try{doc.defaultView.addEventListener('blur',session.onBlur);}catch(_){}
+   session.endDrag=end;
    handle.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setWidth(panelWidth(session)+(event.key==='ArrowLeft'?16:-16),true);}});
   }
   function setOpen(session,open,{remember=true}={}){
@@ -1149,12 +1341,15 @@
   function paintTab(session,id){
    for(const[name,pane]of Object.entries(session.ui.panes))pane.hidden=name!==id;
    for(const[name,t_]of Object.entries(session.ui.tabs))t_.button.setAttribute('aria-selected',String(name===id));
+   tabstops(session);
   }
   function showTab(session,id){
    id=validTab(id);session.tab=id;
    if(!session.probing){uiState().tab=id;persistUI();}
    paintTab(session,id);
    if(id==='translate')prepareTranslate(session);
+   // The summary shown is the one for the settings now (another model or language may have been chosen meanwhile).
+   if(id==='ask'&&session.loaded)renderSummary(session);
    if(id==='listen')markCurrent(session);
   }
   async function ensureReady(session){
@@ -1174,24 +1369,43 @@
   const ACTIVITY=['pointermove','pointerdown','keydown','wheel'];
   /* The viewer document is replaced when the reader reloads the file: listeners and the render watch follow it. */
   function attachViewer(session){
-   const vdoc=viewerDoc(session.reader);
-   if(vdoc===session.vdoc)return;
-   detachViewer(session);
-   if(!vdoc)return;
-   session.onDbl=session.onDbl||(event=>onDoubleClick(session,event));
-   vdoc.addEventListener('dblclick',session.onDbl,true);
-   for(const name of ACTIVITY)vdoc.addEventListener(name,session.onActivity,{capture:true,passive:true});
-   session.vdoc=vdoc;session.marks=[];
-   watchRendering(session);
+   const vdoc=viewerDoc(session.reader),second=viewerDoc(session.reader,'secondary');
+   if(vdoc!==session.vdoc){
+    detachPrimary(session);
+    if(vdoc){
+     session.onDbl=session.onDbl||(event=>onDoubleClick(session,event,'primary'));
+     vdoc.addEventListener('dblclick',session.onDbl,true);
+     for(const name of ACTIVITY)vdoc.addEventListener(name,session.onActivity,{capture:true,passive:true});
+     session.vdoc=vdoc;session.marks=[];
+     watchRendering(session);
+    }
+   }
+   // The second pane of a split view takes the same gesture.
+   if(second!==session.vdoc2){
+    detachSecondary(session);
+    if(second&&second!==vdoc){
+     session.onDbl2=session.onDbl2||(event=>onDoubleClick(session,event,'secondary'));
+     second.addEventListener('dblclick',session.onDbl2,true);
+     for(const name of ACTIVITY)second.addEventListener(name,session.onActivity,{capture:true,passive:true});
+     session.vdoc2=second;
+    }
+   }
   }
-  function detachViewer(session){
+  function detachPrimary(session){
    const vdoc=session.vdoc;session.vdoc=null;unwatchRendering(session);if(!vdoc)return;
    try{vdoc.removeEventListener('dblclick',session.onDbl,true);for(const name of ACTIVITY)vdoc.removeEventListener(name,session.onActivity,true);}catch(_){}
   }
-  function createSession(reader){
+  function detachSecondary(session){
+   const vdoc=session.vdoc2;session.vdoc2=null;if(!vdoc)return;
+   try{vdoc.removeEventListener('dblclick',session.onDbl2,true);for(const name of ACTIVITY)vdoc.removeEventListener(name,session.onActivity,true);}catch(_){}
+  }
+  function detachViewer(session){detachPrimary(session);detachSecondary(session);}
+  /* probe: a session the live self-check made for itself (never saves). quiet: made by a check on the user's reader;
+     an ordinary session afterwards, but its first look at the cache touches no file time (probing until released). */
+  function createSession(reader,{probe=false,quiet=false}={}){
    const doc=reader._iframeWindow&&reader._iframeWindow.document;if(!doc||!doc.documentElement)return null;
    const attachment=attachmentOf(reader);if(!attachment)return null;
-   const session={reader,doc,id:++sequence,name:attachment.libraryID+'-'+attachment.key,menus:new Set(),filters:{captions:false,references:false},tab:validTab(uiState().tab),open:false,collapsed:uiState().collapsed===true,destroyed:false,marks:[],data:{v:1,summary:{},chat:[],tr:{}},ready:false};
+   const session={probing:probe||quiet,noSave:probe,reader,doc,id:++sequence,name:attachment.libraryID+'-'+attachment.key,menus:new Set(),filters:{captions:false,references:false},tab:validTab(uiState().tab),open:false,collapsed:uiState().collapsed===true,destroyed:false,marks:[],data:{v:1,summary:{},chat:[],tr:{}},ready:false};
    buildPanel(session);
    (doc.body||doc.documentElement).appendChild(session.ui.root);
    stylesheet().then(css=>{if(session.destroyed||!css)return;const style=doc.createElementNS(HTML,'style');style.setAttribute('data-sc-ra-style','1');style.textContent=css;(doc.head||doc.documentElement).appendChild(style);session.style=style;});
@@ -1205,7 +1419,7 @@
    session.say=(m,e)=>say(session,m,e);
    sessions.set(reader,session);
    ensureReady(session).then(()=>{
-    if(session.destroyed)return;
+    if(session.destroyed||session.noSave)return;
     const want=uiState().open===true||(uiState().open===undefined&&setting('aiSummaryOnOpen',false)===true);
     if(want&&!session.open)setOpen(session,true,{remember:false});
    });
@@ -1217,12 +1431,13 @@
    try{session.player&&session.player.destroy();}catch(_){}
    for(const tok of [session.chatToken,session.summaryToken])try{tok&&tok.cancel();}catch(_){}
    try{session.tr&&session.tr.service.cancel();}catch(_){}
-   try{saveNow(session);}catch(_){}
+   if(!session.noSave)try{saveNow(session);}catch(_){}
    clearHighlight(session);
    try{session.open=false;applyLayout(session);}catch(_){}
    try{session.ui.root.remove();}catch(_){}try{session.style&&session.style.remove();}catch(_){}
    try{session.doc.removeEventListener('click',session.onDocClick);session.doc.removeEventListener('keydown',session.onKey);for(const name of ACTIVITY)session.doc.removeEventListener(name,session.onActivity,true);}catch(_){}
    try{session.doc.defaultView.removeEventListener('resize',session.onResize);}catch(_){}
+   try{session.endDrag&&session.endDrag();session.doc.defaultView.removeEventListener('blur',session.onBlur);}catch(_){}
    detachViewer(session);
    try{if(session.saveTimer)session.doc.defaultView.clearTimeout(session.saveTimer);if(session.sayTimer)session.doc.defaultView.clearTimeout(session.sayTimer);}catch(_){}
    try{session.toolbarState=null;}catch(_){}
@@ -1232,10 +1447,10 @@
   /* Called by reader-tools every second with the PDF readers of one window and the selected tab. */
   function sync(win,readers,selectedTabID){
    if(stopped)return;
-   pruneSoon();
    const live=new Set(readers.filter(r=>r.type==='pdf'));
    for(const[reader,session]of [...sessions])if(reader._window===win&&!live.has(reader))destroySession(session);
    for(const reader of live){
+    if(reserved.has(reader))continue;
     let session=sessions.get(reader);
     const doc=reader._iframeWindow&&reader._iframeWindow.document;
     if(session&&(session.doc!==doc||!session.ui.root.isConnected)){destroySession(session);session=null;}
@@ -1253,6 +1468,7 @@
       }
     }
    }
+   pruneSoon();
   }
   /* The two toolbar buttons: the panel, and play/pause (which works with the panel closed or folded). */
   function mountToolbar({reader,doc,container}){
@@ -1277,12 +1493,14 @@
   /* ---- the cache folder stays bounded ------------------------------------
      At most 200 papers or 100 MB in style-custom-reader/, least recently used first; a paper whose item is gone
      is removed. Once per run, a minute after the first reader is seen. */
-  let pruneTimer=null,pruned=false;
+  let pruneTimer=null,pruneWin=null,pruned=false;
   function pruneSoon(){
-   if(pruned||pruneTimer||quietStart)return;
+   if(stopped||pruned||pruneTimer!==null||quietStart)return;
    const win=[...sessions.values()][0]?.doc?.defaultView;if(!win||!win.setTimeout)return;
-   pruneTimer=win.setTimeout(()=>{pruneTimer=null;pruned=true;pruneCache().catch(log);},60000);
+   pruneWin=win;
+   pruneTimer=win.setTimeout(()=>{pruneTimer=null;pruneWin=null;if(stopped)return;pruned=true;pruneCache().catch(log);},60000);
   }
+  function cancelPrune(){if(pruneTimer===null)return;try{pruneWin.clearTimeout(pruneTimer);}catch(_){}pruneTimer=null;pruneWin=null;}
   async function pruneCache({maxPapers=CACHE_PAPERS,maxBytes=CACHE_BYTES}={}){
    const fs=io(),dir=folder();if(!fs||!fs.getChildren)return {removed:0};
    let children;try{children=await fs.getChildren(dir);}catch(_){return {removed:0};}
@@ -1335,8 +1553,11 @@
      persisted, no translation is prepared and no summary starts by itself. */
   async function probe(reader){
    const result={reader:reader.itemID,problems:[],checked:0,tabs:{}};
-   const session=sessions.get(reader)||createSession(reader);if(!session){result.problems.push('no panel could be mounted');return result;}
+   // A panel made for the probe reads the cache without touching any file's time (a read by a check is not a use).
+   const session=sessions.get(reader)||createSession(reader,{quiet:true});if(!session){result.problems.push('no panel could be mounted');return result;}
    const win=session.doc.defaultView,wasOpen=session.open,wasTab=session.tab,wasCollapsed=session.collapsed;
+   // Sound that was already playing is the user's, not the probe's: compare before with after.
+   const audioBefore=audioOf(session);
    probing++;session.probing=true;
    try{
     await ensureReady(session);
@@ -1391,13 +1612,17 @@
     result.extraction=await probeExtraction(session);
     if(result.extraction.fallback)result.problems.push('page 1 extraction fell back to plain text: '+(result.extraction.error||'unknown'));
     else if(result.extraction.sentences&&!result.extraction.rects)result.problems.push('page 1 extraction has no rectangles');
-    result.player=session.player?session.player.state().status:'idle';
-    if(result.player==='playing')result.problems.push('the probe started audio');
+    const audioAfter=audioOf(session);result.player=audioAfter.player;result.audio={before:audioBefore,after:audioAfter};
+    if(audioAfter.player==='playing'&&audioBefore.player!=='playing'||audioAfter.speaking&&!audioBefore.speaking)result.problems.push('the probe started audio');
    }finally{
     session.tab=wasTab;session.collapsed=wasCollapsed;setOpen(session,wasOpen,{remember:false});if(wasOpen)paintTab(session,validTab(wasTab));
     session.probing=false;probing--;
    }
    return result;
+  }
+  function audioOf(session){
+   let speaking=false;try{const s=session.reader._iframeWindow&&session.reader._iframeWindow.speechSynthesis;speaking=!!(s&&s.speaking===true);}catch(_){}
+   return {player:session.player?session.player.state().status:'idle',speaking};
   }
   async function probeAll(){
    const out=[];
@@ -1407,12 +1632,103 @@
    }
    return out;
   }
+  /* ---- the live reader self-check's handle ----------------------------------
+     A handle on one reader for src/selfcheck-reader.js, which does the measuring. Everything here goes through the
+     same functions the panel uses (readPage, extractWithPdfjs, overlayBoxes with the live viewport, setOpen,
+     setCollapsed, selectionPopup), on a session in probe mode: nothing is persisted (no tab, width or open state,
+     no .struct/.state file, no cache time touched), nothing is pressed, no summary starts by itself.
+     fresh: the reader was opened by the check itself; any session sync() made for it is replaced by a probe session
+     and release() destroys it (the leak check counts what is left). Otherwise the reader is the user's: release()
+     only puts the panel back the way it was. */
+  const OURS_IN_DOC='[data-sc-ra],[data-sc-ra-style],.sc-ra-selection-listen',OURS_IN_VIEW='[data-sc-ra-hl]';
+  const countIn=(doc,sel)=>{try{return doc?doc.querySelectorAll(sel).length:0;}catch(_){return 0;}};
+  function diagnose(reader,{fresh=false}={}){
+   if(stopped||!reader)return null;
+   if(fresh){
+    reserved.add(reader);
+    const made=sessions.get(reader);if(made){made.noSave=true;destroySession(made);}
+   }
+   const doc=reader._iframeWindow&&reader._iframeWindow.document;
+   const baseline={doc:countIn(doc,OURS_IN_DOC),view:countIn(viewerDoc(reader),OURS_IN_VIEW)};
+   const existing=fresh?null:sessions.get(reader);
+   // A user's reader without a panel yet gets the ordinary session sync() would have made; only the check's own is a probe session.
+   const session=existing||createSession(reader,{probe:fresh,quiet:true});if(!session)return null;
+   const was={open:session.open,tab:session.tab,collapsed:session.collapsed,probing:session.probing};
+   session.probing=true;probing++;
+   const vdoc=()=>viewerDoc(reader)||session.vdoc;
+   let released=false,handlerRefs=null;
+   const handlers=()=>handlerRefs||{doc:[session.onDocClick,session.onKey,session.onActivity].filter(Boolean),view:[session.onDbl,session.onActivity].filter(Boolean),win:[session.onResize].filter(Boolean),watch:session.renderWatch?session.renderWatch.fn:null};
+   const handle={
+    fresh,baseline,session,reader,doc:session.doc,
+    get win(){return session.doc.defaultView;},
+    viewerDoc:vdoc,
+    viewerApp:()=>viewerWindow(reader)?.PDFViewerApplication||null,
+    panel:()=>session.ui.root,
+    viewContainers:()=>viewContainers(session),
+    /* The panel as the reader meets it, after its saved state and its stylesheet are in. */
+    async ready(){
+     await ensureReady(session);await stylesheet();
+     for(let i=0;i<40&&!session.style&&!session.destroyed;i++)await sleepIn(session.doc.defaultView,25);
+     return !!session.style;
+    },
+    open(){setOpen(session,true,{remember:false});setCollapsed(session,false,{remember:false});},
+    collapse(on=true){setCollapsed(session,on,{remember:false});},
+    close(){setOpen(session,false,{remember:false});},
+    showTab(id){session.tab=validTab(id);paintTab(session,session.tab);if(session.tab==='translate')renderTranslate(session);},
+    /* Inline inset of each view container: the value and priority the panel must give back exactly. */
+    layout:()=>viewContainers(session).map(node=>({id:node.id?'#'+node.id:'.'+String(node.className||'').split(/\s+/)[0],value:node.style?node.style.getPropertyValue('inset-inline-end'):'',priority:node.style&&typeof node.style.getPropertyPriority==='function'?node.style.getPropertyPriority('inset-inline-end'):''})),
+    /* Pages through the panel's own reader of pdf.js, with timings and the fonts pdf.js named. */
+    async readPages(numbers){
+     const pdf=await pdfDocumentOf(session,{tries:40});if(!pdf)throw new Error('pdf.js has no document');
+     const stats={fonts:0,named:0,pages:0},pages=[],sizes=[],ms=[];
+     for(const n of numbers){if(n<1||n>pdf.numPages)continue;const t0=Date.now();const got=await readPage(session,pdf,n,{fonts:true,stats});ms.push(Date.now()-t0);pages.push(got.page);sizes[n-1]=got.size;}
+     return {numPages:pdf.numPages,pages,sizes,ms,fonts:stats};
+    },
+    /* The whole document through the very function the panel uses (without its cache). */
+    async extractAll(){const t0=Date.now();const got=await extractWithPdfjs(session);return got?{...got,ms:Date.now()-t0}:null;},
+    structure(pages){const item=itemOf(reader);return paperText().structure({pages,meta:{title:fieldOf(item,'title'),abstract:fieldOf(item,'abstractNote')}});},
+    units(structured,filters={captions:false,references:false}){return RA.composeUnits(structured,filters,paperText());},
+    pageNumberOf,
+    /* The follow-along mark's boxes for one sentence: what drawMarks() would put on the page, in percent of the page. */
+    overlay(unit,sizes){
+     const page=pageNumberOf(unit),size=page&&sizes&&sizes[page-1];
+     if(!size||!Array.isArray(unit.rects)||!unit.rects.length)return {page,boxes:[]};
+     return {page,boxes:overlayBoxes(unit.rects.slice(0,12),size,liveViewport(session,page))};
+    },
+    selectionPopup(params,append){return selectionPopup({reader,doc:session.doc,params,append});},
+    readAloudState:()=>builtInState(reader),
+    speech(){
+     const win=reader._iframeWindow,s=win&&win.speechSynthesis;let voices=0;
+     try{voices=s&&typeof s.getVoices==='function'?s.getVoices().length:0;}catch(_){}
+     return {present:!!s,voices,speaking:!!(s&&s.speaking),pending:!!(s&&s.pending)};
+    },
+    player:()=>session.player?session.player.state():null,
+    handlers,
+    targets:()=>({doc:session.doc,view:vdoc(),win:session.doc.defaultView}),
+    count:()=>({doc:countIn(session.doc,OURS_IN_DOC),view:countIn(vdoc(),OURS_IN_VIEW)}),
+    alive:()=>sessions.get(reader)===session&&!session.destroyed,
+    release(){
+     if(released)return;released=true;
+     handlerRefs=handlers();
+     probing--;
+     if(fresh){destroySession(session);return;}
+     session.tab=was.tab;session.collapsed=was.collapsed;setOpen(session,was.open,{remember:false});if(was.open)paintTab(session,validTab(was.tab));
+     session.probing=was.probing;
+    }
+   };
+   return handle;
+  }
+  /* A reader the self-check opened stays out of sync() until it is closed (or the check lets it go). */
+  function reserve(reader,on=true){if(!reader)return;if(on)reserved.add(reader);else reserved.delete(reader);}
+  /* The live self-check's guard on side effects this module starts itself (the `say` process): fn(label) → true blocks. */
+  function setGuard(fn){guard=typeof fn==='function'?fn:null;}
   function stop(){
    if(stopped)return;stopped=true;
+   cancelPrune();
    for(const session of [...sessions.values()])destroySession(session);
    sessions.clear();
   }
-  return Object.freeze({sync,mountToolbar,releaseWindow,selectionPopup,probe,probeAll,pruneCache,stop,sessions:()=>[...sessions.values()],owner});
+  return Object.freeze({sync,mountToolbar,releaseWindow,selectionPopup,probe,probeAll,diagnose,reserve,setGuard,pruneCache,stop,sessions:()=>[...sessions.values()],owner});
  }
- return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,viewportFor,overlayBoxes});
+ return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,pointToPage});
 });

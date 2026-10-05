@@ -13,7 +13,9 @@
  'use strict';
  const clean=text=>String(text==null?'':text).replace(/\s+/g,' ').trim();
  const SUMMARY_BUDGET=24000;            // characters, about 6,000 tokens
- const CHUNK_TARGET=900,CHUNK_MIN=220,TOP_CHUNKS=6,HISTORY_TURNS=6,EXCERPT_CHARS=1400;
+ const CHUNK_TARGET=900,CHUNK_MIN=220,TOP_CHUNKS=6,HISTORY_TURNS=6,EXCERPT_CHARS=1400,FIGURE_BUDGET=7000;
+ // Headings end with (?![\p{L}\p{N}]), the end of a word in any script: an ASCII \b after Hangul never matches,
+ // so "방법" was read as body text.
 
  /* ---- tokens ----------------------------------------------------------- */
  const STOP=new Set('a an and are as at be been but by can could did do does for from had has have how if in into is it its may might more most no not of on or our so such than that the their then there these they this those to was we were what when where which while who why will with would you your also both each other some any all via per et al fig figure table'.split(' '));
@@ -42,7 +44,7 @@
   [/방법|방식|절차|프로토콜/,'method methods materials procedure protocol approach'],[/실험/,'experiment experimental assay'],
   [/결과|성과/,'result results finding findings'],[/한계|제한|약점/,'limitation limitations limit caveat weakness'],
   [/결론/,'conclusion conclusions'],[/논의|고찰|토의/,'discussion'],[/서론|도입|배경/,'introduction background'],
-  [/그림|도표|도식/,'figure fig'],[/표\b|테이블/,'table'],[/데이터|자료/,'data dataset'],[/통계|유의/,'statistical statistics significance'],
+  [/그림|도표|도식/,'figure fig'],[/(?<!\p{L})표(?!\p{L})|테이블/u,'table'],[/데이터|자료/,'data dataset'],[/통계|유의/,'statistical statistics significance'],
   [/샘플|표본|시료/,'sample samples'],[/대조군|대조/,'control controls'],[/가설/,'hypothesis'],[/모델|모형/,'model'],
   [/성능|정확도/,'performance accuracy'],[/오차|오류/,'error'],[/재현/,'reproducibility replicate'],[/기여|의의|시사/,'contribution implication significance'],
   [/향후|후속|미래/,'future'],[/주장|핵심/,'claim main conclusion'],[/분석/,'analysis'],[/측정/,'measurement measured'],[/균주|세포주/,'strain strains cell line'],
@@ -52,18 +54,18 @@
 
  /* ---- the part of the paper a section belongs to ----------------------- */
  const PART_HEAD=[
-  ['methods',/^(?:(?:materials?|patients?|subjects?)\s+and\s+methods?|methods?(?:\s+(?:summary|details))?|online methods|experimental(?:\s+(?:procedures?|section|methods?|design))?|methodology|star\s*methods|방법|재료 및 방법|실험 방법)\b/i],
-  ['results',/^(?:results?(?:\s+and\s+discussion)?|findings|결과)\b/i],
-  ['discussion',/^(?:discussion|conclusions?|concluding remarks|summary and (?:outlook|conclusions?)|outlook|limitations?|perspectives?|논의|고찰|결론)\b/i],
-  ['intro',/^(?:introduction|background|서론|배경)\b/i]
+  ['methods',/^(?:(?:materials?|patients?|subjects?)\s+and\s+methods?|methods?(?:\s+(?:summary|details))?|online methods|experimental(?:\s+(?:procedures?|section|methods?|design))?|methodology|star\s*methods|방법|재료 및 방법|실험 방법|연구 방법)(?![\p{L}\p{N}])/iu],
+  ['results',/^(?:results?(?:\s+and\s+discussion)?|findings|결과)(?![\p{L}\p{N}])/iu],
+  ['discussion',/^(?:discussion|conclusions?|concluding remarks|summary and (?:outlook|conclusions?)|outlook|limitations?|perspectives?|논의|고찰|결론|토의)(?![\p{L}\p{N}])/iu],
+  ['intro',/^(?:introduction|background|서론|배경|도입)(?![\p{L}\p{N}])/iu]
  ];
  /* Everything after these is the journal's own back matter (Nature's reporting summary, licences). */
- const BACK_HEAD=/^(?:acknowledge?ments?|references|bibliography|literature cited|funding|author contributions?|author information|competing interests?|conflicts? of interest|declarations?|data availability|code availability|data and code availability|online content|reporting summary|peer review(?: information)?|additional information|open access|ethics(?: declarations?)?|supplementary information|extended data|change history|rights and permissions|publisher.?s note|참고문헌|감사의 글|사사)\b/i;
+ const BACK_HEAD=/^(?:acknowledge?ments?|references|bibliography|literature cited|funding|author contributions?|author information|competing interests?|conflicts? of interest|declarations?|data availability|code availability|data and code availability|online content|reporting summary|peer review(?: information)?|additional information|open access|ethics(?: declarations?)?|supplementary information|extended data|change history|rights and permissions|publisher.?s note|참고문헌|감사의 글|사사)(?![\p{L}\p{N}])/iu;
  const isBackSection=s=>!!s&&(s.kind==='back'||s.kind==='references'||s.level==='back'||s.back===true||s.part==='back');
  function partsOf(structured){
   const sections=(structured&&structured.sections)||[];const out=[];let current=null,afterReporting=false;
   sections.forEach((s,i)=>{
-   const heading=clean(s.heading).replace(/^(?:\d+(?:\.\d+)*|[IVX]+)[.)]?\s+/,'');
+   const heading=clean(s.heading).replace(/^(?:\d+(?:\.\d+)*|[IVX]+|[가-힣])[.)]?\s+/u,'');
    if(/^reporting summary\b/i.test(heading))afterReporting=true;
    if(afterReporting||isBackSection(s)||BACK_HEAD.test(heading)){out.push('back');if(!afterReporting&&current&&current.level!==undefined)current=null;return;}
    // The extraction module's own part, where it is specific ("methods", "back"); "main" says only that it is body text.
@@ -89,14 +91,29 @@
   if(current)out.push(current);
   return out.flatMap(piece=>{if(piece.length<=max*1.5)return [piece];const parts=[];for(let i=0;i<piece.length;i+=max)parts.push(piece.slice(i,i+max));return parts;});
  }
+ /* A figure caption as pieces the AI can be given whole: the label and title, then one piece per panel ("(A) …",
+    "a, …", "B. …" after a sentence end), each cut at sentence ends when it is still long. A 4,000-character
+    Nature caption was one chunk cut at 1,400 characters, so the later panels never reached the model. */
+ const PANEL=/(?<=[.;:]\s)(?=\([A-Za-z](?:\s*[–-]\s*[A-Za-z])?\)\s|[a-z](?:[–-][a-z])?,\s|[A-L](?:[–-][A-L])?[.,]\s+[A-Z])/u;
+ const CAPTION_LABEL=/^((?:extended data |supplementary )?(?:fig(?:ure)?s?\.?|table)\s*s?\d+[a-z]?)/i;
+ function captionPieces(text,{max=CHUNK_TARGET}={}){
+  const source=clean(text);if(!source)return [];
+  const out=[];
+  for(const piece of source.split(PANEL)){
+   const m=/^\(?([A-Za-z])(?:\s*[–-]\s*([A-Za-z]))?\)?[,.]?\s/.exec(piece);
+   const panel=out.length&&m?(m[1]+(m[2]?'–'+m[2]:'')):'';
+   for(const part of splitLong(piece,max))out.push({panel,text:part});
+  }
+  return out;
+ }
  /* One chunk is a paragraph or a few short ones from the same section. */
  function buildChunks(structured,{target=CHUNK_TARGET,pageBase=0}={}){
   const chunks=[];if(!structured)return chunks;
   const parts=partsOf(structured);
-  const add=(section,sectionIndex,page,text,kind='body',part='body')=>{
+  const add=(section,sectionIndex,page,text,kind='body',part='body',extra=null)=>{
    const body=clean(text);if(!body)return;
    const tokens=tokenize(section+' '+body),tf=new Map();for(const t of tokens)tf.set(t,(tf.get(t)||0)+1);
-   chunks.push({id:chunks.length,section:clean(section),sectionIndex,page:Number.isFinite(Number(page))?Number(page)+pageBase:null,text:body,tf,length:tokens.length||1,kind,part});
+   chunks.push({id:chunks.length,section:clean(section),sectionIndex,page:Number.isFinite(Number(page))?Number(page)+pageBase:null,text:body,tf,length:tokens.length||1,kind,part,...(extra||{})});
   };
   if(clean(structured.abstract))add('Abstract',-1,1-pageBase,structured.abstract,'abstract','abstract');
   (structured.sections||[]).forEach((section,sectionIndex)=>{
@@ -115,7 +132,12 @@
    }
    flush();
   });
-  (structured.captions||[]).forEach(c=>{const text=clean(c&&c.text||(c&&c.sentences?textOf(c):c));if(text)add(c&&c.kind==='table'?'Table':'Caption',-3,c&&c.page,text,c&&c.kind==='table'?'table':'caption','caption');});
+  (structured.captions||[]).forEach((c,ci)=>{
+   const text=clean(c&&c.text||(c&&c.sentences?textOf(c):c));if(!text)return;
+   const table=c&&c.kind==='table',m=CAPTION_LABEL.exec(text);
+   const label=clean(c&&c.label||(m&&m[1])||(table?'Table':'Caption')).replace(/\.$/,'');
+   for(const piece of captionPieces(text))add(piece.panel?label+', panel '+piece.panel:label,-3,c&&c.page,piece.text,table?'table':'caption','caption',{figure:ci,panel:piece.panel});
+  });
   const tables=Array.isArray(structured.tables)?structured.tables:(structured.skipped&&Array.isArray(structured.skipped.tables)?structured.skipped.tables:[]);
   tables.forEach(tb=>{const text=clean(tb&&(tb.text||tb.caption)||'');if(text)add('Table',-4,tb&&tb.page,text.slice(0,2000),'table','caption');});
   return chunks;
@@ -144,9 +166,11 @@
   const take=c=>{if(c&&!picked.has(c.id))picked.set(c.id,c);};
   const byScore=list=>list.slice().sort((a,b)=>b.score-a.score||a.chunk.id-b.chunk.id);
   take(chunks.find(c=>c.kind==='abstract'));
-  // "This figure": the captions and tables of the page on screen first, then the body there.
+  // "This figure": every panel of the figures and tables on the page on screen first (within their own budget,
+  // so a long caption is not cut off after its first panels), then the body there.
   if(forcePage&&page){
-   for(const c of chunks.filter(c=>c.page===page&&(c.kind==='caption'||c.kind==='table')).slice(0,4))take(c);
+   let used=0;
+   for(const c of chunks.filter(c=>c.page===page&&(c.kind==='caption'||c.kind==='table'))){if(used&&used+c.text.length>FIGURE_BUDGET)break;take(c);used+=c.text.length;}
    for(const c of chunks.filter(c=>c.page===page&&c.kind==='body').slice(0,2))take(c);
   }
   if(sectionIndex>=0){
@@ -177,7 +201,7 @@
  const excerpt=(c,i)=>`[E${i+1}] (${where(c)}) ${c.text.slice(0,EXCERPT_CHARS)}`;
 
  /* ---- summary input ---------------------------------------------------- */
- const WIDE=/^(conclusions?|discussion|conclusions? and (?:outlook|future)|summary|results? and discussion|outlook|limitations?|결론|논의|고찰)\b/i;
+ const WIDE=/^(conclusions?|discussion|conclusions? and (?:outlook|future)|summary|results? and discussion|outlook|limitations?|결론|논의|고찰)(?![\p{L}\p{N}])/iu;
  const SKIP=/^(acknowledge?ments?|references|bibliography|funding|author contributions?|competing interests?|conflicts? of interest|참고문헌|감사)/i;
  /* The budget goes to what a reader decides with: title, abstract and the list of sections always fit; back
     matter (availability statements, reporting summaries, licences) is left out; the methods get at most 15%. */
@@ -244,7 +268,7 @@ Do not invent numbers, results or citations. If the excerpts do not say somethin
   claim:{label:'핵심 주장',question:'이 논문의 핵심 주장은 무엇이고, 어떤 증거로 뒷받침하나요?',intent:{parts:['results','discussion']}},
   methods:{label:'방법 요약',question:'이 논문의 방법을 단계별로 요약해 주세요.',intent:{parts:['methods']}},
   limits:{label:'한계',question:'이 논문의 한계와 결과를 그대로 믿기 전에 확인할 점은 무엇인가요?',intent:{parts:['discussion','methods']}},
-  figure:{label:'이 그림 설명해줘(현재 페이지)',question:'지금 보고 있는 쪽의 그림이나 표를 설명해 주세요. 무엇을 보여주고 어떻게 읽어야 하나요?',forcePage:true,intent:{parts:['caption']}},
+  figure:{label:'현재 그림 설명',question:'지금 보고 있는 쪽의 그림이나 표를 설명해 주세요. 무엇을 보여주고 어떻게 읽어야 하나요?',forcePage:true,intent:{parts:['caption']}},
   mine:{label:'내 연구와 관련?',question:'제 메모와 태그를 보면 이 논문이 제 연구와 어떻게 관련되나요?',mine:true,intent:null}
  };
  function quickPrompt(id,translate=x=>x){
@@ -320,7 +344,10 @@ Do not invent numbers, results or citations. If the excerpts do not say somethin
   };
  }
  const isEventStream=contentType=>/text\/event-stream/i.test(String(contentType||''));
+ /* The prompts' own revision: a summary or an answer made under other instructions is a different result, so it
+    is part of the summary cache key and of each answer's record. Changes whenever a prompt's text changes. */
+ const PROMPT_REVISION=(()=>{const text=summaryPrompt('X')+'\u0001'+chatSystemPrompt('X');let h=0x811c9dc5;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(36);})();
 
- const api={tokenize,stem,expandQuery,partsOf,buildChunks,sectionAtPage,rank,summaryInput,summaryPrompt,chatSystemPrompt,quickPrompt,chatMessages,linkCitations,streamReader,isEventStream,QUICK,SUMMARY_BUDGET,TOP_CHUNKS,HISTORY_TURNS,excerpt};
+ const api={PROMPT_REVISION,tokenize,stem,expandQuery,partsOf,buildChunks,captionPieces,sectionAtPage,rank,summaryInput,summaryPrompt,chatSystemPrompt,quickPrompt,chatMessages,linkCitations,streamReader,isEventStream,QUICK,SUMMARY_BUDGET,TOP_CHUNKS,HISTORY_TURNS,excerpt};
  root.CustomStylePaperChat=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

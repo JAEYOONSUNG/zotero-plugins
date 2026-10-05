@@ -31,6 +31,15 @@ The repository README has the illustrated tour: [../README.md](../README.md). Th
 
 **Settings.** Eleven categories (Columns, Views and panels, Reader and annotations, Sidebar and tabs, Tags, Collections, Menus and design, Reading record, Citations and IF, Translate·AI, Updates) with search, an explanation on every item, per-category defaults, and a *Start here* block naming the keys still blank. API keys are shown masked and are not cleared by restoring a category's defaults.
 
+## AI with your own accounts (the local bridge)
+
+The AI features (title and abstract translation, summaries, chat about a paper, paragraph translation, tag suggestions, reading papers together) need a Chat Completions server. Without an API key, the **local AI bridge** in [`bridge/`](bridge/README.md) supplies one: a small server on `127.0.0.1` that answers with the **Claude account** you are logged in to on this Mac (through Claude Code, `claude`), and with your **ChatGPT account** (through Codex CLI, `codex`) when Claude is not logged in, is at its usage limit or fails. Your accounts' own usage limits apply; every summary or chat turn counts against your plan.
+
+- **Install:** `bridge/install.sh`. It starts at once and at every login (a per-user LaunchAgent; no sudo, no window).
+- **Use:** leave *AI server address* empty in Settings → Translate·AI. The plugin reads the bridge's port and token from `~/Library/Application Support/StyleCustomBridge/bridge.json` and the panel shows which account answered, *Claude 계정 (이 Mac)* or *ChatGPT 계정 (이 Mac)*. The model name may stay empty (Claude Sonnet), or be `opus`, `haiku` or `chatgpt`. An address entered in the settings always takes precedence, and the settings' API key is never sent to the bridge.
+- **Privacy:** only text you ask about is sent, and only through those two CLIs, which run with no tools, no MCP servers, no hooks and none of your CLAUDE.md, AGENTS.md or memory. The bridge's log records sizes and times, never prompts or answers.
+- **Remove:** `bridge/install.sh --uninstall` stops it and deletes the LaunchAgent, its copy and its token.
+
 ## Journal metrics
 
 Two views. The first browses groups → categories → journals. In the build as published, which carries no Journal Citation Reports figures, this is OpenAlex's classification (26 fields, 252 subfields, 89,510 journals), each journal with OpenAlex's two-year mean citedness, labelled as an estimate and never as a JIF. The **Official JCR** view, Clarivate's own hierarchy with each category's journal count, citable items, total citations and median JIF and each journal's JIF, official rank, quartile and percentile, appears only when you put your own JCR export in `style-custom-journals/` in the Zotero data folder (ranges such as `<0.1` and `N/A` are kept as written; nothing is recomputed). The source's own update date and the capture date are shown on the page.

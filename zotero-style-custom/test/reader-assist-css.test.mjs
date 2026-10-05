@@ -74,3 +74,17 @@ test('the button reset has no class weight',()=>{
  assert.match(css,/:where\(\.sc-ra\) button\{/);
  assert.doesNotMatch(css,/(^|\})\s*\.sc-ra button\{/);
 });
+
+test('one set of spacing tokens: card padding, the gap between blocks, the gap between rows; one pill corner, also in the selection popup',async()=>{
+ const vars=rules(css).find(r=>r.sel==='.sc-ra').decls;
+ for(const name of ['--sc-pad','--sc-gap','--sc-row-gap','--sc-radius-btn'])assert.ok(vars[name],name+' is defined');
+ const decl=(sel,prop)=>{const r=rules(css).filter(x=>x.sel===sel&&prop in x.decls).at(-1);return r&&r.decls[prop];};
+ for(const sel of ['.sc-ra-card','.sc-ra-row-card'])assert.match(decl(sel,'padding'),/^var\(--sc-pad\)$/,sel+' padding');
+ for(const sel of ['.sc-ra-main','.sc-ra-body','.sc-ra-pane'])assert.equal(decl(sel,'gap'),'var(--sc-gap)',sel+' gap');
+ for(const sel of ['.sc-ra-card','.sc-ra-rows','.sc-ra-messages','.sc-ra-chips'])assert.equal(decl(sel,'gap'),'var(--sc-row-gap)',sel+' gap');
+ for(const sel of ['.sc-ra-play','.sc-ra-primary','.sc-ra-secondary','.sc-ra-link','.sc-ra-chip'])assert.equal(decl(sel,'border-radius'),'var(--sc-radius-btn)',sel+' corners');
+ const RA=(await import('../src/reader-assist.js')).default;
+ assert.equal(RA.BUTTON_RADIUS,vars['--sc-radius-btn'],'the popup button uses the same corner');
+ const src=fs.readFileSync(new URL('../src/reader-assist.js',import.meta.url),'utf8');
+ assert.match(src,/border-radius:\$\{BUTTON_RADIUS\}/);
+});

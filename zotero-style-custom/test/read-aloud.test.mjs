@@ -307,3 +307,59 @@ test('after destroy, play, seek and resume are refused and nothing is spoken',()
  assert.equal(engine.log.filter(l=>l[0]==='speak').length,0);
  assert.equal(p.destroyed,true);
 });
+
+/* ---- 0.59.24: who owns the speech queue ----------------------------------- */
+/* Gecko's cancel() ends the utterance being spoken with an `end` event (Zotero's own controller detaches onend
+   before it cancels for that reason), and drops the rest of the queue. */
+function geckoSynth(){
+ const s={queue:[],cur:null,cancels:0,voices:[{voiceURI:'v',name:'V',lang:'en-US'}],
+  get speaking(){return !!s.cur;},get pending(){return s.queue.length>0;},
+  getVoices(){return s.voices;},speak(u){s.queue.push(u);},
+  begin(){s.cur=s.queue.shift();s.cur&&s.cur.onstart&&s.cur.onstart();return s.cur;},
+  finish(){const u=s.cur;s.cur=null;u&&u.onend&&u.onend();},
+  cancel(){s.cancels++;const u=s.cur;s.cur=null;s.queue.length=0;u&&u.onend&&u.onend();},
+  pause(){},resume(){}};
+ return s;
+}
+test('an external cancel that arrives as `end` is a lost queue: the player pauses and queues nothing more',()=>{
+ const synth=geckoSynth();class Utt{constructor(t){this.text=t;}}
+ const engine=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ const events=[];const p=RA.create({engine,watchdogMs:0,onChange:e=>events.push(e.type)});p.load(body());
+ p.play();synth.begin();
+ assert.equal(p.state().index,0);assert.equal(synth.queue.length,1,'the next sentence is queued ahead');
+ synth.cancel();                                          // Zotero's Read Aloud starting: our sentence ends with `end`
+ assert.equal(p.state().status,'paused','not played on as if the sentence had ended');
+ assert.equal(p.state().index,0,'still on the sentence that was cut off');
+ assert.equal(synth.queue.length,0,'nothing queued after the loss');
+ assert.ok(events.includes('interrupted'));
+});
+test('a natural end with the next sentence waiting is still a normal advance',()=>{
+ const synth=geckoSynth();class Utt{constructor(t){this.text=t;}}
+ const engine=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ const p=RA.create({engine,watchdogMs:0});p.load(body());
+ p.play();synth.begin();synth.finish();
+ assert.equal(p.state().status,'playing');assert.equal(p.state().index,1);
+});
+test('destroy cancels the queue only while this engine owns the utterance, and detaches its end handler first',()=>{
+ const synth=geckoSynth();class Utt{constructor(t){this.text=t;}}
+ const a=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ const p=RA.create({engine:a,watchdogMs:0});p.load(body());
+ p.play();synth.begin();synth.finish();synth.begin();
+ const mine=synth.cur;
+ p.destroy();
+ assert.equal(synth.cancels,1,'our own utterance is cancelled');assert.equal(mine.onend,null,'its end handler was removed before the cancel');
+ // Someone else speaks now; a second engine that owns nothing must not cancel it.
+ const other={text:'Zotero reads.'};synth.speak(other);synth.begin();
+ const b=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ const q=RA.create({engine:b,watchdogMs:0});q.load(body());q.destroy();
+ assert.equal(synth.cancels,1,'no cancel from an engine that owns nothing');assert.equal(synth.cur,other);
+ // A later speaker in another of our engines owns the queue: the earlier one does not cancel it.
+ const c=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt}),d=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ c.speak({text:'C.'});d.speak({text:'D.'});
+ c.cancel();assert.equal(synth.cancels,1,'d spoke last: c leaves the queue alone');
+ d.cancel();assert.equal(synth.cancels,2);
+});
+test('the plain-text headings recognise Korean section names',()=>{
+ const s=RA.plainTextStructure('서론\n\n첫 문단입니다. 둘째 문장입니다.\n\n방법\n\n방법 문단입니다.\n\n결과\n\n결과 문단입니다.');
+ assert.deepEqual(s.sections.map(x=>x.heading),['서론','방법','결과']);
+});

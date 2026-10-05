@@ -163,7 +163,7 @@ test('the summary button sends the prepared text, shows the result with page lin
  f.press(f.byText('Regenerate'));await settle(20);assert.equal(f.requests.filter(r=>r.body).length,2,'regenerate asks again');
  await new Promise(r=>setTimeout(r,900));
  const saved=JSON.parse(f.fileIO.files.get(f.folder+'1-ATT.state.json'));
- assert.deepEqual(Object.keys(saved.summary),['m1|English']);
+ assert.equal(Object.keys(saved.summary).length,1);assert.match(Object.keys(saved.summary)[0],/^m1\|English\|[\w]+\|[\w]+$/,'model, language, server and prompt revision');
  f.stop();
 });
 
@@ -198,7 +198,7 @@ test('"메모에 넣기" appends the summary to the memo through the memo write 
 test('a question goes out with the excerpts, the page on screen and the summary; the streamed answer fills in and its page links work',async()=>{
  const f=fixture();await f.open();
  const input=f.panel().querySelector('.sc-ra-input');
- input.value='How were libraries screened?';
+ input.textContent='How were libraries screened?';
  f.aiReplies.push(options=>{
   const listeners={};const xhr={readyState:3,responseText:'',getResponseHeader:()=> 'text/event-stream',addEventListener:(n,fn)=>(listeners[n]||=[]).push(fn)};
   options.requestObserver(xhr);
@@ -213,7 +213,7 @@ test('a question goes out with the excerpts, the page on screen and the summary;
  assert.match(call.body.messages[0].content,/\(Methods, p\. 3\) Libraries were screened/);
  assert.match(call.body.messages[0].content,/looking at page 3 \(Methods\)/,'the section on screen is named');
  assert.equal(call.body.messages.at(-1).content,'How were libraries screened?');
- assert.equal(input.value,'');
+ assert.equal(input.textContent,'');
  const answer=f.panel().querySelector('.sc-ra-msg-assistant');
  assert.match(answer.textContent,/By self-replication \(Methods, p\. 3\)\./);
  const cite=answer.querySelector('.sc-ra-cite');assert.equal(cite.getAttribute('data-page'),'3');
@@ -224,7 +224,7 @@ test('a question goes out with the excerpts, the page on screen and the summary;
 test('the conversation is kept to the last 20 messages, saved per paper, restored in a new session, and can be cleared',async()=>{
  const io=memoryIO();
  const f=fixture({io});await f.open();
- for(let i=0;i<12;i++){f.aiReplies.push('Answer '+i);f.panel().querySelector('.sc-ra-input').value='Question '+i;f.press(f.byText('Send'));await settle(15);}
+ for(let i=0;i<12;i++){f.aiReplies.push('Answer '+i);f.panel().querySelector('.sc-ra-input').textContent='Question '+i;f.press(f.byText('Send'));await settle(15);}
  const bubbles=f.panel().querySelectorAll('.sc-ra-msg');assert.equal(bubbles.length,20);
  assert.match(bubbles[0].textContent,/Question 2/);
  const last=f.requests.filter(r=>r.body).at(-1).body.messages;
@@ -240,9 +240,9 @@ test('the conversation is kept to the last 20 messages, saved per paper, restore
 test('a failed question puts the text back and leaves no half message',async()=>{
  const f=fixture();await f.open();
  f.aiReplies.push(()=>({status:500,response:{}}));
- f.panel().querySelector('.sc-ra-input').value='Will this fail?';f.press(f.byText('Send'));await settle(20);
+ f.panel().querySelector('.sc-ra-input').textContent='Will this fail?';f.press(f.byText('Send'));await settle(20);
  assert.equal(f.panel().querySelectorAll('.sc-ra-msg').length,0);
- assert.equal(f.panel().querySelector('.sc-ra-input').value,'Will this fail?');
+ assert.equal(f.panel().querySelector('.sc-ra-input').textContent,'Will this fail?');
  assert.match(f.panel().querySelector('.sc-ra-chat .sc-ra-note:last-child').textContent,/500|AI/);
  f.stop();
 });
@@ -251,7 +251,7 @@ test('Enter sends, Shift+Enter does not, and the Enter that confirms a Korean co
  const f=fixture();await f.open();
  const input=f.panel().querySelector('.sc-ra-input');
  const key=(props)=>{const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.assign(e,props);input.dispatchEvent(e);return e;};
- input.value='한글 입력 중';key({key:'Enter',isComposing:true,keyCode:229});await settle(10);assert.equal(f.requests.filter(r=>r.body).length,0);
+ input.textContent='한글 입력 중';key({key:'Enter',isComposing:true,keyCode:229});await settle(10);assert.equal(f.requests.filter(r=>r.body).length,0);
  key({key:'Enter',shiftKey:true});await settle(10);assert.equal(f.requests.filter(r=>r.body).length,0);
  key({key:'Enter'});await settle(20);assert.equal(f.requests.filter(r=>r.body).length,1);
  f.stop();
@@ -260,14 +260,14 @@ test('Enter sends, Shift+Enter does not, and the Enter that confirms a Korean co
 test('the five quick prompts exist; the one about my research sends the memo and tags, the others do not',async()=>{
  const f=fixture();await f.open();
  const chips=[...f.panel().querySelectorAll('.sc-ra-chip')].map(b=>b.textContent.trim());
- assert.deepEqual(chips,['Central claim','Methods summary','Limitations','Explain this figure (current page)','Related to my research?']);
+ assert.deepEqual(chips,['Central claim','Methods summary','Limitations','Explain this figure','Related to my research?']);
  f.remarks.set(10,'I engineer thermostable enzymes.');
  f.press(f.byText('Central claim'));await settle(20);
  assert.doesNotMatch(f.requests.find(r=>r.body).body.messages[0].content,/OWN NOTES/);
  f.press(f.byText('Related to my research?'));await settle(20);
  const mine=f.requests.filter(r=>r.body).at(-1).body.messages[0].content;
  assert.match(mine,/OWN NOTES[\s\S]*#topic\/PCR[\s\S]*thermostable enzymes/);
- f.press(f.byText('Explain this figure (current page)'));await settle(20);
+ f.press(f.byText('Explain this figure'));await settle(20);
  assert.match(f.requests.filter(r=>r.body).at(-1).body.messages[0].content,/Figure 1\. Residual activity/,'the caption on the page on screen is sent');
  f.stop();
 });
@@ -602,7 +602,7 @@ test('Zotero\'s own Read Aloud playing: ours offers to stop it instead of fighti
  f.press(f.byText('Read body only'));await settle(20);
  assert.equal(f.synth.log.filter(l=>l[0]==='speak').length,0,'nothing spoken over the other reader');
  const clash=f.panel().querySelector('.sc-ra-clash');assert.equal(clash.hidden,false);
- f.press(f.byText("Stop Zotero's Read Aloud and listen"));await settle(20);
+ f.press(f.byText('Stop and start'));await settle(20);
  assert.equal(stoppedIt,1);assert.ok(f.synth.log.some(l=>l[0]==='speak'));
  f.synth.begin();await settle();
  f.synth.cur.onerror({error:'interrupted'});await settle();          // the other speaker cancelled us
@@ -667,7 +667,7 @@ test('Stop in the chat cancels that question only; a summary running beside it f
  f.aiReplies.push(options=>new Promise(r=>{finish.summary=()=>r({status:200,response:{choices:[{message:{content:'## Summary\nDone.'}}]}});options.cancellerReceiver(()=>{finish.summaryCancelled=true;});}));
  f.aiReplies.push(options=>new Promise(r=>{options.cancellerReceiver(()=>{finish.chatCancelled=true;r({status:0,response:null});});}));
  f.press(f.byText('Make summary'));await settle(10);
- f.panel().querySelector('.sc-ra-input').value='Anything?';f.press(f.byText('Send'));await settle(10);
+ f.panel().querySelector('.sc-ra-input').textContent='Anything?';f.press(f.byText('Send'));await settle(10);
  f.press(f.byText('Stop'));await settle(10);
  assert.equal(finish.chatCancelled,true);assert.notEqual(finish.summaryCancelled,true,'the summary was not touched');
  finish.summary();await settle(20);
@@ -811,4 +811,287 @@ test('a re-render (zoom, rotation) that empties the page gets the highlight back
  assert.ok(h>w,'a line on a turned page is tall and narrow');
  assert.equal(f.navs.length,0);
  f.stop();assert.equal((handlers.pagerendered||[]).length,0,'the listener goes with the panel');
+});
+
+/* ---- 0.59.24 runtime fixes ------------------------------------------------- */
+/* Zotero 9.0.6 reader.js, copied: utilities isTextBox(), and the parts of FocusManager._handleKeyDown and
+   KeyboardManager._handleKeyDown that act on a plain key. Both are window listeners in the CAPTURE phase,
+   registered when the reader starts, so they run before any listener of ours on the panel. */
+const isTextBox=node=>['INPUT'].includes(node.nodeName)&&node.type==='text'||node.getAttribute('contenteditable')==='true';
+function nativeKeydown(event,{readAloudActive=false}={}){
+ const did=[];const key=event.key===' '?'Space':event.key;const target=event.target;
+ if(event.key==='Tab'){did.push('tabToGroup');event.preventDefault();}
+ if(!((target.closest('.outline-view')||target.closest('input[type="range"]'))&&['ArrowLeft','ArrowRight'].includes(event.key))){
+  if(['ArrowRight','ArrowDown'].includes(event.key)&&!target.closest('[contenteditable], input[type="text"], .preview-popup')){did.push('tabToItem');event.preventDefault();}
+  else if(['ArrowLeft','ArrowUp'].includes(event.key)&&!target.closest('[contenteditable], input[type="text"], .preview-popup')){did.push('tabToItem(back)');event.preventDefault();}
+ }
+ if(!isTextBox(target)){
+  if(key==='r'||key==='l'){did.push('startReadAloudAtPosition');event.preventDefault();}
+  else if(readAloudActive&&!target.matches('button, select')){if(key==='Space'||key.startsWith('Arrow')){did.push('readAloud '+key);event.preventDefault();}}
+ }
+ return did;
+}
+/* Window capture first, then the event at its target (where the panel's own keydown listener sits). */
+function typeKey(f,node,key,props={}){
+ const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.assign(e,{key,...props});
+ Object.defineProperty(e,'target',{value:node,configurable:true});
+ const native=nativeKeydown(e,props);
+ node.dispatchEvent(e);
+ return {native,prevented:e.defaultPrevented};
+}
+const inputOf=f=>f.panel().querySelector('.sc-ra-input');
+const typeText=(f,text)=>{inputOf(f).textContent=text;};
+
+test('typing in the chat box is typing: r, l, arrows and Space never reach Zotero\'s shortcuts (its real isTextBox and capture order)',async()=>{
+ const f=fixture();await f.open();
+ const input=inputOf(f);
+ assert.equal(input.getAttribute('contenteditable'),'true');assert.ok(isTextBox(input),'Zotero counts it as a text box');
+ for(const node of f.panel().querySelectorAll('textarea,input:not([type]),input[type="text"],input[type="search"],[contenteditable]'))assert.ok(isTextBox(node),node.outerHTML.slice(0,60));
+ for(const key of ['r','l','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ']){
+  const out=typeKey(f,input,key,{readAloudActive:true});
+  assert.deepEqual(out.native,[],`"${key}" is left to the text box`);assert.equal(out.prevented,false);
+ }
+ typeText(f,'Why 95 C?');
+ typeKey(f,input,'Enter');await settle(20);
+ assert.equal(f.requests.filter(r=>r.body).length,1,'Enter still sends');
+ assert.equal(input.textContent,'','and empties the box');
+ f.stop();
+});
+test('pasting into the chat box inserts plain text only',async()=>{
+ const f=fixture();await f.open();
+ const input=inputOf(f);let inserted=null;f.doc.execCommand=(cmd,ui,value)=>{if(cmd==='insertText'){inserted=value;input.textContent+=value;return true;}return false;};
+ const e=new f.win.Event('paste',{bubbles:true,cancelable:true});e.clipboardData={getData:type=>type==='text/plain'?'plain words':'<b>bold</b>'};
+ input.dispatchEvent(e);
+ assert.equal(e.defaultPrevented,true);assert.equal(inserted,'plain words');assert.equal(input.querySelector('b'),null);
+ f.stop();
+});
+test('Tab moves through the panel with Zotero\'s FocusManager: visible groups carry data-tabstop, their items tabindex=-1',async()=>{
+ const f=fixture();await f.open();
+ const visible=n=>!n.closest('[hidden]');
+ const check=(least=4)=>{
+  const groups=[...f.panel().querySelectorAll('[data-tabstop]')];
+  assert.ok(groups.length>=least,'several groups: '+groups.length);
+  for(const g of groups){assert.ok(visible(g),'a hidden group is not a tab stop: '+g.className);
+   assert.ok(g.hasAttribute('tabindex')||[...g.querySelectorAll('[tabindex="-1"]')].some(visible),'the group has something to focus: '+g.className);}
+  for(const n of f.panel().querySelectorAll('[tabindex="-1"]'))assert.ok(visible(n),'no hidden item is reachable: '+n.className);
+  return groups;
+ };
+ const ask=check();assert.ok(ask.some(g=>g.querySelector('.sc-ra-input')),'the composer is a group');
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(10);
+ const tr=check();assert.ok(!tr.some(g=>g.querySelector('.sc-ra-input')),'the ask tab\'s groups leave with it');
+ f.press(f.byText('Fold the panel'));await settle();
+ const rail=check(1);assert.ok(rail.every(g=>g.closest('.sc-ra-rail')),'folded: only the rail');
+ let node=null;f.service.selectionPopup({reader:f.reader,doc:f.doc,params:{annotation:{position:{pageIndex:2,rects:[[80,664,200,676]]}}},append:n=>{node=n;}});
+ assert.equal(node.getAttribute('data-tabstop'),'1','the popup button is its own tab stop, like "Add to note"');
+ f.stop();
+});
+
+test('Stop during the chat\'s text extraction: no AI request is sent afterwards',async()=>{
+ const f=fixture();await f.sync();
+ let release;const read=f.fileIO.readUTF8;f.fileIO.readUTF8=p=>/struct/.test(p)?new Promise(r=>{release=()=>r(read(p));}):read(p);
+ f.press(f.container.querySelector('button[data-safe="view"]'));await settle(10);
+ typeText(f,'Anything?');f.press(f.byText('Send'));await settle(5);
+ assert.equal(f.byText('Stop').hidden,false,'Stop shows at once');
+ f.press(f.byText('Stop'));await settle(5);
+ release&&release();await settle(30);
+ assert.deepEqual(f.requests.filter(r=>r.body),[],'nothing sent after Stop');
+ assert.equal(inputOf(f).textContent,'Anything?','the question is put back');
+ f.stop();
+});
+test('Stop during DeepL\'s usage lookup: the answer arrives, and no translation is sent',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});let answer;
+ f.http.deepl=req=>req.method==='GET'?new Promise(r=>{answer=()=>r({status:200,response:{character_count:5,character_limit:500000}});}):null;
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.press(f.byText('Translate all'));await settle(10);
+ const trStop=()=>f.byText('Stop',f.panel().querySelector('.sc-ra-tr'));
+ assert.equal(trStop().hidden,false,'Stop shows while the usage is asked');
+ f.press(trStop());await settle(5);
+ answer();await settle(30);
+ assert.equal(f.requests.filter(r=>r.method==='POST'&&/deepl/.test(r.url)).length,0,'no POST after Stop');
+ assert.equal(f.byText('Translate all').disabled,false,'the buttons come back');
+ f.stop();
+});
+test('"다시 번역" is a job like the others: Stop shows while it runs and ends it',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.press(f.byText('Translate all'));await settle(30);
+ let cancelled=0;f.http.deepl=req=>req.method==='POST'?new Promise(r=>{req.options.cancellerReceiver(()=>{cancelled++;r({status:0,response:null});});}):null;
+ const row=f.panel().querySelectorAll('.sc-ra-row-card')[1];
+ f.press(row.querySelector('[data-opens="ai"]'));await settle(10);
+ const trStop=()=>f.byText('Stop',f.panel().querySelector('.sc-ra-tr'));
+ assert.equal(trStop().hidden,false);assert.equal(f.byText('Translate all').disabled,true,'one job at a time');
+ f.press(trStop());await settle(15);
+ assert.equal(cancelled,1);assert.equal(trStop().hidden,true);
+ assert.match(f.panel().querySelectorAll('.sc-ra-row-card')[1].textContent,/KO:Libraries/,'the earlier translation stays');
+ f.stop();
+});
+
+test('"다른 번역기로 이어서" sends only the unfinished paragraphs of this language, and every paragraph names its translator',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.press(f.byText('From this page'));await settle(30);           // Methods and Results by DeepL
+ f.http.deepl=req=>req.method==='POST'?{status:456,response:{}}:null;
+ f.press(f.byText('Translate all'));await settle(30);
+ assert.equal(f.byText('Continue with another translator').hidden,false);
+ f.aiReplies.push(options=>{const user=JSON.parse(options.body).messages[1].content;const content=user.trim().startsWith('[')?JSON.stringify(JSON.parse(user).map(p=>'AI:'+p.text)):'AI:'+user;return {status:200,response:{choices:[{message:{content}}]}};});
+ f.press(f.byText('Continue with another translator'));await settle(30);
+ const ai=f.requests.filter(r=>r.body&&r.body.messages);
+ assert.equal(ai.length,1);
+ const body=ai[0].body.messages[1].content;
+ const sent=body.trim().startsWith('[')?JSON.parse(body).map(p=>p.text):[body];
+ assert.deepEqual(sent,['DNA polymerases drive PCR. Thermal stability limits cycling speed.'],'only the paragraph DeepL had not done');
+ const rows=[...f.panel().querySelectorAll('.sc-ra-row-card')];
+ assert.deepEqual(rows.map(r=>r.getAttribute('data-provider')),['ai','deepl','deepl']);
+ assert.match(f.panel().querySelector('.sc-ra-tr').textContent,/AI · paragraphs 1, DeepL Free · paragraphs 2–3/);
+ f.press(f.byText('Save as note'));await settle(10);
+ assert.match(f.notes[0].html,/AI · paragraphs 1, DeepL Free · paragraphs 2–3/);assert.match(f.notes[0].html,/<em>DeepL Free<\/em>/);
+ f.stop();
+});
+
+test('a summary is filed under the model, server, language and prompt it was asked with, even if the model changes before it returns',async()=>{
+ const f=fixture();await f.open();let finish;
+ f.aiReplies.push(()=>new Promise(r=>{finish=()=>r({status:200,response:{choices:[{message:{content:'## Summary\nMade by m1.'}}]}});}));
+ f.press(f.byText('Make summary'));await settle(10);
+ f.allPrefs.aiModel='m2';
+ finish();await settle(20);
+ const entries=Object.entries(f.sessionOf().data.summary);
+ assert.equal(entries.length,1);
+ const [key,entry]=entries[0];
+ assert.match(key,/^m1\|English\|/,'the key is m1, frozen at the start: '+key);assert.equal(entry.model,'m1');
+ assert.ok(entry.endpoint&&entry.rev,'endpoint and prompt revision are in the record');
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(5);f.press(f.panel().querySelector('[data-tab="ask"]'));await settle(5);
+ assert.doesNotMatch(f.panel().querySelector('.sc-ra-summary').textContent,/Made by m1/,'under m2 there is no current summary');
+ f.allPrefs.aiModel='m1';f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(5);f.press(f.panel().querySelector('[data-tab="ask"]'));await settle(5);
+ assert.match(f.panel().querySelector('.sc-ra-summary').textContent,/Made by m1/);
+ f.stop();
+});
+test('a chat answer is written to the conversation it was asked in, with the model it was asked of',async()=>{
+ const f=fixture();await f.open();let finish;
+ f.aiReplies.push(()=>new Promise(r=>{finish=()=>r({status:200,response:{choices:[{message:{content:'Late answer.'}}]}});}));
+ typeText(f,'Question?');f.press(f.byText('Send'));await settle(10);
+ f.allPrefs.aiModel='m2';f.press(f.byText('Clear conversation'));await settle(5);
+ finish();await settle(20);
+ assert.equal(f.sessionOf().data.chat.length,0,'the cleared conversation does not get the old answer');
+ typeText(f,'Again?');f.aiReplies.push('Fresh.');f.press(f.byText('Send'));await settle(20);
+ const last=f.sessionOf().data.chat.at(-1);assert.equal(last.model,'m2');
+ f.stop();
+});
+test('after a model change, an AI translation made with the old model is not shown as current',async()=>{
+ const f=fixture();await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(10);
+ f.aiReplies.push(options=>{const user=JSON.parse(options.body).messages[1].content;return {status:200,response:{choices:[{message:{content:JSON.stringify(JSON.parse(user).map(p=>'AI:'+p.text))}}]}};});
+ f.press(f.byText('Translate all'));await settle(30);
+ assert.equal(f.panel().querySelectorAll('.sc-ra-row-card[data-state="done"]').length,3);
+ f.allPrefs.aiModel='m2';
+ f.press(f.panel().querySelector('[data-tab="ask"]'));await settle(5);f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(10);
+ assert.equal(f.panel().querySelectorAll('.sc-ra-row-card[data-state="done"]').length,0,'none is current under m2');
+ assert.doesNotMatch(f.panel().querySelector('.sc-ra-rows').textContent,/AI:DNA/);
+ f.stop();
+});
+
+test('a narrow reader with the sidebar open keeps 360 px for the PDF: the panel narrows, folds to the rail, and comes back when there is room',async()=>{
+ const f=fixture();const html=f.doc.documentElement,split=f.doc.querySelector('#split-view');
+ let width=900;Object.defineProperty(html,'clientWidth',{get:()=>width,configurable:true});
+ split.getBoundingClientRect=()=>({left:240,right:width,top:41,bottom:800,width:width-240,height:759});
+ await f.open();
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'300px','900 - 240 sidebar - 360 for the PDF');
+ width=500;await f.sync();
+ assert.equal(f.panel().getAttribute('data-collapsed'),'true','no room: the rail');assert.equal(split.style.getPropertyValue('inset-inline-end'),'52px');
+ assert.notEqual(f.runtime.cache.readerAssist.collapsed,true,'not remembered as the user\'s choice');
+ width=1400;await f.sync();
+ assert.equal(f.panel().getAttribute('data-collapsed'),'false','room again: open as before');assert.equal(split.style.getPropertyValue('inset-inline-end'),'372px');
+ f.stop();
+});
+
+test('Zotero\'s Read Aloud playing in another reader: the clash names it and stops that reader, not this one',async()=>{
+ const f=fixture();await f.sync();
+ const other=secondReader(f);f.Z.Reader._readers.push(other);f.service.sync(f.win,[f.reader,other],'t1');await settle(10);
+ let stoppedA=0,stoppedB=0;
+ f.reader._internalReader.toggleReadAloudPopup=open=>{if(open===false)stoppedA++;};
+ other._internalReader._state.readAloudState={active:true,paused:false};
+ other._internalReader.toggleReadAloudPopup=open=>{if(open===false){stoppedB++;other._internalReader._state.readAloudState={active:false,paused:false};}};
+ await f.open();
+ f.press(f.byText('Read body only'));await settle(20);
+ const clash=f.panel().querySelector('.sc-ra-clash');assert.equal(clash.hidden,false);
+ assert.match(clash.textContent,/Another read-aloud is playing\. Stop it and start\?/);
+ f.press(f.byText('Stop and start'));await settle(20);
+ assert.equal(stoppedB,1,'the reader that was playing');assert.equal(stoppedA,0,'not ours');
+ assert.ok(f.synth.log.some(l=>l[0]==='speak'));
+ f.stop();
+});
+
+test('Alt+double-click on a page the reader has turned 90° reads the sentence under the pointer; the split view\'s second pane works too',async()=>{
+ const f=fixture();
+ const live=ReaderAssist.viewportFor([0,0,612,792],90,{scale:1});
+ const primary=f.reader._internalReader._primaryView._iframeWindow;
+ primary.PDFViewerApplication={pdfViewer:{getPageView:()=>({viewport:live})}};
+ await f.open();
+ const page=f.viewDoc.querySelector('.page[data-page-number="3"]');
+ page.getBoundingClientRect=()=>({left:0,top:0,width:live.width,height:live.height});
+ // 'Kinetics were measured at 72 C.' is at [72,116,300,12] in the extraction's (unturned) page space.
+ const [a,b,c,d,e,g]=live.transform,ux=100,uy=792-122;
+ const at={x:a*ux+c*uy+e,y:b*ux+d*uy+g};
+ const dbl=(doc,node,x,y)=>{const ev=new doc.defaultView.Event('dblclick',{bubbles:true});Object.assign(ev,{clientX:x,clientY:y,altKey:true});Object.defineProperty(ev,'target',{value:node});node.dispatchEvent(ev);};
+ dbl(f.viewDoc,page,at.x,at.y);await settle(30);
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)?.[1],'Kinetics were measured at 72 C.');
+ // the second pane of a split view
+ const second=parseHTML('<html><body><div class="page" data-page-number="4"></div></body></html>');
+ f.reader._internalReader._secondaryView={_iframeWindow:{document:second.document,PDFViewerApplication:{pdfViewer:{getPageView:()=>({viewport:ReaderAssist.viewportFor([0,0,612,792],0)})}}}};
+ await f.sync();
+ const p4=second.document.querySelector('.page');p4.getBoundingClientRect=()=>({left:0,top:0,width:612,height:792});
+ f.synth.log.length=0;
+ dbl(second.document,p4,100,106);await settle(30);
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)?.[1],'Variant M7 retained 80 percent activity after 30 minutes at 95 C.');
+ f.stop();
+});
+
+test('stop() cancels the cache clean-up timer, and a timer that fires anyway does nothing',async()=>{
+ const f=fixture();const timers=[];const cleared=[];
+ const setT=f.win.setTimeout;f.win.setTimeout=(fn,ms)=>{if(ms===60000){timers.push(fn);return 'prune';}return setT(fn,ms);};
+ const clearT=f.win.clearTimeout;f.win.clearTimeout=id=>{cleared.push(id);return clearT(id);};
+ let listed=0;f.fileIO.getChildren=async()=>{listed++;return [];};
+ await f.sync();assert.equal(timers.length,1);
+ f.stop();
+ assert.ok(cleared.includes('prune'),'the timer is cleared');
+ timers[0]();await settle();assert.equal(listed,0,'and its callback does nothing after stop');
+});
+test('a drag on the panel edge ends when the pointer capture is lost or the window blurs',async()=>{
+ const f=fixture();Object.defineProperty(f.doc.documentElement,'clientWidth',{value:1200,configurable:true});
+ await f.open();
+ const handle=f.panel().querySelector('.sc-ra-resizer'),split=f.doc.querySelector('#split-view');
+ const fire=(node,type,props={})=>{const e=new f.win.Event(type,{bubbles:true});Object.assign(e,props);node.dispatchEvent(e);};
+ fire(handle,'pointerdown',{button:0,clientX:800,pointerId:1});fire(handle,'pointermove',{clientX:780});
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'392px');
+ fire(handle,'lostpointercapture',{pointerId:1});fire(handle,'pointermove',{clientX:700});
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'392px','no drag after the capture is gone');
+ fire(handle,'pointerdown',{button:0,clientX:800,pointerId:2});fire(f.win,'blur');fire(handle,'pointermove',{clientX:700});
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'392px','no drag after a blur');
+ f.stop();
+});
+
+test('the probe and the live check never touch a cache file\'s time, and audio that was already playing is not blamed on the probe',async()=>{
+ const f=fixture();const touched=[];f.fileIO.setModificationTime=async p=>{touched.push(p);};
+ f.fileIO.files.set(f.folder+'1-ATT.state.json',JSON.stringify({v:1,summary:{},chat:[],tr:{}}));
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:1,getPage:async()=>({view:[0,0,612,792],rotate:0,
+  async getTextContent(){return {items:[{str:'We study polymerases.',transform:[10,0,0,10,72,680],width:200,height:10,fontName:'f2'}],styles:{}};},async getOperatorList(){return {};},commonObjs:{has:()=>true,get:()=>null}})}};
+ const out=await f.service.probe(f.reader);await settle(10);
+ assert.deepEqual(touched,[],'probe on a reader without a panel');
+ f.stop();
+ const g=fixture();const t2=[];g.fileIO.setModificationTime=async p=>{t2.push(p);};
+ const handle=g.service.diagnose(g.reader,{fresh:false});await handle.ready();await settle(10);
+ assert.deepEqual(t2,[],'the live check on the user\'s reader');handle.release();g.stop();
+ // already playing before the probe
+ const h=fixture();await h.sync();h.press(h.container.querySelectorAll('button')[1]);await settle(20);h.synth.begin();await settle();
+ assert.equal(h.sessionOf().player.state().status,'playing');
+ const again=await h.service.probe(h.reader);
+ assert.doesNotMatch(again.problems.join(' '),/probe started audio/);
+ h.stop();void out;
+});
+
+test('wording: skipped content, the figure chip, and the plain-text banner',async()=>{
+ const f=fixture();await f.open();
+ assert.match(f.panel().querySelector('.sc-ra-why summary').textContent,/^Skipped content$/);
+ assert.ok([...f.panel().querySelectorAll('.sc-ra-chip')].some(b=>b.textContent.trim()==='Explain this figure'));
+ assert.match(f.panel().querySelector('.sc-ra-banner').textContent,/Using the plain text Zotero extracted/);
+ assert.doesNotMatch(fs.readFileSync(new URL('../src/reader-assist.js',import.meta.url),'utf8'),/이라 무료|무료\)|\(free\)|so free/,'a model on this Mac is not called free');
+ f.stop();
 });

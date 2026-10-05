@@ -134,3 +134,93 @@ test('the limit is inactivity, not the total: a slow stream that keeps sending i
  live[0].fn();
  await assert.rejects(p,/아무것도 보내지 않아/);
 });
+
+import fs from 'node:fs';
+/* ---- the local AI bridge: found by itself when no address is set; an address in settings wins ---- */
+const BRIDGE_TOKEN='T0ken_for_the_local_bridge_0123456789abcdef';
+function bridgeHarness(values={},{file=JSON.stringify({port:47823,token:BRIDGE_TOKEN,version:'1.0.0',providers:['claude','codex']}),provider='claude'}={}){
+ const prefs={aiEndpoint:'',aiModel:'',aiKey:'settings-key',...values};const requests=[];const logged=[];const reads=[];
+ const home='/Users/tester';
+ const paths={homeDir:home,join:(...parts)=>parts.join('/')};
+ const io={exists:async p=>(reads.push(p),file!==null&&p===home+'/Library/Application Support/StyleCustomBridge/bridge.json'),readUTF8:async()=>file};
+ let response=()=>({status:200,response:{choices:[{message:{content:'Bridge answer'}}]},getResponseHeader:name=>/x-bridge-provider/i.test(name)?provider:null});
+ const Zotero={debug:(...a)=>logged.push(a.join(' ')),logError:e=>logged.push(String(e&&e.stack||e)),HTTP:{request:async(method,url,options)=>{requests.push({method,url,options});return response(options);}}};
+ const api=A.create({Zotero,runtime:{pref:k=>prefs[k]},io,paths});
+ return {api,requests,logged,reads,prefs,setProvider:p=>provider=p,respond:fn=>response=fn,setFile:f=>file=f};
+}
+test('with no address in settings, the bridge is found in Application Support and used with its own token, never the settings key',async()=>{
+ const h=bridgeHarness();
+ assert.equal(await h.api.run('summary',{title:'T',abstract:'A'}),'Bridge answer');
+ const r=h.requests[0];
+ assert.equal(r.url,'http://127.0.0.1:47823/v1/chat/completions');
+ assert.equal(r.options.headers.Authorization,'Bearer '+BRIDGE_TOKEN);
+ assert.doesNotMatch(JSON.stringify(r.options),/settings-key/);
+ assert.equal(JSON.parse(r.options.body).model,'claude','no model in settings: the bridge default, Claude');
+ assert.ok(h.reads.includes('/Users/tester/Library/Application Support/StyleCustomBridge/bridge.json'));
+ assert.equal(h.api.available(),true);
+ assert.deepEqual(h.api.status(),{available:true,source:'bridge',provider:'claude',label:'Claude 계정 (이 Mac)'});
+ h.api.stop();
+});
+test('a model name meant for another server is not passed to the bridge; its own names are',async()=>{
+ const h=bridgeHarness({aiModel:'gpt-4o-mini'});await h.api.run('translate',{title:'T'});
+ assert.equal(JSON.parse(h.requests[0].options.body).model,'claude','gpt-4o-mini would have sent the paper to ChatGPT first');
+ const g=bridgeHarness({aiModel:'ChatGPT'});await g.api.run('translate',{title:'T'});
+ assert.equal(JSON.parse(g.requests[0].options.body).model,'chatgpt');
+});
+test('an address in settings always wins over an installed bridge',async()=>{
+ const h=bridgeHarness({aiEndpoint:'https://example.org/v1/chat/completions',aiModel:'m'});
+ await h.api.run('translate',{title:'T'});
+ assert.equal(h.requests[0].url,'https://example.org/v1/chat/completions');
+ assert.equal(h.requests[0].options.headers.Authorization,'Bearer settings-key');
+ assert.doesNotMatch(JSON.stringify(h.requests[0].options),new RegExp(BRIDGE_TOKEN));
+ assert.equal(h.api.status().source,'endpoint');assert.equal(h.api.status().label,'example.org');
+});
+test('no bridge.json, or a broken one, means no request and the usual setup message',async()=>{
+ for(const file of [null,'not json','{"port":80,"token":"short"}',JSON.stringify({port:47823,token:'bad token with spaces and more than thirty two chars'})]){
+  const h=bridgeHarness({},{file});
+  await assert.rejects(h.api.run('translate',{title:'T'}),/서버 주소/);
+  await assert.rejects(h.api.chat([{role:'user',content:'Q'}]),/bridge\/install\.sh/);
+  assert.equal(h.requests.length,0);assert.equal(h.api.available(),false);assert.equal(h.api.status().source,'none');
+ }
+ assert.equal(A.bridgeConfig(JSON.stringify({port:47823,token:BRIDGE_TOKEN})).url,'http://127.0.0.1:47823/v1/chat/completions');
+});
+test('the provider label follows the x-bridge-provider header: ChatGPT when the bridge fell back, Claude again after',async()=>{
+ const h=bridgeHarness({},{provider:'codex'});
+ await h.api.run('translate',{title:'T'});
+ assert.equal(h.api.status().label,'ChatGPT 계정 (이 Mac)');assert.equal(h.api.status().provider,'codex');
+ h.setProvider('claude');await h.api.paperSummary({title:'T',abstract:'A',text:'body'});
+ assert.equal(h.api.status().label,'Claude 계정 (이 Mac)');
+ // A streamed answer: the header is read as soon as it arrives.
+ h.respond(options=>{
+  const ls={};const xhr={readyState:2,responseText:'',getResponseHeader:n=>/content-type/i.test(n)?'text/event-stream':/x-bridge-provider/i.test(n)?'codex':null,addEventListener:(n,f)=>(ls[n]||=[]).push(f)};
+  options.requestObserver(xhr);for(const f of ls.readystatechange||[])f();
+  assert.equal(h.api.status().label,'ChatGPT 계정 (이 Mac)','known before the answer ends');
+  xhr.readyState=3;xhr.responseText='data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n';for(const f of ls.progress||[])f();
+  return {status:200,responseText:xhr.responseText,getResponseHeader:xhr.getResponseHeader};
+ });
+ h.setProvider('claude');
+ assert.equal(await h.api.chat([{role:'user',content:'Q'}]),'Hi');
+ h.api.stop();
+});
+test('bridge failures read as what to do on this Mac, and the token is never logged or echoed',async()=>{
+ const h=bridgeHarness();
+ h.respond(()=>({status:429,response:{error:{message:'Usage limit'}},getResponseHeader:()=>null}));
+ await assert.rejects(h.api.run('translate',{title:'T'}),/사용 한도/);
+ h.respond(()=>({status:502,response:{},getResponseHeader:()=>null}));
+ await assert.rejects(h.api.chat([{role:'user',content:'Q'}],{stream:false}),/로그인/);
+ h.respond(()=>({status:401,response:{},getResponseHeader:()=>null}));
+ await assert.rejects(h.api.run('translate',{title:'T'}),/install\.sh/);
+ h.respond(()=>{throw new Error('connect ECONNREFUSED Authorization: Bearer '+BRIDGE_TOKEN);});
+ const errors=[];
+ for(const call of [()=>h.api.run('translate',{title:'T'}),()=>h.api.chat([{role:'user',content:'Q'}]),()=>h.api.paperSummary({title:'T',abstract:'A',text:'b'})]){
+  try{await call();assert.fail('should reject');}catch(e){errors.push(e.message);}
+ }
+ assert.ok(errors.every(m=>/응답하지 않습니다/.test(m)),errors.join(' | '));
+ const seen=[...errors,...h.logged,JSON.stringify(h.api.status())].join('\n');
+ assert.doesNotMatch(seen,new RegExp(BRIDGE_TOKEN));
+ h.api.stop();
+});
+test('nothing in assist.js that logs touches the token',()=>{
+ const src=fs.readFileSync(new URL('../src/assist.js',import.meta.url),'utf8');
+ assert.doesNotMatch(src,/(?:debug|log|logError|console\.\w+)\([^)]*token/i,'nothing that logs touches the token');
+});

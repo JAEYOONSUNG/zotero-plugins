@@ -191,8 +191,9 @@
       if (!parts[i].sup || supRun.has(parts[i])) continue;
       const run = [parts[i]];
       for (let j = i + 1; j < parts.length && parts[j].sup && parts[j].x - (run[run.length - 1].x + run[run.length - 1].w) < 0.5 * parts[j].size; j++) run.push(parts[j]);
-      const str = run.map(q => q.str).join('');
-      for (const q of run) supRun.set(q, {str, first: run[0], decided: null});
+      // one decision for the whole run: every fragment of it shares the object
+      const info = {str: run.map(q => q.str).join(''), first: run[0], decided: null};
+      for (const q of run) supRun.set(q, info);
     }
     for (const p of parts) {
       const s = p.str;
@@ -582,7 +583,12 @@
       if (body.length < 6) continue;
       const left = percentile(body.map(sg => sg.x0), 0.1), right = percentile(body.map(sg => sg.x1), 0.9);
       const side = live.filter(sg => sg.plain.length >= 6 && /\p{L}{3}/u.test(sg.plain) && (sg.x1 <= left - 4 || sg.x0 >= right + 4) && sg.x1 - sg.x0 < 0.3 * pg.width);
-      if (side.length >= 2) for (const sg of side) sg.skip = 'margin';
+      if (side.length < 2) continue;
+      // the sidebar's other lines stand in its x-range too, whatever they say ("A.C., Z.Z., J.L.R.,", "(CC BY-NC-ND).")
+      const sx0 = Math.min(...side.map(sg => sg.x0)), sx1 = Math.max(...side.map(sg => sg.x1));
+      const sTop = Math.min(...side.map(sg => sg.top)) - 40, sBottom = Math.max(...side.map(sg => sg.bottom)) + 40;
+      for (const sg of live) if (!side.includes(sg) && sg.x0 >= sx0 - 2 && sg.x1 <= sx1 + 2 && (sg.x1 <= left - 4 || sg.x0 >= right + 4) && sg.top >= sTop && sg.bottom <= sBottom && Math.abs(sg.size - side[0].size) <= 1.5) side.push(sg);
+      for (const sg of side) sg.skip = 'margin';
     }
     for (const pg of pages) for (const seg of pg.segs) {
       if (!seg.skip) continue;
@@ -634,7 +640,11 @@
   /* Tables set across the page (the cells run over the gutter) would be torn into
      the columns, so rows of four or more short cells are taken out before the
      columns are measured, when at least three of them follow each other. */
-  function detectWideTables(pg, skipped) {
+  // a run of words that reads as a sentence: mostly lower-case words, some of them function words
+  const fnRatio = t => { const ws = words(t); return ws.length ? ws.filter(w => FUNCTION_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, ''))).length / ws.length : 0; };
+  const proseShape = t => { const ws = words(t); return t.length >= 30 && ws.length >= 5 && ws.filter(w => /^\p{Ll}[\p{Ll}'\u2019-]*[,;:.)]?$/u.test(w)).length >= 0.55 * ws.length; };
+
+  function detectWideTables(pg, skipped, bodySize) {
     const live = pg.segs.filter(sg => !sg.skip);
     if (live.length < 8) return;
     const rows = lineify(live, pg.index, -1, 0, '');
@@ -658,8 +668,23 @@
         // the header line above, when there is one
         const above = rows[i - 1];
         if (above && above.cells.length >= 2 && i - 1 >= 0 && rows[i].baseline - above.baseline <= 3.2 * rows[i].size && above.chars <= 80 && !skipped.__never) run.unshift(above);
-        for (const r of run) for (const c of r.cells) c.skip = 'table';
-        skipped.tables.push({text: run.map(r => r.cells.map(c => c.plain).join(' | ')).join('\n'), page: pg.index, reason: 'rows of short cells across the page'});
+        // a column of running text beside a figure lines up with the figure's labels row by row, but it is not a
+        // cell: sentences in the body type mark an x-range that stays text, and only what lies outside it can be a table
+        const proseCell = c => bodySize && c.x1 - c.x0 >= 0.28 * pg.width && Math.abs(c.size - bodySize) <= Math.max(0.6, 0.06 * bodySize) && proseShape(c.plain);
+        const prose = run.flatMap(r => r.cells.filter(proseCell));
+        let cells = run.map(r => r.cells);
+        if (prose.length >= 2) {
+          const px0 = Math.min(...prose.map(c => c.x0)), px1 = Math.max(...prose.map(c => c.x1));
+          cells = run.map(r => r.cells.filter(c => c.x1 <= px0 + 2 || c.x0 >= px1 - 2));
+          const rest = cells.map((cs, k) => ({cells: cs, k})).filter(r => r.cells.length >= 2);
+          if (rest.length < 3 || !aligned(rest)) cells = null;
+        }
+        // set in justified prose (the funding line of an acknowledgement), the "cells" are words spread apart
+        if (cells && fnRatio(cells.flat().map(c => c.plain).join(' ')) >= 0.15 && cells.flat().filter(c => words(c.plain).length <= 1).length >= 0.5 * cells.flat().length) cells = null;
+        if (cells) {
+          for (const cs of cells) for (const c of cs) c.skip = 'table';
+          skipped.tables.push({text: cells.filter(cs => cs.length).map(cs => cs.map(c => c.plain).join(' | ')).join('\n'), page: pg.index, reason: 'rows of short cells across the page'});
+        }
       }
       i = Math.max(last + 1, i + 1);
     }
@@ -810,6 +835,32 @@
     return rest.length >= 3 && rest.filter(q => q.size <= 0.93 * bodySize).length >= 0.9 * rest.length;
   };
 
+  /* Legends in a narrow column beside a figure (PNAS sets "Fig. 6. ..." to the right of the figure): from a label in
+     small type that has other text beside it on its baseline, the lines below in the same type that start at the
+     label's left edge, line after line. Returns a map from each of those segments to its legend's list. */
+  function captionFlows(segs, W, bodySize) {
+    const out = new Map();
+    const starts = segs.filter(s => CAPTION_RE.test(s.plain) && bodySize && s.size < 0.97 * bodySize && s.x1 - s.x0 < 0.45 * W);
+    // text beside a line of the legend, on its baseline or within its height
+    const beside = s => segs.some(q => q !== s && Math.abs(q.baseline - s.baseline) < 0.9 * s.size && (q.x1 < s.x0 - s.size || q.x0 > s.x1 + s.size) && !proseShape(q.plain));
+    for (const st of starts) {
+      if (out.has(st)) continue;
+      const flow = [st];
+      let last = st;
+      const below = segs.filter(q => q.baseline > st.baseline && !out.has(q)).sort((a, b) => a.baseline - b.baseline);
+      for (const q of below) {
+        if (q.baseline - last.baseline > 2.2 * st.size) break;
+        if (Math.abs(q.size - st.size) > 0.3 || Math.abs(q.x0 - st.x0) > 0.6 * st.size || q.x1 - q.x0 > 0.5 * W) continue;
+        // a legend's lines run to its measure; a table's first column under its title is short cells
+        if (last !== st && last.plain.length < 18) break;
+        flow.push(q); last = q;
+      }
+      if (flow.length < 3 || flow.filter(beside).length < Math.max(2, 0.4 * flow.length)) continue;
+      for (const q of flow) out.set(q, flow);
+    }
+    return out;
+  }
+
   /* One page into lines in reading order. Segments that cross a gutter where it holds
      (a title, an abstract, a caption across the page) and lines where no gutter holds on
      a page that has columns elsewhere are spanning rows; runs of them cut the page into
@@ -821,9 +872,18 @@
   function layoutPage(pg, bodySize, docGutters) {
     const dropCaps = pg.segs.filter(s => !s.skip && bodySize && s.size >= 1.6 * bodySize && s.plain.length <= 3 && /^[\p{L}\d]+$/u.test(s.plain.trim()) && !pg.segs.some(q => q !== s && !q.skip && Math.abs(q.size - s.size) < 0.2 * s.size && Math.abs(q.baseline - s.baseline) < 0.5 * s.size));
     for (const d of dropCaps) d.skip = 'dropcap';
-    const segs = pg.segs.filter(s => !s.skip);
     const W = pg.width;
+    // a legend set in a narrow column beside its figure: the legend's own x-range and type are locked first, so its
+    // lines do not merge with the figure's labels on the same baselines into rows across the page
     const pageGutters = pg.pageGutters || [];
+    const all = pg.segs.filter(s => !s.skip);
+    let capFlow = captionFlows(all, W, bodySize);
+    if (capFlow.size) {
+      // only where no gutter holds: a legend in a column of its own is read as that column anyway
+      const pieces0 = activePieces(all, W, pageGutters, docGutters || []);
+      for (const flow of new Set(capFlow.values())) if (flow.filter(q => pieces0.some(pc => inPiece(pc, q.baseline))).length > 0.5 * flow.length) for (const q of flow) capFlow.delete(q);
+    }
+    const segs = capFlow.size ? all.filter(s => !capFlow.has(s)) : all;
     const pieces = activePieces(segs, W, pageGutters, docGutters || []);
     const gutters = [...new Set(pieces.map(pc => pc.g))].sort((a, b) => a - b);
     pg.gutters = gutters;
@@ -941,6 +1001,10 @@
       for (const l of cand.slice(1)) l.dropIndent = true;
       first.dropFirst = true;
     }
+    for (const flow of new Set(capFlow.values())) {
+      const z = zoneId++;
+      for (const l of lineify(flow, pg.index, -1, 0, '')) { l.zone = z; l.col = -1; l.group = pg.index + ':' + z + ':legend'; lines.push(l); }
+    }
     pg.columns = gutters.length ? Math.max(...segs.map(s => (s.sig ? s.sig.split('/').length : 0))) + 1 : 1;
     pg.lines = lines;
     let id = 0;
@@ -992,10 +1056,31 @@
       'resourceavailability', 'methoddetails', 'quantificationandstatisticalanalysis', 'statisticalanalysis', 'limitationsofthestudy', 'futuredirections',
       'summaryandconclusions', 'overview', 'motivation', 'implications', 'limitations', 'perspective', 'synopsis', 'preface', 'prologue', 'epilogue', 'afterword'],
   };
+  // Korean section names, written as patterns: a heading name is letters only, so "재료 및 방법" is 재료및방법
+  const HEADINGS_KO = {
+    abstract: /초록|요약|국문초록|영문초록/,
+    back: /감사의글|감사의말|사사|감사|저자기여|이해상충|연구비지원/,
+    main: /서론|서언|머리말|연구배경|방법|재료및방법|재료와방법|실험방법|연구방법|실험재료및방법|대상및방법|연구대상및방법|결과|연구결과|실험결과|결과및고찰|결과및논의|고찰|논의|토의|결론|결론및제언|요약및결론|맺음말/,
+  };
   const HEAD_KIND = new Map();
   for (const [kind, names] of Object.entries(HEADINGS)) for (const n of names) HEAD_KIND.set(n, kind);
+  for (const [kind, re] of Object.entries(HEADINGS_KO)) for (const n of re.source.split('|')) HEAD_KIND.set(n, kind);
   const METHODS_NAMES = new Set(['methods', 'materialsandmethods', 'materialandmethods', 'materialsandmethod', 'materialandmethod', 'materialandmethods', 'materialsandmethod', 'materialandmethod', 'methodsandmaterials', 'experimentalprocedures', 'experimentalsection', 'experimental', 'starmethods',
-    'onlinemethods', 'methodology', 'subjectsandmethods', 'patientsandmethods', 'methodsummary', 'methoddetails', 'materials']);
+    'onlinemethods', 'methodology', 'subjectsandmethods', 'patientsandmethods', 'methodsummary', 'methoddetails', 'materials',
+    ...(/방법|재료및방법|재료와방법|실험방법|연구방법|실험재료및방법|대상및방법|연구대상및방법/).source.split('|')]);
+  /* What a section is about, in one English word, whatever language its heading is in: a consumer (the chat's
+     retrieval, a summary) asks for "results" without knowing "결과 및 고찰" or "Results and Discussion". */
+  const TOPICS = [
+    ['introduction', /^(?:introduction|background|서론|서언|머리말|연구배경)$/],
+    ['methods', /^(?:methods?|materials?and(?:methods?)|methodsandmaterials|experimental(?:procedures|section)?|starmethods|onlinemethods|methodology|methodsummary|methoddetails|materials|subjectsandmethods|patientsandmethods|방법|재료[및와]방법|실험방법|연구방법|실험재료및방법|대상및방법|연구대상및방법)$/],
+    ['results', /^(?:results(?:anddiscussion)?|resultsanddiscussions|결과|연구결과|실험결과|결과및고찰|결과및논의)$/],
+    ['discussion', /^(?:discussion(?:andconclusions?)?|고찰|논의|토의)$/],
+    ['conclusion', /^(?:conclusions?|concludingremarks|summaryandconclusions|결론|결론및제언|요약및결론|맺음말)$/],
+    ['abstract', /^(?:abstract|summary|structuredabstract|초록|요약|국문초록|영문초록)$/],
+    ['acknowledgments', /^(?:acknowledge?ments?|감사의글|감사의말|사사|감사)$/],
+    ['references', /^(?:references?|bibliography|literaturecited|참고문헌|인용문헌)$/],
+  ];
+  const sectionTopic = text => { const n = headingName(text); for (const [t, re] of TOPICS) if (re.test(n)) return t; return null; };
 
   /* The heading name a line carries: numbering removed, spaced capitals closed
      up ("A B S T R A C T"), trailing punctuation dropped, letters only. */
@@ -1003,6 +1088,7 @@
     let t = String(text).replace(/\s+/g, ' ').trim();
     t = t.replace(/^(?:section\s+)?(?:\d{1,2}(?:\.\d{1,2}){0,3}|[IVX]{1,5}(?=[.)]))[.)]?\s+/i, '');
     t = t.replace(/^(?:[A-H][.)]\s+)/, '');
+    t = t.replace(/^[\u2160-\u217F]{1,4}[.)]?\s*/, '');
     t = t.replace(/[.:;–—\-\s]+$/, '');
     return squash(t);
   }
@@ -1245,6 +1331,8 @@
       let a = a0, b = b0;
       while (a < b && text[a] === ' ') a++;
       while (b > a && text[b - 1] === ' ') b--;
+      // a stray glyph after the sentence's full stop (an icon font's character: "(Kashammer et al., 2019).€")
+      { const m = /([.!?]["\u201D\u2019')\]]*)\s?[\u20AC\u00A3\u00A5\u00A4\u00A2\u00A9\u00AE\u2122\u25A0-\u25FF\u2022\u2666\u2665\u2660\u2663\uF000-\uF8FF]{1,2}$/u.exec(text.slice(a, b)); if (m) b = a + m.index + m[1].length; }
       const piece = text.slice(a, b);
       if (!/\p{L}/u.test(piece)) { if (piece.trim()) other.push({text: piece, page: st.toks[a] ? st.toks[a].part.page : lines[0].page, reason: 'no letters'}); continue; }
       const firstTok = st.toks[a];
@@ -1285,6 +1373,8 @@
       return '';
     });
     out = out.replace(CITE_AUTHOR, '');
+    // superscript citations the PDF set as plain digits glued to the word: "with other synthetic DNA1,4,45."
+    out = out.replace(/(\p{L}{2,})(\d{1,3}(?:[,\u2013\u2014-]\d{1,3})+)(?=[.,;:!?)]*(?:\s|$))/gu, '$1');
     out = out.replace(/\s+([.,;:!?)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
     return out || text;
   }
@@ -1301,6 +1391,9 @@
       // a leading list marker ("12." or "[12]") is not a table cell
       const cells = l.cells.length > 1 && MARKER_CELL.test(l.cells[0].plain.trim()) ? l.cells.slice(1) : l.cells;
       const c = cells.length;
+      // justified prose with wide word spaces ("Department | of | Science | and"): single words, function words among them
+      const gaps = cells.slice(1).map((x, k) => x.x0 - cells[k].x1);
+      if (c >= 3 && cells.filter(x => words(x.plain).length <= 1).length >= 0.6 * c && fnRatio(l.text) >= 0.15 && Math.max(...gaps) <= 1.6 * Math.min(...gaps)) return false;
       if (c >= 3 && sum(cells.map(x => x.plain.length)) / c <= 28) return true;
       if (c >= 2) {
         const num = cells.filter(x => words(x.plain).every(w => NUMERIC_TOKEN.test(w))).length;
@@ -1617,6 +1710,17 @@
     return null;
   }
 
+  /* An author list: four or more names between commas ("Chen Wang†, Anthony D. Rish†, Emily G. Armbruster, ...,
+     Tian- Min Fu*"), each a run of capitalised words and initials with a marker after it, and no sentence. */
+  const NAME_WORD = /^(?:\p{Lu}[\p{Ll}'\u2019]+(?:-\p{Lu}?[\p{Ll}'\u2019]+)*|\p{Lu}\.(?:-?\p{Lu}\.)*|\p{Lu}{2,3}|de|van|von|der|den|da|di|du|la|le|del|dos)$/u;
+  function authorList(text) {
+    const t = String(text).replace(/-\s+/g, '-').replace(/\s+(?:and|&)\s+/g, ', ');
+    const items = t.split(/\s*[,;]\s*/).map(x => x.replace(/[*\u2020\u2021\u00A7\u00B6#\d\u00B9\u00B2\u00B3\u2070-\u2079\s]+$/u, '').trim()).filter(Boolean);
+    if (items.length < 4 || /[.!?]\s+\p{Lu}\p{Ll}+\s+\p{Ll}/u.test(t)) return false;
+    const named = items.filter(it => { const ws = it.split(/\s+/).map(w => w.replace(/[*\u2020\u2021\u00A7\d]+$/u, '')); return ws.length >= 2 && ws.length <= 5 && ws.every(w => NAME_WORD.test(w)); }).length;
+    return named >= 0.8 * items.length;
+  }
+
   function frontReason(f) {
     for (const [re, why] of FRONT_PATTERNS) if (re.test(f.text)) return why;
     return 'authors or other front matter';
@@ -1708,8 +1812,11 @@
       if (!pend) return;
       const para = pend; pend = null;
       if (!section) { section = {heading: '', level: 1, page: para.lines[0].page, paragraphs: [], kind: state === 'back' ? 'back' : 'body', info: {}}; sections.push(section); }
+      // a paragraph in the body's own type was judged body already: a sentence of it dense with quantities
+      // ("(cX = 7.3 ± 0.1 g L⁻¹), adenylate energy charge (AEC = 0.84 ± 0.05), ...") is not figure text for that
+      const paraBody = para.lines.filter(l => !l.bold && Math.abs(l.size - bodySize) <= Math.max(0.5, 0.05 * bodySize)).length >= 0.5 * para.lines.length;
       const sents = sentencesOf(para.lines, ctx.lex, ctx.notes.hyphenation, T.other).filter(se => {
-        const why = figureSoup(se.text);
+        const why = paraBody && (opensLikeProse(se.text) || fnRatio(se.text) > 0) ? null : figureSoup(se.text);
         if (why) T.other.push({text: se.text, page: se.page, reason: why});
         return !why;
       });
@@ -1723,6 +1830,7 @@
     };
     const addBody = (b, f) => {
       const first = b.lines[0];
+      if (capOpen) capOpen.bodyAfter = true;
       seenKept.add(b.group);
       if (pend) {
         const prevLast = pend.lines[pend.lines.length - 1];
@@ -1812,6 +1920,64 @@
     const proseAt = (j, page) => j >= 0 && j < blocks.length && blocks[j].page === page && isProse(blocks[j], feats[j], bodySize);
     const supported = bi => proseAt(bi + 1, blocks[bi].page) || proseAt(bi - 1, blocks[bi].page) || (bi + 1 < blocks.length && blocks[bi + 1].page === blocks[bi].page && !!headingOf(blocks[bi + 1], feats[bi + 1], bodySize, 'body', ctx));
 
+    /* Boilerplate comes off a paragraph by its own lines, or by its own cell of a line (a licence line of a sidebar
+       on the paragraph's baseline), never with the paragraph: 'all' when the block is not running prose (or is all
+       boilerplate), 'split' when lines went and the rest is to be looked at again, 'none' when no line of its own
+       says it (the words ran over lines of a sentence) and the block stays. */
+    const stripBoiler = (bi, accept, prefix) => {
+      const b = blocks[bi], f = feats[bi];
+      // only a paragraph in the body's own type is split; a box of small print is boilerplate as a whole
+      const bodyLine = l => Math.abs(l.size - bodySize) <= Math.max(0.5, 0.05 * bodySize);
+      if (!(isProse(b, f, bodySize) && f.nWords >= 25 && b.lines.filter(bodyLine).length >= 0.6 * b.lines.length && fnRatio(f.text) >= 0.12)) return 'all';
+      const lineWhy = (text, size) => { const w = frontBoilerplate({text, size}, bodySize); return w && accept(w) ? w : null; };
+      const kept = [], gone = [];
+      for (const l of b.lines) {
+        const w = lineWhy(l.text, l.size);
+        if (w) { gone.push({text: l.text, why: w}); continue; }
+        const bad = l.cells.length > 1 ? l.cells.filter(c => lineWhy(c.plain, c.size)) : [];
+        if (bad.length && bad.length < l.cells.length) {
+          const cells = l.cells.filter(c => !bad.includes(c));
+          const parts = [].concat(...cells.map(c => c.parts));
+          kept.push(Object.assign({}, l, {cells, parts, text: cells.map(c => c.plain).join(' ').replace(/\s+/g, ' ').trim(), x0: Math.min(...cells.map(c => c.x0)), x1: Math.max(...cells.map(c => c.x1)), chars: sum(cells.map(c => c.chars)), _mf: undefined}));
+          for (const c of bad) gone.push({text: c.plain, why: lineWhy(c.plain, c.size)});
+          continue;
+        }
+        kept.push(l);
+      }
+      if (!gone.length) return 'none';
+      if (!kept.length) return 'all';
+      for (const g of gone) { T.other.push({text: g.text, page: b.page, reason: prefix + g.why}); note(b.page, 'front', g.why, g.text, b); }
+      blocks[bi] = Object.assign({}, b, {lines: kept});
+      feats[bi] = featuresOf(blocks[bi], bodySize);
+      return 'split';
+    };
+
+    const nextBodyStartsLower = (bi, size) => {
+      for (let j = bi + 1; j < Math.min(blocks.length, bi + 25); j++) {
+        if (blocks[j].page > blocks[bi].page + 1) break;
+        if (!isProse(blocks[j], feats[j], bodySize) || !inBodyType(blocks[j], feats[j]) || (size && Math.abs(feats[j].size - size) > 0.6) || captionStart(blocks[j], feats[j], bodySize)) continue;
+        return /^\p{Ll}/u.test(feats[j].text);
+      }
+      return false;
+    };
+    // a paragraph that opens with a back-matter label and a colon ("Author contributions: N.C. ... wrote the paper.")
+    // where the journal sets it, at the foot of the first page: back matter, read after the paper
+    const deferredBack = [];
+    const backLabel = t => { const m = /^\s*([\p{L}][\p{L}\s&,'\u2019-]{2,60}?)\s*:\s+\S/u.exec(t); return m && HEAD_KIND.get(headingName(m[1])) === 'back' ? m[1] : null; };
+    const continuesOpen = (b, f) => {
+      if (!pend || state === 'front' || state === 'frontskip' || state === 'refs' || state === 'supp') return false;
+      const last = pend.lines[pend.lines.length - 1];
+      const prevText = pend.lines.slice(-2).map(l => l.text).join(' ');
+      if (TERMINAL.test(prevText) && !/[,;:\-\u2013\u2014]$/.test(prevText)) return false;
+      if (f.nLines > 3 || b.lines.some(l => l.tab || l.bold) || CAPTION_RE.test(f.text)) return false;
+      const l0 = b.lines[0];
+      const under = l0.page === last.page && l0.group === last.group && l0.baseline > last.baseline && l0.baseline - last.baseline <= 1.6 * (last.typPitch || last.size * 1.2)
+        && Math.abs(l0.x0 - last.colLeft) < 1.2 * last.size && f.nLines <= 2 && (f.terminal || /^[\p{Ll}\d]/u.test(f.text));
+      const carried = f.startsLower && Math.abs(median(pend.lines.map(l => l.size)) - f.size) <= 0.6 && (last.group !== l0.group || interposed > 0)
+        && words(f.text).filter(w => /^\p{Ll}{2,}/u.test(w)).length >= 3 && (f.terminal || f.nWords >= 6);
+      return under || carried;
+    };
+
     let inForm = false;
     for (let bi = 0; bi < blocks.length; bi++) {
       const b = blocks[bi], f = feats[bi];
@@ -1865,6 +2031,14 @@
         note(b.page, 'caption', 'panel of ' + c.label, f.text, b);
         continue;
       }
+      // a legend that runs over the page end carries on at the top of the next page, in its type, mid-sentence
+      if (capOpen && !capOpen.bodyAfter && !(pend && !TERMINAL.test(pend.lines.slice(-2).map(l => l.text).join(' '))) && b.page === capOpen.page + 1 && !blocks.slice(0, bi).some(q => q.page === b.page && !q.lines.every(l => l.title)) && !CAPTION_RE.test(f.text)
+        && Math.abs(f.size - capOpen.size) <= 0.5 && !TERMINAL.test(out.captions[out.captions.length - 1].text) && /^[\p{Ll}\d(]/u.test(f.text)) {
+        const c = out.captions[out.captions.length - 1];
+        c.text += ' ' + f.text; capOpen.page = b.page; capOpen.group = b.group; capOpen.col = b.lines[0].col; capOpen.last = b.lines[b.lines.length - 1].baseline; capOpen.x0 = b.lines[0].x0; capOpen.startTop = b.lines[0].top;
+        note(b.page, 'caption', 'continuation of ' + c.label + ' from the page before', f.text, b);
+        continue;
+      }
       if (capOpen && capOpen.page !== b.page) capOpen = null;
 
       if (!contRun.has(b) && state !== 'front' && state !== 'frontskip' && state !== 'refs' && !HEAD_KIND.get(headingName(f.text))) {
@@ -1887,6 +2061,10 @@
           if (run && !run.kind) { head.text += ' ' + run.text; head.runIn = true; contRun.set(nb, run); }
         }
       }
+      // a figure's label set like a heading, between the two halves of an open sentence ("... act independently as
+      // translational" | figure | "regulators (RsfS)."), is not a section: the sentence carries on after it
+      const insideOpen = head && !head.kind && !head.numbered && pend && !TERMINAL.test(pend.lines.slice(-2).map(l => l.text).join(' ')) && nextBodyStartsLower(bi, median(pend.lines.map(l => l.size)));
+      if (insideOpen) { skipBlock(b, f, 'other', 'other', 'a label inside an open sentence (figure text)'); continue; }
       if (head && acceptHeading(head) && (head.kind || supported(bi))) {
         const kind = head.kind;
         if (kind === 'abstract') {
@@ -1917,7 +2095,11 @@
       if (state === 'refs' || (state === 'body' && f.small)) {
         // the licence box and the dates repeated on a last page are not a reference or a sentence
         const why = frontBoilerplate(f, bodySize);
-        if (why === 'licence or copyright' || why === 'dates' || why === 'stamp') { skipBlock(b, f, 'other', 'other', 'boilerplate: ' + why); continue; }
+        if (why === 'licence or copyright' || why === 'dates' || why === 'stamp') {
+          const how = stripBoiler(bi, w => w === 'licence or copyright' || w === 'dates' || w === 'stamp', 'boilerplate: ');
+          if (how === 'split') { bi--; continue; }
+          if (how === 'all') { skipBlock(b, f, 'other', 'other', 'boilerplate: ' + why); continue; }
+        }
       }
       if (state === 'refs') { refEntries(b, f, 'in the reference list'); continue; }
       if (refRun[bi] && state !== 'front') {
@@ -1944,13 +2126,22 @@
       // front matter wherever it stands on the first two pages: in the body's way it would thread
       // affiliations or a licence into a sentence that runs past it
       if (b.page <= ctx.firstPage + 1 && (state === 'body' || state === 'abstract')) {
-        const why = frontBoilerplate(f, bodySize);
-        if (why) { T.other.push({text: f.text, page: b.page, reason: 'front matter: ' + why}); note(b.page, 'front', why, f.text, b); interposed++; continue; }
+        const why = frontBoilerplate(f, bodySize) || (f.nLines <= 5 && authorList(f.text) ? 'authors' : null);
+        const how = why ? stripBoiler(bi, () => true, 'front matter: ') : 'none';
+        if (how === 'split') { bi--; continue; }
+        if (how === 'all') { T.other.push({text: f.text, page: b.page, reason: 'front matter: ' + why}); note(b.page, 'front', why, f.text, b); interposed++; continue; }
       }
       // footnotes: small print low on the page that starts with a marker
       const first = b.lines[0];
       const pageH = byIndex[b.page] ? byIndex[b.page].height : 792;
       // a table's footnote: its letter glued to the note ("bSlopes were derived ..."), in small type
+      if (f.size < bodySize * 0.97 && /^[a-h]["\u201C\u2018'](?=\S)/u.test(f.text) && /["\u201D\u2019']/.test(f.text.slice(2, 60))) {
+        // the letter glued to a quoted column name ('a"m4C percent detected" is ...')
+        out.footnotes.push({text: f.text, page: b.page});
+        note(b.page, 'footnote', 'table footnote', f.text, b);
+        interposed++;
+        continue;
+      }
       if (f.size < bodySize * 0.97 && /^[a-h]\p{Lu}\p{Ll}{2,}/u.test(f.text) && (first.startsSup || b.lines[0].parts.find(q => q.str.trim()) && b.lines[0].parts.find(q => q.str.trim()).size < f.size - 0.5 || !/^[a-h]\p{Lu}{2}/u.test(f.text))) {
         out.footnotes.push({text: f.text, page: b.page});
         note(b.page, 'footnote', 'table footnote', f.text, b);
@@ -1972,9 +2163,25 @@
         continue;
       }
 
+      const label = state !== 'back' && state !== 'refs' && state !== 'supp' ? backLabel(f.text) : null;
+      if (label) {
+        deferredBack.push({heading: label, page: b.page, lines: b.lines});
+        note(b.page, 'back', 'labelled back-matter paragraph', f.text, b);
+        interposed++;
+        continue;
+      }
       // a contents list (STAR Methods): a run of short titles with no sentence among them
       if (b.lines.length >= 3 && !/[.!?]\s/.test(f.text) && b.lines.filter(l => l.chars <= 70 && !TERMINAL.test(l.text)).length >= 0.8 * b.lines.length && b.lines.filter(l => l.fill < 0.85).length >= 0.6 * b.lines.length && f.capWordRatio >= 0.12 && b.lines.every(l => /^\p{Lu}/u.test(l.text))) {
         skipBlock(b, f, 'other', 'other', 'a list of titles (contents)'); continue;
+      }
+      // a piece of a sentence that the type broke off is read with the sentence it finishes, before it can be taken for
+      // figure text: a line set at its subscripts' size right under the open line ("τPFR = 2.6 min)."), or the
+      // sentence's last words carried to the next column or page ("not significantly (t-test p-value > 0.05), ...")
+      if (continuesOpen(b, f)) {
+        pend.lines.push(...b.lines); interposed = 0; seenKept.add(b.group);
+        if (capOpen) capOpen.bodyAfter = true;
+        note(b.page, 'body', 'continuation of the open sentence', f.text, b);
+        continue;
       }
       if (!isProse(b, f, bodySize) && !proseInBodyType(bi)) {
         skipBlock(b, f, 'other', 'other', f.small ? 'small text outside a paragraph (figure or table text)' : f.nWords <= 4 ? 'short fragment (figure label)' : 'not paragraph text');
@@ -2009,14 +2216,26 @@
       if (run) {
         flush();
         if (run.kind === 'refs') { state = 'refs'; section = null; note(b.page, 'heading', 'references run-in heading', f.text, b); continue; }
-        const isBack = run.kind === 'back';
+        // "Supplementary Materials. The following are available online ..." is the supplement, not a paragraph
+        if (run.kind === 'supp') {
+          state = 'supp'; section = null;
+          T.other.push({text: f.text, page: b.page, reason: 'supplement'});
+          note(b.page, 'heading', 'supplement run-in heading', f.text, b); interposed++; continue;
+        }
+        if (run.kind === 'frontskip') {
+          T.other.push({text: f.text, page: b.page, reason: 'front matter: ' + run.text});
+          note(b.page, 'front', 'front-matter run-in heading', f.text, b); interposed++; continue;
+        }
+        // a subheading of the back matter ("Project administration", "Writing – original draft" under Author
+        // Contributions) stays back matter; only a known section of the paper ("Methods.") opens the body again
+        const isBack = run.kind === 'back' || (state === 'back' && run.kind !== 'main' && run.kind !== 'abstract');
         if (isBack) state = 'back'; else if (state === 'back') state = 'body';
         section = {heading: run.text, level: 3, page: b.page, paragraphs: [], kind: isBack ? 'back' : 'body',
           info: {runIn: true, name: headingName(run.text), size: f.size, bold: true}};
         sections.push(section);
         note(b.page, 'heading', 'bold run-in heading', run.text, b);
         const rest = restLines(b, run);
-        if (rest.length) { pend = {lines: rest}; note(b.page, 'body', 'paragraph after run-in heading', rest.map(l => l.text).join(' '), b); }
+        if (rest.length) { pend = {lines: rest}; if (capOpen) capOpen.bodyAfter = true; note(b.page, 'body', 'paragraph after run-in heading', rest.map(l => l.text).join(' '), b); }
         interposed = 0;
         continue;
       }
@@ -2025,6 +2244,28 @@
       addBody(b, f);
     }
     flush();
+    // a labelled back-matter paragraph goes where it stands in the reading order, after the sentence that starts before
+    // it; the section it interrupts carries on after it without a heading of its own
+    for (const d of deferredBack) {
+      const sents = sentencesOf(d.lines, ctx.lex, ctx.notes.hyphenation, T.other);
+      if (!sents.length) continue;
+      const l0 = d.lines[0];
+      const key = [l0.page, l0.zone, l0.col, l0.top];
+      const before = se => { const k = [se.page, se.zone, se.col, se.y]; for (let i = 0; i < 4; i++) if (k[i] !== key[i]) return k[i] < key[i]; return true; };
+      let at = null;
+      sections.forEach((sec, si) => sec.paragraphs.forEach((para, pi) => para.sentences.forEach((se, ki) => { if (sec.kind !== 'back' && before(se)) at = {si, pi, ki}; })));
+      const back = {heading: d.heading, level: 1, page: d.page, paragraphs: [{sentences: sents}], kind: 'back', info: {name: headingName(d.heading)}};
+      if (!at) { sections.unshift(back); continue; }
+      const sec = sections[at.si];
+      const paras = sec.paragraphs;
+      const head = paras.slice(0, at.pi).concat([{sentences: paras[at.pi].sentences.slice(0, at.ki + 1)}]);
+      const restFirst = paras[at.pi].sentences.slice(at.ki + 1);
+      const tail = (restFirst.length ? [{sentences: restFirst}] : []).concat(paras.slice(at.pi + 1));
+      sec.paragraphs = head;
+      const parts = [back];
+      if (tail.length) parts.push({heading: '', level: sec.level, page: tail[0].sentences[0].page, paragraphs: tail, kind: sec.kind, info: {continued: true}});
+      sections.splice(at.si + 1, 0, ...parts);
+    }
     out.sections = sections.filter(s => s.paragraphs.length || s.kind === 'abstract' || s.heading);
     return out;
   }
@@ -2170,7 +2411,7 @@
       }
     }
     detectMargins(P, skipped, meta);
-    for (const pg of P) detectWideTables(pg, skipped);
+    { const size0 = bodyFontSize(P); for (const pg of P) detectWideTables(pg, skipped, size0); }
     const bodySize = bodyFontSize(P);
     // gutters page by page, then the ones the document keeps using (odd and even pages differ)
     for (const pg of P) { const g = []; findGutters(pg.segs.filter(s => !s.skip), pg.width, 0, pg.width, g, 0); pg.pageGutters = g.sort((a, b) => a - b); }
@@ -2263,6 +2504,8 @@
     let inMethods = false;
     const sections = res.sections.map(s => {
       const o = {heading: s.heading, spoken: speakHeading(s.heading), level: s.kind === 'back' ? 'back' : s.level, page: s.page, paragraphs: s.paragraphs, kind: s.kind};
+      const topic = s.heading ? sectionTopic(s.heading) : (s.kind === 'abstract' ? 'abstract' : null);
+      if (topic) o.topic = topic;
       if (s.kind !== 'back' && s.kind !== 'abstract') {
         if (s.level === 1 && s.heading) inMethods = METHODS_NAMES.has(headingName(s.heading));
         o.part = inMethods ? 'methods' : 'main';
@@ -2342,7 +2585,7 @@
     return lines.join('\n');
   }
 
-  const api = {structure, readingOrder, pageFromPdfjs, fontsOf, debug, splitSentences, normalizeText, decideHyphen, headingName, isCiteSup, spokenOf, _: {segmentsOf, findGutters, joinParts, clusterRows, breakReason, lineify}};
+  const api = {structure, readingOrder, pageFromPdfjs, fontsOf, debug, splitSentences, normalizeText, decideHyphen, headingName, sectionTopic, isCiteSup, spokenOf, _: {segmentsOf, findGutters, joinParts, clusterRows, breakReason, lineify}};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.StyleCustomPaperText = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -771,13 +771,15 @@ test('관계 그래프 labels are short title + year, a small graph labels every
 });
 
 test('a small citation map places every label by side rather than always right of the node',async()=>{
+ /* Since 2026-10-05 the place is chosen by placeLabelsAround: eight sides tried per node, and a label is kept only where
+    it misses every other label and dot. */
  const f=fixture();
  const extra=[10].map(n=>({...f.papers[0],id:String(n),key:'K'+n,title:'Neighbour '+n}));
  f.refs.set(10,{id:10,libraryID:1,key:'K10'});
  f.library.snapshot=async()=>[...f.papers,...extra];
  const works={'1:K1':{openalex:'W1',references:['W10']},'1:K10':{openalex:'W10',references:[]},'1:K2':{}};
  let sidesCalled=0;
- const graphTools={...PaperGraph,placeLabelSides:(...args)=>{sidesCalled++;return PaperGraph.placeLabelSides(...args);}};
+ const graphTools={...PaperGraph,placeLabelsAround:(...args)=>{sidesCalled++;return PaperGraph.placeLabelsAround(...args);}};
  f.runtime.graphTools=graphTools;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
  f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
  await f.bench.show('graph');await settle();
@@ -2569,9 +2571,13 @@ test('the map names its commonest journals in their own colours, and a card name
  f.runtime.journalMarkForVenue=(doc,venue)=>{const m=doc.createElement('span');m.className='sc-mark';m.textContent=venue.slice(0,3).toUpperCase();return m;};
  await f.bench.show('graph');
  const legend=[...f.body().querySelectorAll('.sc-legend-entry')].map(e=>e.textContent);
- assert.deepEqual(legend,['Science1','Nature1','내 라이브러리에 없음','공통 참고문헌'],'both journals, then the two shapes the map uses');
- assert.equal(f.body().querySelectorAll('.sc-legend-entry .sc-legend-dot').length,3,'a swatch in the node\'s own paint, plus the dashed outside square');
- assert.ok(f.body().querySelector('.sc-legend-line'),'and the dashed tie');
+ /* This is the related-items map (no citation layout in this fixture): it has no papers off the shelf and no
+    shared-reference ties, so its key names only the journals (design pass 2026-10-05: a key names what the map uses). */
+ assert.deepEqual(legend,['Science1','Nature1'],'both journals, in their whole names');
+ assert.equal(f.body().querySelectorAll('.sc-legend-entry .sc-legend-dot').length,2,'a swatch in the node\'s own paint');
+ assert.equal(f.body().querySelector('.sc-legend-line'),null,'no tie this map does not draw');
+ const fills=[...f.body().querySelectorAll('svg.sc-graph circle')].map(c=>c.getAttribute('fill'));
+ assert.ok(fills.includes('#dde'),'and the nodes wear the colour the key names');
  await f.bench.show('explore');
  // The card spells the journal out in its own ink -- no abbreviation badge beside the full name (user, 2026-10-02).
  assert.equal(f.body().querySelectorAll('.sc-paper-meta .sc-mark').length,0);
@@ -5201,7 +5207,8 @@ test('관계 그래프: labels lie on a backdrop and the zoom buttons lie on the
  await f.bench.show('graph');await settle();
  const frame=f.body().querySelector('.sc-graph-frame');
  assert.ok(frame&&frame.querySelector('svg.sc-graph'),'the map is in a frame of its own');
- assert.deepEqual([...frame.querySelectorAll('.sc-graph-zoom button')].map(b=>b.textContent),['확대','축소'],'the zoom is inside the frame, top right by CSS, not in a bar under it');
+ // Icon buttons since the design pass of 2026-10-05: named by aria-label, in the card's own tool strip.
+ assert.deepEqual([...frame.querySelectorAll('.sc-graph-zoom button')].map(b=>b.getAttribute('aria-label')),['축소','확대','전체 보기'],'the zoom is inside the card, in its tool strip, not in a bar under it');
  const labels=[...frame.querySelectorAll('.sc-graph-label')];
  assert.ok(labels.length>=2);
  for(const label of labels)assert.equal(label.previousElementSibling.getAttribute('class'),'sc-graph-label-bg','every label has its plate');
@@ -9134,4 +9141,139 @@ test('A7 English: the institution h-index tooltip and a patent\'s registration l
   assert.ok(!f.panel?.textContent?.includes('기관 h-index'));
   f.bench.destroy();
  }finally{i18n.use('ko-KR');}
+});
+
+/* ---- Maps: one tool strip, find, keys, filters, saving (design pass 2026-10-05) --------------------------------
+   The user: "시각화 부분도 디자인 신경 쓰고" and "편의성 특히 신경 쓰고". Every map is a card with the same strip:
+   find, a few filter chips, zoom out / in / fit, save as PNG or SVG. */
+function mapFixture(){
+ const f=fixture();
+ const extra=Array.from({length:10},(_,i)=>({...f.papers[0],id:String(10+i),key:'K'+(10+i),title:(i%2?'Neighbour ':'Remote ')+(10+i),year:String(2008+i*2),citations:i*4,venue:i%2?'Science':'Cell'}));
+ for(const p of extra)f.refs.set(Number(p.id),{id:Number(p.id),libraryID:1,key:p.key});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K1':{openalex:'W1',references:['W10','W11','W12']},'1:K2':{openalex:'W2',references:['W1','W13']}};
+ for(const p of extra){const n=Number(p.id);works['1:'+p.key]={openalex:'W'+n,references:['W'+(10+((n-9)%10)),'W1']};}
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);
+ return f;
+}
+const viewBoxOf=svg=>svg.getAttribute('viewBox').split(/\s+/).map(Number);
+
+test('maps: every map card has the same strip, and the self-check presses only its view buttons',async()=>{
+ const f=mapFixture();
+ await f.bench.show('graph');await settle();
+ const frame=f.body().querySelector('.sc-graph-frame.sc-graph-card');
+ assert.ok(frame,'the map is a card');
+ const strip=frame.querySelector('.sc-graph-toolbar[role=toolbar]');
+ assert.ok(strip&&frame.firstElementChild===strip,'the strip leads the card');
+ assert.ok(strip.querySelector('input[type=search][aria-label="그래프에서 찾기"]'),'a find box');
+ const zoom=[...strip.querySelectorAll('.sc-graph-zoom button')];
+ assert.deepEqual(zoom.map(b=>b.getAttribute('aria-label')),['축소','확대','전체 보기']);
+ for(const b of zoom)assert.equal(b.getAttribute('data-safe'),'view','zoom only changes what is shown');
+ const saves=[...strip.querySelectorAll('.sc-graph-export button')];
+ assert.deepEqual(saves.map(b=>b.getAttribute('aria-label')),['PNG로 저장','SVG로 저장']);
+ for(const b of saves){
+  assert.equal(b.getAttribute('data-writes'),'file','a save writes a file');
+  assert.ok(b.getAttribute('data-opens'),'and opens the save dialog');
+  assert.equal(b.hasAttribute('data-safe'),false,'so the self-check never presses it');
+ }
+ for(const chip of strip.querySelectorAll('.sc-graph-chip'))assert.equal(chip.getAttribute('data-safe'),'view','a filter chip only changes what is shown');
+ // Every letter on the map is one of the two styled kinds, with no size of its own.
+ for(const text of frame.querySelectorAll('svg text')){
+  assert.ok(text.classList.contains('sc-graph-label')||text.classList.contains('sc-author-initials'),'map text is styled by the sheet');
+  assert.equal(text.getAttribute('font-size'),null);assert.equal(text.style?.fontSize||'','');
+ }
+ // The key to the colours sits at the foot of the same card.
+ const legend=frame.querySelector('.sc-graph-legend');
+ assert.ok(legend&&frame.lastElementChild===legend,'the key is at the foot of the card');
+ f.bench.destroy();
+});
+
+test('maps: the find box lights the matches, Enter centres the next, Escape clears',async()=>{
+ const f=mapFixture();
+ await f.bench.show('graph');await settle();
+ const svg=f.body().querySelector('svg.sc-graph'),box=f.body().querySelector('.sc-graph-find-box');
+ box.value='neighbour';box.dispatchEvent(new f.win.Event('input',{bubbles:true}));
+ const lit=[...svg.querySelectorAll('g[data-match]')];
+ assert.ok(lit.length>=2,'several papers match');
+ assert.ok(lit.every(g=>/Neighbour/.test(g.getAttribute('aria-label'))),'only the ones whose title has the words');
+ assert.equal(svg.getAttribute('data-finding'),'true','the rest step back');
+ const before=viewBoxOf(svg);
+ const enter=new f.win.Event('keydown',{bubbles:true});enter.key='Enter';box.dispatchEvent(enter);
+ const after=viewBoxOf(svg);
+ assert.ok(after[2]<before[2],'Enter zooms in on the first match');
+ assert.match(box.parentNode.querySelector('.sc-graph-find-count').textContent,/^1\/\d+$/,'and says which of them it is');
+ const esc=new f.win.Event('keydown',{bubbles:true});esc.key='Escape';box.dispatchEvent(esc);
+ assert.equal(box.value,'');assert.equal(svg.querySelectorAll('g[data-match]').length,0);assert.equal(svg.hasAttribute('data-finding'),false);
+ f.bench.destroy();
+});
+
+test('maps: Tab enters at one paper, arrows walk to the nearest one that way',async()=>{
+ const f=mapFixture();
+ await f.bench.show('graph');await settle();
+ const svg=f.body().querySelector('svg.sc-graph');
+ const nodes=[...svg.querySelectorAll('g[role=button]')];
+ assert.ok(nodes.length>=4);
+ assert.equal(nodes.filter(g=>g.getAttribute('tabindex')==='0').length,1,'one way in by Tab, not one stop per paper');
+ const at=g=>g.getAttribute('transform').match(/translate\(([-\d.]+) ([-\d.]+)\)/).slice(1).map(Number);
+ const start=nodes.slice().sort((a,b)=>at(a)[0]-at(b)[0])[0];
+ const key=new f.win.Event('keydown',{bubbles:true});key.key='ArrowRight';start.dispatchEvent(key);
+ const next=nodes.find(g=>g.getAttribute('tabindex')==='0');
+ assert.notEqual(next,start,'the arrow moved on');
+ assert.ok(at(next)[0]>at(start)[0],'to a paper to the right');
+ f.bench.destroy();
+});
+
+test('maps: Ctrl+wheel zooms about the pointer, the view is kept per scope, and fit goes back',async()=>{
+ const f=mapFixture();
+ await f.bench.show('graph');await settle();
+ let svg=f.body().querySelector('svg.sc-graph');
+ const full=viewBoxOf(svg);
+ const plain=new f.win.Event('wheel',{bubbles:true,cancelable:true});plain.deltaY=-100;svg.dispatchEvent(plain);
+ assert.deepEqual(viewBoxOf(svg),full,'a plain wheel over an untouched map scrolls the panel, not the map');
+ const wheel=new f.win.Event('wheel',{bubbles:true,cancelable:true});Object.assign(wheel,{deltaY:-100,ctrlKey:true,clientX:0,clientY:0});svg.dispatchEvent(wheel);
+ const zoomed=viewBoxOf(svg);
+ assert.ok(zoomed[2]<full[2],'a pinch or Ctrl+wheel zooms in');
+ await f.bench.render();await settle();
+ svg=f.body().querySelector('svg.sc-graph');
+ assert.deepEqual(viewBoxOf(svg),zoomed,'drawn again, the map keeps its view');
+ await f.click('전체 보기');
+ assert.deepEqual(viewBoxOf(svg),full,'fit shows the whole drawing again');
+ f.bench.destroy();
+});
+
+test('maps: a filter chip hides papers and their lines without laying the map out again',async()=>{
+ const f=mapFixture();
+ await f.bench.show('graph');await settle();
+ const svg=f.body().querySelector('svg.sc-graph');
+ const chip=[...f.body().querySelectorAll('.sc-graph-chip')].find(b=>b.textContent==='최근 5년');
+ assert.ok(chip,'a year chip is offered when it would hide something');
+ const places=[...svg.querySelectorAll('g[role=button]')].map(g=>g.getAttribute('transform'));
+ chip.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(chip.getAttribute('aria-pressed'),'true');
+ const hidden=[...svg.querySelectorAll('g[role=button][display=none]')];
+ assert.ok(hidden.length>0,'old papers step out');
+ const gone=new Set(hidden.map(g=>g.getAttribute('data-id')));
+ const year=new Date().getFullYear();
+ for(const g of hidden)assert.ok(Number(g.querySelector('title').textContent.match(/\n(\d{4})/)?.[1]||0)<year-4,'only papers older than five years are hidden');
+ for(const line of svg.querySelectorAll('line[data-a]'))assert.equal(line.getAttribute('display')==='none',gone.has(line.getAttribute('data-a'))||gone.has(line.getAttribute('data-b')),'a line goes with either end');
+ assert.deepEqual([...svg.querySelectorAll('g[role=button]')].map(g=>g.getAttribute('transform')),places,'no paper moved');
+ chip.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(svg.querySelectorAll('g[role=button][display=none]').length,0,'pressed again, all of them are back');
+ f.bench.destroy();
+});
+
+test('maps: journal colour is a choice, and the key follows it',async()=>{
+ const f=mapFixture();
+ await f.bench.show('graph');await settle();
+ const painted=()=>[...f.body().querySelectorAll('svg.sc-graph circle')].filter(c=>c.dataset.fill==='journal').length;
+ const named=()=>[...f.body().querySelectorAll('.sc-graph-legend .sc-legend-entry')].filter(e=>e.querySelector('.sc-legend-dot')&&!e.querySelector('.sc-legend-external')).length;
+ assert.ok(painted()>0,'papers in a named journal wear its colour');
+ assert.ok(named()>0,'and the key names that journal');
+ await f.click('저널 색');await settle();
+ assert.equal(painted(),0,'off: every paper is the neutral node');
+ assert.equal(named(),0,'and the key names no journal');
+ await f.click('저널 색');await settle();
+ assert.ok(painted()>0&&named()>0,'on again');
+ f.bench.destroy();
 });

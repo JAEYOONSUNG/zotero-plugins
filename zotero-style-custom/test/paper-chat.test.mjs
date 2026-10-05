@@ -224,3 +224,39 @@ test('the summary leaves out back matter and keeps the methods to a sixth of the
  const tiny=PC.summaryInput(nature,{pageBase:1,budget:3000});
  assert.ok(tiny.chars<=3000);assert.match(tiny.text,/^TITLE: /);assert.match(tiny.text,/ABSTRACT: /);assert.match(tiny.text,/SECTIONS: /);
 });
+
+/* ---- 0.59.24: long captions, Korean section names --------------------------- */
+const longCaption=(label,panels,style)=>label+' Translation is required for efficient early transcription. '+panels.map((p,i)=>(style==='nature'?p.toLowerCase()+', ':'('+p+') ')+'Panel '+p+' shows '+('measured promoter-proximal signal under condition '+p+' with replicate spread. ').repeat(i===panels.length-1?3:4)+'END'+p+'.').join(' ');
+test('a long figure caption reaches the AI whole: split into panels, the figure on screen first, nothing cut at 1,400 characters',()=>{
+ const nar=longCaption('Figure 3.',['A','B','C','D','E','F'],'cell');
+ const nat=longCaption('Extended Data Fig. 2 |',['A','B','C','D','E','F','G','H','I','J','K','L','M'],'nature');
+ assert.ok(nar.length>1800&&nat.length>4000,`${nar.length} / ${nat.length}`);
+ for(const text of [nar,nat]){
+  const doc=paper();doc.captions=[{kind:'figure',label:text.startsWith('Figure')?'Figure 3':'Extended Data Fig. 2',text,page:6},{kind:'figure',label:'Figure 9',text:'Figure 9. Elsewhere.',page:8}];
+  const chunks=PC.buildChunks(doc,{pageBase:1});
+  const caps=chunks.filter(c=>c.kind==='caption'&&c.page===7);
+  assert.ok(caps.length>=3,'cut into panels: '+caps.length);
+  assert.ok(caps.every(c=>c.text.length<=1400),'no piece longer than an excerpt');
+  assert.ok(caps.slice(1).every(c=>/panel [A-Ma-m]/.test(c.section)),caps.map(c=>c.section).join(' | '));
+  const q=PC.quickPrompt('figure');
+  const m=PC.chatMessages({question:q.question,chunks,viewing:{page:7},forcePage:true,intent:q.intent});
+  const sys=m.messages[0].content;
+  for(const end of text.match(/END[A-M]\./g))assert.ok(sys.includes(end),end+' is sent');
+  assert.ok(!/Figure 9/.test(sys),'not the figure of another page');
+ }
+});
+test('the real NAR 2025 Figure 3 caption (1,901 characters) is sent whole when its page is on screen',(t)=>{
+ const s=realPaper('nar2025');if(!s)return t.skip('fixture not present');
+ const cap=s.captions.find(c=>/^Figure 3\b/.test(c.label||c.text));assert.ok(cap&&cap.text.length>1800);
+ const chunks=PC.buildChunks(s,{pageBase:1});
+ const q=PC.quickPrompt('figure');
+ const sys=PC.chatMessages({question:q.question,chunks,viewing:{page:cap.page+1},forcePage:true,intent:q.intent}).messages[0].content;
+ const flat=sys.replace(/\s+/g,' ');
+ assert.ok(flat.includes(cap.text.replace(/\s+/g,' ').slice(-80)),'the end of the caption is there');
+});
+test('Korean section names are classified (no ASCII \\b after Hangul), and the extraction module\'s part is used when present',()=>{
+ const sec=(heading,extra={})=>({heading,level:1,page:0,paragraphs:[{sentences:[{text:'x',page:0}]}],...extra});
+ assert.deepEqual(PC.partsOf({sections:[sec('서론'),sec('2. 방법'),sec('결과'),sec('논의'),sec('결론'),sec('참고문헌')]}),['intro','methods','results','discussion','discussion','back']);
+ assert.deepEqual(PC.partsOf({sections:[sec('Something',{part:'methods'}),sec('Other',{kind:'back'})]}),['methods','back']);
+ assert.ok(PC.expandQuery('표 1을 설명해줘').includes('table'));assert.ok(!PC.expandQuery('표본 크기').includes('table'),'표본 is a sample, not a table');
+});

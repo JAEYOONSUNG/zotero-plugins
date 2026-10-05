@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 const require = createRequire(import.meta.url);
@@ -367,6 +369,39 @@ test("section headings: numbered, capitalised, bold run-in; levels follow number
   assert.match(gel.paragraphs[0].sentences[0].text, /^Samples were separated on a 1% agarose gel and stained\./);
 });
 
+test("Korean section names set kind, part and topic like their English counterparts", () => {
+  const items = [];
+  let y = 70;
+  const h = t => { items.push(item(t, 72, y, 12, { bold: true })); y += 12 * 1.8; };
+  const body = (a, b) => { const p = para(72, y, 468, prose(a, b)); items.push(...p.items); y = p.next + 6; };
+  h("1. 서론"); body(1, 3);
+  h("2. 재료 및 방법"); body(4, 6);
+  h("3. 결과"); body(7, 9);
+  h("4. 고찰"); body(10, 12);
+  h("5. 결론"); body(13, 14);
+  h("감사의 글"); body(15, 15);
+  h("참고문헌");
+  items.push(...lines(72, y, ["1. Kim, J. & Lee, S. Restriction in bacteria. Nature 500, 1–10 (2013).", "2. Park, H. Methylation of phage DNA. Cell 12, 3–9 (2015).", "3. Choi, Y. Phage defence. Science 9, 4–8 (2019)."], 9));
+  const r = PT.structure({ pages: [page(0, items)] });
+  const got = r.sections.filter(s => s.heading).map(s => [s.heading, s.kind, s.part, s.topic]);
+  assert.deepEqual(got, [
+    ["1. 서론", "body", "main", "introduction"],
+    ["2. 재료 및 방법", "body", "methods", "methods"],
+    ["3. 결과", "body", "main", "results"],
+    ["4. 고찰", "body", "main", "discussion"],
+    ["5. 결론", "body", "main", "conclusion"],
+    ["감사의 글", "back", undefined, "acknowledgments"],
+  ]);
+  assert.equal(r.references.length, 3, "참고문헌 opens the reference list");
+  assert.equal(PT.headingName("Ⅱ. 방법"), "방법");
+  assert.equal(r.sections.find(s => s.heading === "1. 서론").topic, "introduction");
+  // English names carry the same topics
+  assert.equal(PT.sectionTopic("Results and Discussion"), "results");
+  assert.equal(PT.sectionTopic("Materials and Methods"), "methods");
+  assert.equal(PT.sectionTopic("논의"), "discussion");
+  assert.equal(PT.sectionTopic("결과 및 고찰"), "results");
+});
+
 test("sentences that are only an address are set aside, and a very long run is cut into speakable pieces", () => {
   const pseudo = i => String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + (Math.floor(i / 26) % 26)) + "ing";
   const long = Array.from({ length: 150 }, (_, i) => pseudo(i)).join(" ") + "; " + Array.from({ length: 20 }, (_, i) => pseudo(i + 200)).join(" ") + ".";
@@ -730,6 +765,12 @@ test("adjacent raised items are judged together, compound prefixes keep their hy
   assert.equal(r.text, "binds Zn²⁺ ions");
   const c = PT._.joinParts([{ str: "were found", x: 0, w: 50, size: 10 }, sup("12", 50), sup(",13", 56), { str: " here", x: 64, w: 25, size: 10 }], true);
   assert.equal(c.text, "were found here");
+  // fragments that touch are one run, and the whole run shares one decision ("1"+"2" is citation 12, "12"+",13" is 12,13)
+  const touching = (a, b, wa) => PT._.joinParts([{ str: "were found", x: 0, w: 50, size: 10 }, sup(a, 50), { ...sup(b, 50 + wa), w: 6 }, { str: " here", x: 50 + wa + 6, w: 25, size: 10 }], true).text;
+  assert.equal(touching("1", "2", 3), "were found here", "were found² here");
+  assert.equal(PT._.joinParts([{ str: "were found", x: 0, w: 50, size: 10 }, { ...sup("12", 50), w: 6 }, { ...sup(",13", 56), w: 8 }, { str: " here", x: 64, w: 25, size: 10 }], true).text, "were found here", "were found,13 here");
+  // an exponent run is still one exponent: "10" then raised "1"+"2" is 10¹²
+  assert.equal(PT._.joinParts([{ str: "about 10", x: 0, w: 40, size: 10 }, sup("1", 40), sup("2", 43), { str: " cells", x: 46, w: 25, size: 10 }], true).text, "about 10¹² cells");
   const lex = { words: new Set(["motif", "binding"]) };
   assert.equal(PT.decideHyphen("high", "fidelity", lex).action, "keep");
   assert.equal(PT.decideHyphen("self", "versus", lex).action, "keep");
@@ -765,6 +806,150 @@ test("without font names the body, captions, references and headings hold", { sk
     assert.ok(b.captions.length >= 0.7 * a.captions.length, `${name}: captions ${a.captions.length} vs ${b.captions.length}`);
     assert.ok(b.sections.filter(s => s.heading).length >= 3, `${name}: some headings still found`);
   }
+});
+
+/* Reviewer findings at 0.59.23: body text that the extractor deleted, and what still leaked. */
+
+test("a column of prose beside a figure is not a wide table, and a sidebar line does not take a paragraph with it", { skip: SKIP }, () => {
+  // Science p8: nine body lines lined up with a figure's labels were filed as "rows of short cells across the page"
+  assert.equal(sentence("science", "Upon induction").text, "Upon induction, overexpression of Ec83 PtuAB on plates containing ampicillin inhibited cell growth compared to the PtuB active-site mutant (Fig. 4G).");
+  assert.ok(bodyHas("science", "When the same cells were grown on plates without antibiotics, PtuAB overexpression did not inhibit bacterial growth"));
+  assert.ok(!run("science").skipped.tables.some(t => /plates containing ampicillin|without antibiotics/.test(t.text)));
+  // PNAS p1: "(CC BY- NC- ND)." from the sidebar stood on a body line, and the whole paragraph went as a licence
+  assert.match(sentence("pnas", "From a structural perspective").text, /^From a structural perspective, a number of structural modeling and domain analysis of the Lamassu components have revealed the presence of a SMC scaffold for the LmuB subunit \(8\)/);
+  assert.ok(bodyHas("pnas", "How Lamassu complexes detect foreign DNA, trigger effector activation, and evolve their modular architecture remains unknown"));
+  assert.ok(!mainOf("pnas").some(s => /CC BY|A\.C\., Z\.Z\./.test(s.text)), "the sidebar's lines stay out");
+  // NAR p9: a justified funding line with wide word spaces is not a table
+  assert.ok(PT.readingOrder(run("nar")).some(s => s.kind === "back" && /Council for Scientific and Industrial Research \(CSIR\); Department of Science and Technology/.test(s.text)));
+});
+
+test("a sentence dense with numbers stays body, and a fragment that finishes an open sentence is read with it", { skip: SKIP }, () => {
+  // Wiley p7: judged body, then deleted as "labels and numbers without a sentence"
+  assert.match(sentence("wiley", "STR-PFR tests started").text, /^STR-PFR tests started with installing a steady-state glucose-limited reference \(dilution rate: 0\.2 h⁻¹, DOT: 5%\) characterized as follows: cell dry weight concentration/);
+  // Wiley p7: a last line set at its subscripts' size, right under the open line
+  assert.match(sentence("wiley", "After connection of the PFR to the STR").text, /\(residence time of cells in the PFR τPFR = 2\.6 min\)\.$/);
+  assert.match(sentence("wiley", "Integration of the OTR").text, /O2 consumed, 4min = 139\.1 ± 3\.9 mmol L−1\)\.$/);
+  // Wiley p7 -> p8: the sentence's last words carried past a figure to the next page
+  assert.equal(sentence("wiley", "Only the energy charge of the cells dropped").text, "Only the energy charge of the cells dropped, however not significantly (t-test p-value > 0.05), from the reference value of 0.84 ± 0.05 to 0.69 ± 0.15.");
+});
+
+test("a legend set in a narrow column beside its figure is one caption, not body", { skip: SKIP }, () => {
+  // PNAS p8 Fig. 6: the legend's lines merged with the figure's labels into rows across the page
+  assert.ok(!mainOf("pnas").some(s => /LmuB ho-CxxC|Comparison of typical oper|Structure & sequence similarity|^\([A-C]\) /.test(s.text)), "legend or panel text in the body");
+  const fig6 = run("pnas").captions.find(c => c.label === "Fig. 6");
+  assert.match(fig6.text, /\(A\) LmuB ho- ?mologs phylogenetic tree\..*\(C\) Comparison of typical oper- ?ons from SbcCD and Lamassu systems highlighting regions of similarity \(gray shading\)\.$/);
+  assert.equal(sentence("pnas", "Short LmuC were positioned").text, "Short LmuC were positioned similarly as in the Lamassu Vc-Cap4 complex, while long LmuC had an additional short domain separated by an unstructured linker (SI Appendix, Fig. S20).");
+});
+
+test("back matter is not re-opened by its own subheadings, and a supplement list is not body", { skip: SKIP }, () => {
+  // Murray p13: after "Project administration" and "Writing – original draft" the author names were read as body
+  assert.deepEqual(mainOf("murray").filter(s => /^Iain A\. Murray, Richard/.test(s.text)).map(s => s.text), []);
+  assert.ok(PT.readingOrder(run("murray")).some(s => s.kind === "back" && /^Iain A\. Murray, Richard D\. Morgan, Richard J\. Roberts\.$/.test(s.text)));
+  // MDPI p15: "Supplementary Materials: The following are available online ... Figure S1: SDS-PAGE analysis ..."
+  assert.ok(!PT.readingOrder(run("mdpi")).some(s => /The following are available online|Figure S1: SDS-PAGE analysis/.test(s.text)));
+  assert.ok(run("mdpi").skipped.other.some(e => e.reason === "supplement" && /The following are available online/.test(e.text)));
+  assert.ok(!run("mdpi").sections.some(s => s.heading === "Supplementary Materials" && s.kind !== "back"));
+  // Crampton p1: "Author contributions: N.C., ..." at the foot of the first page is back matter, read where it stands
+  const cr = PT.readingOrder(run("crampton"));
+  assert.ok(!mainOf("crampton").some(s => /^Author contributions:/.test(s.text)));
+  assert.ok(cr.some(s => s.kind === "back" && /^Author contributions: N\.C\., D\.T\.F\.D\., .* wrote the paper\.$/.test(s.text)));
+  assert.match(sentence("crampton", "The ability of resolvase to concatenate plasmids").text, /in the presence of a cleavage-deficient mutant EcoPI \(an enzyme highly homologous to EcoP15I\)/);
+});
+
+test("the leaks left at 0.59.23: author lines, keywords, table footnotes, stray glyphs, split sentences", { skip: SKIP }, () => {
+  // Science p2: the author line under the repeated title
+  assert.ok(!mainOf("science").some(s => /Chen Wang†, Anthony D\. Rish†/.test(s.text)));
+  // Akkaya p2: the keyword list
+  assert.ok(!mainOf("akkaya").some(s => /^NADPH oxidases, Pseudomonas putida, reactive oxygen species/.test(s.text)));
+  // Murray p8: a table footnote whose letter is glued to a quoted column name
+  assert.ok(!mainOf("murray").some(s => /^a"m4C percent detected" is percent/.test(s.text)));
+  assert.ok(run("murray").footnotes.some(f => /^a"m4C percent detected"/.test(f.text)));
+  // Cell p7: an icon-font glyph after the full stop
+  const kas = mainOf("cell").find(s => /\(Kashammer et al\., 2019\)\./.test(s.text));
+  assert.ok(kas && /\(Kashammer et al\., 2019\)\.$/.test(kas.text), kas && kas.text.slice(-40));
+  // Nature p9: "DNA1,4,45." joins its sentence; the spoken form leaves the glued citation out
+  const dna = sentence("nature", "To this end, the BAC backbones may directly be amplified");
+  assert.match(dna.text, /assembly of BACs with other synthetic DNA1,4,45\.$/);
+  assert.match(dna.spoken, /assembly of BACs with other synthetic DNA\.$/);
+  assert.equal(PT.spokenOf("with other synthetic DNA1,4,45."), "with other synthetic DNA.");
+  assert.equal(PT.spokenOf("The CO2 level and Mg2+ ions in H2O."), "The CO2 level and Mg2+ ions in H2O.");
+  // Annual Reviews p20 -> p21: a sentence split across the page by a figure's labels set like headings
+  assert.match(sentence("annrev", "Finally, other stress-induced translation factors").text, /or act independently as translational regulators \(RsfS\)\.$/);
+  assert.ok(!run("annrev").sections.some(s => /^Exponential growth Stationary/.test(s.heading)));
+  // Aparicio p26 -> p27: a legend that runs over the page end (captions are not read, but they are kept whole)
+  assert.match(run("aparicio").captions.find(c => c.label === "Figure 3").text, /normalized by conjugation efficiency of pCONJ with unmethylated motifs\.$/);
+  assert.ok(!run("aparicio").skipped.other.some(e => /^the genome of E\. coli expressing the Class 1 DISARM/.test(e.text)));
+});
+
+/* No body words lost against the last release before the 0.59.23 reader review. Every run of body words that release
+   read and this one does not must be found elsewhere with a reason: a caption, a reference, a footnote, back matter,
+   a heading, a margin, front matter that reads as front matter (an address, a licence, an author list), or one of the
+   reviewed moves below. A paragraph filed as "rows of short cells", "figure text" or a licence is a loss. */
+const PREV_RELEASE = "11f0699";   // Style Custom 0.59.21
+const prevModule = (() => {
+  if (SKIP) return null;
+  try {
+    const src = execFileSync("git", ["show", `${PREV_RELEASE}:./src/paper-text.js`], { cwd: path.join(path.dirname(fileURLToPath(import.meta.url)), ".."), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const file = path.join(tmpdir(), `style-custom-paper-text-${PREV_RELEASE}.cjs`);
+    writeFileSync(file, src);
+    const saved = globalThis.StyleCustomPaperText;
+    const mod = require(file);
+    globalThis.StyleCustomPaperText = saved;
+    return mod;
+  } catch (e) { return null; }
+})();
+const REVIEWED_MOVES = {
+  cell: [/key resources table|structural alignments d quantification/, "the STAR Methods contents list, not text"],
+  natbiotech: [/fragilis|phenotypic data collection|isolation and biobanking/, "labels inside figures 1 and 5"],
+  annrev: [/70s assembly no 70s assembly/, "labels inside figure 6, read before its legend"],
+};
+const BOILER_WORD = /univ|department|institut|school|laborator|hospital|college|center|centre|email|correspond|contributed|licen|creative|copyright|received|accepted|published|revised|grant|award|keyword|orcid|rights|permission|author|address|funding|edited|reviewed|forschung|^(?:ac|edu|com|org|uk|usa|de|cc|by|nc|nd)$|^\d+$/;
+function lostBodyWords(name) {
+  const toks = t => String(t).toLowerCase().normalize("NFKC").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const isWord = w => /^\p{L}{2,}$/u.test(w);
+  const pages = load(name).pages;
+  const prev = prevModule.readingOrder(prevModule.structure({ pages })).filter(s => s.kind !== "back").map(s => s.text);
+  const r = run(name);
+  const cur = mainOf(name).map(s => s.text);
+  const pw = prev.flatMap(t => toks(t).concat([""])), cw = cur.flatMap(t => toks(t).concat([""]));
+  const grams = new Set(); for (let i = 0; i + 4 <= cw.length; i++) grams.add(cw.slice(i, i + 4).join(" "));
+  const present = pw.map(() => false);
+  for (let i = 0; i + 4 <= pw.length; i++) if (grams.has(pw.slice(i, i + 4).join(" "))) for (let k = i; k < i + 4; k++) present[k] = true;
+  const places = [
+    ...Object.entries(r.skipped).flatMap(([k, es]) => es.map(e => ({ where: k, reason: e.reason || "", text: e.text }))),
+    ...r.captions.map(c => ({ where: "caption", reason: c.label, text: c.text })), ...r.references.map(c => ({ where: "reference", reason: "", text: c.text })),
+    ...r.footnotes.map(c => ({ where: "footnote", reason: "", text: c.text })), ...r.sections.map(s => ({ where: "heading", reason: "", text: s.heading })),
+    ...PT.readingOrder(r).filter(s => s.kind === "back").map(s => ({ where: "back", reason: "", text: s.text })), { where: "title", reason: "", text: r.title },
+  ].map(e => ({ ...e, toks: " " + toks(e.text).join(" ") + " " }));
+  const lost = [];
+  for (let i = 0; i < pw.length;) {
+    if (present[i] || !pw[i]) { i++; continue; }
+    let j = i; while (j < pw.length && !present[j]) j++;
+    const ws = pw.slice(i, j).filter(Boolean), n = ws.filter(isWord).length;
+    i = j;
+    if (n < 2) continue;
+    let best = null, bn = 0;
+    for (const e of places) { let m = 0; for (let k = 0; k + 3 <= ws.length; k++) if (e.toks.includes(" " + ws.slice(k, k + 3).join(" ") + " ")) m++; if (m > bn) { bn = m; best = e; } }
+    const text = ws.join(" ");
+    const reasoned = best && (/^(?:caption|reference|footnote|back|heading|title|headers|footers|pageNumbers)$/.test(best.where)
+      || /supplement|rotated|stale text layer|reporting summary|stamp|margin|front matter: (?:key ?words|authors$)/i.test(best.reason)
+      || (/front matter|boilerplate/.test(best.reason) && ws.filter(w => BOILER_WORD.test(w)).length * 6 >= ws.length));
+    const reviewed = REVIEWED_MOVES[name] && REVIEWED_MOVES[name][0].test(text);
+    if (!reasoned && !reviewed) lost.push({ words: n, text: text.slice(0, 160), to: best ? `${best.where} [${best.reason}]` : "nowhere" });
+  }
+  return lost;
+}
+
+test("no fixture loses body words against the previous release unless they are filed elsewhere with a reason", { skip: SKIP || (prevModule ? false : `git show ${PREV_RELEASE} is not available`) }, () => {
+  const report = [];
+  for (const name of fixtureNames) {
+    if (UNREADABLE.has(name)) continue;
+    const lost = lostBodyWords(name);
+    const n = lost.reduce((a, x) => a + x.words, 0);
+    // a few words are the previous release's own broken joins ("Apart and msdDNA ... we with distinguished features.")
+    if (n > 8) report.push(`${name}: ${n} words\n` + lost.map(x => `   ${x.words} -> ${x.to}: ${x.text}`).join("\n"));
+  }
+  assert.deepEqual(report, []);
 });
 
 test("the shipped module has no dependency on the DOM or on Zotero", () => {

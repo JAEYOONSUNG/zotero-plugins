@@ -74,7 +74,7 @@
   }
   // Only an explicit new choice enables OpenAlex. Old subject picks never
   // decide which taxonomy the journals tab opens with.
-  state.graphKind=['library','collection','paper'].includes(ui.graphKind)?ui.graphKind:'library';state.graphPaper=ui.graphPaper?String(ui.graphPaper):null;state.graphCollection=ui.graphCollection?String(ui.graphCollection):null;state.graphSub=ui.graphSub!==false;state.graphDepth2=ui.graphDepth2===true;
+  state.graphKind=['library','collection','paper'].includes(ui.graphKind)?ui.graphKind:'library';state.graphPaper=ui.graphPaper?String(ui.graphPaper):null;state.graphCollection=ui.graphCollection?String(ui.graphCollection):null;state.graphSub=ui.graphSub!==false;state.graphDepth2=ui.graphDepth2===true;state.graphJournalColour=ui.graphJournalColour!==false;
   state.journalBrowser=ui.journalBrowser==='openalex'?'openalex':'jcr';
   state.jcrBrowserState=ui.jcrBrowserState&&typeof ui.jcrBrowserState==='object'?ui.jcrBrowserState:null;
   const enabled=id=>runtime.featureEnabled?.(id)!==false;
@@ -463,6 +463,11 @@
    // read; nineteen distinct silhouettes is a list you recognise, which is the
    // difference between finding a tab and scanning for it every time.
    filter:[['path',{d:'M2.5 4h11l-4.2 5v3.6l-2.6 1.2V9z'}]],
+   // The graph toolbar's own marks: zoom in and out, fit the whole drawing, and save a picture of it.
+   zoomIn:[['circle',{cx:7,cy:7,r:4.5}],['line',{x1:10.4,y1:10.4,x2:13.5,y2:13.5}],['line',{x1:5,y1:7,x2:9,y2:7}],['line',{x1:7,y1:5,x2:7,y2:9}]],
+   zoomOut:[['circle',{cx:7,cy:7,r:4.5}],['line',{x1:10.4,y1:10.4,x2:13.5,y2:13.5}],['line',{x1:5,y1:7,x2:9,y2:7}]],
+   fit:[['path',{d:'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10'}]],
+   saveImage:[['path',{d:'M8 2.5v7M5 6.8 8 9.8l3-3'}],['path',{d:'M2.8 10.5v1.7c0 .7.6 1.3 1.3 1.3h7.8c.7 0 1.3-.6 1.3-1.3v-1.7'}]],
    explore:[['rect',{x:2.75,y:3,width:3,height:10,rx:.8}],['rect',{x:7.25,y:3,width:3,height:10,rx:.8}],
     ['path',{d:'M11.9 3.6l1.9.5-2.2 9.1-1.2-.3'}]],
    recent:[['circle',{cx:8,cy:8,r:5.25}],['path',{d:'M8 5.1V8l2.2 1.7'}]],
@@ -1821,7 +1826,8 @@
     if(weekHead){node('span',T(weekHead.label),box,{class:'sc-overview-picks-label'});statTiles(box,weekHead.tiles);weekHead.drawn=true;}
     else{
     const meter=node('div',null,box,{class:'sc-overview-meter','aria-hidden':'true'});
-    for(const key of ['done','reading','unread'])if(n[key])node('span',null,meter,{class:'sc-overview-'+key}).style.flexGrow=String(n[key]);
+    // Hovering a stretch of the bar says exactly how many it stands for.
+    for(const[key,said]of [['done','완료'],['reading','읽는 중'],['unread','안 읽음']])if(n[key])node('span',null,meter,{class:'sc-overview-'+key,title:`${T(said)} ${fmtN(n[key])}`}).style.flexGrow=String(n[key]);
     const tiles=[];
     /* The reading counts are the way to those papers: pressed, the list shows
        only them (the status filter above says so, and clears it); pressed
@@ -2157,7 +2163,8 @@
   /* The drawing's own height follows the frame's. Shrinking only the frame
      left an 860x540 drawing fitted into 228 pixels, which scaled 11px labels to
      under 5px. Same formula as the CSS height, so the scale stays near one. */
-  const graphHeight=nodes=>Math.max(220,Math.min(540,90+Math.max(1,nodes||0)*46));
+  // A crowded map (past 80 papers) gets more height to breathe in; the ceiling is still under a screen.
+  const graphHeight=nodes=>Math.max(220,Math.min((nodes||0)>80?680:540,90+Math.max(1,nodes||0)*46));
   /* And its width follows the panel's. Laid out at 860 and fitted into a 640px
      narrow panel, an 11px label came out at 8px (Codex). A graph that scrolls
      sideways is worse to read than one laid out for the room it has. */
@@ -2203,6 +2210,201 @@
    svg.style.setProperty('--sc-graph-height',H+'px');
    svg.setAttribute('aria-label',T(label));body.appendChild(svg);
    return svg;
+  }
+  /* ---- One set of controls for every map ------------------------------
+     The citation map, the collection and one-paper maps, the tag/author/related map and
+     both author graphs are drawn by their own code, and are handled the same way:
+     - a strip on top of the card: a find box, a few filter chips, zoom out, zoom in,
+       fit, and save as PNG or SVG;
+     - a pinch or Ctrl/Cmd+wheel zooms around the pointer, and so does a plain wheel once
+       the map has been clicked: scrolling the panel past a map is never caught by it;
+       dragging the background pans; the view is remembered per scope for the session;
+     - Tab enters the map at one node, arrow keys walk to the nearest node that way, + - 0
+       zoom, Escape clears the find box and the highlight.
+     Zoom never goes below the fitted drawing: below 1 the 11px labels shrink under 11px. Zooming keeps the middle of the graph
+     from the buttons (anchored at 0 0, two presses once left half the nodes out of the frame) and the point under the pointer from a pinch.
+     Finding a node lights it the way hovering does, by the map's own hover handlers. */
+  const GRAPH_MAX_ZOOM=4;
+  const GRAPH_HINT='끌어서 이동 · 핀치나 Ctrl+휠로 확대 · 두 번 누르면 열기';
+  let lastLegend=null;/* the legend drawn for the map about to be drawn, moved into its card */
+  function graphKit({svg,frame,W,H,key,marks,lines=[],label='',filters=[],roving=true,start=null,onClear,legend=null,journalChip=false}){
+   const views=state.graphViews||(state.graphViews=new Map());
+   const round=v=>Math.round(v*100)/100;
+   const clamp=v=>{const w=Math.max(W/GRAPH_MAX_ZOOM,Math.min(W,Number(v&&v.w)||W)),h=w*H/W;
+    return {w,h,x:Math.max(0,Math.min(W-w,Number(v&&v.x)||0)),y:Math.max(0,Math.min(H-h,Number(v&&v.y)||0))};};
+   let view=clamp(views.get(key));
+   const apply=()=>{view=clamp(view);views.set(key,view);svg.setAttribute('viewBox',`${round(view.x)} ${round(view.y)} ${round(view.w)} ${round(view.h)}`);frame.dataset.zoomed=String(view.w<W-.5);};
+   const zoomAt=(factor,cx=view.x+view.w/2,cy=view.y+view.h/2)=>{const w=Math.max(W/GRAPH_MAX_ZOOM,Math.min(W,view.w/factor)),h=w*H/W;view={x:cx-(cx-view.x)*w/view.w,y:cy-(cy-view.y)*h/view.h,w,h};apply();};
+   const fit=()=>{view={x:0,y:0,w:W,h:H};apply();};
+   const centreOn=(x,y,least=1)=>{if(W/view.w<least){const w=W/least;view={...view,w,h:w*H/W};}view={...view,x:x-view.w/2,y:y-view.h/2};apply();};
+   const toDrawing=(cx,cy)=>{
+    try{const m=svg.getScreenCTM&&svg.getScreenCTM();if(m&&svg.createSVGPoint){const p=svg.createSVGPoint();p.x=cx;p.y=cy;const q=p.matrixTransform(m.inverse());return {x:q.x,y:q.y};}}catch(_){}
+    const r=svg.getBoundingClientRect?.();if(!r||!r.width)return {x:view.x+view.w/2,y:view.y+view.h/2};
+    return {x:view.x+(cx-r.left)/r.width*view.w,y:view.y+(cy-r.top)/r.height*view.h};};
+   apply();
+   frame.classList.add('sc-graph-card');
+   const tools=node('div',null,null,{class:'sc-graph-toolbar',role:'toolbar','aria-label':'그래프 도구'});
+   frame.insertBefore(tools,frame.firstChild);
+   // The key to the colours sits in the card, under the drawing it explains.
+   if(legend?.isConnected&&legend.childNodes.length){frame.appendChild(legend);legend.classList.add('sc-graph-legend-foot');}
+   // Find: type, and every node whose name has it stays bright; Enter walks through them, centring each.
+   const find=node('label',null,tools,{class:'sc-graph-find'});
+   setIcon(node('span',null,find,{class:'sc-graph-find-icon','aria-hidden':'true'}),'search');
+   const box=node('input',null,find,{type:'search',class:'sc-graph-find-box',placeholder:'그래프에서 찾기','aria-label':'그래프에서 찾기',title:'Enter로 다음, Shift+Enter로 이전'});
+   const count=node('span','',find,{class:'sc-graph-find-count','aria-live':'polite'});
+   const textOf=m=>String(m.search||m.n?.label||m.n?.name||m.n?.person?.name||'').toLowerCase();
+   const shown=id=>marks.get(id)?.g.getAttribute('display')!=='none';
+   let matches=[],at=-1,lit=null;
+   const light=id=>{if(lit&&lit!==id)marks.get(lit)?.g.dispatchEvent(new win.Event('mouseleave'));lit=id||null;if(id)marks.get(id)?.g.dispatchEvent(new win.Event('mouseenter'));};
+   const runFind=()=>{
+    const q=box.value.trim().toLowerCase();at=-1;
+    matches=q?[...marks.keys()].filter(id=>shown(id)&&textOf(marks.get(id)).includes(q)):[];
+    for(const[id,m]of marks){if(q&&matches.includes(id))m.g.setAttribute('data-match','true');else m.g.removeAttribute('data-match');}
+    if(q)svg.setAttribute('data-finding','true');else svg.removeAttribute('data-finding');
+    count.textContent=q?`${matches.length}`:'';
+    if(matches.length===1)step(1);else if(!q)light(null);
+   };
+   const step=dir=>{
+    if(!matches.length)return;at=(at+dir+matches.length)%matches.length;
+    const id=matches[at],n=marks.get(id).n;count.textContent=`${at+1}/${matches.length}`;
+    centreOn(n.x,n.y,1.5);light(id);
+   };
+   box.addEventListener('input',runFind);
+   box.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();step(e.shiftKey?-1:1);}
+    else if(e.key==='Escape'&&(box.value||lit)){e.preventDefault();e.stopPropagation();box.value='';runFind();light(null);onClear?.();}
+   });
+   // Filters: view-only chips that hide nodes (and the lines that touch them) without laying the map out again.
+   const on=state.graphFilterOn||(state.graphFilterOn=new Set());
+   const applyFilters=()=>{
+    const hidden=new Set();
+    for(const[id,m]of marks)if(filters.some(f=>on.has(f.key)&&!f.keep(m.n))){hidden.add(id);m.g.setAttribute('display','none');}else if(m.g.getAttribute('display')==='none')m.g.removeAttribute('display');
+    for(const line of lines){if(hidden.has(line.getAttribute('data-a'))||hidden.has(line.getAttribute('data-b')))line.setAttribute('display','none');else line.removeAttribute('display');}
+    frame.dataset.filtered=String(hidden.size>0);
+    if(box.value)runFind();
+   };
+   const usable=filters.filter(f=>[...marks.values()].some(m=>!f.keep(m.n)));
+   if(usable.length||journalChip){
+    const chips=node('div',null,tools,{class:'sc-graph-chips',role:'group','aria-label':'그래프 거르기'});
+    // Journal colour is a choice: on, the journals the key names wear their colour; off, every paper is the neutral node.
+    if(journalChip)viewButton('저널 색',()=>{state.graphJournalColour=state.graphJournalColour===false;saveView({graphJournalColour:state.graphJournalColour});return render();},chips,{class:'sc-graph-chip','aria-pressed':String(state.graphJournalColour!==false),title:'노드를 저널 색으로 칠합니다'});
+    for(const f of usable){
+     const chip=viewButton(f.label,()=>{if(on.has(f.key))on.delete(f.key);else on.add(f.key);chip.setAttribute('aria-pressed',String(on.has(f.key)));applyFilters();},chips,{class:'sc-graph-chip','aria-pressed':String(on.has(f.key)),title:f.title||f.label});
+    }
+   }
+   const right=node('div',null,tools,{class:'sc-graph-tools-end'});
+   const zoomBar=node('div',null,right,{class:'sc-graph-zoom',role:'group','aria-label':'확대·축소'});
+   const tool=(icon,text,fn,parent,attrs={})=>{const b=(attrs['data-writes']?button:viewButton)('',fn,parent,{class:'sc-graph-tool',title:text,'aria-label':text,...attrs});setIcon(b,icon);return b;};
+   tool('zoomOut','축소',()=>zoomAt(1/1.25),zoomBar);
+   tool('zoomIn','확대',()=>zoomAt(1.25),zoomBar);
+   tool('fit','전체 보기',fit,zoomBar);
+   const save=node('div',null,right,{class:'sc-graph-export',role:'group','aria-label':'그림으로 저장'});
+   for(const ext of ['png','svg']){
+    const b=button('',()=>saveGraph(svg,{W,H,ext,key,label,frame}),save,{class:'sc-graph-tool sc-graph-save','data-writes':'file','data-opens':'dialog','aria-label':ext==='png'?'PNG로 저장':'SVG로 저장',title:ext==='png'?'PNG로 저장':'SVG로 저장'});
+    setIcon(node('span',null,b,{class:'sc-graph-tool-icon','aria-hidden':'true'}),'saveImage');node('span',ext.toUpperCase(),b,{class:'sc-graph-tool-text'});
+   }
+   // Pan by dragging the background; a press on a node stays the node's.
+   let drag=null;
+   svg.addEventListener('pointerdown',e=>{
+    frame.dataset.engaged='true';
+    if(e.button!==0||e.target?.closest?.('g[role=button],[data-node]'))return;
+    drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};
+    try{svg.setPointerCapture?.(e.pointerId);}catch(_){}
+    frame.dataset.panning='true';
+   });
+   svg.addEventListener('pointermove',e=>{
+    if(!drag)return;const r=svg.getBoundingClientRect?.();if(!r||!r.width)return;
+    const k=view.w/r.width;view={...view,x:drag.vx-(e.clientX-drag.x)*k,y:drag.vy-(e.clientY-drag.y)*k};apply();
+   });
+   const end=()=>{drag=null;delete frame.dataset.panning;};
+   svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
+   frame.addEventListener('pointerleave',()=>{delete frame.dataset.engaged;});
+   svg.addEventListener('wheel',e=>{
+    if(!(e.ctrlKey||e.metaKey||frame.dataset.engaged==='true'))return;
+    const factor=Math.exp(-Math.max(-60,Math.min(60,e.deltaY))*.01);
+    // Out past the fitted drawing there is nothing to do, so the panel scrolls instead.
+    if(factor<1&&view.w>=W-.5&&!e.ctrlKey&&!e.metaKey)return;
+    e.preventDefault();const p=toDrawing(e.clientX,e.clientY);zoomAt(factor,p.x,p.y);
+   },{passive:false});
+   // One way in by Tab; arrows walk to the nearest node in that direction.
+   const tabTo=id=>{if(!roving||!marks.has(id))return;for(const[k,m]of marks)m.g.setAttribute('tabindex',k===id?'0':'-1');};
+   if(roving)tabTo(start&&marks.has(start)?start:marks.keys().next().value);
+   const idOf=g=>{for(const[k,m]of marks)if(m.g===g)return k;return null;};
+   svg.addEventListener('focusin',e=>{const g=e.target?.closest?.('g[role=button]');const id=g&&idOf(g);if(id)tabTo(id);});
+   const ARROWS={ArrowRight:[1,0],ArrowLeft:[-1,0],ArrowDown:[0,1],ArrowUp:[0,-1]};
+   svg.addEventListener('keydown',e=>{
+    const g=e.target?.closest?.('g[role=button]'),id=g&&idOf(g);
+    if(id&&ARROWS[e.key]){
+     e.preventDefault();e.stopPropagation();
+     const[dx,dy]=ARROWS[e.key],from=marks.get(id).n;let best=null,score=Infinity;
+     for(const[k,m]of marks){if(k===id||!shown(k)||!m.g.hasAttribute('tabindex'))continue;const vx=m.n.x-from.x,vy=m.n.y-from.y,along=vx*dx+vy*dy;if(along<=1)continue;const s=along+Math.abs(vx*dy-vy*dx)*2;if(s<score){score=s;best=k;}}
+     if(best){tabTo(best);const n=marks.get(best).n;if(n.x<view.x||n.x>view.x+view.w||n.y<view.y||n.y>view.y+view.h)centreOn(n.x,n.y);marks.get(best).g.focus?.();}
+    }else if(e.key==='Escape'&&(box.value||lit)){e.preventDefault();e.stopPropagation();box.value='';runFind();light(null);onClear?.();}
+    else if(e.key==='+'||e.key==='='){e.preventDefault();zoomAt(1.25);}
+    else if(e.key==='-'){e.preventDefault();zoomAt(1/1.25);}
+    else if(e.key==='0'){e.preventDefault();fit();}
+   });
+   applyFilters();
+   return {zoomAt,fit,centreOn,find:box,view:()=>({...view})};
+  }
+  /* The filters the paper maps offer. Each says what it keeps; a filter nothing would hide is not shown. */
+  const PAPER_FILTERS=()=>{const year=new Date().getFullYear();return [
+   {key:'held',label:'내 서재만',title:'내 서재에 없는 논문을 숨깁니다',keep:n=>n.kind!=='ghost'&&n.kind!=='external'},
+   {key:'recent',label:'최근 5년',title:`${year-4}년 이후 논문만`,keep:n=>Number(n.year)>=year-4},
+   {key:'cited',label:'인용 10+',title:'10번 이상 인용된 논문만',keep:n=>Number(n.citations)>=10}];};
+  /* Saving a map: the drawing with its colours written into it (a saved file has no panel stylesheet), on a card-coloured
+     ground, at the size it was laid out at -- the whole drawing, not the zoomed part. PNG is drawn at twice that. */
+  const GRAPH_STYLE=['fill','fill-opacity','stroke','stroke-width','stroke-opacity','stroke-dasharray','stroke-linejoin','paint-order','opacity','font-family','font-size','font-weight'];
+  function graphMarkup(svg,{W,H,frame,picture}){
+   const copy=svg.cloneNode(true);
+   const from=[svg,...svg.querySelectorAll('*')],to=[copy,...copy.querySelectorAll('*')];
+   for(let i=0;i<from.length;i++){
+    if(from[i].closest?.('clipPath,title'))continue;
+    const cs=win.getComputedStyle?.(from[i]);if(!cs)continue;
+    const parts=[];for(const p of GRAPH_STYLE){const v=cs.getPropertyValue(p);if(v)parts.push(`${p}:${v}`);}
+    if(cs.getPropertyValue('display')==='none')parts.push('display:none');
+    to[i].setAttribute('style',parts.join(';'));
+   }
+   for(const el of copy.querySelectorAll('[data-match],[tabindex]')){el.removeAttribute('data-match');el.removeAttribute('tabindex');}
+   // A picture cannot fetch a portrait from the web; the initials under it stand in.
+   if(picture)for(const img of copy.querySelectorAll('image')){const letters=img.parentNode?.querySelector?.('.sc-author-initials');img.remove();if(letters){letters.removeAttribute('display');letters.style.removeProperty?.('display');}}
+   copy.setAttribute('xmlns',SVG);copy.setAttribute('viewBox',`0 0 ${W} ${H}`);copy.setAttribute('width',String(W));copy.setAttribute('height',String(H));
+   copy.removeAttribute('class');copy.removeAttribute('data-finding');copy.style?.removeProperty?.('--sc-graph-height');
+   const ground=doc.createElementNS(SVG,'rect');
+   for(const[k,v]of Object.entries({x:0,y:0,width:W,height:H}))ground.setAttribute(k,String(v));
+   const bg=(frame&&win.getComputedStyle?.(frame)?.backgroundColor)||'';
+   ground.setAttribute('fill',bg&&!/rgba\(0, 0, 0, 0\)|transparent/.test(bg)?bg:'#ffffff');
+   copy.insertBefore(ground,copy.firstChild);
+   return new win.XMLSerializer().serializeToString(copy);
+  }
+  async function saveGraph(svg,{W,H,ext,key,label,frame}){
+   const markup=graphMarkup(svg,{W,H,frame,picture:ext==='png'});
+   let data=markup;
+   if(ext==='png'){
+    const img=new win.Image();
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('그래프를 그림으로 바꾸지 못했습니다. SVG로 저장해 보세요.'));img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(markup);});
+    const scale=2,canvas=doc.createElementNS(HTML,'canvas');canvas.width=W*scale;canvas.height=H*scale;
+    const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.drawImage(img,0,0,W,H);
+    data=Uint8Array.from(win.atob(canvas.toDataURL('image/png').split(',')[1]),c=>c.charCodeAt(0));
+   }
+   const name=`style-custom-${String(key||'graph').replace(/[^\w-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'graph'}-${new Date().toISOString().slice(0,10)}.${ext}`;
+   const io=win.IOUtils||globalThis.IOUtils,CU=win.ChromeUtils||globalThis.ChromeUtils;
+   if(io&&CU?.importESModule){
+    // Zotero's own save dialog, opened by this press only.
+    const {FilePicker}=CU.importESModule('chrome://zotero/content/modules/filePicker.mjs');
+    const fp=new FilePicker();fp.init(win,T('그래프를 그림으로 저장'),fp.modeSave);
+    fp.appendFilter(ext.toUpperCase(),'*.'+ext);fp.defaultString=name;fp.defaultExtension=ext;
+    const rv=await fp.show();
+    if(rv!==fp.returnOK&&rv!==fp.returnReplace)return;
+    if(typeof data==='string')await io.writeUTF8(fp.file,data);else await io.write(fp.file,data);
+    message(F('그래프를 저장했습니다: {0}',fp.file));
+    return;
+   }
+   // A plain page (the design preview): the browser's own download.
+   const blob=new win.Blob([data],{type:ext==='svg'?'image/svg+xml':'image/png'}),a=doc.createElementNS(HTML,'a');
+   a.href=win.URL.createObjectURL(blob);a.download=name;(doc.body||panel).appendChild(a);a.click();a.remove();
+   win.setTimeout(()=>win.URL.revokeObjectURL(a.href),4000);
+   message(F('그래프를 저장했습니다: {0}',name));
   }
   /* ---- 관계 그래프 범위: 라이브러리 · 컬렉션 · 논문 하나 ------------------
      The scope is chosen at the top of the tab and kept. Library is the whole
@@ -2325,62 +2527,128 @@
   /* One map for both new scopes: shelf papers are solid in the journal's colour, papers not on the shelf are hollow
      circles with a firm ring. Arrows point from the citing paper to the cited one. Clicking, or Enter on, a node
      focuses it in the list and the preview below; the centre paper of a one-paper graph is ringed. */
-  function drawScopeMap(laid,{W,H,label,centreID,onFocus,before}){
-   const tools=runtime.graphTools,identity=runtime.journalIdentity||{identify:()=>null,colours:()=>null};
+  /* The paper maps share one look (2026-10 design pass):
+     - size is how central a paper is here, and nothing else;
+     - colour is the journal, for the journals the legend names (the six commonest it can
+       identify); every other paper is the neutral node, so a map is never a rainbow;
+     - the chosen paper (and a one-paper map's centre) takes the one accent, lime;
+     - papers not on the shelf are hollow with a dashed ring;
+     - lines are thin and light; hovering, focusing or finding a paper brings its lines and
+       neighbours forward and fades the rest;
+     - every label lies on a plate in the card's colour, so a line behind it never cuts it. */
+  function legendVenues(nodes){
+   const identity=runtime.journalIdentity;
+   if(!identity?.identify||!identity.colours)return [];
+   const counts=new Map();
+   for(const n of nodes)if(n.venue&&n.kind!=='ghost'&&n.kind!=='external')counts.set(n.venue,(counts.get(n.venue)||0)+1);
+   // Four at most: past that a map reads as a rainbow, not as four journals.
+   return [...counts].sort((a,b)=>b[1]-a[1]).filter(([venue])=>identity.identify(venue)).slice(0,4);
+  }
+  function graphTones(nodes){
+   const identity=runtime.journalIdentity,out=new Map();
+   if(state.graphJournalColour===false)return out;
+   for(const[venue]of legendVenues(nodes))out.set(venue,identity.colours(identity.identify(venue),{dark:darkScheme()}));
+   return out;
+  }
+  function paintPaper(circle,n,{tones,picked,centre}){
+   const ghost=n.kind==='ghost'||n.kind==='external',tone=!ghost&&n.venue?tones.get(n.venue):null;
+   circle.setAttribute('fill',ghost?'var(--sc-surface)':picked||centre?'var(--sc-lime)':(tone?tone.fill:'var(--sc-node-fill)'));
+   circle.dataset.fill=tone?'journal':'plain';
+   circle.setAttribute('stroke',ghost?'var(--sc-node-ring)':picked||centre?'var(--sc-text)':(tone?tone.ink:'var(--sc-node-ring)'));
+   circle.setAttribute('stroke-width',picked?2.4:centre?2:ghost?1.4:1);
+   if(ghost)circle.setAttribute('stroke-dasharray','2.5 2');else circle.removeAttribute('stroke-dasharray');
+  }
+  function fitPlate(text,plate){
+   let w=0;try{w=text.getComputedTextLength?.()||0;}catch(_){w=0;}
+   if(!w)for(const ch of String(text.textContent))w+=/[ᄀ-ᇿ　-鿿가-힯]/.test(ch)?11:6;
+   const x=Number(text.getAttribute('x'))||0,y=Number(text.getAttribute('y'))||0,anchor=text.getAttribute('text-anchor')||'start';
+   const left=anchor==='end'?x-w:anchor==='middle'?x-w/2:x;
+   for(const[k,v]of Object.entries({x:left-4,y:y-10.5,width:w+8,height:15}))plate.setAttribute(k,v);
+  }
+  /* Which labels show and where: placeLabelsAround tries eight places round each node and keeps
+     one only where it misses every other label and dot (paper-graph.js); the map gets id -> place. */
+  function placeGraphLabels(nodes,{W,H,first=null,edges=[],limit=32}){
+   const tools=runtime.graphTools;
+   if(tools?.placeLabelsAround)return tools.placeLabelsAround(nodes,{width:W,height:H,lineHeight:14,pad:2,gap:4,limit,first,edges});
+   const set=tools?.placeLabels?tools.placeLabels(nodes,{width:W,height:H,lineHeight:14,pad:4,limit,first,avoidDots:true}):new Set(nodes.map(n=>n.id));
+   return new Map([...set].map(id=>[id,null]));
+  }
+  function seatLabel(m,place){
+   const r=m.n.r||m.n.rad||6;
+   m.label.setAttribute('x',String(place?place.dx:r+4));m.label.setAttribute('y',String(place?place.dy:3.5));
+   if(place&&place.anchor!=='start')m.label.setAttribute('text-anchor',place.anchor);else m.label.removeAttribute('text-anchor');
+   if(m.plate)fitPlate(m.label,m.plate);
+  }
+  function arrowDefs(svg){
+   const defs=doc.createElementNS(SVG,'defs'),marker=doc.createElementNS(SVG,'marker');
+   for(const[k,v]of Object.entries({id:'sc-arrow',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'4.5',markerHeight:'4.5',orient:'auto-start-reverse'}))marker.setAttribute(k,v);
+   const head=doc.createElementNS(SVG,'path');head.setAttribute('d','M0 0 L8 4 L0 8 z');head.setAttribute('class','sc-graph-arrow');head.setAttribute('fill','var(--sc-graph-line)');
+   marker.appendChild(head);defs.appendChild(marker);svg.appendChild(defs);return defs;
+  }
+  // What a paper's tooltip says, the same on every map: title, then year · journal in full · citations · held or not.
+  const paperTip=(n,extra=[])=>`${plain(n.label||'')||T('제목 없음')}\n`+[n.year,n.venue,n.citations!=null?T(`인용 ${n.citations||0}`):null,
+   n.kind==='ghost'||n.kind==='external'?T('내 서재에 없음'):T('내 서재에 있음'),...extra].filter(Boolean).join(' · ');
+  function drawScopeMap(laid,{W,H,label,centreID,onFocus,before,key}){
+   const tools=runtime.graphTools,tones=graphTones(laid.nodes);
    const svg=graphCanvas(W,H,laid.nodes.length,label);
    const mapFrame=node('div',null,null,{class:'sc-graph-frame'});mapFrame.appendChild(svg);
    if(before)body.insertBefore(mapFrame,before);else body.appendChild(mapFrame);
-   const defs=doc.createElementNS(SVG,'defs'),marker=doc.createElementNS(SVG,'marker');
-   for(const[k,v]of Object.entries({id:'sc-arrow',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'5',markerHeight:'5',orient:'auto-start-reverse'}))marker.setAttribute(k,v);
-   const head=doc.createElementNS(SVG,'path');head.setAttribute('d','M0 0 L8 4 L0 8 z');head.setAttribute('fill','var(--sc-graph-line)');marker.appendChild(head);defs.appendChild(marker);svg.appendChild(defs);
-   const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
+   arrowDefs(svg);
+   const lineLayer=doc.createElementNS(SVG,'g'),group=doc.createElementNS(SVG,'g');svg.appendChild(lineLayer);svg.appendChild(group);
    const pos=new Map(laid.nodes.map(n=>[n.id,n])),near=new Map(laid.nodes.map(n=>[n.id,new Set()])),lines=[];
+   const baseOpacity=line=>line.dataset.side?0.16:line.getAttribute('marker-end')?0.5:0.24;
    for(const e of laid.edges){
     const a=pos.get(String(e.source)),c=pos.get(String(e.target));if(!a||!c)continue;
     near.get(a.id).add(c.id);near.get(c.id).add(a.id);
-    const dx=c.x-a.x,dy=c.y-a.y,dist=Math.hypot(dx,dy)||1,pull=(c.r||6)+0.5,cited=e.kind==='cites';
+    const dx=c.x-a.x,dy=c.y-a.y,dist=Math.hypot(dx,dy)||1,pull=(c.r||6)+1,cited=e.kind==='cites';
     const line=doc.createElementNS(SVG,'line');
     for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:cited?c.x-dx/dist*pull:c.x,y2:cited?c.y-dy/dist*pull:c.y}))line.setAttribute(k,v);
     line.setAttribute('stroke','var(--sc-graph-line)');// In a one-paper graph the lines to the centre carry the picture; the neighbours' own citations stay faint behind it.
     const side=(!!centreID&&a.id!==centreID&&c.id!==centreID)||!!e.external;
-    line.setAttribute('stroke-width',cited?(side?0.8:1.4):Math.min(2.2,0.5+(e.weight||0.3)*4));
-    line.setAttribute('stroke-opacity',cited?(side?0.22:0.65):0.3);line.dataset.side=side?'1':'';
+    line.dataset.side=side?'1':'';
+    line.setAttribute('stroke-width',cited?(side?0.8:1.2):Math.min(1.8,0.6+(e.weight||0.3)*2.5));
     if(cited)line.setAttribute('marker-end','url(#sc-arrow)');else line.setAttribute('stroke-dasharray','2 3');
-    line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);lines.push(line);group.appendChild(line);
+    line.setAttribute('stroke-opacity',baseOpacity(line));
+    line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);lines.push(line);lineLayer.appendChild(line);
    }
    for(const n of laid.nodes)n.labelText=[shortGraphTitle(n.label),n.year].filter(Boolean).join(' · ')||T('제목 없음');
-   const placeAll=()=>tools.placeLabels(laid.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:32,first:new Set([centreID,state.graphFocus].filter(Boolean)),avoidDots:true});
+   const placeAll=()=>placeGraphLabels(laid.nodes,{W,H,first:new Set([centreID,state.graphFocus].filter(Boolean)),edges:laid.edges});
    let labelled=placeAll();const marks=new Map(),activators=new Map();
+   const seatAll=()=>{for(const[key,m]of marks)seatLabel(m,labelled.get(key));};
+   const setLabel=(m,show)=>{for(const el of [m.label,m.plate]){if(show)el.removeAttribute('display');else el.setAttribute('display','none');}};
+   let focusID=state.graphFocus&&pos.has(state.graphFocus)?state.graphFocus:null;
+   const emphasise=on=>{
+    // A faded line fades whole, arrowhead and all: stroke-opacity alone left the heads standing.
+    for(const line of lines){const hit=!on||line.getAttribute('data-a')===on||line.getAttribute('data-b')===on;line.setAttribute('stroke-opacity',on&&hit?0.85:baseOpacity(line));line.setAttribute('opacity',on&&!hit?0.1:1);}
+    for(const[key,m]of marks){const close=!on||key===on||near.get(on).has(key);m.circle.setAttribute('opacity',close?1:0.22);
+     m.g.dataset.state=on?(key===on?'hover':close?'near':'dim'):'';
+     setLabel(m,on?(key===on||(close&&labelled.has(key))):labelled.has(key));}
+   };
    for(const n of laid.nodes){
     const g=doc.createElementNS(SVG,'g');g.setAttribute('transform',`translate(${n.x} ${n.y})`);
-    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label)+(n.kind==='ghost'?' · '+T('내 서재에 없음'):''));
-    const id=n.venue?identity.identify(n.venue):null,tone=id?identity.colours(id,{dark:darkScheme()}):null;
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label)+(n.kind==='ghost'?' · '+T('내 서재에 없음'):''));g.setAttribute('data-id',n.id);
     const ghost=n.kind==='ghost',centre=n.id===centreID,r=n.r||6;
     const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',r);
-    circle.setAttribute('fill',ghost?'var(--sc-surface)':centre?'var(--sc-lime)':(tone?tone.fill:'var(--sc-fill)'));
-    circle.setAttribute('stroke',ghost?'var(--sc-border-strong)':(tone?tone.ink:'var(--sc-muted)'));
-    circle.setAttribute('stroke-width',ghost?2:centre?2.4:1);
+    paintPaper(circle,n,{tones,centre,picked:n.id===focusID&&!centre});
     if(ghost)circle.setAttribute('data-ghost','1');
     g.appendChild(circle);
+    const plate=doc.createElementNS(SVG,'rect');plate.setAttribute('class','sc-graph-label-bg');plate.setAttribute('rx','6');g.appendChild(plate);
     const label=doc.createElementNS(SVG,'text');label.setAttribute('x',r+4);label.setAttribute('y','3.5');label.setAttribute('class','sc-graph-label');label.textContent=n.labelText;
-    if(!labelled.has(n.id))label.setAttribute('display','none');
+    if(ghost)label.dataset.kind='external';
     g.appendChild(label);
-    const title=doc.createElementNS(SVG,'title');title.textContent=`${plain(n.label)}\n`+[n.venue,n.year,ghost?T('내 서재에 없음'):null,T(`인용 ${n.citations||0}`)].filter(Boolean).join(' · ');g.appendChild(title);
-    const emphasise=on=>{
-     for(const line of lines){const hit=!on||line.getAttribute('data-a')===on||line.getAttribute('data-b')===on;const base=line.dataset.side?0.22:line.getAttribute('marker-end')?0.65:0.3;line.setAttribute('stroke-opacity',on?(hit?0.85:0.05):base);}
-     for(const[key,m]of marks){const close=!on||key===on||near.get(on).has(key);m.circle.setAttribute('opacity',close?1:0.25);
-      const show=on?(key===on||(close&&labelled.has(key))):labelled.has(key);if(show)m.label.removeAttribute('display');else m.label.setAttribute('display','none');}
-    };
-    const activate=()=>{state.graphFocus=n.id;labelled=placeAll();for(const[key,m]of marks)m.circle.setAttribute('stroke-width',key===n.id?2.6:(m.n.kind==='ghost'?2:m.n.id===centreID?2.4:1));emphasise(n.id);onFocus(n);};
+    const title=doc.createElementNS(SVG,'title');title.textContent=paperTip(n);g.appendChild(title);
+    const activate=()=>{focusID=n.id;state.graphFocus=n.id;labelled=placeAll();seatAll();for(const[key,m]of marks)paintPaper(m.circle,m.n,{tones,centre:key===centreID,picked:key===n.id&&key!==centreID});if(n.id===centreID)marks.get(n.id).circle.setAttribute('stroke-width',2.6);emphasise(n.id);onFocus(n);};
     activators.set(n.id,activate);g.addEventListener('click',activate);
+    // A double click goes to the paper itself: the item in Zotero, or OpenAlex for one not on the shelf.
+    g.addEventListener('dblclick',()=>run(()=>ghost?(n.openalex&&runtime.Z.launchURL?.(`https://openalex.org/${n.openalex}`)):library.openItem(n.id)));
     g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});
     g.addEventListener('mouseenter',()=>emphasise(n.id));g.addEventListener('mouseleave',()=>emphasise(null));
     g.addEventListener('focus',()=>emphasise(n.id));g.addEventListener('blur',()=>emphasise(null));
-    marks.set(n.id,{g,label,circle,n});group.appendChild(g);
+    marks.set(n.id,{g,label,plate,circle,n});group.appendChild(g);
    }
-   const zoomBar=node('div',null,mapFrame,{class:'sc-graph-zoom',role:'group','aria-label':T('확대·축소')});let zoom=1;
-   const frame=()=>{const w=W/zoom,h=H/zoom;svg.setAttribute('viewBox',`${(W-w)/2} ${(H-h)/2} ${w} ${h}`);};
-   viewButton('확대',()=>{zoom=Math.min(3,zoom+.25);frame();},zoomBar);viewButton('축소',()=>{zoom=Math.max(1,zoom-.25);frame();},zoomBar);
+   seatAll();
+   emphasise(null);
+   graphKit({svg,frame:mapFrame,W,H,key:key||label,marks,lines,label,filters:PAPER_FILTERS(),start:focusID||centreID,onClear:()=>emphasise(null),legend:lastLegend,journalChip:true});
    return {svg,pos,select:id=>{const a=activators.get(id);if(a)a();return !!a;}};
   }
   // A paper row in the side lists: the title focuses it on the map, the buttons act on it.
@@ -2464,7 +2732,7 @@
    const laid=runtime.graphTools.egoLayout(g,{width:W,height:H});
    statTiles(body,[{value:fmtN(g.counts.cites),label:'이 논문이 인용',title:'이 논문의 참고문헌 수'},{value:fmtN(g.counts.citedBy),label:'이 논문을 인용',title:'내 문헌과, 가져온 외부 논문 중 이 논문을 인용한 수'},
     {value:fmtN(g.counts.library),label:'내 문헌',title:'이 논문과 직접 연결된 내 서재의 논문'},g.counts.near?{value:fmtN(g.counts.near),label:'2단계'}:null],{label:'논문 하나 그래프 요약'});
-   drawJournalLegend(g.nodes.filter(n=>n.kind!=='ghost'),body);
+   drawJournalLegend(g.nodes.filter(n=>n.kind!=='ghost'),body,{outside:'circle'});
    const info=node('div',null,body,{class:'sc-graph-info','aria-live':'polite'});info.hidden=true;
    const lists=node('div',null,body,{class:'sc-scope-lists'});
    let mapApi=null;
@@ -2476,8 +2744,8 @@
     markScopeRow(lists,n.id);
     if(!quiet&&n.kind!=='ghost')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}
    };
-   mapApi=drawScopeMap(laid,{W,H,label:'논문 하나 인용 관계 그래프',centreID:id,onFocus:show,before:info});
-   body.insertBefore(node('p','실선 화살표는 인용(인용하는 논문 → 인용되는 논문) · 속이 빈 원은 내 서재에 없는 논문 · 왼쪽은 이 논문이 인용한 논문, 오른쪽은 이 논문을 인용한 논문',null,{class:'sc-muted sc-graph-caption'}),info);
+   mapApi=drawScopeMap(laid,{W,H,label:'논문 하나 인용 관계 그래프',centreID:id,onFocus:show,before:info,key:'paper:'+id});
+   body.insertBefore(node('p',T('실선 화살표는 인용(인용하는 논문 → 인용되는 논문) · 왼쪽은 이 논문이 인용한 논문, 오른쪽은 이 논문을 인용한 논문')+' · '+T(GRAPH_HINT),null,{class:'sc-muted sc-graph-caption'}),info);
    const groups=[['이 논문이 인용',g.nodes.filter(n=>n.role==='cites'||n.role==='both'),g.counts.cites],['이 논문을 인용',g.nodes.filter(n=>n.role==='citedBy'||n.role==='both'),g.counts.citedBy],
     ['내 문헌',g.nodes.filter(n=>n.kind==='paper'),g.counts.library+g.counts.near]];
    for(const[label,nodes,total]of groups){
@@ -2547,7 +2815,7 @@
    const clusters=tools.clusterCount([...built.nodes,...joined,...ghostNodes].map(n=>n.id),[...built.edges,...ghostEdges])/* every drawn node, outside works included: two papers meeting at one are one group */;
    statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.truncated?built.counted.total:built.edges.length),label:built.truncated?T(`연결 · 일부만 그림 (${fmtN(built.counted.drawn)}개 표시)`):'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
     {value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'},{value:fmtN(stillIsolated.length),label:'연결 없는 논문',title:'이 컬렉션 안에서 어느 논문과도 이어지지 않은 논문'}],{label:'컬렉션 그래프 요약'});
-   drawJournalLegend(built.nodes,body);
+   drawJournalLegend(built.nodes,body,{outside:'circle'});
    const info=node('div',null,body,{class:'sc-graph-info','aria-live':'polite'});info.hidden=true;
    const lists=node('div',null,body,{class:'sc-scope-lists'});
    let mapApi=null;
@@ -2555,8 +2823,8 @@
    const show=(n,quiet)=>{info.hidden=false;info.replaceChildren();scopeRow(info,n,{focus,recentre:null});markScopeRow(lists,n.id);if(!quiet&&n.kind!=='ghost')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
    if(!laid.nodes.length){if(withRefs)node('p','이 컬렉션 안에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다.',body,{class:'sc-muted'});}
    else{
-    mapApi=drawScopeMap(laid,{W,H,label:'컬렉션 인용 관계 그래프',centreID:null,onFocus:show,before:info});
-    body.insertBefore(node('p','실선 화살표는 인용 · 점선은 공통 참고문헌 · 속이 빈 원은 이 컬렉션 밖의 논문(컬렉션 논문 여러 편이 인용) · 색은 출판사',null,{class:'sc-muted sc-graph-caption'}),info);
+    mapApi=drawScopeMap(laid,{W,H,label:'컬렉션 인용 관계 그래프',centreID:null,onFocus:show,before:info,key:'collection:'+chosen.id});
+    body.insertBefore(node('p',T('실선 화살표는 인용, 점선은 공통 참고문헌 · 속이 빈 원은 이 컬렉션 밖에서 컬렉션 논문 여러 편이 인용한 논문')+' · '+T(GRAPH_HINT),null,{class:'sc-muted sc-graph-caption'}),info);
    }
    // The papers the rest of the collection stands on.
    const cited=new Map();for(const e of direct)cited.set(e.target,(cited.get(e.target)||0)+1);
@@ -2742,12 +3010,10 @@
    const svg=graphCanvas(W,H,graph.nodes.length,'인용 관계 그래프');
    // The map sits in a frame of its own so the zoom buttons can lie on it, top right, and never meet the footer.
    const mapFrame=node('div',null,body,{class:'sc-graph-frame'});mapFrame.appendChild(svg);
-   const defs=doc.createElementNS(SVG,'defs');
-   const marker=doc.createElementNS(SVG,'marker');
-   for(const[k,v]of Object.entries({id:'sc-arrow',viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'5',markerHeight:'5',orient:'auto-start-reverse'}))marker.setAttribute(k,v);
-   const head=doc.createElementNS(SVG,'path');head.setAttribute('d','M0 0 L8 4 L0 8 z');head.setAttribute('fill','var(--sc-graph-line)');
-   marker.appendChild(head);defs.appendChild(marker);svg.appendChild(defs);
+   arrowDefs(svg);
    const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
+   // Journal colour for the journals the legend names; every other paper is the neutral node.
+   const tones=graphTones(graph.nodes.filter(n=>n.kind==='paper'));
    const positions=new Map(graph.nodes.map(n=>[n.id,n]));
    const neighbours=new Map(graph.nodes.map(n=>[n.id,new Set()]));
    const lines=[];
@@ -2762,15 +3028,17 @@
     // actually shows.
     let x2=c.x,y2=c.y;
     if(cited){
-     const dx=c.x-a.x,dy=c.y-a.y,dist=Math.hypot(dx,dy)||1,pull=(c.r||6)+0.5;
+     const dx=c.x-a.x,dy=c.y-a.y,dist=Math.hypot(dx,dy)||1,pull=(c.r||6)+1;
      x2=c.x-dx/dist*pull;y2=c.y-dy/dist*pull;
     }
     for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2,y2}))line.setAttribute(k,v);
     line.setAttribute('stroke','var(--sc-graph-line)');
     // A stated citation is solid and carries an arrow; a shared-reading thread
     // is faint and has no direction, because it is an inference, not a fact.
-    line.setAttribute('stroke-width',cited?1.4:Math.min(2.2,0.5+e.weight*4));
-    line.setAttribute('stroke-opacity',cited?0.75:Math.min(0.5,0.12+e.weight));
+    // Thin and light at rest: the lines are the texture, the papers are the subject.
+    line.setAttribute('stroke-width',cited?1.2:Math.min(1.8,0.6+e.weight*2.5));
+    line.dataset.base=String(cited?0.5:Math.min(0.32,0.1+e.weight));
+    line.setAttribute('stroke-opacity',line.dataset.base);
     if(cited)line.setAttribute('marker-end','url(#sc-arrow)');
     else line.setAttribute('stroke-dasharray','2 3');
     line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);
@@ -2798,23 +3066,16 @@
       most LABEL_LIMIT are shown; the chosen paper is placed first so it never loses its words. The
       boxes are estimated generously (14px line, 4px each side) because real glyph widths vary. */
    const LABEL_LIMIT=32;
-   const placeAll=()=>small
-    ?new Set(graph.nodes.map(n=>n.id))
-    :graphTools.placeLabels(graph.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:LABEL_LIMIT,first:state.selected,avoidDots:true});
+   const placeAll=()=>placeGraphLabels(graph.nodes,{W,H,first:state.selected,edges:graph.edges,limit:small?graph.nodes.length:LABEL_LIMIT});
    let labelled=placeAll();
    const setLabel=(m,on)=>{for(const el of [m.label,m.backdrop]){if(!el)continue;if(on)el.removeAttribute('display');else el.setAttribute('display','none');}};
    // Small enough that every label stays; placeLabelSides picks whichever of
    // the four sides around a node collides least, instead of always sitting
    // just right of it -- exactly where an edge to a neighbour usually runs.
-   const sides=small&&typeof graphTools.placeLabelSides==='function'
-    ?graphTools.placeLabelSides(graph.nodes,{width:W,height:H,edges:graph.edges})
-    :null;
    for(const n of graph.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
-    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label));
-    const id=n.venue?identity.identify(n.venue):null;
-    const tone=id?identity.colours(id,{dark:darkScheme()}):null;
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label));g.setAttribute('data-id',n.id);
     /* Size is how central the paper is here, not how famous it is anywhere,
        and the very value layout() already settled the picture around --
        recomputing it here from citations, as before, could disagree with the
@@ -2827,18 +3088,11 @@
      // never mistaken for something already on the shelf.
      for(const[k,v]of Object.entries({x:-r,y:-r,width:r*2,height:r*2,rx:2}))circle.setAttribute(k,v);
     } else circle.setAttribute('r',r);
-    circle.setAttribute('fill',external?'var(--sc-bg)':state.selected.has(n.id)?'var(--sc-lime)':(tone?tone.fill:'var(--sc-fill)'));
-    circle.dataset.fill=tone?'journal':'plain';
-    circle.setAttribute('stroke',external?'var(--sc-external)':(tone?tone.ink:'var(--sc-muted)'));
-    circle.setAttribute('stroke-width',state.selected.has(n.id)?2.4:1);
-    if(external)circle.setAttribute('stroke-dasharray','2 2');
+    paintPaper(circle,n,{tones,picked:state.selected.has(n.id)});
     g.appendChild(circle);
     // A label on every node at this density is a grey smear, so only the papers
     // worth reading first carry one: the most cited and the best connected.
     const label=doc.createElementNS(SVG,'text');
-    const side=sides&&sides.get(n.id);
-    label.setAttribute('x',side?side.dx:r+4);label.setAttribute('y',side?side.dy:'3.5');
-    if(side&&side.anchor!=='start')label.setAttribute('text-anchor',side.anchor);
     label.setAttribute('class','sc-graph-label');
     label.textContent=n.labelText;
     if(n.kind==='external')label.dataset.kind='external';
@@ -2849,13 +3103,11 @@
     // forty of them piled up in the middle is worse than showing none.
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');
-    title.textContent=`${plain(n.label)}\n`+[n.venue,n.year,
-     n.kind==='external'?T('내 라이브러리에 없음'):null,
-     T(`인용 ${n.citations}`),n.references?T(`참고문헌 ${n.references}`):null,T(`연결 ${n.degree}`),
-     n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null].filter(Boolean).join(' · ');
+    title.textContent=paperTip(n,[n.references?T(`참고문헌 ${n.references}`):null,T(`연결 ${n.degree}`),
+     n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null]);
     g.appendChild(title);
     // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
-    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks){m.circle.setAttribute('stroke-width',key===n.id?2.4:1);if(m.circle.tagName==='circle'){const node0=positions.get(key);const idv=node0&&node0.venue?identity.identify(node0.venue):null;const tn=idv?identity.colours(idv,{dark:darkScheme()}):null;m.circle.setAttribute('fill',key===n.id?'var(--sc-lime)':(tn?tn.fill:'var(--sc-fill)'));}}if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
+    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();for(const[key,m]of marks)seatLabel(m,labelled.get(key));focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks)paintPaper(m.circle,m.n,{tones,picked:key===n.id});if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
      ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
@@ -2867,25 +3119,16 @@
     g.addEventListener('mouseleave',()=>focusNode(null));
     g.addEventListener('focus',()=>focusNode(n.id));
     g.addEventListener('blur',()=>focusNode(null));
-    marks.set(n.id,{g,label,backdrop,circle,n});
+    marks.set(n.id,{g,label,backdrop,plate:backdrop,circle,n});
     group.appendChild(g);
    }
-   fitBackdrops();
    /* The backdrop is sized from the words it sits under: the browser's own measure when it has one, an estimate (Korean is wider) when it has not. */
-   function fitBackdrops(){
-    for(const m of marks.values()){
-     const t=m.label;let w=0;
-     try{w=t.getComputedTextLength?.()||0;}catch(_){w=0;}
-     if(!w)for(const ch of String(t.textContent))w+=/[\u1100-\u11ff\u3000-\u9fff\uac00-\ud7af]/.test(ch)?11:6;
-     const x=Number(t.getAttribute('x'))||0,y=Number(t.getAttribute('y'))||0,anchor=t.getAttribute('text-anchor')||'start';
-     const left=anchor==='end'?x-w:anchor==='middle'?x-w/2:x;
-     for(const[k,v]of Object.entries({x:left-4,y:y-10.5,width:w+8,height:15}))m.backdrop.setAttribute(k,v);
-    }
-   }
+   for(const[key,m]of marks)seatLabel(m,labelled.get(key));
    function focusNode(id){
     for(const line of lines){
      const on=!id||line.getAttribute('data-a')===id||line.getAttribute('data-b')===id;
-     line.setAttribute('stroke-opacity',on?(line.getAttribute('marker-end')?0.85:0.42):0.05);
+     // A faded line fades whole, arrowhead and all: stroke-opacity alone left the heads standing.
+     line.setAttribute('stroke-opacity',id&&on?(line.getAttribute('marker-end')?0.85:0.42):line.dataset.base);line.setAttribute('opacity',id&&!on?0.1:1);
     }
     for(const[key,mark]of marks){
      const near=!id||key===id||neighbours.get(id).has(key);
@@ -2932,14 +3175,10 @@
     }
    }
    if(state.graphInfoID&&positions.has(state.graphInfoID))showInfo(positions.get(state.graphInfoID));
-   const zoomBar=node('div',null,mapFrame,{class:'sc-graph-zoom',role:'group','aria-label':T('확대·축소')});let zoom=1;
-   // Anchored at 0 0, zooming in pushed half the nodes out of frame with no
-   // way to pan back; keep the frame centred on the drawing instead.
-   const frame=()=>{const w=W/zoom,h=H/zoom;svg.setAttribute('viewBox',`${(W-w)/2} ${(H-h)/2} ${w} ${h}`);};
-   viewButton('확대',()=>{zoom=Math.min(3,zoom+.25);frame();},zoomBar);
-   // Zoom goes in, not out past the fitted drawing: below 1 it shrank 11px labels to 5px.
-   viewButton('축소',()=>{zoom=Math.max(1,zoom-.25);frame();},zoomBar);
-   node('p','실선 화살표는 실제 인용 · 점선은 공통 참고문헌 · 네모는 내가 갖고 있지 않은 논문 · 크기는 이 라이브러리 안에서의 중심성 · 색은 출판사',body,{class:'sc-muted sc-graph-caption'});
+   // Zoom keeps the point under the pointer (or the middle, from the buttons) and never goes out past the fitted drawing.
+   graphKit({svg,frame:mapFrame,W,H,key:'citations:'+(neighbourMode?'around:'+centreID:'scope'),marks,lines,label:'인용 관계 그래프',filters:PAPER_FILTERS(),
+    start:[...state.selected].find(id=>marks.has(id)),onClear:()=>focusNode(null),legend:lastLegend,journalChip:true});
+   node('p',T('실선 화살표는 실제 인용, 점선은 공통 참고문헌 · 크기는 이 라이브러리 안에서의 중심성')+' · '+T(GRAPH_HINT),body,{class:'sc-muted sc-graph-caption'});
    // The one thing a citation map tells you that reading your own shelf cannot.
    if(graph.missing.length){
     sectionHead('내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문',graph.missing.length);
@@ -3024,7 +3263,7 @@
    const degree=new Map();
    for(const e of built.edges){degree.set(e.source,(degree.get(e.source)||0)+1);degree.set(e.target,(degree.get(e.target)||0)+1);}
    for(const n of built.nodes)n.degree=degree.get(n.id)||0;
-   drawJournalLegend(built.nodes,body);
+   drawJournalLegend(built.nodes,body,{shapes:false});
    const top=Math.max(1,...built.nodes.map(n=>n.degree));
    for(const n of built.nodes)n.rank=n.degree/top;
    const laid=tools?tools.layout(built,{width:W,height:H}):(()=>{
@@ -3034,49 +3273,63 @@
    node('p',`문헌 ${laid.nodes.length} · 연결 ${built.edges.length}`,body,{class:'sc-muted'});
    const svg=graphCanvas(W,H,laid.nodes.length,'문헌 관계 그래프');
    const mapFrame=node('div',null,body,{class:'sc-graph-frame'});mapFrame.appendChild(svg);
-   const group=doc.createElementNS(SVG,'g');svg.appendChild(group);
-   const pos=new Map(laid.nodes.map(n=>[n.id,n]));
+   const lineLayer=doc.createElementNS(SVG,'g'),group=doc.createElementNS(SVG,'g');svg.appendChild(lineLayer);svg.appendChild(group);
+   const pos=new Map(laid.nodes.map(n=>[n.id,n])),near=new Map(laid.nodes.map(n=>[n.id,new Set()])),lines=[];
+   // The same paper look as the citation map: journal colour for the journals the legend names, the neutral node otherwise.
+   const tones=graphTones(built.nodes);
    for(const e of built.edges){
     const a=pos.get(e.source),c=pos.get(e.target);if(!a||!c)continue;
+    near.get(a.id)?.add(c.id);near.get(c.id)?.add(a.id);
     const line=doc.createElementNS(SVG,'line');
     for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:c.x,y2:c.y}))line.setAttribute(k,v);
-    line.setAttribute('stroke','var(--sc-graph-line)');
-    line.setAttribute('stroke-opacity','0.4');
-    group.appendChild(line);
+    line.setAttribute('stroke','var(--sc-graph-line)');line.setAttribute('stroke-width','1');
+    line.setAttribute('stroke-opacity','0.3');line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);
+    lines.push(line);lineLayer.appendChild(line);
    }
-   for(const n of laid.nodes)n.labelText=String(n.label).slice(0,34);
-   const labelled=tools?tools.placeLabels(laid.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:32,first:state.selected,avoidDots:true}):new Set(laid.nodes.map(n=>n.id));
+   for(const n of laid.nodes){
+    const item=itemOf(n.id);
+    if(item){n.year=Number(item.year)||null;n.citations=Number(item.citations)||0;n.venue=item.venue||n.venue;}
+    n.labelText=[shortGraphTitle(n.label),n.year].filter(Boolean).join(' · ')||T('제목 없음');
+   }
+   const placeAll=()=>placeGraphLabels(laid.nodes,{W,H,first:state.selected,edges:built.edges});
+   let labelled=placeAll();
+   const marks=new Map();
+   const seatAll=()=>{for(const[key,m]of marks)seatLabel(m,labelled.get(key));};
+   const setLabel=(m,show)=>{for(const el of [m.label,m.plate]){if(show)el.removeAttribute('display');else el.setAttribute('display','none');}};
+   const emphasise=on=>{
+    for(const line of lines){const hit=!on||line.getAttribute('data-a')===on||line.getAttribute('data-b')===on;line.setAttribute('stroke-opacity',on?(hit?0.8:0.05):0.3);}
+    for(const[key,m]of marks){const close=!on||key===on||near.get(on)?.has(key);m.circle.setAttribute('opacity',close?1:0.22);
+     setLabel(m,on?(key===on||(close&&labelled.has(key))):labelled.has(key));}
+   };
    for(const n of laid.nodes){
     const g=doc.createElementNS(SVG,'g');
     g.setAttribute('transform',`translate(${n.x} ${n.y})`);
-    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label));
-    const circle=doc.createElementNS(SVG,'circle');
-    circle.setAttribute('r',n.r||5);
-    circle.setAttribute('fill',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-fill)');
-    circle.setAttribute('stroke',state.selected.has(n.id)?'var(--sc-accent)':'var(--sc-muted)');
+    g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',plain(n.label));g.setAttribute('data-id',n.id);
+    const r=n.r||5;
+    const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',r);
+    paintPaper(circle,n,{tones,picked:state.selected.has(n.id)});
     g.appendChild(circle);
+    const plate=doc.createElementNS(SVG,'rect');plate.setAttribute('class','sc-graph-label-bg');plate.setAttribute('rx','6');g.appendChild(plate);
     const label=doc.createElementNS(SVG,'text');
-    label.setAttribute('x',(n.r||5)+4);label.setAttribute('y','3.5');
+    label.setAttribute('x',r+4);label.setAttribute('y','3.5');
     label.setAttribute('class','sc-graph-label');
     label.textContent=n.labelText;
-    if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('display','none');
-    g.addEventListener('mouseenter',()=>label.removeAttribute('display'));g.addEventListener('mouseleave',()=>{if(!(labelled.has(n.id)||state.selected.has(n.id)))label.setAttribute('display','none');});
     g.appendChild(label);
-    const title=doc.createElementNS(SVG,'title');title.textContent=`${n.label}\n`+T(`연결 ${n.degree}`);g.appendChild(title);
-    const activate=()=>{state.selected=new Set([n.id]);updateSelectionUI();message(n.label);for(const other of group.querySelectorAll('circle[data-picked]')){other.removeAttribute('data-picked');other.setAttribute('fill','var(--sc-fill)');other.setAttribute('stroke','var(--sc-muted)');}circle.setAttribute('data-picked','1');circle.setAttribute('fill','var(--sc-accent)');circle.setAttribute('stroke','var(--sc-accent)');};
+    const title=doc.createElementNS(SVG,'title');title.textContent=paperTip(n,[T(`연결 ${n.degree}`)]);g.appendChild(title);
+    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();seatAll();updateSelectionUI();message(n.label);for(const[key,m]of marks)paintPaper(m.circle,m.n,{tones,picked:key===n.id});emphasise(n.id);try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
     g.addEventListener('click',activate);
     g.addEventListener('dblclick',()=>run(()=>library.openItem(n.id)));
     g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});
+    g.addEventListener('mouseenter',()=>emphasise(n.id));g.addEventListener('mouseleave',()=>emphasise(null));
+    g.addEventListener('focus',()=>emphasise(n.id));g.addEventListener('blur',()=>emphasise(null));
+    marks.set(n.id,{g,label,plate,circle,n});
     group.appendChild(g);
    }
-   let zoom=1;
-   /* Zooming keeps the middle of the graph, not its top-left corner. Anchored
-      at 0 0, two presses put half the nodes outside the frame with no way to
-      pan back to them. */
-   const frame=()=>{const w=W/zoom,h=H/zoom;svg.setAttribute('viewBox',`${(W-w)/2} ${(H-h)/2} ${w} ${h}`);};
-   const zoomBar=node('div',null,mapFrame,{class:'sc-graph-zoom',role:'group','aria-label':T('확대·축소')});
-   viewButton('확대',()=>{zoom=Math.min(3,zoom+.25);frame();},zoomBar);
-   viewButton('축소',()=>{zoom=Math.max(1,zoom-.25);frame();},zoomBar);
+   seatAll();
+   emphasise(null);
+   graphKit({svg,frame:mapFrame,W,H,key:'related:'+state.graphMode+':'+state.graphKind,marks,lines,label:'문헌 관계 그래프',filters:PAPER_FILTERS(),
+    start:[...state.selected].find(id=>marks.has(id)),onClear:()=>emphasise(null),legend:lastLegend,journalChip:true});
+   node('p',T('선은 같은 태그·저자·관련 문헌으로 이어진 논문')+' · '+T(GRAPH_HINT),body,{class:'sc-muted sc-graph-caption'});
    if((scopeItems||rows()).length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다. 검색으로 범위를 좁히세요.`,body,{class:'sc-muted'});
   }
   function drawTags(){
@@ -5126,7 +5379,7 @@
    const boardName=node('input',null,b,{'aria-label':'현재 보드 이름'});boardName.value=board.name;boardName.dataset.draftKey=JSON.stringify(['board-name',board.id]);
    button('보드 이름 변경',async()=>{const submitted=boardName.value;model.renameBoard(board,submitted);runtime.dirty=true;await runtime.flush();finishDraft(boardName,submitted);render();},b);
    button('카드 연결 해제',async()=>{const ids=[...state.cardIDs];if(ids.length!==2)throw new Error('연결을 해제할 두 카드를 선택하세요.');model.unlinkCards(board,...ids);await save();},b);
-   const canvas=node('div',null,body,{class:'sc-canvas'});const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('class','sc-canvas-lines');svg.setAttribute('width',String(Math.max(2000,...board.nodes.map(n=>n.x+300))));svg.setAttribute('height',String(Math.max(2000,...board.nodes.map(n=>n.y+300))));canvas.appendChild(svg);for(const e of board.edges){const a=board.nodes.find(n=>n.id===e.source),z=board.nodes.find(n=>n.id===e.target);if(!a||!z)continue;const line=doc.createElementNS(SVG,'line');for(const[k,v]of Object.entries({x1:a.x+90,y1:a.y+40,x2:z.x+90,y2:z.y+40,stroke:'var(--sc-graph-line)'}))line.setAttribute(k,v);svg.appendChild(line);}
+   const canvas=node('div',null,body,{class:'sc-canvas'});const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('class','sc-canvas-lines');svg.setAttribute('width',String(Math.max(2000,...board.nodes.map(n=>n.x+300))));svg.setAttribute('height',String(Math.max(2000,...board.nodes.map(n=>n.y+300))));canvas.appendChild(svg);for(const e of board.edges){const a=board.nodes.find(n=>n.id===e.source),z=board.nodes.find(n=>n.id===e.target);if(!a||!z)continue;const line=doc.createElementNS(SVG,'line');/* From the middle of one card's head to the other's, in the map's line ink, round-capped. */for(const[k,v]of Object.entries({x1:a.x+97,y1:a.y+40,x2:z.x+97,y2:z.y+40,stroke:'var(--sc-graph-line)','stroke-width':'1.5','stroke-linecap':'round'}))line.setAttribute(k,v);svg.appendChild(line);}
    for(const n of board.nodes){const c=card(Dor(n.label,''),null,canvas);c.classList.add('sc-canvas-card');c.dataset.cardId=n.id;c.style.left=n.x+'px';c.style.top=n.y+'px';c.style.background=/^#[0-9a-f]{6}$/i.test(n.color)?n.color:'#ffffff';check('카드 선택',state.cardIDs.has(n.id),on=>on?state.cardIDs.add(n.id):state.cardIDs.delete(n.id),c);const memo=node('textarea',null,c,{'aria-label':'카드 메모'});memo.dataset.draftKey=JSON.stringify(['board-note',board.id,n.id]);memo.value=n.note;memo.addEventListener('change',()=>run(async()=>{n.note=memo.value.slice(0,50000);runtime.dirty=true;await runtime.flush();}));if(n.itemID)button('문헌 열기',()=>library.openItem(n.itemID),c,{'data-opens':'window'});
     const editor=node('details',null,c);node('summary','카드 편집',editor);
     const title=node('input',null,editor,{'aria-label':'카드 제목'});title.value=n.label;title.dataset.draftKey=JSON.stringify(['board-label',board.id,n.id]);
@@ -5396,7 +5649,8 @@
    const section=node('section',null,parent,{class:'sc-compare-insight','aria-label':'AI 논지·논쟁 분석'});
    sectionHead('주장·논리 흐름·논쟁 여지',null,section);
    const b=bar(section);
-   if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣으면 켜집니다.',section,{class:'sc-muted'});
+   // The account bridge on this Mac counts as set up, as does an address in settings.
+   {const ai=runtime.assist?.status?.();if(ai?.available)node('p',ai.label?F('AI 연결: {0}',ai.label):T('AI 연결됨'),section,{class:'sc-muted'});else if(!String(runtime.pref('aiEndpoint','')||'').trim())node('p','번역·AI 설정에 AI 서버 주소와 모델을 넣거나, 이 Mac에 계정 연결 프로그램을 설치하면 켜집니다.',section,{class:'sc-muted'});}
    node('span','언어',b,{class:'sc-muted'});
    const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});
    const ready=chosen.length>=2&&chosen.length<=6&&values.length<=6;
@@ -5523,7 +5777,7 @@
       if(c.deepCount)node('span',`${mix.done}/${c.deepCount}`,row,{class:'sc-collection-ratio',title:T(`완료 ${mix.done}편 / 전체 ${c.deepCount}편`)});
       if(mix.known){
        fill.classList.add('sc-collection-mix');
-       for(const key of ['done','reading','unread'])if(mix[key])node('span',null,fill,{class:'sc-overview-'+key}).style.flexGrow=String(mix[key]);
+       for(const[key,said]of [['done','완료'],['reading','읽는 중'],['unread','안 읽음']])if(mix[key])node('span',null,fill,{class:'sc-overview-'+key,title:`${T(said)} ${fmtN(mix[key])}`}).style.flexGrow=String(mix[key]);
        const mixText=node('span',null,nameLine,{class:'sc-collection-mixtext'});
        const said=[mix.done&&T(`완료 ${mix.done}`),mix.reading&&T(`읽는 중 ${mix.reading}`)].filter(Boolean);
        if(said.length)mixText.appendChild(doc.createTextNode(said.join(' · ')));
@@ -6537,16 +6791,28 @@
     const defs=doc.createElementNS(SVG,'defs');svg.appendChild(defs);
     const lineLayer=doc.createElementNS(SVG,'g'),nodeLayer=doc.createElementNS(SVG,'g');svg.appendChild(lineLayer);svg.appendChild(nodeLayer);
     const at=new Map([[laid.centre.id,laid.centre],...laid.nodes.map(n=>[n.id,n])]);
+    const lines=[];
     const line=(a,b,width,opacity,cls,title)=>{
      const el=doc.createElementNS(SVG,'line');
      for(const [k,v] of Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y}))el.setAttribute(k,v);
      el.setAttribute('stroke','var(--sc-graph-line)');el.setAttribute('stroke-width',String(width));el.setAttribute('stroke-opacity',String(opacity));el.setAttribute('class',cls);
+     el.setAttribute('stroke-linecap','round');el.setAttribute('data-a',a.id);el.setAttribute('data-b',b.id);el.dataset.base=String(opacity);
      if(title){const t=doc.createElementNS(SVG,'title');t.textContent=title;el.appendChild(t);}
-     lineLayer.appendChild(el);
+     lineLayer.appendChild(el);lines.push(el);
     };
     // Second ring, drawn lightly: co-authors who also share papers with each other.
-    for(const l of graph.links){const a=at.get(l.source),b=at.get(l.target);if(a&&b)line(a,b,1,.22,'sc-ego-link');}
-    for(const e of graph.edges){const b=at.get(e.target);if(b)line(laid.centre,b,Math.min(6,1+e.weight*1.1),.6,'sc-ego-edge',`${D(myName).text} · ${D(b.name).text} · ${T(`함께 쓴 논문 ${e.weight}편`)}`);}
+    for(const l of graph.links){const a=at.get(l.source),b=at.get(l.target);if(a&&b)line(a,b,1,.18,'sc-ego-link');}
+    // Weight is the papers written together: a few pixels at most, never a slab.
+    for(const e of graph.edges){const b=at.get(e.target);if(b)line(laid.centre,b,Math.min(4,0.8+e.weight*0.8),.45,'sc-ego-edge',`${D(myName).text} · ${D(b.name).text} · ${T(`함께 쓴 논문 ${e.weight}편`)}`);}
+    const near=new Map([...at.keys()].map(id=>[id,new Set()]));
+    for(const el of lines){const a=el.getAttribute('data-a'),b=el.getAttribute('data-b');near.get(a)?.add(b);near.get(b)?.add(a);}
+    // Which full names show and where: placed round each circle where they miss every other name and circle.
+    const everyone=[laid.centre,...laid.nodes].map(n=>Object.assign(n,{r:n.rad}));
+    const shortName=n=>D(n.name.length>26?n.name.slice(0,25)+'…':n.name).text;
+    const named=new Set([laid.centre.id,...laid.nodes.filter(n=>n.full||n.followed).map(n=>n.id)]);
+    const places=runtime.graphTools?.placeLabelsAround?runtime.graphTools.placeLabelsAround(everyone,{width:W,height:HT,lineHeight:14,pad:2,gap:5,limit:EGO_MAX+1,
+     first:new Set([laid.centre.id,...laid.nodes.filter(n=>n.followed).map(n=>n.id)]),text:n=>named.has(n.id)?shortName(n):'',
+     edges:lines.map(el=>({source:el.getAttribute('data-a'),target:el.getAttribute('data-b')}))}):null;
     const portrait=(n,id)=>{
      const found=runtime.portraitOf?.(id);
      if(!found?.url)return;
@@ -6557,26 +6823,37 @@
      img.addEventListener('error',()=>img.remove());
      return img;
     };
+    const marks=new Map();
+    const hover=id=>{
+     for(const el of lines){const on=!id||el.getAttribute('data-a')===id||el.getAttribute('data-b')===id;el.setAttribute('stroke-opacity',!id?el.dataset.base:on?.9:.06);}
+     for(const[key,m]of marks){const close=!id||key===id||near.get(id)?.has(key);m.g.setAttribute('opacity',close?1:.32);}
+    };
     const mark=(n,{centre})=>{
      const gEl=doc.createElementNS(SVG,'g');
      gEl.setAttribute('transform',`translate(${n.x} ${n.y})`);gEl.setAttribute('data-ego',n.id);
+     if(centre)gEl.setAttribute('data-state','centre');
      const circle=doc.createElementNS(SVG,'circle');circle.setAttribute('r',n.rad);circle.setAttribute('class','sc-author-dot');gEl.appendChild(circle);
      const letters=doc.createElementNS(SVG,'text');letters.setAttribute('class','sc-author-initials');letters.setAttribute('text-anchor','middle');letters.setAttribute('y','4');
      letters.textContent=D(centre?initials(n.name):n.followed||!n.full?n.initials:n.initials).text;gEl.appendChild(letters);
      const img=portrait(n,centre?person.id:n.followed?.id||n.authorID);
      if(img){img.addEventListener('load',()=>letters.setAttribute('display','none'));gEl.appendChild(img);}
      const ring=doc.createElementNS(SVG,'circle');ring.setAttribute('r',n.rad);ring.setAttribute('class','sc-author-ring');gEl.appendChild(ring);
-     // A full name beside the circle, on the side facing away from the middle; the rest are initials with the name in their tooltip.
-     if(centre||n.full){
-      const text=doc.createElementNS(SVG,'text');text.setAttribute('class','sc-graph-label');text.setAttribute('data-name',n.name);
-      if(centre){text.setAttribute('text-anchor','middle');text.setAttribute('y',n.rad+15);}
-      else{text.setAttribute('text-anchor',n.side);text.setAttribute('x',n.side==='start'?n.rad+5:-(n.rad+5));text.setAttribute('y','4');}
-      text.textContent=D(n.name.length>26?n.name.slice(0,25)+'…':n.name).text;gEl.appendChild(text);
+     // A full name where it misses every other name and circle, on a plate; the rest are initials with the name in their tooltip.
+     const place=places?places.get(n.id):(centre||n.full)?{anchor:centre?'middle':n.side,dx:centre?0:n.side==='start'?n.rad+5:-(n.rad+5),dy:centre?n.rad+15:4}:null;
+     let text=null,plate=null;
+     if(place){
+      plate=doc.createElementNS(SVG,'rect');plate.setAttribute('class','sc-graph-label-bg');plate.setAttribute('rx','6');gEl.appendChild(plate);
+      text=doc.createElementNS(SVG,'text');text.setAttribute('class','sc-graph-label');text.setAttribute('data-name',n.name);
+      text.textContent=shortName(n);gEl.appendChild(text);
      }
      const title=doc.createElementNS(SVG,'title');
      title.textContent=centre?D(n.name).text:[D(n.name).text,T(`함께 쓴 논문 ${n.weight}편`),n.followed?T('관심 저자'):''].filter(Boolean).join(' · ');
      gEl.appendChild(title);
      gEl.setAttribute('aria-label',title.textContent);
+     const m={g:gEl,label:text,plate,n,search:n.name};
+     if(text)seatLabel(m,place);
+     marks.set(n.id,m);
+     gEl.addEventListener('mouseenter',()=>hover(n.id));gEl.addEventListener('mouseleave',()=>hover(null));
      return gEl;
     };
     nodeLayer.appendChild(mark(laid.centre,{centre:true}));
@@ -6592,9 +6869,11 @@
       gEl.setAttribute('role','button');gEl.setAttribute('tabindex','0');
       gEl.addEventListener('click',go);
       gEl.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
+      gEl.addEventListener('focus',()=>hover(n.id));gEl.addEventListener('blur',()=>hover(null));
      }
      nodeLayer.appendChild(gEl);
     }
+    graphKit({svg,frame,W,H:HT,key:'ego:'+person.id,marks,lines,label:T(`${myName} 공저 관계 그래프`),roving:false,onClear:()=>hover(null)});
     if(laid.omitted)node('p',T(`${laid.omitted}명은 그리지 않았습니다.`),g,{class:'sc-muted'});
    }
    /* 논문: everything this person has published, newest first, below what is new.
@@ -7332,7 +7611,8 @@
      const a=positions.get(e.source),b=positions.get(e.target);
      const line=doc.createElementNS(SVG,'line');
      for(const [k,v] of Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y}))line.setAttribute(k,v);
-     line.setAttribute('stroke','var(--sc-graph-line)');line.setAttribute('stroke-width',String(Math.min(6,1+e.weight*1.1)));
+     // Weight is papers written together; thin to a few pixels, never a slab.
+     line.setAttribute('stroke','var(--sc-graph-line)');line.setAttribute('stroke-width',String(Math.min(4,0.8+e.weight*0.8)));line.setAttribute('stroke-linecap','round');
      line.setAttribute('data-a',e.source);line.setAttribute('data-b',e.target);
      const title=doc.createElementNS(SVG,'title');title.textContent=`${a.person.name} · ${b.person.name} · ${T(`함께 쓴 논문 ${e.weight}편`)}`;line.appendChild(title);
      lineLayer.appendChild(line);lines.push(line);
@@ -7342,7 +7622,8 @@
     let labelled=new Set();
     const place=()=>{
      const first=focusID?[focusID,...near.get(focusID)]:null;
-     labelled=graphTools.placeLabels(laid.nodes,{width:W,height:H,lineHeight:14,pad:4,limit:Math.max(12,Math.min(40,laid.nodes.length)),first,avoidDots:true});
+     labelled=placeGraphLabels(laid.nodes,{W,H,first,edges,limit:Math.max(12,Math.min(40,laid.nodes.length))});
+     for(const[id,m]of marks)seatLabel(m,labelled.get(id));
     };
     const tabbable=()=>focusID&&marks.has(focusID)?focusID:order[0];
     for(const n of laid.nodes){
@@ -7367,32 +7648,34 @@
      const title=doc.createElementNS(SVG,'title');const f=facts.get(n.id);
      title.textContent=[n.person.name,f.lib?T(`서재 ${f.lib}편`):'',f.fresh?T(`새 논문 ${f.fresh}편`):'',n.degree?T(`공저 ${n.degree}명`):''].filter(Boolean).join(' · ');g.appendChild(title);
      g.addEventListener('click',()=>choose(state.authorFocus===n.id?'':n.id));
+     // Arrows walk to the nearest person that way (graphKit); Home and End go to the first and last.
      g.addEventListener('keydown',event=>{
-      const at=order.indexOf(n.id);
       const go=index=>{event.preventDefault();const id=order[(index+order.length)%order.length];marks.get(id)?.g.focus?.();};
       if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(state.authorFocus===n.id?'':n.id);}
-      else if(event.key==='ArrowRight'||event.key==='ArrowDown')go(at+1);
-      else if(event.key==='ArrowLeft'||event.key==='ArrowUp')go(at-1);
       else if(event.key==='Home')go(0);
       else if(event.key==='End')go(order.length-1);
      });
-     marks.set(n.id,{g,circle,label,backdrop,n});
+     // Hovering a person brings their co-authors forward, as on the paper maps; the picked person stays picked.
+     g.addEventListener('mouseenter',()=>hover(n.id));g.addEventListener('mouseleave',()=>hover(null));
+     marks.set(n.id,{g,circle,label,backdrop,plate:backdrop,n});
      nodeLayer.appendChild(g);
     }
     svg.addEventListener('keydown',event=>{if(event.key==='Escape'&&state.authorFocus){event.preventDefault();event.stopPropagation();choose('');marks.get(tabbable())?.g.focus?.();}});
-    // The backdrop is sized from the words under it, estimated when there is no layout to measure.
-    for(const m of marks.values()){
-     let w=0;try{w=m.label.getComputedTextLength?.()||0;}catch(_){w=0;}
-     if(!w)w=graphTools.textWidth?graphTools.textWidth(m.n.person.name):m.n.person.name.length*6.5;
-     for(const [k,v] of Object.entries({x:m.n.rad,y:-7,width:w+8,height:15}))m.backdrop.setAttribute(k,v);
+    // Hover: the person and their co-authors at full strength, everyone else faded, their names stepping aside.
+    function hover(id){
+     if(!id){paint(true);return;}
+     for(const line of lines){const on=line.getAttribute('data-a')===id||line.getAttribute('data-b')===id;line.setAttribute('stroke-opacity',on?.9:.06);}
+     for(const[key,m]of marks){const close=key===id||near.get(id)?.has(key);m.g.setAttribute('opacity',close?1:.3);
+      const show=key===id||(close&&labelled.has(key));for(const el of [m.label,m.backdrop]){if(show)el.removeAttribute('display');else el.setAttribute('display','none');}}
     }
+    graphKit({svg,frame,W,H,key:'authors',marks,lines,label:'관심 저자 공저 관계 그래프',roving:false,onClear:()=>choose('')});
     const summary=node('div',null,wrap,{class:'sc-author-graph-info','aria-live':'polite'});
-    const paint=()=>{
+    const paint=(quiet)=>{
      const picked=state.authorFocus&&marks.has(state.authorFocus)?state.authorFocus:'';
-     place();
+     if(!quiet)place();
      for(const line of lines){
       const on=!picked||line.getAttribute('data-a')===picked||line.getAttribute('data-b')===picked;
-      line.setAttribute('stroke-opacity',on?(picked?.9:.55):.08);
+      line.setAttribute('stroke-opacity',on?(picked?.9:.4):.08);
      }
      for(const [id,m] of marks){
       const related=!picked||id===picked||near.get(picked).has(id);
@@ -7402,6 +7685,7 @@
       const showLabel=labelled.has(id)&&(!picked||related);
       for(const el of [m.label,m.backdrop]){if(showLabel)el.removeAttribute('display');else el.setAttribute('display','none');}
      }
+     if(quiet===true)return;
      // The summary: who, where, what is on the shelf, and the people they write with most.
      summary.replaceChildren();summary.hidden=!picked;
      if(!picked)return;
@@ -7983,22 +8267,24 @@
      colour, and a reader new to it has no way to know that lilac is Nature
      and coral is Cell; the six commonest journals in the map are named, each
      in its own mark, with how many nodes it accounts for. */
-  function drawJournalLegend(nodes,parent){
+  function drawJournalLegend(nodes,parent,{outside='square',shapes=true}={}){
+   lastLegend=null;
    const identity=runtime.journalIdentity;
    if(!identity?.identify||!identity.colours)return;
-   const counts=new Map();
-   for(const n of nodes)if(n.venue)counts.set(n.venue,(counts.get(n.venue)||0)+1);
-   const top=[...counts].sort((a,b)=>b[1]-a[1]).slice(0,6).filter(([venue])=>identity.identify(venue));
-   const legend=node('div',null,parent,{class:'sc-graph-legend','aria-label':'저널별 색'});
-   // The swatch is the node's own paint, not the badge, so the key matches the map.
-   for(const [venue,count] of (top.length>=2?top:[])){
+   const top=state.graphJournalColour===false?[]:legendVenues(nodes);
+   const legend=node('div',null,parent,{class:'sc-graph-legend',role:'group','aria-label':'저널별 색'});lastLegend=legend;
+   // The swatch is the node's own paint, not the badge, so the key matches the map. The name is the journal's whole name.
+   for(const [venue,count] of top){
     const entry=node('span',null,legend,{class:'sc-legend-entry',title:`${venue} · ${count}편`});
     const tone=identity.colours(identity.identify(venue),{dark:darkScheme()});const dot=node('span',null,entry,{class:'sc-legend-dot'});dot.style.background=tone.fill;dot.style.boxShadow=`inset 0 0 0 1px ${tone.ink}`;
     node('span',D(venue),entry,{class:'sc-legend-name'});
     node('span',String(count),entry,{class:'sc-legend-count'});
    }
-   // The two shapes the map uses besides colour.
-   const outside=node('span',null,legend,{class:'sc-legend-entry'});node('span',null,outside,{class:'sc-legend-dot sc-legend-external'});node('span','내 라이브러리에 없음',outside,{class:'sc-legend-name'});
+   // The shapes the map uses besides colour: the neutral node for any other journal, the hollow one for papers not held, the dashed tie.
+   const anyPlain=nodes.some(n=>n.kind!=='ghost'&&n.kind!=='external'&&!top.some(([venue])=>venue===n.venue));
+   if(top.length&&anyPlain){const other=node('span',null,legend,{class:'sc-legend-entry'});node('span',null,other,{class:'sc-legend-swatch sc-legend-plain'});node('span','그 밖의 저널',other,{class:'sc-legend-name'});}
+   if(!shapes){if(!legend.childNodes.length){legend.remove();lastLegend=null;}return;}
+   const out=node('span',null,legend,{class:'sc-legend-entry'});node('span',null,out,{class:'sc-legend-dot sc-legend-external','data-shape':outside});node('span','내 라이브러리에 없음',out,{class:'sc-legend-name'});
    const coupled=node('span',null,legend,{class:'sc-legend-entry'});node('span',null,coupled,{class:'sc-legend-line'});node('span','공통 참고문헌',coupled,{class:'sc-legend-name'});
   }
   /* OpenAlex subject browsing and local JIF comparisons. Official JCR
@@ -8228,6 +8514,9 @@
      // Label left, bar, value right: the same three tracks on both lines, so the labels, bars and figures each form a column.
      const line=node('span',null,mix,{class:'sc-journal-reading-share'});
      const pct=whole>0?Math.round(100*part/whole):null;
+     // The exact share on hover: the bar is a picture of it, the tooltip is the figure.
+     const isTime=label==='시간';
+     if(pct!=null)line.title=isTime&&runtime.formatReadTime?`${T(label)} ${runtime.formatReadTime(part,{compact:true})} / ${runtime.formatReadTime(whole,{compact:true})} (${pct}%)`:`${T(label)} ${fmtN(part)} / ${fmtN(whole)} (${pct}%)`;
      const scale=node('span',null,line,{class:'sc-journal-reading-bar','aria-hidden':'true'});
      if(pct!=null)node('span',null,scale).style.width=`${pct}%`;
      node('span',pct==null?'—':`${pct}%`,line,{class:'sc-journal-reading-pct',title:T(label)});
@@ -8248,7 +8537,7 @@
      const join=node('span',null,plot,{class:'sc-journal-citation-join'});
      join.style.left=fx(at(rd)<=at(un)?rd:un);join.style.width=`calc((100% - 10px) * ${Math.abs(at(rd)-at(un))})`;
     }
-    for(const part of g.split)if(part.median!=null)node('span',part.key==='read'?'●':'■',plot,{class:'sc-journal-citation-dot','data-group':part.key}).style.left=fx(part);
+    for(const part of g.split)if(part.median!=null)node('span',part.key==='read'?'●':'■',plot,{class:'sc-journal-citation-dot','data-group':part.key,title:`${T(part.key==='read'?'읽는 중·완료':'안 읽음')} · ${T('인용 중앙값')} ${fmtN(Math.round(part.median))}`}).style.left=fx(part);
     for(const part of g.split){
      const line=node('span',null,cell,{class:'sc-journal-citation-line','data-group':part.key});
      node('span',part.key==='read'?'●':'■',line,{class:'sc-journal-citation-mark','aria-hidden':'true'});
@@ -8596,7 +8885,7 @@
    if(j.openAlexID){const b=button('OpenAlex에서 보기',()=>runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${j.openAlexID}`),actions,{'data-opens':'browser'});journalIcon('link',b);b.insertBefore(b.lastChild,b.firstChild);}
   }
   function drawAssist(){let item;try{item=one();}catch(_){pickOne(empty('번역·요약할 문헌 하나를 선택하세요. AI 서버 주소와 모델은 설정에서 연결합니다.'));return;}bindAI(item.id);node('h2',D(item.title),body);const b=bar();const language=node('input',null,b,{value:setting('aiLanguage','Korean'),'aria-label':'출력 언어',class:'sc-lang'});const output=node('textarea',null,body,{class:'sc-ai-output','aria-label':'AI 생성 결과 — 적용 전 확인',placeholder:T('요청하면 결과가 여기에 나타납니다.')});if(state.aiOutput)output.value=Array.isArray(state.aiOutput)?state.aiOutput.join(', '):state.aiOutput;
-   const aiReady=!!(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim());
+   const aiReady=!!(runtime.assist?.status?.()?.available||(String(runtime.pref('aiEndpoint','')||'').trim()&&String(runtime.pref('aiModel','')||'').trim()));
    /* Two parts, named: what to ask, and what came back. The request row and
       the result box used to run together under the paper's title, and the
       note saying the service was not set up sat below the box it explained. */

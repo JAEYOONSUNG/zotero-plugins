@@ -78,12 +78,19 @@
  }
 
  /* ---- engines ---------------------------------------------------------- */
+ /* Which of our engines last called speak(): the one whose utterance the queue holds. Zotero's own controller
+    keeps the same kind of record (lastSpeaker in reader/browser/controller.ts) for the same reason: the queue is
+    global, and a cancel() from anyone who does not own it stops someone else's speech. */
+ let lastSpeaker=null;
  function speechEngine(win){
   const synth=win&&win.speechSynthesis,Utterance=win&&win.SpeechSynthesisUtterance;const live=new Set();
-  // Every cancel() this engine makes starts a new epoch; an utterance from the current epoch that is cancelled was cancelled by someone else.
+  // Every cancel() this engine makes, and every queue it finds lost, starts a new epoch; events from an older epoch are not ours to act on.
   let epoch=0;
   const voices=()=>{try{return Array.from(synth.getVoices()||[]);}catch(_){return [];}};
-  return {name:'speechSynthesis',supportsPause:true,
+  // Whether the queue is doing anything at all; only a synth that reports both flags can say it is idle.
+  const idle=()=>{try{return typeof synth.speaking==='boolean'&&typeof synth.pending==='boolean'&&!synth.speaking&&!synth.pending;}catch(_){return false;}};
+  const detach=u=>{u.onstart=null;u.onend=null;u.onerror=null;};
+  const engine={name:'speechSynthesis',supportsPause:true,
    available(){return !!synth&&typeof Utterance==='function'&&voices().length>0;},
    voices(){return voices().map(v=>({voiceURI:v.voiceURI,name:v.name,lang:v.lang,localService:!!v.localService,default:!!v.default}));},
    speak({text,lang,voiceURI,rate,onstart,onend,onerror,oninterrupt}){
@@ -91,18 +98,39 @@
     if(voiceURI){const voice=voices().find(v=>v.voiceURI===voiceURI);if(voice)u.voice=voice;}
     // Gecko drops an utterance nobody holds a reference to, and its end event with it.
     live.add(u);const done=()=>live.delete(u);
-    u.onstart=()=>{onstart&&onstart();};u.onend=()=>{done();onend&&onend();};
+    // The queue was emptied under us: drop what is left of ours and report it once, as an interruption.
+    const lost=reason=>{epoch++;for(const x of live)detach(x);live.clear();if(lastSpeaker===engine)lastSpeaker=null;if(oninterrupt)oninterrupt(reason);};
+    u.onstart=()=>{onstart&&onstart();};
+    u.onend=()=>{
+     done();
+     // Gecko's cancel() ends the utterance being spoken with `end`, not an error. A natural end leaves our next
+     // utterance pending; an end after which the queue is idle while we still had sentences waiting is a cancel
+     // somebody else made, and the next sentence must not be treated as due.
+     if(mine===epoch&&live.size>0&&idle()){lost('interrupted');return;}
+     onend&&onend();
+    };
     u.onerror=event=>{
      done();
-     if(event&&(event.error==='canceled'||event.error==='interrupted')){if(mine===epoch&&oninterrupt)oninterrupt(event.error);return;}
+     if(event&&(event.error==='canceled'||event.error==='interrupted')){if(mine===epoch)lost(event.error);return;}
      onerror&&onerror(event&&event.error||'error');
     };
+    lastSpeaker=engine;
     synth.speak(u);
    },
-   cancel(){epoch++;try{synth.cancel();}catch(_){}live.clear();},
+   /* Drop what this engine queued. As Zotero's controller does: the handlers come off first, so the `end` the
+      cancel fires is not taken for a finished sentence, and the global cancel() is made only while this engine
+      owns the queue (it has an utterance there and was the last of ours to speak). */
+   cancel(){
+    epoch++;
+    const owned=live.size>0&&lastSpeaker===engine;
+    for(const u of live)detach(u);live.clear();
+    if(owned){lastSpeaker=null;try{synth.cancel();}catch(_){}}
+   },
+   owns(){return live.size>0&&lastSpeaker===engine;},
    /* Whether the window's speech queue is doing anything at all: false while this player thinks it is playing means someone else cancelled it. */
    busy(){try{return !!(synth.speaking||synth.pending);}catch(_){return true;}},
    pause(){try{synth.pause();}catch(_){}},resume(){try{synth.resume();}catch(_){}}};
+  return engine;
  }
  /* macOS `say`. `spawn(args, onexit)` starts /usr/bin/say with an argument
     array (no shell, so nothing in the paper text can become a command) and
@@ -182,8 +210,8 @@
 
  /* ---- plain text fallback (no extraction module) ------------------------
    Pages are 0-based indexes here, as in the extraction module's output. */
- const HEADING=/^(?:(?:\d+(?:\.\d+){0,3}|[IVX]+)[.)]?\s+)?(abstract|introduction|background|related work|methods?|materials and methods|experimental(?: procedures)?|results?(?: and discussion)?|discussion|conclusions?|acknowledge?ments?|limitations?|references|bibliography|supplementary(?: information)?|초록|서론|방법|결과|논의|결론|참고문헌)\b[\s:.]*$/i;
- const REFERENCES=/^(?:\d+[.)]?\s+)?(references|bibliography|literature cited|참고문헌)[\s:.]*$/i;
+ const HEADING=/^(?:(?:\d+(?:\.\d+){0,3}|[IVX]+)[.)]?\s+)?(abstract|introduction|background|related work|methods?|materials and methods|experimental(?: procedures)?|results?(?: and discussion)?|discussion|conclusions?|acknowledge?ments?|limitations?|references|bibliography|supplementary(?: information)?|초록|서론|방법|결과|논의|결론|참고문헌)(?![\p{L}\p{N}])[\s:.]*$/iu;
+ const REFERENCES=/^(?:\d+[.)]?\s+)?(references|bibliography|literature cited|참고문헌)[\s:.]*$/iu;
  function plainTextStructure(text,{title=''}={}){
   const raw=String(text||'').replace(/\r/g,'');
   const pageTexts=raw.includes('\f')?raw.split('\f'):[raw];

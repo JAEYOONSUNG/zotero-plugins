@@ -1173,7 +1173,7 @@
     {
       "key": "aiEndpoint",
       "keepOnReset": true,
-      "description": "Chat Completions 형식 주소. 예: https://api.openai.com/v1/chat/completions, 로컬 Ollama는 http://localhost:11434/v1/chat/completions",
+      "description": "비워 두면 이 Mac의 AI 브리지를 찾아 씁니다. 브리지는 이 Mac에 로그인된 Claude 계정으로 답하고, Claude가 한도에 걸리거나 답하지 못하면 ChatGPT 계정으로 답합니다(API 키 없음, 각 계정의 사용 한도 적용). 설치·제거는 플러그인 폴더의 bridge/install.sh, bridge/install.sh --uninstall. 다른 서버를 쓰려면 Chat Completions 형식 주소를 넣으세요. 이 주소가 항상 우선합니다. 예: https://api.openai.com/v1/chat/completions, 로컬 Ollama는 http://localhost:11434/v1/chat/completions",
       "category": "ai",
       "label": "AI 서버 주소 (Chat Completions)",
       "type": "url",
@@ -1182,7 +1182,7 @@
     {
       "key": "aiModel",
       "keepOnReset": true,
-      "description": "서버가 받는 모델 이름 그대로. 예: gpt-4o-mini, llama3",
+      "description": "서버가 받는 모델 이름 그대로. 예: gpt-4o-mini, llama3. AI 브리지를 쓸 때는 비워 두면 Claude, chatgpt를 넣으면 ChatGPT 계정에 먼저 묻습니다.",
       "category": "ai",
       "label": "모델 이름",
       "type": "text",
@@ -1215,7 +1215,7 @@
       "label": "논문을 열면 AI 요약을 자동으로 만들기",
       "type": "boolean",
       "default": false,
-      "description": "켜면 논문을 열 때(논문마다 한 번) 제목·초록·본문 일부를 위에 입력한 AI 서버로 보내 요약을 만듭니다. 서버가 요금을 받는 서비스라면 열 때마다 비용이 듭니다. 그래서 기본은 꺼짐이고, 꺼져 있으면 리더 패널의 ‘요약 만들기’ 버튼을 눌러야만 보냅니다. 내 컴퓨터의 무료 로컬 모델(Ollama 등, http://localhost:11434/v1/chat/completions)을 연결하면 비용 없이 켜 둘 수 있습니다. 한 번 만든 요약은 저장해 두고 다시 보냅니다."
+      "description": "켜면 논문을 열 때(논문마다 한 번) 제목·초록·본문 일부를 위에 입력한 AI 서버로 보내 요약을 만듭니다. 서버가 요금을 받는 서비스라면 열 때마다 비용이 듭니다. 그래서 기본은 꺼짐이고, 꺼져 있으면 리더 패널의 ‘요약 만들기’ 버튼을 눌러야만 보냅니다. 이 Mac에서 실행하는 로컬 모델(Ollama 등, http://localhost:11434/v1/chat/completions)을 연결하면 요청이 이 Mac 밖으로 나가지 않습니다. 한 번 만든 요약은 저장해 두고 다시 보냅니다."
     },
     {
       "key": "deeplApiKey",
@@ -1224,7 +1224,7 @@
       "type": "password",
       "default": "",
       "secret": true,
-      "description": "리더 패널의 ‘번역’에서 문단별 번역에만 씁니다. deepl.com에서 무료 키(:fx로 끝남, 한 달 50만 자)를 받을 수 있고, 키 끝으로 무료/유료 서버를 알아서 고릅니다. 키는 DeepL 서버의 인증 헤더에만 보내며 번역 버튼을 눌렀을 때만 사용합니다. 비워 두면 위의 AI 서버, 그다음 Translate for Zotero 플러그인이 있으면 그것을 씁니다."
+      "description": "리더 패널의 ‘번역’에서 문단별 번역에만 씁니다. deepl.com에서 무료 키(:fx로 끝남, 한 달 50만 자)를 받을 수 있고, 키 끝으로 무료/유료 서버를 알아서 고릅니다. 키는 DeepL 서버의 인증 헤더에만 보내며 번역 버튼을 눌렀을 때만 사용합니다. 번역기는 DeepL → Translate for Zotero(설치되어 있으면) → 위의 AI 서버 순서로 고르며, 한 번역기가 멈추면 패널에서 다음 번역기로 남은 문단만 이어서 번역할 수 있습니다."
     },
     {
       "key": "translateTarget",

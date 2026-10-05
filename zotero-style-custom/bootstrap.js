@@ -10,7 +10,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "attention", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "workspace", "paper-chat", "paper-translate", "read-aloud", "assist", "library", "reader-assist", "reader-tools", "workbench", "marquee", "item-cells", "reading", "updater", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "attention", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "selfcheck-reader", "workspace", "paper-chat", "paper-translate", "read-aloud", "assist", "library", "reader-assist", "reader-tools", "workbench", "marquee", "item-cells", "reading", "updater", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     // The text extraction for the reader panel. Optional at load time: without it the panel
@@ -117,9 +117,12 @@ async function startup({ id, version, rootURI }) {
         repair: Zotero.Prefs.get("extensions.style-custom.selfCheckRepair", true) === true,
         fill: Zotero.Prefs.get("extensions.style-custom.selfCheckFill", true) === true,
         shots: Zotero.Prefs.get("extensions.style-custom.selfCheckShots", true) === true,
-        seed: String(Zotero.Prefs.get("extensions.style-custom.selfCheckDemoSeed", true) || "")
+        seed: String(Zotero.Prefs.get("extensions.style-custom.selfCheckDemoSeed", true) || ""),
+        // Opens one PDF in a background reader tab, measures the reader panel on it and closes the tab
+        // (style-custom-reader-check.json). Off unless asked for: the default check never opens a reader.
+        reader: Zotero.Prefs.get("extensions.style-custom.selfCheckReader", true) === true
       };
-      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill", "selfCheckShots"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
+      for (const flag of ["selfCheck", "selfCheckRepair", "selfCheckFill", "selfCheckShots", "selfCheckReader"]) Zotero.Prefs.set("extensions.style-custom." + flag, false, true);
       Zotero.Prefs.set("extensions.style-custom.selfCheckDemoSeed", "", true);
       const reportPath = PathUtils.join(Zotero.DataDirectory.dir, "style-custom-selfcheck.json");
       setTimeout(() => {

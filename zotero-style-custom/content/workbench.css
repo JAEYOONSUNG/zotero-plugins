@@ -60,7 +60,10 @@
   --sc-chevron-ink: #5b5f68;
   --sc-check-ink: #ffffff;
   --sc-on-pill-tint: rgba(255, 255, 255, .22);
-  --sc-graph-line: #8b909b;
+  --sc-graph-line: #7a7f8a;
+  /* A paper on a map: the neutral node and its ring (3:1 on the card), for papers whose journal the key does not name. */
+  --sc-node-fill: #e3e5e9;
+  --sc-node-ring: #6b6f78;
   --sc-shadow: 0 8px 24px rgba(20, 22, 30, .14), 0 0 0 .5px rgba(20, 22, 30, .10);
   --sc-font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
   --sc-title-font: var(--sc-font);
@@ -796,6 +799,8 @@
     --sc-check-ink: #121317;
     --sc-on-pill-tint: rgba(0, 0, 0, .14);
     --sc-graph-line: #7d818c;
+    --sc-node-fill: #41424d;
+    --sc-node-ring: #9a9eaa;
     --sc-shadow: 0 8px 24px rgba(0, 0, 0, .5), 0 0 0 .5px rgba(255, 255, 255, .12);
     color-scheme: dark;
   }
@@ -3115,3 +3120,72 @@
 #style-custom-workbench .sc-attachment-findings > summary.sc-findings-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); }
 #style-custom-workbench .sc-findings-title { font-weight: var(--sc-fw-strong); color: var(--sc-text); }
 #style-custom-workbench .sc-findings-fact { display: inline-flex; align-items: center; min-height: var(--sc-h-badge); padding: 0 var(--sc-space-2); border-radius: 999px; background: var(--sc-fill); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); white-space: nowrap; }
+
+/* ---- Maps (design pass 2026-10-05) ----------------------------------------
+   Every map is one white card: a tool strip on top (find, filter chips, zoom, save),
+   the drawing, and the key to its colours at the foot. Papers are a neutral node unless
+   their journal is one the key names; the chosen one takes the lime accent. Lines are thin
+   and light until a paper is hovered, focused or found. Node rings clear 3:1 on the card. */
+#style-custom-workbench .sc-graph-frame.sc-graph-card { position: relative; display: flex; flex-direction: column; margin-block-end: var(--sc-space-3); border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge), var(--sc-card-shadow); overflow: hidden; }
+#style-custom-workbench .sc-graph-card > .sc-graph { border: 0; border-radius: 0; background: transparent; touch-action: none; cursor: grab; }
+#style-custom-workbench .sc-graph-card[data-panning=true] > .sc-graph { cursor: grabbing; }
+#style-custom-workbench .sc-graph-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); padding: var(--sc-space-3) var(--sc-space-3) var(--sc-space-2); }
+#style-custom-workbench .sc-graph-find { display: inline-flex; align-items: center; gap: var(--sc-space-1); flex: 0 1 240px; min-width: 150px; height: var(--sc-h-seg); padding: 0 var(--sc-space-2) 0 var(--sc-space-3); border-radius: var(--sc-radius-pill); background: var(--sc-fill); color: var(--sc-muted); cursor: text; }
+#style-custom-workbench .sc-graph-find:focus-within { box-shadow: 0 0 0 2px var(--sc-focus-soft); }
+#style-custom-workbench .sc-graph-find-icon { display: inline-flex; flex: none; }
+#style-custom-workbench .sc-graph-find svg { width: 14px; height: 14px; }
+#style-custom-workbench .sc-graph-find input.sc-graph-find-box[type=search],
+#style-custom-workbench .sc-graph-find input.sc-graph-find-box[type=search]:focus-visible { flex: 1 1 auto; min-width: 0; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; color: var(--sc-text); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench .sc-graph-find-box::placeholder { color: var(--sc-muted); opacity: 1; }
+#style-custom-workbench .sc-graph-find-count { flex: none; color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-graph-chips { display: inline-flex; flex-wrap: wrap; gap: var(--sc-space-1); }
+#style-custom-workbench button.sc-graph-chip { min-height: var(--sc-h-seg); height: var(--sc-h-seg); padding: 0 var(--sc-space-3); border-radius: var(--sc-radius-pill); background: var(--sc-fill); box-shadow: none; color: var(--sc-text); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); white-space: nowrap; }
+#style-custom-workbench button.sc-graph-chip:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench button.sc-graph-chip[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-graph-tools-end { display: inline-flex; align-items: center; gap: var(--sc-space-2); margin-inline-start: auto; }
+#style-custom-workbench .sc-graph-toolbar .sc-graph-zoom,
+#style-custom-workbench .sc-graph-export { position: static; inset: auto; display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--sc-radius-pill); background: var(--sc-fill); box-shadow: none; }
+#style-custom-workbench button.sc-graph-tool { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 24px; height: 22px; min-height: 0; padding: 0 6px; border-radius: var(--sc-radius-pill); background: transparent; box-shadow: none; color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); }
+#style-custom-workbench button.sc-graph-tool:hover { background: var(--sc-surface); }
+#style-custom-workbench button.sc-graph-tool:focus-visible { box-shadow: 0 0 0 2px var(--sc-focus); }
+#style-custom-workbench .sc-graph-tool svg, #style-custom-workbench .sc-graph-tool-icon { display: inline-flex; width: 14px; height: 14px; }
+/* The key, at the foot of the card: whole journal names, wrapping rather than cut. */
+#style-custom-workbench .sc-graph-legend.sc-graph-legend-foot { margin: 0; padding: var(--sc-space-2) var(--sc-space-4) var(--sc-space-3); border-block-start: 1px solid var(--sc-border); gap: var(--sc-space-1) var(--sc-space-4); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+#style-custom-workbench .sc-legend-name { max-width: none; white-space: normal; overflow: visible; color: var(--sc-text); }
+#style-custom-workbench .sc-legend-entry { align-items: center; gap: 6px; }
+#style-custom-workbench .sc-legend-dot, #style-custom-workbench .sc-legend-swatch { flex: none; }
+#style-custom-workbench .sc-legend-swatch.sc-legend-plain { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--sc-node-fill); box-shadow: inset 0 0 0 1px var(--sc-node-ring); }
+#style-custom-workbench .sc-legend-external { box-sizing: border-box; border: 1px dashed var(--sc-node-ring); border-radius: 25%; background: var(--sc-surface); }
+#style-custom-workbench .sc-legend-external[data-shape=circle] { border-radius: 50%; }
+#style-custom-workbench .sc-legend-line { border-top: 1.5px dashed var(--sc-graph-line); }
+#style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-muted); font-style: italic; }
+#style-custom-workbench .sc-graph-arrow { fill: var(--sc-graph-line); }
+/* Found, focused, hovered: the paper's ring goes to the ink; what was not found steps back. */
+#style-custom-workbench .sc-graph[data-finding] g[role=button]:not([data-match]) { opacity: .22; }
+#style-custom-workbench .sc-graph g[data-match] > circle,
+#style-custom-workbench .sc-graph g[data-match] > rect:not(.sc-graph-label-bg) { stroke: var(--sc-text); stroke-width: 2.4px; }
+#style-custom-workbench .sc-graph g[role=button]:focus { outline: none; }
+#style-custom-workbench .sc-graph g[role=button]:focus-visible > circle:not(.sc-author-dot),
+#style-custom-workbench .sc-graph g[role=button]:focus-visible > rect:not(.sc-graph-label-bg) { stroke: var(--sc-text); stroke-width: 2.6px; }
+#style-custom-workbench .sc-graph g[role=button]:hover > circle:not(.sc-author-dot):not(.sc-author-ring) { stroke: var(--sc-text); }
+#style-custom-workbench .sc-graph-caption { margin: 0 var(--sc-space-1) var(--sc-space-4); color: var(--sc-muted); font-size: var(--sc-fs-meta); line-height: var(--sc-lh-meta); }
+@container sc-workbench (max-width: 760px) {
+  #style-custom-workbench .sc-graph-find { flex: 1 1 100%; }
+  #style-custom-workbench .sc-graph-tools-end { margin-inline-start: 0; }
+}
+/* 저널 지표 · 내 문헌 분석: the citation plot and its figures fit inside the row at every width (at 1,100px the last
+   track was 16px wider than the row and a missing median's dash sat outside the card), and a missing value
+   sits where the value would, not pushed to the far edge. */
+@container sc-workbench (min-width: 901px) {
+  #style-custom-workbench .sc-journal-reading-row { grid-template-columns: minmax(140px, 240px) 52px 60px 124px 68px minmax(236px, 1fr); }
+  #style-custom-workbench .sc-journal-reading-citation-compare,
+  #style-custom-workbench .sc-journal-reading-header > .sc-journal-citation-head { grid-template-columns: minmax(80px, 136px) minmax(0, 1fr); min-width: 0; }
+}
+#style-custom-workbench .sc-journal-citation-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#style-custom-workbench .sc-journal-reading-num .sc-journal-citation-line .sc-none-mark { margin-inline-start: 0; }
+#style-custom-workbench .sc-journal-citation-grid { border-left-color: var(--sc-border-strong); }
+/* 쪽별 기록: the cells are squares, as the key above them is; a card's 26px button floor stretched them into capsules. */
+#style-custom-workbench .sc-page-strip button.sc-page-cell { min-height: 0; height: auto; max-height: 11px; }
+/* A person's own graph: the person in the middle is ringed in the ink. */
+#style-custom-workbench .sc-ego-graph g[data-state=centre] .sc-author-ring { stroke: var(--sc-text); stroke-width: 2; }
+#style-custom-workbench .sc-graph-frame.sc-graph-card { margin-block-start: var(--sc-space-2); }
