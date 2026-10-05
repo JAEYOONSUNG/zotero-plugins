@@ -57,7 +57,7 @@ const resultRows = () => [
 	{ key: "C", title: "Result C", source: "openalex", sourceId: "W12" },
 	{ key: "D", title: "Result D", source: "crossref", doi: "10.1000/d" },
 	{ key: "E", title: "Held one", source: "openalex", sourceId: "W1", doi: "10.1000/h1" },
-	{ key: "P", title: "Held one about GENOME editing!", source: "openalex", sourceId: "W14", doi: "10.1000/pre" },
+	{ key: "P", title: "Held one about GENOME editing!", source: "openalex", sourceId: "W14", doi: "10.1000/pre", preprintOf: { doi: "10.1000/h1" } },
 	{ key: "F", title: "Result F, nothing to look up", source: "crossref" }
 ];
 
@@ -91,7 +91,7 @@ test("held results are flagged and left out of the ranking; so are a held paper'
 	const { http } = mockOpenAlex(table());
 	const out = await run({ held: heldRows(), results: resultRows(), http });
 	assert.equal(out.scores.get("E").held, true, "the library holds it: same OpenAlex id");
-	assert.equal(out.scores.get("P").held, true, "another DOI, same title: the other version of a held paper");
+	assert.equal(out.scores.get("P").held, true, "another DOI, declared as the other version of a held paper");
 	assert.equal(out.scores.get("E").score, null);
 	assert.equal(out.scores.get("P").score, null, "its references equal held 1's, so scoring it would only echo the library back");
 	assert.deepEqual(out.order.slice(-3), ["E", "P", "F"], "held after every ranked result, not rankable last");
@@ -99,7 +99,7 @@ test("held results are flagged and left out of the ranking; so are a held paper'
 
 test("a preprint and its article in the library count once", async () => {
 	const { http } = mockOpenAlex({ ...table(), 20: { doi: "10.1000/h1-pre", refs: [100, 101, 102] } });
-	const held = [...heldRows(), { itemID: 9, title: "Held one about genome editing", doi: "10.1000/h1-pre" }];
+	const held = [...heldRows(), { itemID: 9, title: "Held one about genome editing", doi: "10.1000/h1-pre", versionDois: ["10.1000/h1"] }];
 	const out = await run({ held, results: [{ key: "X", title: "X", source: "openalex", sourceId: "W10", doi: "10.1000/a" }], http });
 	assert.equal(out.scores.get("X").c1, 1, "two library items for one paper is one link");
 	assert.equal(out.scores.get("X").c3w, 1.5, "and does not double the idf weights: the duplicate is merged, N stays 3");
@@ -234,7 +234,8 @@ test("the button ranks the list by the library, shows the breakdown chip with a 
 	const chip = row("A").querySelector(".rel-chip");
 	assert.ok(chip, "a chip on the row");
 	assert.match(chip.textContent, /relChip\|1\|1\|2/, "cites 1 of yours, cited by 1, 2 shared refs");
-	const tipText = ui.Z && (chip.getAttribute("data-tip") || chip.getAttribute("title") || "");
+	assert.equal(chip.dataset.tipKind, "related", "the card is built when it opens, not for every row drawn");
+	const tipText = ui.tipContent(chip, "related");
 	assert.match(tipText, /Held one about genome editing/);
 	assert.match(tipText, /Nature Biotechnology/, "the journal in full");
 	assert.match(tipText, /2020/);

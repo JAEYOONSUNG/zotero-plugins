@@ -92,7 +92,7 @@
 		focusKey: null,
 		detailKey: null,
 		sortKey: "rank",
-		related: { running: false, controller: null, prev: null, store: null },
+		related: { running: false, controller: null, prev: null, store: null, generation: 0, libraryID: null },
 		checking: false,
 		sortDir: "asc",
 		searching: false,
@@ -463,7 +463,7 @@
 		$("dp-retry").addEventListener("click", () => previewViewer?.retry());
 		$("dp-original").addEventListener("click", () => { let u = state.preview.originalURL; if (u && ZotPoPPreview.safeURL(u)) Zotero.launchURL(u); });
 		$("import-btn").addEventListener("click", () => importRecords(state.records.filter(r => state.selected.has(r.key))));
-		$("target").addEventListener("change", () => { state.doiMap.clear(); refreshLibraryFlags(); });
+		$("target").addEventListener("change", () => { relatedLibraryChanged(); state.doiMap.clear(); refreshLibraryFlags(); });
 		$("source").addEventListener("change", sourceHint);
 		$("engine").addEventListener("change", () => { cancelCacheRestore(); populateSearchSources(); sourceHint(); savePrefs(); saveQuery(); });
 		$("pop-options")?.addEventListener("input", cancelCacheRestore);
@@ -502,6 +502,8 @@
 		window.addEventListener("unload", saveLayout);
 		window.addEventListener("unload", () => state.searchController?.abort());
 		window.addEventListener("unload", cancelCacheRestore);
+		window.addEventListener("unload", () => cancelRelated());
+		window.addEventListener("unload", () => { try { ZotPoPImporter?.dispose?.(); } catch (e) { /* the window is closing anyway */ } });
 		window.addEventListener("unload", () => { clearTimeout(previewTimer); previewViewer?.close(); });
 		window.addEventListener("resize", debounce(saveLayout, 400));
 		window.addEventListener("resize", debounce(fitTitleColumn, 100));
@@ -2917,6 +2919,7 @@
 		if (kind === "aff") return tipAffCard(r);
 		if (kind === "journal") return tipJournalCard(r);
 		if (kind === "authors") return tipAuthorsCard(r);
+		if (kind === "related") return r.related && r.related.score != null ? relatedTipText(r.related) : null;
 		return null;
 	}
 
@@ -3467,7 +3470,9 @@
 			// By value, never by the summary object: a new summary of unchanged data must not rebuild the row.
 			where && [where.first, where.corresponding].map(p => p && [p.name, p.institution, p.country, p.hIndex, p.tier]), where?.correspondingKnown,
 			row?.institution, row?.tier, row?.hIndex, row?.flag, where?.countries, affLineParts(r).map(p => [p.role, p.institution, p.country, p.hIndex]),
-			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r)), r.related]);
+			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r)),
+			// The numbers, never the object: reading `top` would work out every row's explanation.
+			r.related && [r.related.score, r.related.c1, r.related.c2, r.related.c3, r.related.c3w, r.related.held, r.related.unrankable, r.related.lowConf]]);
 	}
 	// The parts of a row that follow the selection, not the paper: set on every draw, reused row or not.
 	function paintRowState(tr, r, pick) {
@@ -4339,22 +4344,24 @@
 	// ------------------------------------------------------------ PubMed abstracts
 	/* PubMed's summary has no abstract. The one of a paper the reader opens, or translates, is fetched
 	   then (several papers in one request when several are asked together), and never for a whole list. */
-	const abstractBusy = new Set(), abstractFailed = new Set();
+	const abstractBusy = new Set(), abstractFailed = new Set(), abstractFlights = new Map(); // abstractFlights: PMID -> the one request in the air
 	async function ensureAbstracts(recs, { force = false } = {}) {
 		let need = recs.filter(r => r && r.pmid && !r.abstract && !abstractBusy.has(r.key) && (force || !abstractFailed.has(r.key)));
 		if (!need.length || typeof ZotPoPSources?.fetchPubMedAbstracts !== "function") return false;
 		for (let r of need) { abstractBusy.add(r.key); abstractFailed.delete(r.key); }
-		let found = false;
-		try {
-			let got = await ZotPoPSources.fetchPubMedAbstracts(need.map(r => String(r.pmid)), http, { ncbiApiKey: PREF("ncbiApiKey") || "", log });
-			for (let r of need) { let text = got.get(String(r.pmid)); if (text) { r.abstract = text; found = true; } }
-		}
-		catch (e) { log("PubMed abstract lookup failed: " + (e.message || e)); for (let r of need) abstractFailed.add(r.key); }
-		finally { for (let r of need) abstractBusy.delete(r.key); }
-		let open = detailRecord();
-		if (open && need.includes(open)) paintAbstract(open);
-		return found;
+		let flight = ZotPoPSources.fetchPubMedAbstracts(need.map(r => String(r.pmid)), http, { ncbiApiKey: PREF("ncbiApiKey") || "", log });
+		let tracked = Promise.resolve(flight).then(got => { let found = false; for (let r of need) { let text = got.get(String(r.pmid)); if (text) { r.abstract = text; found = true; } } return found; })
+			.catch(e => { log("PubMed abstract lookup failed: " + (e.message || e)); for (let r of need) abstractFailed.add(r.key); return false; })
+			.finally(() => {
+				for (let r of need) { abstractBusy.delete(r.key); if (abstractFlights.get(String(r.pmid)) === tracked) abstractFlights.delete(String(r.pmid)); }
+				let open = detailRecord();
+				if (open && need.includes(open)) paintAbstract(open);
+			});
+		for (let r of need) abstractFlights.set(String(r.pmid), tracked);
+		return tracked;
 	}
+	// The request already in the air for this paper's PMID, if any: Translate waits on it instead of reporting "no abstract".
+	const abstractInFlight = r => (r && r.pmid ? abstractFlights.get(String(r.pmid)) : null) || null;
 	function paintAbstract(r) {
 		$("d-abstract").textContent = r.abstract || (abstractBusy.has(r.key) ? t("abstractLoading") : t("noAbstract"));
 		renderTranslate(r);
@@ -4405,7 +4412,13 @@
 		if (!r || !translator) return;
 		let lang = trLang(), wantTitle = trTitleOn(), id = r.key + "|" + lang;
 		if (state.trBusy === id) return;
-		if (!r.abstract && r.pmid) { await ensureAbstracts([r], { force: true }); }
+		if (!r.abstract && r.pmid) {
+			// An abstract still on its way is awaited, never re-requested; only a failed or absent one is asked for again.
+			let flying = abstractInFlight(r);
+			state.trBusy = id; renderTranslate(r);
+			try { if (flying) await flying; else await ensureAbstracts([r], { force: true }); }
+			finally { if (state.trBusy === id) state.trBusy = null; }
+		}
 		if (!r.abstract && !wantTitle) { trSet(r, t("trNoText"), true); renderTranslate(r); return; }
 		state.trBusy = id; trNote = null;
 		renderTranslate(r);
@@ -4679,7 +4692,15 @@
 	   and reference list where it has one (no request), otherwise the DOI the search window already read. */
 	function relatedHeld() {
 		let out = [], seen = new Set(), lib = state.libraryID;
-		let title = id => { try { let it = Zotero.Items.get(id); return it ? String(it.getField("title") || "").trim() : ""; } catch (e) { return ""; } };
+		// What identifies a held paper besides its title: the year and the first author's family name.
+		let facts = id => {
+			try {
+				let it = Zotero.Items.get(id);
+				if (!it) return { title: "" };
+				let creators = typeof it.getCreators === "function" ? it.getCreators() : [];
+				return { title: String(it.getField("title") || "").trim(), doi: String(it.getField("DOI") || "").trim(), year: String(it.getField("date") || "").match(/\d{4}/)?.[0] || "", family: String(creators?.[0]?.lastName || "").trim() };
+			} catch (e) { return { title: "" }; }
+		};
 		let sc = styleCustom();
 		if (sc) for (let w of ZotPoPSignals.libraryWorks(sc)) {
 			if (!w.openalex) continue;
@@ -4687,9 +4708,11 @@
 			let item = libraryItemOfKey(w.key);
 			if (!item) continue;
 			seen.add(item.id);
-			out.push({ itemID: item.id, title: item.title, openalex: w.openalex, refs: [...w.refs] });
+			let f = facts(item.id);
+			// Style Custom's list is trusted only for the DOI it was fetched for, while fresh (content/related.js decides).
+			out.push({ itemID: item.id, title: item.title, year: f.year, family: f.family, doi: f.doi, openalex: w.openalex, refs: [...w.refs], stored: true, scDoi: w.doi, checkedAt: w.checkedAt, complete: w.complete });
 		}
-		for (let [doi, id] of state.doiMap || []) { if (seen.has(id)) continue; seen.add(id); out.push({ itemID: id, title: title(id), doi }); }
+		for (let [doi, id] of state.doiMap || []) { if (seen.has(id)) continue; seen.add(id); let f = facts(id); out.push({ itemID: id, title: f.title, year: f.year, family: f.family, doi }); }
 		return out;
 	}
 	// What the tooltip shows of a held paper: title, year and the journal in full.
@@ -4709,14 +4732,44 @@
 		}
 		chip.textContent = rel.score === 0 ? t("relNoLink") : t("relChip", rel.c1, rel.c2, rel.c3);
 		if (rel.score === 0) chip.classList.add("muted");
-		tip(chip, [t("relTip", rel.score, rel.c1, rel.c2, rel.c3w), ...(rel.top || []).map(heldLine)].join("\n"));
+		// The five papers behind the score are worked out when the card opens (tipContent, kind "related"), not for every row drawn.
+		chip.dataset.tipKind = "related";
+		chip.setAttribute("aria-label", t("relTip", rel.score, rel.c1, rel.c2, rel.c3w));
 		return chip;
+	}
+	function relatedTipText(rel) {
+		return [t("relTip", rel.score, rel.c1, rel.c2, rel.c3w), ...(rel.top || []).map(heldLine), ...(rel.lowConf ? [t("relLowConf", rel.lowConf)] : [])].join("\n");
 	}
 	function syncRelatedBtn() {
 		let btn = $("related-btn"), rel = state.related, on = state.sortKey === "related";
 		btn.disabled = !rel.running && (state.searching || !state.records.length);
 		btn.setAttribute("aria-pressed", String(on && !rel.running));
 		$("related-label").textContent = t(rel.running ? "relCancel" : on ? "relBack" : "relButton");
+	}
+	/* One ranking job at a time, tied to a library and a generation. A library switch, the window closing or
+	   a cancel bumps the generation; whatever an older job still delivers is dropped. */
+	function cancelRelated({ clear = false } = {}) {
+		let rel = state.related;
+		rel.generation = (rel.generation || 0) + 1;
+		rel.controller?.abort();
+		rel.controller = null; rel.running = false;
+		if (clear) clearRelated();
+	}
+	function clearRelated() {
+		let rel = state.related, had = state.records.some(r => r.related);
+		for (let r of state.records) r.related = null;
+		if (state.sortKey === "related") { let prev = rel.prev || { key: "rank", dir: "asc" }; state.sortKey = prev.key; state.sortDir = prev.dir; }
+		rel.prev = null; rel.libraryID = null;
+		return had;
+	}
+	// A different library is a different set of held papers: nothing scored against the old one may stay.
+	function relatedLibraryChanged() {
+		let rel = state.related, lib = currentTarget().libraryID;
+		if (rel.libraryID == null || rel.libraryID === lib) return;
+		let had = clearRelated() || rel.running;
+		cancelRelated();
+		syncRelatedBtn();
+		if (had) render();
 	}
 	async function toggleRelated() {
 		let rel = state.related;
@@ -4731,27 +4784,31 @@
 		let held = relatedHeld();
 		if (!held.length) { showBanner(t(state.doiMap?.failed ? "relLibraryFailed" : "relNeedsLibrary"), null, { warn: true }); return; }
 		let records = state.records.slice(), controller = new AbortController();
-		rel.running = true; rel.controller = controller;
+		let job = { generation: (rel.generation = (rel.generation || 0) + 1), libraryID: currentTarget().libraryID, controller };
+		let stale = () => job.generation !== rel.generation;
+		let cancelled = () => job.generation !== rel.generation || controller.signal.aborted;
+		rel.running = true; rel.controller = controller; rel.libraryID = job.libraryID;
 		hideBanner();
 		syncRelatedBtn();
-		let cctx = { openAlexApiKey: String(PREF("openAlexApiKey") || ""), log, openAlexSpent: openAlexHeld(), signal: controller.signal };
+		let cctx = { openAlexApiKey: String(PREF("openAlexApiKey") || ""), log, openAlexSpent: openAlexHeld(), signal: controller.signal, isCancelled: () => job.generation !== rel.generation };
 		let out = null;
 		try {
 			rel.store = rel.store || await loadRelatedStore();
 			out = await ZotPoPRelated.rank({ held, http, ctx: cctx, store: rel.store, sources: ZotPoPSources,
-				results: records.map(r => ({ key: r.key, source: r.source, sourceId: r.sourceId, doi: r.doi, title: r.title, publishedAs: r.publishedAs, preprintOf: r.preprintOf })),
-				onProgress: p => { setStatus(t("relProgress", p.done, p.total)); setProgress(p.done, p.total); } });
+				results: records.map(r => ({ key: r.key, source: r.source, sourceId: r.sourceId, doi: r.doi, title: r.title, year: r.year, family: r.authors?.[0]?.lastName || "", publishedAs: r.publishedAs, preprintOf: r.preprintOf })),
+				onProgress: p => { if (!cancelled()) { setStatus(t("relProgress", p.done, p.total)); setProgress(p.done, p.total); } } });
 		}
 		catch (e) {
-			if (e?.name === "AbortError") setStatus(t("relStopped"), "", { transient: true });
-			else { log("ranking by library failed: " + (e?.message || e)); setStatus(t("relFailed"), "err"); }
+			if (e?.name === "AbortError") { if (!stale()) setStatus(t("relStopped"), "", { transient: true }); }
+			else { log("ranking by library failed: " + (e?.message || e)); if (!stale()) setStatus(t("relFailed"), "err"); }
 		}
 		finally {
 			noteOpenAlexSpent(cctx);
-			rel.running = false; rel.controller = null;
-			setProgress(null);
+			if (job.generation === rel.generation) { rel.running = false; rel.controller = null; setProgress(null); }
 			if (rel.store) await saveRelatedStore(rel.store);
 		}
+		// A newer generation (library switch, window closed) owns the state now: this job's answer is dropped whole.
+		if (cancelled() || job.libraryID !== currentTarget().libraryID) { if (job.generation === rel.generation) { syncRelatedBtn(); render(); } return; }
 		if (out) {
 			let reason = out.reason;
 			if (!out.ok) {
@@ -4760,10 +4817,8 @@
 			}
 			else {
 				let live = new Set(state.records), same = records.every(r => live.has(r));
-				for (let r of records) {
-					let s = out.scores.get(r.key);
-					r.related = s && s.top ? { ...s, top: s.top.map(x => ({ ...x })) } : s || null;
-				}
+				// Shared, not copied: `top` is worked out on first read.
+				for (let r of records) r.related = out.scores.get(r.key) || null;
 				if (same) {
 					rel.prev = { key: state.sortKey, dir: state.sortDir };
 					state.sortKey = "related"; state.sortDir = "desc";

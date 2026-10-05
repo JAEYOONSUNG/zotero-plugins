@@ -64,43 +64,106 @@ var ZotPoPRelated = (() => {
 		};
 	}
 
-	/* The score of every result against the held papers. `held`: { itemID, title, doi, openalex, refs }
-	   (refs null when OpenAlex could not say); `results`: { key, id, doi, title, refs, versionDois }. */
-	function scoreAll(held, results) {
-		let clusters = [], byTitle = new Map();
-		// One cluster per paper: a preprint and its article, both in the library, are one.
+	/* Who is who. A held paper is the same paper as another held paper, or as a result, by OpenAlex id,
+	   then DOI, then an explicit version relation (publishedAs / preprintOf, as `versionDois`). A title
+	   is a last resort only for a record that has neither an id nor a DOI, and then it must also agree on
+	   the year and the first author's family name: two "Editorial"s of one year are not one paper. */
+	const lc = v => String(v == null ? "" : v).toLowerCase();
+	const titleKey = r => { let ft = flat(r.title), year = String(r.year || "").match(/\d{4}/)?.[0] || "", fam = flat(r.family); return ft.length >= 8 && year && fam ? ft + "|" + year + "|" + fam : ""; };
+
+	/* The held library, indexed once: clusters (one per paper) and an inverted index from every
+	   reference to the held papers that cite it. `held`: { itemID, title, year, family, doi, openalex,
+	   versionDois, refs, complete } (refs null when OpenAlex could not say). */
+	function* indexSteps(held, every = 100) {
+		let clusters = [], idMap = new Map(), doiMap = new Map(), vdoiMap = new Map(), titleMap = new Map();
 		for (let h of held) {
-			let ft = flat(h.title), cluster = ft.length >= 8 ? byTitle.get(ft) : null;
-			if (!cluster) { cluster = { itemID: h.itemID, title: h.title, ids: new Set(), dois: new Set(), refs: null, flat: ft }; clusters.push(cluster); if (ft.length >= 8) byTitle.set(ft, cluster); }
-			if (h.openalex) cluster.ids.add(shortId(h.openalex));
-			if (h.doi) cluster.dois.add(String(h.doi).toLowerCase());
-			if (Array.isArray(h.refs)) { cluster.refs = cluster.refs || new Set(); for (let r of h.refs) cluster.refs.add(shortId(r)); }
-		}
-		let known = clusters.filter(c => c.refs), N = known.length;
-		let idToCluster = new Map(), doiToCluster = new Map(), refToClusters = new Map();
-		for (let c of clusters) { for (let id of c.ids) idToCluster.set(id, c); for (let d of c.dois) doiToCluster.set(d, c); }
-		for (let c of known) for (let r of c.refs) { if (!refToClusters.has(r)) refToClusters.set(r, new Set()); refToClusters.get(r).add(c); }
-		let weight = ref => { let df = refToClusters.get(ref)?.size || 0; return df && N ? Math.max(0, Math.log((N + 1) / df) / Math.log(N + 1)) : 0; };
-		let scores = new Map();
-		for (let r of results) {
-			let id = shortId(r.id), doi = String(r.doi || "").toLowerCase(), ft = flat(r.title);
-			let twin = (id && idToCluster.get(id)) || (doi && doiToCluster.get(doi)) || (r.versionDois || []).map(d => doiToCluster.get(String(d).toLowerCase())).find(Boolean) || (ft.length >= 8 && byTitle.get(ft)) || null;
-			if (twin) { scores.set(r.key, { held: true, score: null }); continue; }
-			if (!Array.isArray(r.refs) || !isWork(id)) { scores.set(r.key, { unrankable: true, score: null }); continue; }
-			let own = new Set(r.refs.map(shortId)), cites = new Set(), citedBy = new Set(), shared = [], per = new Map();
-			let note = c => { if (!per.has(c)) per.set(c, { c, cites: false, citedBy: false, w: 0 }); return per.get(c); };
-			for (let ref of own) {
-				let c = idToCluster.get(ref);
-				if (c) { cites.add(c); note(c).cites = true; continue; }
-				let who = refToClusters.get(ref);
-				if (who) { shared.push(ref); let w = weight(ref); for (let k of who) note(k).w += w; }
+			let id = h.openalex ? shortId(h.openalex) : "", doi = lc(h.doi), vers = (h.versionDois || []).map(lc).filter(Boolean), tk = !id && !doi ? titleKey(h) : "";
+			let c = (id && idMap.get(id)) || (doi && (doiMap.get(doi) || vdoiMap.get(doi))) || vers.map(d => doiMap.get(d)).find(Boolean) || (tk && titleMap.get(tk)) || null;
+			if (!c) { c = { itemID: h.itemID, title: h.title, refs: null, complete: false }; clusters.push(c); }
+			if (id) idMap.set(id, c);
+			if (doi) doiMap.set(doi, c);
+			for (let d of vers) vdoiMap.set(d, c);
+			if (tk) titleMap.set(tk, c);
+			if (Array.isArray(h.refs)) {
+				c.refs = c.refs || new Set(); for (let r of h.refs) c.refs.add(shortId(r));
+				if (h.complete !== false) c.complete = true;
 			}
-			for (let c of refToClusters.get(id) || []) { citedBy.add(c); note(c).citedBy = true; }
-			let c3w = round(shared.reduce((s, ref) => s + weight(ref), 0));
-			let top = [...per.values()].map(p => ({ itemID: p.c.itemID, title: p.c.title, why: [p.cites && "cites", p.citedBy && "citedBy", p.w > 0 && "shared"].filter(Boolean), shared: round(p.w), direct: (p.cites ? 1 : 0) + (p.citedBy ? 1 : 0) }))
-				.sort((a, b) => b.direct - a.direct || b.shared - a.shared).slice(0, TOP).map(({ direct, ...rest }) => rest);
-			scores.set(r.key, { score: round(3 * (cites.size + citedBy.size) + c3w), c1: cites.size, c2: citedBy.size, c3: shared.length, c3w, top });
 		}
+		let known = clusters.filter(c => c.refs), N = known.length, refToClusters = new Map(), n = 0;
+		for (let c of known) {
+			for (let r of c.refs) { let l = refToClusters.get(r); if (!l) refToClusters.set(r, l = []); l.push(c); }
+			if (++n % every === 0) yield;           // a long library is indexed in slices too
+		}
+		let weights = new Map(), logN = Math.log(N + 1);
+		let weight = ref => {
+			let w = weights.get(ref);
+			if (w === undefined) { let df = refToClusters.get(ref)?.length || 0; w = df && N ? Math.max(0, Math.log((N + 1) / df) / logN) : 0; weights.set(ref, w); }
+			return w;
+		};
+		let idToCluster = idMap;
+		return { clusters, idMap, doiMap, vdoiMap, titleMap, refToClusters, weight, N, incomplete: known.filter(c => !c.complete).length, idToCluster };
+	}
+
+	function buildIndex(held) { let it = indexSteps(held), step; while (!(step = it.next()).done); return step.value; }
+
+	function twinOf(ix, r) {
+		let id = shortId(r.id), doi = lc(r.doi);
+		return (id && ix.idMap.get(id)) || (doi && (ix.doiMap.get(doi) || ix.vdoiMap.get(doi))) || (r.versionDois || []).map(d => ix.doiMap.get(lc(d))).find(Boolean)
+			|| (!id && !doi && (() => { let tk = titleKey(r); return tk && ix.titleMap.get(tk); })()) || null;
+	}
+
+	/* One result's score, without the explanation: c1, c2, c3, c3w and a lazy `top` (the five held papers
+	   that explain it), worked out only when something reads it. */
+	function scoreOne(ix, r) {
+		if (twinOf(ix, r)) return { held: true, score: null };
+		let id = shortId(r.id);
+		if (!Array.isArray(r.refs) || !isWork(id)) return { unrankable: true, score: null };
+		let own = new Set(r.refs.map(shortId)), cites = new Set(), shared = 0, c3w = 0;
+		for (let ref of own) {
+			let c = ix.idMap.get(ref);
+			if (c) { cites.add(c); continue; }
+			if (ix.refToClusters.has(ref)) { shared++; c3w += ix.weight(ref); }
+		}
+		let citedBy = new Set();
+		for (let c of ix.refToClusters.get(id) || []) if (c.complete) citedBy.add(c);
+		c3w = round(c3w);
+		let score = { score: round(3 * (cites.size + citedBy.size) + c3w), c1: cites.size, c2: citedBy.size, c3: shared, c3w, lowConf: ix.incomplete };
+		let explain = () => {
+			let per = new Map(), note = c => { if (!per.has(c)) per.set(c, { c, cites: false, citedBy: false, w: 0 }); return per.get(c); };
+			for (let ref of own) {
+				if (ix.idMap.has(ref)) { note(ix.idMap.get(ref)).cites = true; continue; }
+				let who = ix.refToClusters.get(ref);
+				if (who) { let w = ix.weight(ref); for (let k of who) note(k).w += w; }
+			}
+			for (let c of citedBy) note(c).citedBy = true;
+			return [...per.values()].map(p => ({ itemID: p.c.itemID, title: p.c.title, why: [p.cites && "cites", p.citedBy && "citedBy", p.w > 0 && "shared"].filter(Boolean), shared: round(p.w), direct: (p.cites ? 1 : 0) + (p.citedBy ? 1 : 0) }))
+				.sort((a, b) => b.direct - a.direct || b.shared - a.shared).slice(0, TOP).map(({ direct, ...rest }) => rest);
+		};
+		Object.defineProperty(score, "top", { enumerable: true, configurable: true, get() { let v = explain(); Object.defineProperty(score, "top", { value: v, enumerable: true, writable: true, configurable: true }); return v; } });
+		return score;
+	}
+
+	/* The score of every result against the held papers, all at once (the tests and small lists). */
+	function scoreAll(held, results) {
+		let ix = buildIndex(held), scores = new Map();
+		for (let r of results) scores.set(r.key, scoreOne(ix, r));
+		return scores;
+	}
+
+	/* The same, without holding the thread: the index is built once, then results are scored in slices
+	   of `every` (or `budget` ms, whichever comes first), and between slices the event loop gets a turn (`pause`, a macrotask by default).
+	   `cancelled` is asked before each slice and throws an AbortError when set. */
+	async function scoreAllAsync(held, results, { every = 100, budget = 40, pause = () => new Promise(r => setTimeout(r, 0)), cancelled } = {}) {
+		cancelled?.();
+		let it = indexSteps(held), step;
+		while (!(step = it.next()).done) { await pause(); cancelled?.(); }
+		let ix = step.value, scores = new Map();
+		let since = 0, started = Date.now();
+		for (let i = 0; i < results.length; i++) {
+			if (since >= every || Date.now() - started >= budget) { await pause(); cancelled?.(); since = 0; started = Date.now(); }
+			scores.set(results[i].key, scoreOne(ix, results[i])); since++;
+		}
+		cancelled?.();
 		return scores;
 	}
 
@@ -118,8 +181,17 @@ var ZotPoPRelated = (() => {
 		if (!held.length) return Object.assign(out, { ok: false, reason: "empty-library" });
 		let auth = sources?.openAlexAuth ? sources.openAlexAuth({ openAlexApiKey: ctx.openAlexApiKey || "" }) : "";
 		let cancelled = () => { if (ctx.signal?.aborted || ctx.isCancelled?.()) throw abortError(); };
+		cancelled();
 		let heldNeedsDoi = [], heldDoi = h => normDOI(sources, h.doi);
-		let have = h => h.openalex && Array.isArray(h.refs);
+		/* Style Custom's stored list (`stored`) is used only while it is still about this item and still
+		   fresh: the item's current DOI must be the one the list was fetched for, and the list at most 30
+		   days old. Anything else is asked for again, in the normal batches. */
+		let trusted = h => {
+			if (!h.stored) return true;
+			let at = Date.parse(h.checkedAt), cur = heldDoi(h), was = normDOI(sources, h.scDoi);
+			return Number.isFinite(at) && store.now() - at < TTL && (cur ? cur === was : !was);
+		};
+		let have = h => h.openalex && Array.isArray(h.refs) && trusted(h);
 		for (let h of held) { let d = heldDoi(h); if (!have(h) && d && !store.getDoi(d)) heldNeedsDoi.push(d); }
 		let resNeedsId = [], resNeedsDoi = [];
 		for (let r of results) {
@@ -156,7 +228,7 @@ var ZotPoPRelated = (() => {
 		let heldNow = () => held.map(h => {
 			if (have(h)) return { ...h, refs: h.refs.map(shortId) };
 			let e = heldDoi(h) && store.getDoi(heldDoi(h));
-			return e?.refs ? { ...h, openalex: e.id, refs: e.refs } : { ...h, refs: null };
+			return e?.refs ? { ...h, openalex: e.id, refs: e.refs, complete: true } : { ...h, openalex: h.stored ? null : h.openalex, refs: null };
 		});
 		let go = true;
 		for (let b of doiBatches) { if (!(go = await fetchBatch("doi", b))) break; }
@@ -169,16 +241,17 @@ var ZotPoPRelated = (() => {
 			if (isWork(id)) e = store.getId(id);
 			else if (d) { let w = store.getDoi(d); if (w?.id) { id = w.id; e = w; } }
 			let versionDois = [r.publishedAs?.doi, r.preprintOf?.doi].filter(Boolean).map(x => normDOI(sources, x));
-			return { key: r.key, id: isWork(id) ? id : null, doi: d, title: r.title, refs: e?.refs || null, versionDois };
+			return { key: r.key, id: isWork(id) ? id : null, doi: d, title: r.title, year: r.year, family: r.family, refs: e?.refs || null, versionDois };
 		});
-		out.scores = scoreAll(heldList, rows);
+		cancelled();
+		out.scores = await scoreAllAsync(heldList, rows, { cancelled, pause: ctx.pause });
 		out.order = orderOf(results, out.scores);
 		out.partial = !go;
 		if (out.partial && !out.reason) out.reason = "failed";
 		return out;
 	}
 
-	return { FORMULA, TTL, BATCH, shortId, flat, createStore, scoreAll, orderOf, rank };
+	return { FORMULA, TTL, BATCH, shortId, flat, createStore, scoreAll, scoreAllAsync, buildIndex, orderOf, rank };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPRelated;

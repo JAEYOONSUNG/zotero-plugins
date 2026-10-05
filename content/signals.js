@@ -6,6 +6,7 @@ var ZotPoPSignals = (() => {
 	const shortWork = value => String(value == null ? "" : value).replace(/^https?:\/\/openalex\.org\//i, "").trim().toUpperCase();
 	const shortAuthor = value => shortWork(value);
 	const flat = value => String(value == null ? "" : value).normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+	const REFERENCE_CAP = 500;
 	const STATES = new Set(["done", "reading", "unread"]);
 
 	/* The Style Custom runtime, only when it exposes what is needed. */
@@ -14,7 +15,7 @@ var ZotPoPSignals = (() => {
 		return sc && typeof sc.paperWorks === "function" && typeof sc.watchedAuthors === "function" ? sc : null;
 	}
 
-	/* Style Custom's stored works as { key, openalex, refs:Set }, one per library item it has looked up. */
+	/* Style Custom's stored works as { key, openalex, doi, checkedAt, complete, refs:Set }, one per library item it has looked up. */
 	function libraryWorks(sc) {
 		let out = [];
 		if (!sc) return out;
@@ -22,7 +23,9 @@ var ZotPoPSignals = (() => {
 		try { store = sc.paperWorks() || {}; } catch (e) { return out; }
 		for (let [key, work] of Object.entries(store)) {
 			if (!work || work.missing) continue;
-			out.push({ key, openalex: shortWork(work.openalex), refs: new Set((Array.isArray(work.references) ? work.references : []).map(shortWork).filter(Boolean)) });
+			let list = Array.isArray(work.references) ? work.references : [];
+			// Style Custom keeps at most 500 references per paper: a list that long may have been cut.
+			out.push({ key, openalex: shortWork(work.openalex), doi: String(work.doi || ""), checkedAt: String(work.checkedAt || ""), complete: list.length < REFERENCE_CAP, refs: new Set(list.map(shortWork).filter(Boolean)) });
 		}
 		return out;
 	}

@@ -168,10 +168,39 @@ var ZotPoPImporter = (function () {
 			list.push({ itemID: item.id, title: item.getField("title"), date: item.getField("date"), doi: item.getField("DOI") || null, extra: item.getField("extra") || null });
 		} catch (e) { /* the TTL still bounds a missed entry */ }
 	}
-	// Deleted or trashed items leave the index; added/modified ones are handled on save or by the TTL.
-	try {
-		Zotero.Notifier?.registerObserver?.({ notify(event, type) { if (type === "item" && (event === "delete" || event === "trash" || event === "removeDuplicatesMaster")) forgetTitleIndex(); } }, ["item"], "zotpop-title-index");
-	} catch (e) { /* no notifier here: add-on-save and the TTL remain */ }
+	/* Deleted or trashed items leave the index; added/modified ones are handled on save or by the TTL.
+	   Zotero's Notifier holds its observers strongly, so one observer serves every window of the plugin
+	   (kept on the shared Zotero object, because each search window loads this script anew) and is
+	   unregistered when the last window's importer is disposed, or at plugin shutdown. */
+	function registerTitleObserver() {
+		try {
+			let shared = Zotero.__zotpopTitleObserver;
+			if (!shared) {
+				if (!Zotero.Notifier?.registerObserver) return;
+				let id = Zotero.Notifier.registerObserver({ notify(event, type) { if (type === "item" && (event === "delete" || event === "trash" || event === "removeDuplicatesMaster")) shared?.forget(); } }, ["item"], "zotpop-title-index");
+				shared = Zotero.__zotpopTitleObserver = { id, forgetters: new Set(), forget() { for (let f of shared.forgetters) { try { f(); } catch (e) { /* see above */ } } } };
+				shared.disposeAll = () => { shared.forgetters.clear(); unregisterShared(); };
+			}
+			ownForgetter = () => forgetTitleIndex();
+			shared.forgetters.add(ownForgetter);
+		} catch (e) { /* no notifier here: add-on-save and the TTL remain */ }
+	}
+	let ownForgetter = null;
+	function unregisterShared() {
+		let shared = Zotero.__zotpopTitleObserver;
+		if (!shared) return;
+		try { Zotero.Notifier?.unregisterObserver?.(shared.id); } catch (e) { /* already gone */ }
+		delete Zotero.__zotpopTitleObserver;
+	}
+	/* This window's importer goes away: its share of the observer is dropped, and with the last one the observer itself. */
+	function dispose() {
+		let shared = Zotero.__zotpopTitleObserver;
+		if (shared && ownForgetter) shared.forgetters.delete(ownForgetter);
+		ownForgetter = null;
+		if (shared && !shared.forgetters.size) unregisterShared();
+		titleRuns.clear();
+	}
+	registerTitleObserver();
 	function forgetTitleIndex(libraryID) { if (libraryID == null) titleRuns.clear(); else titleRuns.delete(libraryID); }
 	async function titleIndex(libraryID) {
 		let held = titleRuns.get(libraryID);
@@ -629,5 +658,5 @@ var ZotPoPImporter = (function () {
 		}
 	}
 
-	return { manualItemType, importRecord, fillPDF, localPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, getReadingStates, getCollectionPaths, addTranslatedNote };
+	return { manualItemType, importRecord, fillPDF, localPDF, backfill, publicationDate, journalFigureLabel, sameWorkIdentifiers, getLibraryDOIMap, getTargets, getCurrentTarget, findByDOI, findByTitle, flatTitle, forgetTitleIndex, dispose, getReadingStates, getCollectionPaths, addTranslatedNote };
 })();

@@ -328,6 +328,8 @@ Zotero.ZotPoP = {
 	shutdown() {
 		try { this.updater?.stop(); } catch (e) {}
 		this.updater = null;
+		// The importer's Notifier observer lives on Zotero, not in a window: drop it before the windows are closed.
+		try { Zotero.__zotpopTitleObserver?.disposeAll?.(); } catch (e) {}
 		this.closeSearchTab();
 		if (this._window && !this._window.closed) this._window.close();
 		this._window = null;
