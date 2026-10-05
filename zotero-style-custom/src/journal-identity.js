@@ -430,18 +430,20 @@
   const seen = new Map();
   const SEEN_LIMIT = 4000;
 
-  function identify(title) {
+  function identify(title, {issn} = {}) {
     const name = text(title);
     if (!name) return null;
-    const cached = seen.get(name);
+    const codes = issnCodes(issn).join(',');
+    const memo = codes ? name + '|' + codes : name;
+    const cached = seen.get(memo);
     if (cached !== undefined) return cached;
-    const found = classify(name);
+    const found = classify(name, codes);
     /* Whatever branch named the colour, the registry's facts ride along:
        a journal matched by a title rule (Nature, Cell, Science) used to come
        back without its quartile or abbreviation, so the list showed Q1 on
        Chemical Reviews and nothing on Nature. */
     if (found) {
-      const row = registryLookup(name);
+      const row = registryLookup(name, codes);
       if (row) {
         if (found.quartile == null) found.quartile = row.quartile ?? null;
         if (!found.abbreviation) found.abbreviation = row.abbreviation || '';
@@ -454,11 +456,11 @@
     // A library has hundreds of journals, not thousands; the cap is there so a
     // pathological caller cannot grow this without bound.
     if (seen.size >= SEEN_LIMIT) seen.clear();
-    seen.set(name, found);
+    seen.set(memo, found);
     return found;
   }
 
-  function classify(name) {
+  function classify(name, issn) {
     const key = flat(name);
     const measured = JOURNAL_HUES[key];
     const exact = Object.prototype.hasOwnProperty.call(JOURNAL_COLOURS, key) ? JOURNAL_COLOURS[key] : undefined;
@@ -483,7 +485,7 @@
        who publishes it, and a journal nobody curated then gets the colour of
        the house that prints it -- which is the thing a reader recognises.
        Measured over every JCR journal, the rules alone reached 3%. */
-    const row = registryLookup(name);
+    const row = registryLookup(name, issn);
     const family = row ? familyForPublisher(row.publisher) : null;
     const info = family ? familyInfo(family, row.publisher) : null;
     if (info) {
@@ -558,11 +560,28 @@
     return row && REGISTRY.rankByKey ? (REGISTRY.rankByKey.get(REGISTRY.rowKeys.get(row)) || null) : null;
   }
   function exactRegistryTitle(title) { return String(title || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase(); }
-  function registryLookup(title) {
+  /* By title (exact, then flattened, then without a leading "The": "The ISME
+     Journal" is filed as "ISME Journal"), and when the title finds nothing, by
+     the ISSN the item carries. A string may hold several ISSNs. */
+  function issnCodes(issn) {
+    return [...new Set((String(issn || '').toUpperCase().match(/\b\d{4}[-\s]?\d{3}[\dX]\b/g) || []).map(code => code.replace(/[-\s]/g, '')))];
+  }
+  function registryLookup(title, issn) {
     if (!REGISTRY) return null;
     const exact = exactRegistryTitle(title);
     if (REGISTRY.byExactTitle.has(exact)) return REGISTRY.byExactTitle.get(exact);
-    return REGISTRY.byTitle.get(flat(title)) || null;
+    const hit = REGISTRY.byTitle.get(flat(title));
+    if (hit) return hit;
+    if (/^the\s+/i.test(text(title))) {
+      const bare = text(title).replace(/^the\s+/i, '');
+      const byBare = REGISTRY.byExactTitle.get(exactRegistryTitle(bare)) || REGISTRY.byTitle.get(flat(bare));
+      if (byBare) return byBare;
+    }
+    for (const code of issnCodes(issn)) {
+      const row = REGISTRY.byIssn.get(code);
+      if (row) return row;
+    }
+    return null;
   }
   /* Local JIF comparisons inside the bundled OpenAlex subject paths. These
      are not official JCR category ranks. Identical displayed JIFs receive a

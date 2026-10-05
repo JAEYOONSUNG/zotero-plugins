@@ -135,3 +135,24 @@ test('a rating leaves no tag behind at all; only the status stays a tag', () => 
   assert.equal(written.find(t => t.tag === '/done').type, 0);
   assert.deepEqual(written.map(t => t.tag), ['Topic', '/done']);
 });
+
+// Fact-check 2026-10-05: 10 papers with minutes of reading (GADTZ9US 5,920 s, 5 stars) showed unread
+// because an automatic (type 1) /unread tag outranked the time.
+test('an automatic /unread tag does not outrank substantial reading time; a manual one does', () => {
+  const auto = [{tag: '/unread', type: 1}], manual = [{tag: '/unread', type: 0}];
+  assert.equal(data.readState(auto, '', 5920).status, 'reading');
+  assert.equal(data.readState(auto, '', 29).status, 'unread', 'a glance is still not reading');
+  assert.equal(data.readState(auto, '', 0).status, 'unread');
+  assert.equal(data.readState(manual, '', 5920).status, 'unread', 'the reader\'s own tag wins');
+  assert.equal(data.readState(['/unread'], '', 600).status, 'unread', 'a bare string carries no type, so it is the reader\'s word');
+  assert.equal(data.readState([...auto, {tag: '/done', type: 0}], '', 5920).status, 'done');
+});
+test('statusReason says why a status is shown', () => {
+  const auto = [{tag: '/unread', type: 1}];
+  assert.equal(data.statusReason(auto, 5920), 'time-over-auto-unread');
+  assert.equal(data.statusReason([{tag: '/unread', type: 0}], 5920), 'tag-unread');
+  assert.equal(data.statusReason(['/done'], 0), 'tag-done');
+  assert.equal(data.statusReason(['/reading'], 0), 'tag-reading');
+  assert.equal(data.statusReason([], 100), 'time');
+  assert.equal(data.statusReason([], 0), 'none');
+});

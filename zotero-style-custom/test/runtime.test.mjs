@@ -64,6 +64,31 @@ function fixture() {
   return { Z, plugin, item, records, extras, columns, observers, errors };
 }
 
+test('A7 a language change registers every column again under its new title and rebuilds the menus in each window',async()=>{
+ const {plugin,columns,Z}=fixture();
+ const i18n=require('../src/i18n.js'),strings=require('../src/strings.js');
+ i18n.load(strings.en);
+ await plugin.start({id:'test@focus',version:'0.1',rootURI:'file:///focus/'});
+ try{
+  const keys=[...columns.keys()].sort(),statusKey=[...columns.keys()].find(k=>/status$/.test(k));
+  assert.equal(columns.get(statusKey).label,'상태','Korean at first');
+  // Two windows with a menu built in each: a rebuild must replace, not stack.
+  let built=0,removed=0;
+  const state=()=>({nodes:[],menuNodes:[]});
+  const a=state(),b=state();
+  plugin.windows.set({closed:false,id:'a'},a);plugin.windows.set({closed:false,id:'b'},b);
+  plugin.buildMenus=(win,st)=>{built++;const node={remove(){removed++;}};st.nodes.push(node);st.menuNodes.push(node);};
+  plugin.buildMenus(null,a);plugin.buildMenus(null,b);built=0;
+  await plugin.setSetting('language','en-US',{apply:false});
+  assert.equal(columns.get(statusKey).label,'Status','the registered title follows the language');
+  assert.deepEqual([...columns.keys()].sort(),keys,'the same columns under the same keys, none lost or doubled');
+  assert.equal(built,2,'each window\'s menus were rebuilt');assert.equal(removed,2,'and the old ones taken down');
+  assert.equal(a.menuNodes.length,1);assert.equal(a.nodes.length,1);
+  await plugin.setSetting('language','ko-KR',{apply:false});
+  assert.equal(columns.get(statusKey).label,'상태');
+ }finally{i18n.use('ko-KR');plugin.windows.clear();await plugin.stop();}
+});
+
 test('startup registers typed, namespaced columns and stop removes all registrations', async () => {
   const { plugin, columns, observers } = fixture();
   await plugin.start({ id: 'test@focus', version: '0.1', rootURI: 'file:///focus/' });
@@ -256,6 +281,27 @@ test('verified catalog overrides undated legacy IF and clears IF when the journa
  assert.match(plugin.metrics(reference).impactSource,/JIF 2025/);
  journal='Unrelated Journal';assert.equal(plugin.metrics(reference).impactFactor,null);
 });
+test('a successor journal marks the IF and an old paper gets none (P2-7)', () => {
+ const {plugin,item}=fixture(); plugin.active=true;
+ plugin.catalog=[{title:'Microbiology-SGM',aliases:[],issns:[],impactFactor:4.3,year:2025,checkedAt:'2026-09-13',sourceURL:'https://www.microbiologyresearch.org/x',evidence:'Verified JIF'}];
+ plugin.rebuildJournals();
+ const paper=item(7);let date='1976-05-01';
+ paper.getField=k=>({publicationTitle:'Journal of General Microbiology',date}[k]||'');
+ assert.equal(plugin.metrics(paper).impactFactor,null,'before the 1994 rename the successor figure does not apply');
+ date='1998';
+ assert.equal(plugin.metrics(paper).impactFactor,4.3);
+ assert.equal(plugin.metrics(paper).impactSuccessor,'Microbiology-SGM');
+ paper.getField=k=>({publicationTitle:'Microbiology-SGM',date}[k]||'');
+ assert.equal(plugin.metrics(paper).impactSuccessor,'');
+});
+test('the status tooltip says why an automatic /unread tag does not win (P2-4)', () => {
+ const {plugin}=fixture();
+ const why=Object.getPrototypeOf(plugin).statusWhy;
+ const call=state=>why.call({state:()=>state,t:x=>x},{});
+ assert.match(call({statusReason:'time-over-auto-unread',seconds:5920}),/99분/);
+ assert.match(call({statusReason:'time',seconds:600}),/10분/);
+ assert.equal(call({statusReason:'tag-unread',seconds:600}),'');
+});
 test('publisher refresh updates valid metrics, keeps cached values on failures and deduplicates page requests',async()=>{
  const {plugin,item,Z}=fixture(); const {DOMParser}=await import('linkedom');plugin.active=true;
  const record={title:'Nature',aliases:[],issns:[],impactFactor:50,year:2024,checkedAt:'2025-09-13',sourceURL:'https://www.nature.com/nature/journal-impact',evidence:'Verified JIF'};
@@ -275,10 +321,47 @@ test('numeric-string legacy totals become visible without source or date inventi
  const ref=item(1);assert.equal(plugin.metrics(ref).citations,123);
  assert.equal(plugin.metrics(ref).citationSource,'Style cache: Total(DOI)');
 });
+test('a legacy Total(DOI) count is flagged, never sorted as current, and left out of panel aggregates (P2-3)',()=>{
+ const {plugin,item,Z}=fixture();Z.Libraries.userLibraryID=1;
+ plugin.legacy={'1':{citedCount:{'Total(DOI)':'439'}}};
+ const ref=item(1);
+ const metrics=plugin.metrics(ref);
+ assert.equal(metrics.citations,439,'the count is still shown');
+ assert.equal(metrics.citationLegacy,true);
+ assert.equal(plugin.displayValue('citations',ref),'439');
+ assert.equal(plugin.value('citations',ref),plugin.sortKey(''),'but it sorts as unknown, not as 439');
+ const panel=plugin.panelState(ref);
+ assert.equal(panel.citations,null,'aggregates do not count it');
+ assert.match(panel.citationSource,/legacy · unverified/);
+ // A count a lookup verified is current and counts.
+ plugin.entry(ref).citationLookup={status:'ok',count:123,source:'OpenAlex',checkedAt:'2026-10-01T00:00:00Z',identity:plugin.citationTools.identity(plugin.citationRecord(ref))};
+ assert.equal(plugin.metrics(ref).citations,123);
+ assert.equal(plugin.metrics(ref).citationLegacy,false);
+ assert.equal(plugin.panelState(ref).citations,123);
+});
 function citationItem(item,id,doi='10.1234/fixture'){
  const reference=item(id);reference.fields={DOI:doi,title:'Precisely identified research paper',date:'2025-01-01',extra:'Citations: 999 (Old source, 2020-01-01)'};
  reference.getField=k=>reference.fields[k]||'';reference.getCreators=()=>[{creatorTypeID:1,lastName:'Liu'}];return reference;
 }
+test('a refreshed count rewrites the stale Citations line in Extra in one transaction, only where a line exists (P2-8)',async()=>{
+ const {plugin,item,Z}=fixture();plugin.active=true;
+ const stale=citationItem(item,1);          // Extra: Citations: 999 (Old source, 2020-01-01)
+ const none=citationItem(item,2,'10.1234/two');none.fields.extra='Rating: 4';
+ const same=citationItem(item,3,'10.1234/three');same.fields.extra='Citations: 12 (OpenAlex, 2026-01-01)';
+ let transactions=0;const saved=[];
+ Z.DB.executeTransaction=async fn=>{transactions++;await fn();};
+ for(const ref of [stale,none,same]){ref.hasChanged=()=>false;ref.isEditable=()=>true;ref.setField=(k,v)=>{ref.fields[k]=String(v);};ref.save=async o=>{saved.push([ref.id,o]);};}
+ const out=await plugin.syncCitationExtras([{item:stale,count:123,checkedAt:'2026-10-05T00:00:00Z'},{item:none,count:5,checkedAt:'2026-10-05T00:00:00Z'},{item:same,count:12,checkedAt:'2026-10-05T00:00:00Z'}]);
+ assert.equal(out.written,1);assert.equal(transactions,1,'one batch, not one write per paper');
+ assert.equal(stale.fields.extra,'Citations: 123 (OpenAlex, 2026-10-05)');
+ assert.equal(none.fields.extra,'Rating: 4','no line, nothing added here');
+ assert.equal(same.fields.extra,'Citations: 12 (OpenAlex, 2026-01-01)','an equal count is not rewritten');
+ assert.deepEqual(saved.map(x=>x[0]),[1]);assert.equal(saved[0][1].skipDateModifiedUpdate,true);
+ plugin.Z.Prefs.set('extensions.style-custom.metadataCitations',false);
+ stale.fields.extra='Citations: 1 (OpenAlex, 2020-01-01)';
+ assert.equal((await plugin.syncCitationExtras([{item:stale,count:9,checkedAt:'2026-10-05T00:00:00Z'}])).written,0,'off means off');
+ assert.equal(stale.fields.extra,'Citations: 1 (OpenAlex, 2020-01-01)');
+});
 test('fresh verified zero outranks stale Extra, errors preserve it and cached attempts avoid repeated requests',async()=>{
  const {plugin,item,Z}=fixture();plugin.active=true;const ref=citationItem(item,1);let calls=0,fail=false;
  Z.HTTP={request:async()=>{calls++;if(fail)throw Object.assign(Error('blocked'),{status:403});return {response:{results:[{doi:'https://doi.org/10.1234/fixture',cited_by_count:0}]}};}};
@@ -581,7 +664,7 @@ test('the click that selects a row does not also change its status; a click on a
 test('clicking a selected status cell opens a three-state menu with the current one checked, and the choice goes through edit()',async()=>{
  const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const a=item(1),b=item(2),c=item(3);
  let selectedRows=[a,b];window.ZoteroPane={itemsView:{getRow:()=>({ref:a}),selection:{isSelected:()=>true}},getSelectedItems:()=>selectedRows};
- plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'1';
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'1';plugin.state=()=>({status:'reading',seconds:0});
  const edits=[],said=[];plugin.edit=async(items,change)=>{edits.push([items.map(i=>i.id),change]);};plugin.say=async(w,m)=>{said.push(m);};
  const opened=[];document.createXULElement=tag=>{const n=document.createElement(tag);n.openPopup=(...args)=>opened.push(args);return n;};
  const cell=plugin.renderCell('status',0,'1',{},document);document.body.appendChild(cell);
@@ -603,10 +686,54 @@ test('clicking a selected status cell opens a three-state menu with the current 
  window.ZoteroPane=undefined;
 });
 
+test('A4 the status menu reads the current state at click time, and skips only when every selected paper already has the choice',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const a=item(1),b=item(2);
+ window.ZoteroPane={itemsView:{getRow:()=>({ref:a}),selection:{isSelected:()=>true}},getSelectedItems:()=>[a,b]};
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'0';
+ const live={1:'unread',2:'unread'};plugin.state=it=>({status:live[it.id],seconds:0});
+ const edits=[];plugin.edit=async(items,change)=>{edits.push([items.map(i=>i.id),change]);};plugin.say=async()=>{};
+ document.createXULElement=tag=>{const n=document.createElement(tag);n.openPopup=()=>{};return n;};
+ const cell=plugin.renderCell('status',0,'0',{},document);document.body.appendChild(cell);   // drawn as unread
+ live[1]='reading';live[2]='reading';                                                          // reading time grew after the paint
+ cell.dispatchEvent(new window.Event('mousedown',{bubbles:true}));cell.dispatchEvent(new window.Event('click',{bubbles:true}));
+ const entries=[...document.querySelectorAll('menupopup menuitem')];
+ assert.deepEqual(entries.map(e=>e.getAttribute('checked')),[null,'true',null],'the checkmark follows the state now, not at render');
+ entries[0].dispatchEvent(new window.Event('command'));await new Promise(r=>setTimeout(r,0));
+ assert.deepEqual(edits,[[[1,2],{status:'unread'}]],'Unread is not skipped as "same" just because the cell was drawn unread');
+ // one of two already has it: still applied; both have it: skipped
+ live[1]='unread';live[2]='reading';edits.length=0;entries[0].dispatchEvent(new window.Event('command'));await new Promise(r=>setTimeout(r,0));
+ assert.equal(edits.length,1);
+ live[1]='unread';live[2]='unread';edits.length=0;entries[0].dispatchEvent(new window.Event('command'));await new Promise(r=>setTimeout(r,0));
+ assert.equal(edits.length,0);
+ window.ZoteroPane=undefined;
+});
+
+test('A2 a selected row keeps its multi-selection through mousedown, mouseup and click on the status cell, the stars and the more button',async()=>{
+ const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body><div id="row"></div></body></html>');const {plugin,item}=fixture();const a=item(1),b=item(2);
+ let selected=true;
+ window.ZoteroPane={itemsView:{getRow:()=>({ref:a}),selection:{isSelected:()=>selected,select(){}}},getSelectedItems:()=>[a,b],buildItemContextMenu:async()=>{}};
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'1';plugin.state=()=>({status:'reading',rating:2,seconds:0});plugin.say=async()=>{};plugin.edit=async()=>{};
+ document.createXULElement=tag=>{const n=document.createElement(tag);n.openPopup=()=>{};return n;};
+ const row=document.getElementById('row');const seen=[];
+ for(const type of ['mousedown','mouseup','click'])row.addEventListener(type,()=>seen.push(type));   // what Zotero's own row handlers would hear
+ const sequence=target=>{for(const type of ['mousedown','mouseup','click'])target.dispatchEvent(new window.Event(type,{bubbles:true}));};
+ const status=plugin.renderCell('status',0,'1',{},document);row.appendChild(status);
+ const more=plugin.moreButton(document,0,a);row.appendChild(more);
+ const stars=plugin.renderCell('rating',0,'2',{},document);row.appendChild(stars);
+ sequence(status);assert.deepEqual(seen,[],'the status cell on a selected row keeps all three events from the row, so the selection is not collapsed');
+ sequence(more);assert.deepEqual(seen,[],'so does the more button');
+ sequence(stars.firstChild);assert.deepEqual(seen,[],'and a star');
+ // On a row that is not selected the first press is Zotero's to handle: it selects the row.
+ selected=false;seen.length=0;
+ const status2=plugin.renderCell('status',0,'1',{},document);row.appendChild(status2);
+ sequence(status2);assert.ok(seen.includes('mousedown')&&seen.includes('mouseup'),'an unselected row still gets its selecting mousedown/mouseup');
+ window.ZoteroPane=undefined;
+});
+
 test('without a native popup the status click cycles unread, reading, done',async()=>{
  const {parseHTML}=await import('linkedom');const {document,window}=parseHTML('<html><body></body></html>');const {plugin,item}=fixture();const a=item(1);
  window.ZoteroPane={itemsView:{getRow:()=>({ref:a}),selection:{isSelected:()=>true}},getSelectedItems:()=>[a]};
- plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'2';plugin.say=async()=>{};
+ plugin.isRegular=()=>true;plugin.canEdit=()=>true;plugin.value=()=>'2';plugin.state=()=>({status:'done',seconds:0});plugin.say=async()=>{};
  const edits=[];plugin.edit=async(items,change)=>{edits.push(change);};
  const cell=plugin.renderCell('status',0,'2',{},document);cell.dispatchEvent(new window.Event('mousedown',{bubbles:true}));cell.dispatchEvent(new window.Event('click',{bubbles:true}));
  await new Promise(r=>setTimeout(r,0));assert.deepEqual(edits,[{status:'unread'}]);
@@ -2677,6 +2804,30 @@ test('rows for papers that have left the library are dropped, and a small store 
  plugin.cache.items = {'1:ONLY': {seconds: 1}};
  assert.equal(await plugin.pruneDeletedItems(), 0);
  assert.deepEqual(Object.keys(plugin.cache.items), ['1:ONLY']);
+ plugin.cancelScheduledFlush();
+});
+
+test('stale works rows and trashed items are pruned too, except where a merge ledger still points', async () => {
+ const {plugin, Z, item} = fixture(); Z.Libraries.userLibraryID = 1;
+ plugin.active = true;
+ const alive = item(42, {}), trashed = item(43, {});
+ trashed.deleted = true;
+ Z.Libraries.getAll = () => [{libraryID: 1}];
+ // A library listing that wrongly still hands back a trashed item must not keep its rows.
+ Z.Items = {...(Z.Items || {}), getAll: async () => [alive, trashed]};
+ plugin.cache.items = {}; plugin.cache.works = {};
+ for (let n = 0; n < 250; n++) plugin.cache.items['1:GONE' + n] = {seconds: 5};
+ plugin.cache.items[plugin.identity(alive)] = {seconds: 99};
+ plugin.cache.items[plugin.identity(trashed)] = {seconds: 7};
+ plugin.cache.works[plugin.identity(alive)] = {references: []};
+ plugin.cache.works[plugin.identity(trashed)] = {references: []};
+ plugin.cache.works['1:GONEW'] = {references: []};
+ plugin.cache.works['1:LEDGER'] = {references: []};
+ plugin.cache.mergeUndo = {'77': {preprintKey: '1:LEDGER'}};
+ await plugin.pruneDeletedItems();
+ assert.deepEqual(Object.keys(plugin.cache.works).sort(), [plugin.identity(alive), '1:LEDGER'].sort(), 'works rows of gone and trashed papers go, a ledgered one stays');
+ assert.ok(!(plugin.identity(trashed) in plugin.cache.items), 'a trashed paper keeps no items row');
+ assert.equal(plugin.cache.items[plugin.identity(alive)].seconds, 99);
  plugin.cancelScheduledFlush();
 });
 

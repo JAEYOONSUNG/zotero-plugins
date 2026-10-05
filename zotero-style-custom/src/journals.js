@@ -14,7 +14,20 @@
   // title on an old paper is sent to the new one (Biotechnology for Biofuels is
   // now "... and Bioproducts", Journal of General Microbiology is Microbiology).
   const SPELLED={'biotechnology for biofuels':'biotechnology for biofuels and bioproducts','bmc evolutionary biology':'bmc ecology and evolution','molecular and general genetics mgg':'molecular genetics and genomics','molecular and general genetics':'molecular genetics and genomics','journal of general microbiology':'microbiology sgm','european journal of biochemistry':'febs journal','journal of applied bacteriology':'journal of applied microbiology','genome announcements':'microbiology resource announcements','agricultural and biological chemistry':'bioscience biotechnology and biochemistry','biotechnology techniques':'biotechnology letters','standards in genomic sciences':'environmental microbiome','current protocols in molecular biology':'current protocols','bioelectrochemistry and bioenergetics':'bioelectrochemistry','angewandte chemie':'angewandte chemie international edition','acta crystallographica section f structural biology and crystallization communications':'acta crystallographica section f structural biology communications','acta crystallographica section f':'acta crystallographica section f structural biology communications','frontiers in bioscience':'frontiers in bioscience landmark','proceedings of the national academy of sciences':'proceedings of the national academy of sciences of the united states of america','pnas':'proceedings of the national academy of sciences of the united states of america'};
-  function name(value) { const key=String(value || '').normalize('NFKC').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ').replace(/^the /,''); return SPELLED[key]||key; }
+  function plain(value) { return String(value || '').normalize('NFKC').toLowerCase().replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ').replace(/^the /,''); }
+  function name(value) { const key=plain(value); return SPELLED[key]||key; }
+  /* The year the successor title began, for the titles SPELLED sends to a new
+     name. A paper older than that was published in a different journal, so the
+     successor's present IF says nothing about it. null: renamed, year not
+     known, so the figure is shown but marked. Not a rename (same journal under
+     a spelling): Angewandte Chemie, Frontiers in Bioscience, PNAS. */
+  const RENAMES={'journal of general microbiology':1994,'genome announcements':2018,'current protocols in molecular biology':2021,'european journal of biochemistry':2005,'journal of applied bacteriology':1997,'agricultural and biological chemistry':1992,'biotechnology techniques':1999,'biotechnology for biofuels':2022,'bmc evolutionary biology':2021,'molecular and general genetics mgg':2001,'molecular and general genetics':2001,'bioelectrochemistry and bioenergetics':2000,'standards in genomic sciences':null};
+  const STOP=new Set(['of','the','and','in','for','on','a','an','de','der','journal']);
+  function overlaps(a,b) {
+    const tokens=v=>plain(v).split(' ').filter(t=>t.length>=3&&!STOP.has(t));
+    const left=tokens(a),right=tokens(b);
+    return left.some(x=>right.some(y=>x.startsWith(y)||y.startsWith(x)));
+  }
   function issn(value) {
     const s=String(value||'').toUpperCase().replace(/[^0-9X]/g,'');
     if(!/^\d{7}[\dX]$/.test(s))return null;
@@ -50,7 +63,7 @@
       if(new Set(candidates.map(r=>r.impactFactor)).size>1)return null;
       return candidates.sort((a,b)=>b.checkedAt.localeCompare(a.checkedAt))[0];
     }
-    function lookup(item) {
+    function resolve(item) {
       const field=k=>{try{return item.getField(k)||'';}catch(_){return '';}};
       const names=[field('publicationTitle'),field('journalAbbreviation')].filter(Boolean);
       const identifiers=(String(field('ISSN')).match(/\d{4}-?\d{3}[\dXx]/g)||[]).map(issn).filter(Boolean);
@@ -66,7 +79,28 @@
       if(apart)return null;
       return choose(byName);
     }
-    return {lookup,records:all};
+    /* The record, and what is true about how it was reached: a successor
+       journal (the paper's own journal was renamed, or the ISSN led to a
+       journal that shares nothing with the name the paper gives) and whether
+       the paper is older than the rename, in which case there is no figure. */
+    function lookupDetail(item) {
+      const record=resolve(item);
+      if(!record)return {record:null,successor:null,predates:false};
+      const field=k=>{try{return item.getField(k)||'';}catch(_){return '';}};
+      const own=field('publicationTitle'),paperYear=Number((String(field('date')).match(/\b(1[5-9]\d\d|20\d\d)\b/)||[])[1])||null;
+      const key=plain(own);
+      let successor=null;
+      if(own&&Object.prototype.hasOwnProperty.call(RENAMES,key))
+        successor={from:own,to:record.title,year:RENAMES[key]};
+      else if(own&&name(own)!==name(record.title)&&![...record.aliases].some(a=>name(a)===name(own))
+        &&(String(field('ISSN')).match(/\d{4}-?\d{3}[\dXx]/g)||[]).map(issn).filter(Boolean).some(id=>record.issns.map(issn).includes(id))
+        &&![record.title,...record.aliases,field('journalAbbreviation')].some(t=>t&&overlaps(own,t)))
+        successor={from:own,to:record.title,year:null};
+      const predates=!!(successor&&successor.year&&paperYear&&paperYear<successor.year);
+      return {record:predates?null:record,successor,predates};
+    }
+    const lookup=item=>lookupDetail(item).record;
+    return {lookup,lookupDetail,records:all};
   }
   function parsePage(html, record, DOMParser) {
     if(!valid(record))return null;
@@ -129,6 +163,6 @@
     const newest=Math.max(...found.map(r=>r.year));const values=found.filter(r=>r.year===newest);
     return values.length && new Set(values.map(v=>v.impactFactor)).size===1?values[0]:null;
   }
-  const api={name,issn,valid,create,parsePage};root.CustomStyleJournals=api;
+  const api={name,issn,valid,create,parsePage,RENAMES};root.CustomStyleJournals=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

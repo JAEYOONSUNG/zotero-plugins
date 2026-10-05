@@ -98,14 +98,43 @@
     return {both, wins, losses, undecided};
   }
 
-  // Items tagged /unread (and not /reading or /done) whose shown status differs.
+  /* Items whose shown status contradicts their tags. More than one status tag
+     is a contradiction whatever is shown (an item tagged /unread, /reading and
+     /done passed the earlier check because it skipped them). A lone /unread
+     disagrees with a shown status unless it is an automatic tag (type 1) and
+     reading time was recorded, which is the case the reader sees as reading. */
   function statusContradictions(rows) {
     const bad = [];
     for (const row of rows || []) {
-      const tags = (row.tags || []).map(tag => String(tag && tag.tag != null ? tag.tag : tag).trim().toLowerCase());
-      if (tags.includes('/unread') && !tags.includes('/reading') && !tags.includes('/done') && row.status !== 'unread') bad.push(row.id);
+      const entries = (row.tags || []).map(tag => ({name: String(tag && tag.tag != null ? tag.tag : tag).trim().toLowerCase(), automatic: !!tag && typeof tag === 'object' && Number(tag.type) === 1}));
+      const status = entries.filter(entry => /^\/(unread|reading|done)$/.test(entry.name));
+      if (new Set(status.map(entry => entry.name)).size > 1) { bad.push(row.id); continue; }
+      const unread = status.find(entry => entry.name === '/unread');
+      if (!unread || row.status === 'unread') continue;
+      if (unread.automatic && Number(row.seconds) >= 30) continue;
+      bad.push(row.id);
     }
     return bad;
+  }
+
+  // Standalone attachments (not regular items, no parent paper) that still carry a rating tag: nothing moves them.
+  function orphanRatingTags(rows) {
+    const keys = [];
+    for (const row of rows || []) {
+      if (!row || row.regular || row.hasParent) continue;
+      if ((row.tags || []).some(tag => /^style-custom:rating:[0-5]$/.test(String(tag && tag.tag != null ? tag.tag : tag)))) keys.push(row.key || row.id);
+    }
+    return keys;
+  }
+
+  // Followed authors whose news has never been through a sweep's classifier.
+  function newsWithoutClassification(rows) {
+    return (rows || []).filter(row => row && Array.isArray(row.news) && row.news.length && !Array.isArray(row.placesSeen)).map(row => row.name || row.id);
+  }
+
+  // Followed authors whose stored news lists one paper twice, by the rule the sweep itself uses.
+  function rowsWithDuplicateNews(rows, dedupe) {
+    return (rows || []).filter(row => row && Array.isArray(row.news) && dedupe(row.news).length !== row.news.length).map(row => row.name || row.id);
   }
 
   // Stored works whose people list names someone twice (by id, else by name).
@@ -122,6 +151,43 @@
       if (dup) count++;
     }
     return count;
+  }
+
+  // Stored rows (keyed "libraryID:key") whose paper is trashed or gone.
+  function staleRows(keys, isLive) {
+    return (keys || []).filter(key => !isLive(key));
+  }
+
+  // Every column key's context-menu plan, built and never run: which columns would offer nothing.
+  function planCoverage(keys, plan) {
+    const empty = [], failed = [];
+    let total = 0;
+    for (const key of keys || []) {
+      try {
+        const entries = plan({key}) || [];
+        if (entries.some(entry => entry && !entry.separator && entry.label)) total++; else empty.push(key);
+      } catch (error) { failed.push(key + ': ' + (error && error.message || error)); }
+    }
+    return {empty, failed, total};
+  }
+
+  // What the ⋯ column's cell must hold: a real button that says it opens a menu (so the button sweep never presses it).
+  function moreButtonProblems(cell) {
+    const button = cell && cell.querySelector && cell.querySelector('button');
+    if (!button) return ['no button in the cell'];
+    const problems = [];
+    if (button.getAttribute('data-opens') !== 'menu') problems.push('the button lacks data-opens="menu"');
+    if (!button.title) problems.push('the button has no tooltip');
+    if (!String(button.textContent || '').trim()) problems.push('the button has no glyph');
+    return problems;
+  }
+
+  // A check that read the data: duplicate people lists are a failure, not a footnote.
+  function requireNoDuplicatePeople(works) {
+    const dup = worksWithDuplicatePeople(works);
+    const said = `중복 저자 목록이 남은 논문 ${dup}편 / ${works.length}편`;
+    if (dup) throw new Error(said + ' (다시 조회하면 정리됨)');
+    return said;
   }
 
   function missingMembers(target, names) {
@@ -309,6 +375,73 @@
       }
       if (failures.length) throw new Error(failures.slice(0, 5).join(' | '));
       return `${(runtime.columnDefinitions || []).length} columns × ${sample.length} papers`;
+    }));
+
+    /* The list's own controls, exercised the way the reader meets them and never
+       the way that opens something: a cell is drawn and inspected, an event is
+       dispatched at a real cell and the attribute it sets is read, a menu plan
+       is built and not shown. Nothing here is clicked, and no popup is opened. */
+    const borrowRow = (item, fn) => {
+      const view = win && win.ZoteroPane && win.ZoteroPane.itemsView;
+      if (!view || typeof view.getRow !== 'function') throw new Error('no item tree to render into');
+      const original = view.getRow;
+      try { view.getRow = () => ({ref: item}); return fn(); } finally { view.getRow = original; }
+    };
+
+    results.push(await attempt('the ⋯ column draws a button that says it opens a menu', () => {
+      if (!doc) throw new Error('no main window');
+      const item = all[0];
+      if (!item) throw new Error('no paper to draw');
+      const cell = borrowRow(item, () => runtime.renderCell('more', 0, '', {className: ''}, doc));
+      const problems = moreButtonProblems(cell);
+      if (problems.length) throw new Error(problems.join(' · '));
+      return 'a button · data-opens=menu · not pressed';
+    }));
+
+    results.push(await attempt('the status cell draws with its tooltip and is not opened', () => {
+      if (!doc) throw new Error('no main window');
+      const item = all.find(paper => runtime.canEdit(paper)) || all[0];
+      if (!item) throw new Error('no paper to draw');
+      const cell = borrowRow(item, () => runtime.renderCell('status', 0, runtime.value('status', item), {className: ''}, doc));
+      if (!String(cell.title || '').trim()) throw new Error('the status cell has no tooltip');
+      const popups = doc.querySelectorAll ? doc.querySelectorAll('menupopup[state="open"], panel[panelopen="true"]').length : 0;
+      return `tooltip "${String(cell.title).split('\n')[0].slice(0, 60)}" · drawing opened ${popups} popups`;
+    }));
+
+    results.push(await attempt('hovering a cell sets the hover attributes and leaving clears them', async () => {
+      if (!doc || !win) throw new Error('no main window');
+      const state = runtime.windows.get(win);
+      if (!state || !state.cellsCleanup) throw new Error('the cell hover handlers are not attached');
+      if (runtime.getSetting && !runtime.getSetting('hoverColumn')) return 'the hover tint is switched off in settings; nothing to probe';
+      const cell = doc.querySelector('#zotero-items-tree .virtualized-table-body .row .cell');
+      if (!cell) return 'no visible row in the list; not probed';
+      const tree = cell.closest('#zotero-items-tree');
+      const wait = ms => new Promise(resolve => win.setTimeout(resolve, ms));
+      try {
+        cell.dispatchEvent(new win.MouseEvent('mouseover', {bubbles: true, cancelable: true, buttons: 0}));
+        for (let waited = 0; waited < 600 && !cell.hasAttribute('data-sc-hover-cell'); waited += 50) await wait(50);
+        if (!cell.hasAttribute('data-sc-hover-cell')) {
+          if (doc.hidden) return 'the window is hidden, so animation frames do not run; hover not probed';
+          throw new Error('mouseover set no data-sc-hover-cell on the cell');
+        }
+        if (!tree.getAttribute('data-sc-hover-col')) throw new Error('the tree did not record the hovered column');
+        cell.dispatchEvent(new win.MouseEvent('mouseout', {bubbles: true, cancelable: true, relatedTarget: null}));
+        if (cell.hasAttribute('data-sc-hover-cell') || tree.hasAttribute('data-sc-hover-col')) throw new Error('mouseout left the hover attributes behind');
+        return 'mouseover set the cell and the column; mouseout cleared both';
+      } finally {
+        cell.removeAttribute('data-sc-hover-cell');
+        if (tree) tree.removeAttribute('data-sc-hover-col');
+      }
+    }));
+
+    results.push(await attempt('every column offers its own right-click actions', () => {
+      if (!win) throw new Error('no main window');
+      const item = all.find(paper => paper.getField('publicationTitle')) || all[0];
+      if (!item) throw new Error('no paper to plan for');
+      const keys = (runtime.columnDefinitions || []).map(row => row[0]).filter(key => key !== 'more');
+      const out = planCoverage(keys, ctx => runtime.itemCells.plan({rt: runtime, win, item, items: [item], key: ctx.key, text: ''}));
+      if (out.failed.length || out.empty.length) throw new Error([...out.failed, out.empty.length ? 'no actions for: ' + out.empty.join(', ') : ''].filter(Boolean).join(' | '));
+      return `${out.total} columns · plans built, none shown`;
     }));
 
     results.push(await attempt('state and value read back for every paper', () => {
@@ -779,6 +912,13 @@
     // reports how far it has got.
     results.push(await attempt('the citation record behind the map', async () => {
       const works = Object.values(runtime.paperWorks());
+      const stale = staleRows(Object.keys(runtime.paperWorks()), key => {
+        const at = key.indexOf(':');
+        let item = null;
+        try { item = Zotero.Items.getByLibraryAndKey(Number(key.slice(0, at)), key.slice(at + 1)); } catch (ignored) { item = null; }
+        return !!item && !item.deleted;
+      });
+      if (stale.length) throw new Error(`휴지통에 있거나 사라진 논문의 기록이 ${stale.length}건 남아 집계에 섞임 (${stale.slice(0, 3).join(', ')}) — 다음 시작 때 정리됩니다`);
       const withRefs = works.filter(work => Array.isArray(work.references) && work.references.length);
       const references = withRefs.reduce((n, work) => n + work.references.length, 0);
       const institutions = Object.values(runtime.institutionTable());
@@ -834,15 +974,41 @@
     }));
 
     results.push(await attempt('reading status agrees with tags', () => {
-      const bad = statusContradictions(all.map(item => ({id: item.id, tags: item.getTags(), status: runtime.state(item).status})));
-      if (bad.length) throw new Error(`${bad.length}건: /unread 태그인데 다른 상태로 표시 (id ${bad.slice(0, 5).join(', ')})`);
+      const bad = statusContradictions(all.map(item => ({id: item.key || item.id, tags: item.getTags(), status: runtime.state(item).status, seconds: runtime.state(item).seconds})));
+      if (bad.length) throw new Error(`${bad.length}건: 태그와 표시된 상태가 어긋남 — 상태 태그가 둘 이상이거나 /unread인데 다른 상태 (${bad.slice(0, 5).join(', ')})`);
       return `${all.length}편 중 모순 0건`;
     }));
 
     results.push(await attempt('corresponding authors are counted once', () => {
       const works = Object.values(runtime.paperWorks()).filter(work => work && !work.missing);
-      const dup = worksWithDuplicatePeople(works);
-      return `중복 저자 목록이 남은 논문 ${dup}편 / ${works.length}편` + (dup ? ' (다시 조회하면 정리됨)' : '');
+      return requireNoDuplicatePeople(works);
+    }));
+
+    results.push(await attempt('followed authors\' stored news went through the classifier', () => {
+      const rows = runtime.watchedAuthors();
+      const unclassified = newsWithoutClassification(rows);
+      if (unclassified.length) throw new Error(`placesSeen 없이 news만 있는 관심 저자 ${unclassified.length}명 (동명이인 검사를 거치지 않음): ${unclassified.slice(0, 5).join(', ')} — 다음 조회에서 분류됩니다`);
+      const loose = rows.reduce((n, row) => n + (row.news || []).filter(work => work && work.unclassified).length, 0);
+      return `${rows.length}명 · 분류 안 된 논문 ${loose}편`;
+    }));
+
+    results.push(await attempt('followed authors\' news lists no paper twice', () => {
+      const twins = rowsWithDuplicateNews(runtime.watchedAuthors(), list => runtime.dedupeNews(list));
+      if (twins.length) throw new Error(`중복 논문이 남은 관심 저자 ${twins.length}명: ${twins.slice(0, 5).join(', ')}`);
+      return 'ok';
+    }));
+
+    results.push(await attempt('standalone attachments carry no rating tag', async () => {
+      const rows = [];
+      for (const item of await runtime.libraryItems(library)) {
+        let regular = false;
+        try { regular = runtime.isRegular(item); } catch (ignored) { regular = false; }
+        if (regular) continue;
+        rows.push({id: item.id, key: item.key, regular: false, hasParent: !!(item.parentItemID ?? item.parentID), tags: item.getTags ? item.getTags() : []});
+      }
+      const orphans = orphanRatingTags(rows);
+      if (orphans.length) throw new Error(`부모 논문이 없는 첨부에 별점 태그가 남음 ${orphans.length}건 (${orphans.slice(0, 5).join(', ')}) — 읽기 전용 확인, 지우지 않았습니다`);
+      return '없음';
     }));
 
     results.push(await attempt('the panel reports what is still empty', async () => {
@@ -1178,25 +1344,55 @@
     const broken = []; let pressed = 0;
     // Some view switches remember the choice as the panel preference: whatever a press saved is put back, only if it changed.
     const savedUI = JSON.parse(JSON.stringify(runtime.cache.workbenchUI || {}));
+    /* Failing spies on the plugin's own save and open paths, live only while a button is
+       being pressed: a call is recorded and swallowed, so a view button that writes the data
+       file, edits a paper or opens something fails this step without doing it. (Zotero's own
+       objects are left alone: swallowing a write there would lose someone else's.) */
+    const violations = [];
+    let pressing = false;
+    const restores = [];
+    const spy = (owner, name, label) => {
+      if (!owner || typeof owner[name] !== 'function') return;
+      const real = owner[name], own = Object.prototype.hasOwnProperty.call(owner, name);
+      owner[name] = function (...args) {
+        if (!pressing) return real.apply(this, args);
+        violations.push(label + '.' + name);
+        return Promise.resolve();
+      };
+      restores.push(() => { if (own) owner[name] = real; else delete owner[name]; });
+    };
+    for (const name of ['flush', 'edit', 'importWork', 'watchAuthor', 'unwatchAuthor', 'queueForReading', 'resolveNamesake', 'moveStrayRatingTags', 'hideRatingTags']) spy(runtime, name, 'runtime');
+    spy(runtime.storage, 'write', 'storage');
+    const service = runtime.libraryService;
+    if (service) {
+      const verbs = /^(save|set|add|remove|create|trash|delete|rename|open|move|relate|unrelate|restore|merge|import|index|update|apply|replace|write|put|drop|extract|attach|link|unlink|synthesis|memoTo|resolve|accept|reject)/i;
+      const names = new Set();
+      for (let o = service; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) for (const name of Object.getOwnPropertyNames(o)) if (name !== 'constructor') names.add(name);
+      for (const name of names) if (verbs.test(name)) spy(service, name, 'library');
+    }
     for (const tab of tabs) {
       try { await bench.show(tab); } catch (error) { broken.push(tab + ' · show → ' + (error.message || error)); continue; }
       const seen = new Set();
       for (const b of safeButtons(bench.panel).filter(b => { const k = b.textContent.trim(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, limit)) {
         const label = b.textContent.trim();
         if (!b.isConnected) continue;
-        try { b.click(); pressed++; } catch (error) { broken.push(`${tab} · ${label} → ${error.message || error}`); continue; }
-        await wait(60);
+        const before = violations.length;
+        pressing = true;
+        try { b.click(); pressed++; } catch (error) { pressing = false; broken.push(`${tab} · ${label} → ${error.message || error}`); continue; }
+        try { await wait(60); } finally { pressing = false; }
+        if (violations.length > before) broken.push(`${tab} · ${label} → tried to write or open: ${[...new Set(violations.slice(before))].join(', ')}`);
         const status = bench.panel.querySelector('.sc-status');
         if (status && status.dataset.error === 'true' && jsError.test(status.textContent)) broken.push(`${tab} · ${label} → ${status.textContent.slice(0, 80)}`);
         if (bench.state.tab !== tab) { try { await bench.show(tab); } catch (ignored) {} }
       }
     }
     try { await bench.toggle(false); } catch (ignored) {}
+    for (const undo of restores.reverse()) { try { undo(); } catch (ignored) {} }
     if (JSON.stringify(savedUI) !== JSON.stringify(runtime.cache.workbenchUI || {})) { runtime.cache.workbenchUI = savedUI; runtime.dirty = true; }
     return {pressed, broken};
   }
 
-  const api = {run, safeButtons, sweepSafeButtons, journalLayerReport, jcrPrecedence, statusContradictions, worksWithDuplicatePeople, missingMembers};
+  const api = {run, safeButtons, sweepSafeButtons, journalLayerReport, jcrPrecedence, statusContradictions, orphanRatingTags, newsWithoutClassification, rowsWithDuplicateNews, worksWithDuplicatePeople, requireNoDuplicatePeople, staleRows, planCoverage, moreButtonProblems, missingMembers};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleSelfCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

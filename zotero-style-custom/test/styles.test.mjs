@@ -395,3 +395,34 @@ test('star colour token: one bright warm yellow with no outline, a lighter yello
  assert.equal(value.getPropertyValue('color'),'var(--sc-star-fill)');assert.equal(value.getPropertyValue('-webkit-text-stroke'),'');
  assert.equal(rule('#style-custom-workbench .sc-stars .sc-star-off').getPropertyValue('color'),'var(--sc-muted)');
 });
+
+// Regression review A9: an opacity on a container dims its text too. Empty-collection rows carried opacity .8 on the
+// whole row, compositing the muted ink (#5b5f68) to about 4.01:1 on white; they are clickable navigation, not disabled.
+const hexOf=(r,g,b)=>'#'+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+function mix(top,under,alpha){const t=top.slice(1).match(/../g).map(c=>parseInt(c,16)),u=under.slice(1).match(/../g).map(c=>parseInt(c,16));return hexOf(...t.map((c,i)=>alpha*c+(1-alpha)*u[i]));}
+function opacityOf(selector){
+ const found=rules.filter(r=>r.selectorText?.split(',').map(x=>x.trim()).includes(selector)&&r.style.getPropertyValue('opacity')!=='').map(r=>Number(r.style.getPropertyValue('opacity')));
+ return found.length?found[found.length-1]:1;
+}
+test('text under an ancestor opacity is composited before the 4.5:1 check, and empty-collection rows carry none',()=>{
+ // The rule that was wrong, and the general check this adds.
+ assert.equal(opacityOf('#style-custom-workbench .sc-collection-group > .sc-collection-empty'),1,'a row you can click is not dimmed as a whole; its name uses the muted token');
+ assert.equal(rule('#style-custom-workbench .sc-collection-empty .sc-collection-name').getPropertyValue('color'),'var(--sc-muted)');
+ // Text with its own opacity, composited over the surface it sits on, in both schemes.
+ const cases=[
+  // [selector with the opacity, ink token, background token or null for the plain surface]
+  ['#style-custom-workbench .sc-collection-group > .sc-collection-empty','--sc-muted',null],
+  ['#style-custom-workbench .sc-notice-toggle[aria-pressed=true]','--sc-amber-ink','--sc-amber'],
+  ['#style-custom-workbench .sc-chip-button[aria-pressed=true] b','--sc-nav-on-ink','--sc-nav-on']
+ ];
+ for(const [name,palette] of [['light',light],['dark',dark]])for(const [selector,inkToken,bgToken] of cases){
+  const alpha=opacityOf(selector);
+  const resolve=value=>value.startsWith('var(')?palette[value.slice(4,-1)]:value;
+  const surface=resolve(palette['--sc-surface']||'#ffffff');
+  const ink=resolve(palette[inkToken]),bg=bgToken?resolve(palette[bgToken]):surface;
+  if(!/^#[0-9a-f]{6}$/i.test(ink)||!/^#[0-9a-f]{6}$/i.test(bg)||!/^#[0-9a-f]{6}$/i.test(surface))continue;
+  // The element's own text and background both dim over what is behind it.
+  const shownInk=mix(ink,surface,alpha),shownBg=mix(bg,surface,alpha);
+  assert.ok(contrast(shownInk,shownBg)>=4.5,`${name} ${selector} composites to ${contrast(shownInk,shownBg).toFixed(2)}:1 at opacity ${alpha}`);
+ }
+});

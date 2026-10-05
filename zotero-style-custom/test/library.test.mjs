@@ -390,6 +390,33 @@ test('audit4 a multi-paper annotation note uses the native serializer per paper,
  assert.equal((html.match(/data-schema-version/g)||[]).length,1,'the per-paper wrappers are stripped, one wrapper remains');
 });
 
+test('A1 the synthesis note keeps every paper\'s data-citation-items (merged by URI) and the highest schema version',async()=>{
+ const f=fixture();
+ f.add('journalArticle',6,{fields:{title:'Second paper',date:'2021-03-01'}});
+ f.add('attachment',7,{parentID:6,attachmentContentType:'application/pdf'});
+ f.add('annotation',8,{parentID:7,annotationText:'Q2',annotationComment:'',annotationPosition:'{"pageIndex":4}'});
+ const cite=(uri,title)=>({uris:[uri],itemData:{id:uri,type:'article-journal',title}});
+ const enc=list=>encodeURIComponent(JSON.stringify(list));
+ // The real native shape: one outer div carrying both attributes, schema 9 for one paper and 10 for the other.
+ const shapes=new Map([
+  [1,{schema:'9',items:[cite('http://zotero.org/users/local/abc/items/K1','One'),cite('http://zotero.org/users/local/abc/items/KX','Shared')]}],
+  [6,{schema:'10',items:[cite('http://zotero.org/users/local/abc/items/K6','Two'),cite('http://zotero.org/users/local/abc/items/KX','Shared')]}]]);
+ f.Z.EditorInstance.createNoteFromAnnotations=async(input,opts)=>{
+  const shape=shapes.get(opts.parentID);const note=new f.Z.Item('note');
+  note.setNote(`<div data-citation-items="${enc(shape.items)}" data-schema-version="${shape.schema}"><blockquote>${input[0].annotationText}</blockquote></div>`);
+  return note;
+ };
+ const id=await f.service.synthesisNote([{id:1,annotationIDs:[3]},{id:6,annotationIDs:[8]}],{title:'모음'});
+ const html=f.items.get(Number(id)).html;
+ const outer=html.match(/^<div([^>]*)>/)[1];
+ assert.match(outer,/data-schema-version="10"/,'the highest schema version wins, not a fixed 9');
+ const raw=outer.match(/data-citation-items="([^"]*)"/);
+ assert.ok(raw,'the combined note carries data-citation-items');
+ const merged=JSON.parse(decodeURIComponent(raw[1]));
+ assert.deepEqual(merged.map(c=>c.uris[0].split('/').pop()).sort(),['K1','K6','KX'],'merged by URI: the shared paper is listed once');
+ assert.equal((html.match(/data-schema-version/g)||[]).length,1);
+});
+
 test('audit5 neighbours come from the author and tag indexes, so a paper keeps every real neighbour', () => {
  const s = fixture().service;
  const rows = [1, 2, 3, 4].map(i => ({id: String(i), title: 'P' + i, related: [], tags: ['t' + (i % 2)], authors: 'Smith J; Other ' + i}));

@@ -41,6 +41,21 @@
     }
     return fields;
   }
+  // A tag Zotero or a tool added by itself (type 1), as against one the reader typed.
+  const isAutomatic = value => typeof value === 'object' && value !== null && Number(value.type) === 1;
+  // Why readState says what it says, for a tooltip.
+  function statusReason(tags, seconds) {
+    const list = Array.isArray(tags) ? tags : [];
+    const states = list.map(statusOf);
+    const spent = (number(seconds) || 0) >= MIN_READING_SECONDS;
+    if (states.includes('done')) return 'tag-done';
+    if (states.includes('reading')) return 'tag-reading';
+    if (states.includes('unread')) {
+      const manual = list.some(tag => statusOf(tag) === 'unread' && !isAutomatic(tag));
+      return !spent || manual ? 'tag-unread' : 'time-over-auto-unread';
+    }
+    return spent ? 'time' : 'none';
+  }
   function readState(tags, extra, seconds) {
     const list = Array.isArray(tags) ? tags : [];
     const states = list.map(statusOf);
@@ -50,7 +65,12 @@
        the first real reading tick rewrites the tag, so live reading still
        turns it. Under MIN_READING_SECONDS a glance is not reading. */
     const spent = (number(seconds) || 0) >= MIN_READING_SECONDS;
-    const status = states.includes('done') ? 'done' : states.includes('reading') ? 'reading' : states.includes('unread') ? 'unread' : spent ? 'reading' : 'unread';
+    /* Only the reader's own /unread (a manual tag, type 0, or a bare string
+       that carries no type) outranks time. An automatic one (type 1, written by
+       an import or another tool) does not: ten papers with minutes of reading,
+       one at 5,920 s with five stars, showed unread because of it. */
+    const unreadWins = states.includes('unread') && (!spent || list.some(tag => statusOf(tag) === 'unread' && !isAutomatic(tag)));
+    const status = states.includes('done') ? 'done' : states.includes('reading') ? 'reading' : unreadWins ? 'unread' : spent ? 'reading' : 'unread';
     const stars = list.map(starRating).filter(n => n !== null);
     const explicit = list.map(ownRating).filter(n => n !== null);
     const raw = extraFields(extra).get('rating');
@@ -140,7 +160,7 @@
     result.rating = readState(safely(() => item.getTags()), fields.has('rating') ? 'Rating: ' + fields.get('rating') : '', result.seconds).rating;
     return result;
   }
-  const api = {readState, updateTags, updateExtra, readMetrics, readLegacyCitations};
+  const api = {readState, statusReason, updateTags, updateExtra, readMetrics, readLegacyCitations};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleData = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -68,3 +68,36 @@ test("a renamed journal is found under the title the catalog lists now", () => {
   assert.equal(j.lookup(item({publicationTitle: "Angewandte Chemie"})).impactFactor, 17.6);
   assert.equal(j.lookup(item({publicationTitle: "Science of The Total Environment"})), null, "not in this catalog, so no figure");
 });
+
+// Fact-check 2026-10-05: a 1976 Journal of General Microbiology paper showed Microbiology's 4.3, Genome
+// Announcements 2018 showed MRA's 0.6, Current Protocols in Molecular Biology showed "Current Protocols".
+const dated=(title,date,ISSN='')=>({getField:k=>({publicationTitle:title,date,ISSN}[k]||'')});
+test('a successor journal is named, and an IF is left blank for a paper older than the rename',()=>{
+ const r=J.create([row('Microbiology-SGM',{issns:['1350-0872']}),row('Microbiology Resource Announcements',{impactFactor:0.6}),row('Current Protocols'),row('FEBS Journal')]);
+ // Before the rename: no figure at all, and the reason is available.
+ const old=r.lookupDetail(dated('Journal of General Microbiology','1976-05-01'));
+ assert.equal(old.record,null);assert.equal(old.predates,true);assert.equal(old.successor.to,'Microbiology-SGM');
+ assert.equal(r.lookup(dated('Journal of General Microbiology','1976')),null);
+ // After it: the figure stays, marked as the successor's.
+ const recent=r.lookupDetail(dated('Journal of General Microbiology','1998'));
+ assert.equal(recent.record.title,'Microbiology-SGM');assert.equal(recent.successor.to,'Microbiology-SGM');assert.equal(recent.predates,false);
+ // Genome Announcements became Microbiology Resource Announcements in 2018: a 2017 paper predates it, a 2018 one does not.
+ assert.equal(r.lookupDetail(dated('Genome Announcements','2017-03-01')).record,null);
+ assert.equal(r.lookupDetail(dated('Genome Announcements','2018-09-01')).record.title,'Microbiology Resource Announcements');
+ assert.equal(r.lookupDetail(dated('Current Protocols in Molecular Biology','2015')).predates,true);
+ assert.equal(r.lookupDetail(dated('European Journal of Biochemistry','2010')).record.title,'FEBS Journal');
+ // Unknown paper year: the figure is shown, still marked, never blanked on a guess.
+ const undated=r.lookupDetail(dated('Genome Announcements',''));
+ assert.equal(undated.record.title,'Microbiology Resource Announcements');assert.equal(undated.successor.to,'Microbiology Resource Announcements');
+ // The same journal under its own name carries no mark.
+ const same=r.lookupDetail(dated('Microbiology-SGM','1976'));
+ assert.equal(same.successor,null);assert.equal(same.record.title,'Microbiology-SGM');
+ assert.equal(r.lookupDetail(dated('The FEBS Journal','2020')).successor,null);
+});
+test('an ISSN match under a different name with nothing in common is flagged as a successor; an abbreviation is not',()=>{
+ const r=J.create([row('Microbiology',{issns:['0022-1287']}),row('Nature Communications',{issns:['2041-1723']})]);
+ const odd=r.lookupDetail(dated('Journal of Something Else Entirely','2001','0022-1287'));
+ assert.equal(odd.record.title,'Microbiology');assert.equal(odd.successor.to,'Microbiology');
+ const abbr=r.lookupDetail(dated('Nat Commun','2020','2041-1723'));
+ assert.equal(abbr.record.title,'Nature Communications');assert.equal(abbr.successor,null);
+});

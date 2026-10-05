@@ -328,48 +328,73 @@
   function egoGraph({me, works, news, items, followed, limit = 20, fullLabels = 8} = {}) {
     const myID = text(me?.id).replace(/^https?:\/\/openalex\.org\//i, '');
     const myName = fold(me?.name);
-    const people = new Map();        // folded name -> {name, id}
-    const papers = new Map();        // paper key -> Set of folded names (never the centre)
-    const note = (key, list) => {
-      const names = new Set();
-      let mine = false;
+    const shortID = value => text(value).replace(/^https?:\/\/openalex\.org\//i, '');
+    /* The id is the identity. A name stands in only for a record that carries
+       none (the stored news and the library's author lists are names alone):
+       it joins the one person of that name the ids know, and stands by itself
+       when two ids share it, rather than crediting either. Two John Smiths with
+       different ids are two people; one id under two spellings is one. */
+    const records = [];              // [paper key, [{id, name, folded}]]
+    const idsByName = new Map();     // folded name -> Set of ids
+    const collect = (key, list) => {
+      const entries = [];
       for (const person of list) {
         const name = text(person.name), folded = fold(name);
         if (!folded) continue;
-        if ((myID && person.id === myID) || folded === myName) { mine = true; continue; }
-        names.add(folded);
-        const known = people.get(folded);
-        if (!known) people.set(folded, {name, id: person.id || ''});
-        else {
-          if (!known.id && person.id) known.id = person.id;
-          if (name.length > known.name.length) known.name = name;
-        }
+        const id = shortID(person.id);
+        if (id) { if (!idsByName.has(folded)) idsByName.set(folded, new Set()); idsByName.get(folded).add(id); }
+        entries.push({id, name, folded});
       }
-      if (!mine || names.size + 1 > CROWD) return;
-      const held = papers.get(key) || new Set();
-      for (const name of names) held.add(name);
-      papers.set(key, held);
+      records.push([key, entries]);
     };
     for (const work of Array.isArray(works) ? works : [])
-      note(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(p => ({id: text(p.id).replace(/^https?:\/\/openalex\.org\//i, ''), name: p.name})));
+      collect(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(p => ({id: p.id, name: p.name})));
     for (const work of Array.isArray(news) ? news : [])
-      note(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(name => ({id: '', name: typeof name === 'string' ? name : name?.name})));
+      collect(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(name => ({id: '', name: typeof name === 'string' ? name : name?.name})));
     for (const item of Array.isArray(items) ? items : [])
-      note(bareDoi(item.doi) || 'l:' + text(item.id), text(item.authors).split(';').map(name => ({id: '', name})));
+      collect(bareDoi(item.doi) || 'l:' + text(item.id), text(item.authors).split(';').map(name => ({id: '', name})));
+
+    const people = new Map();        // identity -> {name, id, folded}
+    const papers = new Map();        // paper key -> Set of identities (never the centre)
+    for (const [key, entries] of records) {
+      const names = new Set();
+      let mine = false;
+      for (const person of entries) {
+        let identity;
+        if (person.id) {
+          // With ids on both sides the ids decide; a matching name alone never makes someone the centre.
+          if (myID ? person.id === myID : person.folded === myName) { mine = true; continue; }
+          identity = person.id;
+        } else {
+          const candidates = idsByName.get(person.folded);
+          if (person.folded === myName && (!candidates || !myID || candidates.has(myID))) { mine = true; continue; }
+          identity = candidates && candidates.size === 1 ? [...candidates][0] : 'n:' + person.folded;
+        }
+        names.add(identity);
+        const known = people.get(identity);
+        if (!known) people.set(identity, {name: person.name, id: identity.startsWith('n:') ? '' : identity, folded: person.folded});
+        else if (person.name.length > known.name.length) known.name = person.name;
+      }
+      if (!mine || names.size + 1 > CROWD) continue;
+      const held = papers.get(key) || new Set();
+      for (const identity of names) held.add(identity);
+      papers.set(key, held);
+    }
 
     const weight = new Map();
     for (const names of papers.values()) for (const name of names) weight.set(name, (weight.get(name) || 0) + 1);
     const follow = Array.isArray(followed) ? followed : [];
     const ranked = [...people.entries()].filter(([key]) => weight.has(key))
       .map(([key, person]) => {
-        const who = follow.find(row => row && ((row.id && person.id && row.id === person.id) || fold(row.name) === key));
+        // By id when both have one; a name only for a person drawn without an id.
+        const who = follow.find(row => row && (person.id ? row.id && row.id === person.id : fold(row.name) === person.folded));
         return {key, name: person.name, authorID: person.id, weight: weight.get(key), who};
       })
       .sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
     const total = ranked.length;
     const shownRows = ranked.slice(0, Number.isFinite(limit) ? Math.max(0, limit) : undefined);
     const nodes = shownRows.map((row, rank) => {
-      const id = row.authorID || 'n:' + row.key;
+      const id = row.key;
       const followedAs = row.who ? {id: row.who.id, name: row.who.name} : null;
       const full = rank < fullLabels || !!followedAs;
       return {id, name: row.name, weight: row.weight, rank, followed: followedAs, authorID: row.authorID || '',
@@ -396,37 +421,101 @@
     };
   }
 
-  /* Where everything goes: the author in the middle and the rest on an ellipse
-     (two or three when there are many), the people whose names are written out
-     placed at the sides, where a name has room, and the initials-only circles at
-     the top and bottom. Pure, so the same numbers can be checked. */
-  function egoLayout(graph, {width = 760, height = 360} = {}) {
-    const centre = {id: graph.centre.id, name: graph.centre.name, x: width / 2, y: height / 2, rad: 26, centre: true};
-    const maxWeight = Math.max(1, ...graph.nodes.map(node => node.weight));
-    const nodes = graph.nodes.slice(0, 48).map(node => ({...node,
-      rad: node.followed ? 17 : 12 + Math.round(5 * Math.sqrt(node.weight / maxWeight))}));
-    const labelRoom = Math.min(150, Math.round(width * 0.25));
-    const widest = Math.max(17, ...nodes.map(node => node.rad));
-    const rx0 = Math.max(60, width / 2 - labelRoom - widest - 6), ry0 = Math.max(50, height / 2 - widest - 6);
-    const rings = [[1, 24], [0.62, 16], [0.34, 8]];
-    let from = 0;
-    for (const [scale, capacity] of rings) {
-      const members = nodes.slice(from, from + capacity);
-      from += members.length;
-      if (!members.length) break;
-      const at = members.map((_, k) => -Math.PI / 2 + 2 * Math.PI * k / members.length + (scale < 1 ? Math.PI / members.length : 0));
-      // Written-out names take the positions nearest the left and right edges of the ellipse.
-      const slots = at.map((angle, k) => ({angle, k})).sort((a, b) => Math.abs(Math.cos(b.angle)) - Math.abs(Math.cos(a.angle)));
-      const full = members.filter(node => node.full), rest = members.filter(node => !node.full);
-      [...full, ...rest].forEach((node, i) => {
-        const angle = slots[i].angle;
-        node.x = centre.x + rx0 * scale * Math.cos(angle);
-        node.y = centre.y + ry0 * scale * Math.sin(angle);
-        // The text-anchor of a written-out name: starts at the circle on the right half, ends at it on the left.
-        node.side = Math.cos(angle) >= 0 ? 'start' : 'end';
-      });
+  /* Where everything goes: the author in the middle and the rest on concentric
+     ellipses, the people whose names are written out placed at the sides, where a
+     name has room, and the initials-only circles at the top and bottom. Pure, so the
+     same numbers can be checked.
+
+     How many fit on a ring is decided by its circumference and the size of the
+     nodes, not by a fixed count: points are spaced by equal arc length, and rings
+     are a node apart. When the frame is too small for all of them (a narrow panel
+     with many co-authors) the canvas grows taller until they fit, and the answer
+     says how tall it became (`height`); nothing is allowed to overlap or leave it. */
+  function ellipseLength(a, b) {
+    return Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+  }
+  // `count` points at equal arc length around an ellipse, starting at the top, turned by `phase` of a step.
+  function onEllipse(cx, cy, rx, ry, count, phase) {
+    const steps = 1440, table = [0];
+    for (let i = 1; i <= steps; i++) {
+      const t0 = -Math.PI / 2 + 2 * Math.PI * (i - 1) / steps, t1 = -Math.PI / 2 + 2 * Math.PI * i / steps;
+      table.push(table[i - 1] + Math.hypot(rx * (Math.cos(t1) - Math.cos(t0)), ry * (Math.sin(t1) - Math.sin(t0))));
     }
-    return {centre, nodes: nodes.filter(node => Number.isFinite(node.x)), omitted: Math.max(0, graph.nodes.length - 48), width, height};
+    const total = table[steps], out = [];
+    for (let k = 0; k < count; k++) {
+      const target = ((k + phase) / count % 1) * total;
+      let lo = 0, hi = steps;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (table[mid] < target) lo = mid + 1; else hi = mid; }
+      const i = Math.max(1, lo), span = table[i] - table[i - 1] || 1, f = (target - table[i - 1]) / span;
+      const t = -Math.PI / 2 + 2 * Math.PI * (i - 1 + f) / steps;
+      out.push({angle: t, x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t)});
+    }
+    return out;
+  }
+  function egoLayout(graph, {width = 760, height = 360} = {}) {
+    const maxWeight = Math.max(1, ...graph.nodes.map(node => node.weight));
+    const picked = graph.nodes.slice(0, 48).map(node => ({...node,
+      rad: node.followed ? 17 : 12 + Math.round(5 * Math.sqrt(node.weight / maxWeight))}));
+    const omitted = Math.max(0, graph.nodes.length - 48);
+    const centreRad = 26, gap = 8;
+    const labelRoom = Math.min(150, Math.round(width * 0.25));
+    const widest = Math.max(17, ...picked.map(node => node.rad));
+    const cell = 2 * widest + gap;
+    const innerR = centreRad + widest + gap;
+    const build = H => {
+      const rx0 = Math.max(innerR, width / 2 - labelRoom - widest - 6), ry0 = Math.max(innerR, H / 2 - widest - 6);
+      const rings = [];
+      for (let k = 0; ; k++) {
+        const rx = rx0 - k * cell * 1.15, ry = ry0 - k * cell * 1.15;
+        if (rx < innerR || ry < innerR) break;
+        rings.push({rx, ry, cap: Math.max(1, Math.floor(ellipseLength(rx, ry) / cell))});
+      }
+      return rings;
+    };
+    const place = H => {
+      const rings = build(H), total = rings.reduce((sum, ring) => sum + ring.cap, 0);
+      if (total < picked.length) return null;
+      // Spread by capacity, so no ring is packed while another stands empty.
+      const counts = rings.map(ring => Math.min(ring.cap, Math.floor(picked.length * ring.cap / total)));
+      let left = picked.length - counts.reduce((a, b) => a + b, 0);
+      while (left > 0) {
+        let best = -1;
+        rings.forEach((ring, k) => { if (counts[k] < ring.cap && (best < 0 || ring.cap - counts[k] > rings[best].cap - counts[best])) best = k; });
+        counts[best]++; left--;
+      }
+      const cx = width / 2, cy = H / 2, placed = [];
+      let from = 0;
+      rings.forEach((ring, k) => {
+        const members = picked.slice(from, from + counts[k]);
+        from += members.length;
+        if (!members.length) return;
+        const slots = onEllipse(cx, cy, ring.rx, ring.ry, members.length, k % 2 ? 0.5 : 0);
+        // Written-out names take the positions nearest the left and right edges of the ring.
+        const order = slots.map((slot, i) => ({slot, i})).sort((a, b) => Math.abs(Math.cos(b.slot.angle)) - Math.abs(Math.cos(a.slot.angle)));
+        const full = members.filter(node => node.full), rest = members.filter(node => !node.full);
+        [...full, ...rest].forEach((node, i) => {
+          const slot = order[i].slot;
+          placed.push({...node, x: slot.x, y: slot.y, side: Math.cos(slot.angle) >= 0 ? 'start' : 'end'});
+        });
+      });
+      const centre = {id: graph.centre.id, name: graph.centre.name, x: cx, y: cy, rad: centreRad, centre: true};
+      const all = [centre, ...placed];
+      for (const n of all) if (n.x - n.rad < 0 || n.x + n.rad > width || n.y - n.rad < 0 || n.y + n.rad > H) return null;
+      for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++)
+        if (Math.hypot(all[i].x - all[j].x, all[i].y - all[j].y) < all[i].rad + all[j].rad + 1) return null;
+      return {centre, nodes: placed};
+    };
+    let H = height, laid = null;
+    for (let attempt = 0; attempt < 80 && !laid; attempt++) {
+      laid = place(H);
+      if (!laid) H += 40;
+    }
+    if (!laid) {
+      // Cannot happen for 48 nodes; the last frame is still returned rather than nothing.
+      const centre = {id: graph.centre.id, name: graph.centre.name, x: width / 2, y: H / 2, rad: centreRad, centre: true};
+      laid = {centre, nodes: picked.map((node, i) => ({...node, x: width / 2 + (i % 8) * 40 - 140, y: 40 + Math.floor(i / 8) * 40, side: 'start'}))};
+    }
+    return {centre: laid.centre, nodes: laid.nodes.filter(node => Number.isFinite(node.x)), omitted, width, height: H};
   }
 
   const api = {choose, readPage, personImage, orcidURL, readResearcherURLs, stale, coauthors, egoGraph, egoLayout,

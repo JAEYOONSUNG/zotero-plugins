@@ -366,6 +366,7 @@
       const say=text=>{try{return runtime?.t?runtime.t(text):text;}catch(_){return text;}};
       const heading=String(title||'').trim()||say('종합 노트');
       let html=`<h1>${escape(heading)}</h1>`;
+      let schemaVersion=9;const citationItems=new Map();
       for(const {item,marks,evidence} of papers){
         const year=field(item,'date').match(/\b\d{4}\b/)?.[0]||'';
         html+=`<h2><a href="zotero://select/${route}/items/${escape(item.key)}">${escape(field(item,'title')||say('제목 없음'))}</a>${year?' ('+year+')':''}</h2>`;
@@ -376,8 +377,23 @@
            unsaved note whose wrapper div is dropped to nest it under the heading. */
         if(marks.length&&typeof Z.EditorInstance?.createNoteFromAnnotations==='function'){
           const native=await Z.EditorInstance.createNoteFromAnnotations(marks.map(m=>m.mark),{parentID:item.id,noSave:true});
-          const inner=String(native.getNote()||'').trim().replace(/^<div[^>]*data-schema-version[^>]*>([\s\S]*)<\/div>$/,'$1');
-          html+=inner;
+          const raw=String(native.getNote()||'').trim();
+          const wrapper=raw.match(/^<div([^>]*data-schema-version[^>]*)>([\s\S]*)<\/div>$/);
+          // The wrapper carries the citation metadata and the schema version the body was written for: both are kept, not dropped with it.
+          if(wrapper){
+            const schema=Number(wrapper[1].match(/data-schema-version="(\d+)"/)?.[1]);
+            if(Number.isFinite(schema)&&schema>schemaVersion)schemaVersion=schema;
+            const encoded=wrapper[1].match(/data-citation-items="([^"]*)"/)?.[1];
+            if(encoded){
+              try{
+                for(const cited of JSON.parse(decodeURIComponent(encoded.replace(/&quot;/g,'"')))){
+                  const key=Array.isArray(cited?.uris)&&cited.uris[0]||JSON.stringify(cited);
+                  if(!citationItems.has(key))citationItems.set(key,cited);
+                }
+              }catch(_){}
+            }
+          }
+          html+=wrapper?wrapper[2]:raw;
         }
         for(const {mark,file} of marks){
           const page=safe(()=>JSON.parse(mark.annotationPosition).pageIndex,null),label=String(safe(()=>mark.annotationPageLabel,'')||'')||(Number.isInteger(page)?String(page+1):'');
@@ -390,7 +406,7 @@
           html+=`<p><a href="${link}">${label?'p.'+escape(label)+' · ':''}${say('주석 열기')}</a></p>`;
         }
       }
-      const note=new Z.Item('note');note.libraryID=libraryID;note.setNote('<div data-schema-version="9">'+html+'</div>');
+      const note=new Z.Item('note');note.libraryID=libraryID;note.setNote(`<div${citationItems.size?` data-citation-items="${encodeURIComponent(JSON.stringify([...citationItems.values()]))}"`:''} data-schema-version="${schemaVersion}">${html}</div>`);
       if(collectionID)note.addToCollection(collectionID);
       await Z.DB.executeTransaction(async()=>{await note.save();});
       return String(note.id);

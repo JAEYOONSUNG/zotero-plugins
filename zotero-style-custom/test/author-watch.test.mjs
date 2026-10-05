@@ -16,7 +16,7 @@ const work = (id, authorIDs, over = {}) => ({
   primary_location: {source: {display_name: "Nature"}},
   open_access: {is_oa: false},
   authorships: authorIDs.map(a => ({author: {id: "https://openalex.org/" + a, display_name: a},
-    author_position: "first", institutions: []})),
+    author_position: "first", institutions: [{display_name: "Somewhere"}]})),
   ...over
 });
 
@@ -42,7 +42,7 @@ function host({rows, pages, profiles = []}) {
     sweepWatchedAuthors: Runtime.prototype.sweepWatchedAuthors,
     sweepWatchedPatents: Runtime.prototype.sweepWatchedPatents,
     patentTools: require("../src/patents.js"), patentsKey() { return this.key || ""; }, active: true,
-    retireLooseMoves: Runtime.prototype.retireLooseMoves,
+    retireLooseMoves: Runtime.prototype.retireLooseMoves, reclassifyStoredNews: Runtime.prototype.reclassifyStoredNews,
     clearAuthorNews: Runtime.prototype.clearAuthorNews,
     async discoverJSON(url) {
       calls.push(url);
@@ -211,7 +211,7 @@ test("a sweep notices a lab move and a first-time co-author, and drops repositor
       // A repository deposit, which OpenAlex types as a dataset.
       {...work("W2", ["A1"]), type: "dataset", primary_location: {source: {display_name: "PNNL Repository"}}},
       // A preprint, which should be flagged as one.
-      {...work("W3", ["A1"]), type: "preprint", primary_location: {source: {display_name: "bioRxiv (Cold Spring Harbor Laboratory)"}}}
+      {...work("W3", ["A1"]), authorships: [signed("A1", "MIT")], type: "preprint", primary_location: {source: {display_name: "bioRxiv (Cold Spring Harbor Laboratory)"}}}
     ],
     meta: {next_cursor: ""}
   }];
@@ -736,4 +736,119 @@ test("what is stored and what is shown have separate caps", async () => {
   const stored = h.cache.watchedAuthors[0].news.length;
   assert.ok(stored > h.NEWS_LIMIT, "storage holds more than the display cap, " + stored);
   assert.ok(stored <= 200, "and is still bounded");
+});
+
+/* Fact-check 2026-10-05: namesake papers stayed in followed authors' stored
+   news because the classifier never ran on rows swept before it existed. */
+const nw = (id, over = {}) => ({id, title: id + " a long enough title", doi: "10.1/" + id.toLowerCase(), date: "2026-09-01", people: ["Zed Q"], ...over});
+
+test("stored news is re-classified on load: stored places are judged, namesakes are held as unverified", () => {
+  const row = person("A1", {name: "Huimin Zhao", institution: "University of Illinois Urbana-Champaign", institutionRor: "RUIUC",
+    news: [nw("Wgood", {places: ["University of Illinois Urbana-Champaign"], country: "US", verified: "", people: ["Huimin Zhao", "Pal X"]}),
+      nw("Wrice", {places: ["Nanjing Agricultural University"], country: "CN"})]});
+  const h = host({rows: [row], pages: []});
+  assert.equal(h.reclassifyStoredNews(), 1);
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id), ["Wgood"]);
+  assert.equal(saved.news[0].verified, "place");
+  assert.deepEqual(saved.unverified.map(n => n.id), ["Wrice"]);
+  assert.equal(h.dirty, true);
+});
+
+test("news swept before the classifier has nothing to judge by: marked unclassified, not silently trusted or dropped", () => {
+  const row = person("A1", {name: "Huimin Zhao", news: [nw("W1"), nw("W2")]});
+  const h = host({rows: [row], pages: []});
+  h.reclassifyStoredNews();
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => [n.id, n.unclassified]), [["W1", true], ["W2", true]]);
+  assert.equal(saved.placesSeen, undefined, "the row itself still reads as never classified by a sweep");
+});
+
+test("once a row has verified papers, a stored paper with no data and no shared coauthor is held; one that shares a coauthor stays", () => {
+  const row = person("A1", {name: "Huimin Zhao", confirmed: [], news: [
+    nw("Wv", {verified: "place", people: ["Huimin Zhao", "Real Colleague"]}),
+    nw("Wshared", {people: ["Real Colleague", "Other"]}),
+    nw("Wrice", {people: ["Somebody Else", "Another One"]})]});
+  const h = host({rows: [row], pages: []});
+  h.reclassifyStoredNews();
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id).sort(), ["Wshared", "Wv"]);
+  assert.deepEqual(saved.unverified.map(n => n.id), ["Wrice"]);
+});
+
+test("a fresh paper that names no institution is unverified unless it shares a coauthor with verified work", async () => {
+  const none = (id, names) => work(id, [], {authorships: names.map((n, i) => ({author: {id: "https://openalex.org/" + (i ? "X" + n : "A1"), display_name: i ? n : "Ada"}, author_position: "first", institutions: []}))});
+  const h = host({rows: [person("A1", {name: "Ada", institution: "Somewhere"})], pages: [{results: [
+    work("W1", [], {authorships: [{author: {id: "https://openalex.org/A1", display_name: "Ada"}, author_position: "first", institutions: [{display_name: "Somewhere"}]}, {author: {id: "https://openalex.org/XBo", display_name: "Bo"}, author_position: "middle", institutions: []}]}),
+    none("W2", ["Ada", "Bo"]), none("W3", ["Ada", "Stranger"])], meta: {}}]});
+  await h.sweepWatchedAuthors();
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id).sort(), ["W1", "W2"]);
+  assert.deepEqual(saved.unverified.map(n => n.id), ["W3"]);
+  assert.ok(saved.placesSeen, "a swept row records places seen");
+});
+
+test("a stored paper the classifier now rejects does not survive as 'earlier', and a held id never stays in the news", async () => {
+  const row = person("A1", {name: "Ada", institution: "Somewhere", sweptAt: new Date(Date.now() - 864e5).toISOString(),
+    news: [nw("Wold", {places: ["Elsewhere University"], country: "CN"}), nw("Wheld", {places: ["Somewhere"], verified: "place"})],
+    unverified: [{id: "Wheld", title: "x", date: "2026-09-01"}]});
+  const h = host({rows: [row], pages: [{results: [], meta: {}}]});
+  await h.sweepWatchedAuthors();
+  const saved = h.cache.watchedAuthors[0];
+  assert.deepEqual(saved.news.map(n => n.id), [], "namesake gone, held id gone");
+  assert.ok(saved.unverified.some(n => n.id === "Wold"));
+});
+
+test("news never lists a paper twice: same id, ange/anie twins, preprint beside its journal version", () => {
+  const keep = list => Runtime.prototype.keepNews.call({NEWS_LIMIT: 50, panelSeenKeys: () => new Set()}, list, new Set(), 50);
+  const out = keep([
+    {id: "W4409654112", title: "Optogenetic control of gene expression", date: "2026-09-02", doi: "10.1/a"},
+    {id: "W4409654112", title: "Optogenetic control of gene expression", date: "2026-09-02", doi: "10.1/a"},
+    {id: "W2", title: "Design of a Cyclic Peptide Binder", date: "2026-09-03", doi: "10.1002/ange.1"},
+    {id: "W3", title: "Design of a cyclic peptide binder.", date: "2026-09-03", doi: "10.1002/anie.1"},
+    {id: "W4", title: "Pathway engineering in yeast", date: "2026-05-01", doi: "10.1101/2026.01.01", preprint: true, venue: "bioRxiv"},
+    {id: "W5", title: "Pathway Engineering in Yeast", date: "2026-08-01", doi: "10.1038/x", venue: "Nature"},
+    {id: "W6", title: "光合成の研究 全体の題名", date: "2026-08-02"}, {id: "W7", title: "光合成の研究 全体の題名!", date: "2026-08-02"}
+  ]);
+  assert.deepEqual(out.map(w => w.id).sort(), ["W2", "W4409654112", "W5", "W6"].sort());
+  const journal = out.find(w => w.id === "W5");
+  assert.equal(journal.preprintOf.id, "W4", "the journal version notes the preprint");
+});
+
+test("two different papers with short or distinct titles are not merged", () => {
+  const out = Runtime.dedupeNews([{id: "a", title: "Editorial"}, {id: "b", title: "Editorial"}, {id: "c", title: "A study of X in cells part 1"}, {id: "d", title: "A study of X in cells part 2"}]);
+  assert.equal(out.length, 4);
+});
+
+// Regression review A5: the full-works fetch must stop when its owner has gone.
+function worksHost() {
+  const h = Object.create(Runtime.prototype);
+  Object.assign(h, {cache: {}, discoverTools: discover, active: true, stopping: false, dirty: false, Z: {logError() {}},
+    discoverOptions: () => ({}), libraryDOIs: () => new Set(), async pause() {}, calls: 0});
+  return h;
+}
+const worksPage = (n, next) => ({results: [{id: "https://openalex.org/W" + n, title: "Paper " + n, publication_year: 2020,
+  authorships: [{author: {id: "https://openalex.org/A1", display_name: "Ada"}, author_position: "first", institutions: []}]}], meta: {next_cursor: next}});
+
+test("the full-works fetch asks nothing more and writes nothing once its signal is aborted", async () => {
+  const h = worksHost(), controller = new AbortController();
+  h.discoverJSON = async () => { h.calls++; controller.abort(); return worksPage(h.calls, "c" + h.calls); };
+  await assert.rejects(h.authorAllWorks("A1", {signal: controller.signal}), /abort/i);
+  assert.equal(h.calls, 1, "no second page after the owner went away");
+  assert.deepEqual(h.cache.authorWorks || {}, {}, "the cache was not written");
+  assert.equal(h.dirty, false);
+});
+
+test("a closed plugin stops the full-works fetch too, and an untouched fetch still completes and caches", async () => {
+  const stopped = worksHost();
+  stopped.discoverJSON = async () => { stopped.calls++; stopped.stopping = true; return worksPage(stopped.calls, "next"); };
+  await assert.rejects(stopped.authorAllWorks("A1"), /abort|stop/i);
+  assert.equal(stopped.calls, 1);
+  assert.deepEqual(stopped.cache.authorWorks || {}, {});
+  const fine = worksHost();
+  fine.discoverJSON = async () => { fine.calls++; return worksPage(fine.calls, fine.calls < 3 ? "c" : null); };
+  const out = await fine.authorAllWorks("A1");
+  assert.equal(fine.calls, 3);
+  assert.equal(out.works.length, 3);
+  assert.equal(Object.keys(fine.cache.authorWorks).length, 1);
 });

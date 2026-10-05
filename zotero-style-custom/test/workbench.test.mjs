@@ -1075,6 +1075,20 @@ test('followed authors\' news is one list: a shared paper once with both names, 
  f.bench.destroy();
 });
 
+test('P1-2 the authors tab lists one paper once even when a stored row holds twins',async()=>{
+ const f=fixture();
+ f.runtime.dedupeNews=require('../src/runtime.js').dedupeNews;
+ f.runtime.watchedAuthorsByNews=()=>[
+  {id:'A1',name:'First Person',seen:[],news:[
+   {id:'W7',title:'Pathway engineering in yeast',doi:'10.1101/2026.01.01',date:'2026-05-01',preprint:true,venue:'bioRxiv'},
+   {id:'W8',title:'Pathway Engineering in Yeast',doi:'10.1038/x',date:'2026-08-01',venue:'Nature'},
+   {id:'W8',title:'Pathway Engineering in Yeast',doi:'10.1038/x',date:'2026-08-01',venue:'Nature'}]}];
+ await f.bench.show('authors');
+ const rows=[...f.body().querySelectorAll('.sc-author-inbox-row')];
+ assert.equal(rows.length,1,'the same id twice and the preprint beside its journal version are one paper');
+ f.bench.destroy();
+});
+
 test('a new paper marked 확인함 leaves the unseen list, is found under 확인함, comes back, and the search reads names',async()=>{
  const f=fixture();
  f.runtime.watchedAuthorsByNews=()=>[
@@ -5062,6 +5076,22 @@ test('R18 clearing a record search resets the header count to the plain list',as
  f.bench.destroy();
 });
 
+test('A6 the Recently edited button is a view switch: it changes the order and remembers it in memory, with no save',async()=>{
+ const f=fixture();
+ f.library.annotations=async()=>[{id:'a',parentID:'1',attachmentID:'100',text:'one',comment:'',color:'#ffd400',pageIndex:2,pageLabel:'3',modified:'2026-09-01 10:00:00'}];
+ f.refs.set(100,{id:100,parentID:1,getField:()=>'Main article'});
+ await f.bench.show('annotations');
+ const button=f.findButton('최근 수정순');
+ assert.equal(button.getAttribute('data-safe'),'view');
+ const before=f.calls.filter(c=>c[0]==='flush').length;
+ f.runtime.dirty=false;
+ button.click();await settle();
+ assert.equal(f.runtime.cache.workbenchUI.annotationOrder,'recent','the choice is remembered');
+ assert.equal(f.calls.filter(c=>c[0]==='flush').length-before,0,'without writing the data file');
+ assert.equal(f.runtime.dirty,true,'it is saved with the next real write');
+ f.bench.destroy();
+});
+
 test('R18 annotations group by paper then file, and the order choice flips p.6 against p.3 by modification date',async()=>{
  const f=fixture();
  f.refs.set(100,{id:100,parentID:1,getField:()=>'Main article'});f.refs.set(200,{id:200,parentID:1,getField:()=>'Supplementary'});f.refs.set(98,{id:98,parentID:2,getField:()=>'PDF'});
@@ -6454,7 +6484,9 @@ for(const locale of ['ko-KR','en-US']){
    const dataBefore=rest(),callsBefore=f.calls.length;
    const labelsSeen=new Set(),unsafeSeen=[];
    for(const tab of tabs){await f.bench.show(tab);await f.bench.load();for(const b of f.bench.panel.querySelectorAll('.sc-body button')){labelsSeen.add(b.textContent.trim());if(b.getAttribute('data-safe')!=='view')unsafeSeen.push(b.textContent.trim());}}
+   const flushesBefore=f.calls.filter(c=>c[0]==='flush').length;
    const {pressed,broken}=await SelfCheck.sweepSafeButtons({bench:f.bench,runtime:f.runtime,tabs,wait:()=>settle()});
+   assert.equal(f.calls.filter(c=>c[0]==='flush').length-flushesBefore,0,'the sweep never saves the data file: a view press is memory only (A6)');
    assert.deepEqual(broken,[],'a press must never surface a JavaScript error');
    assert.ok(pressed>=3,'the sweep really presses the marked view buttons: '+pressed);
    assert.deepEqual(writes,[],'no write path was called');
@@ -9040,4 +9072,35 @@ test('the dark pill left of the panel in the screenshot is the rail’s own acti
  assert.doesNotMatch(rules,/position:\s*(fixed|absolute)/);
  assert.doesNotMatch(rules,/(margin-inline-start|margin-left|inset-inline-start|left):\s*-/);
  assert.match(css,/\.sc-shell nav\s*\{[^}]*overflow:\s*auto/,'the rail clips what it holds');
+});
+
+test('A5 the Papers list fetch carries a signal that destroying the panel aborts while the fetch is still running',async()=>{
+ const f=personFixture();
+ allWorksFixture(f,{count:5,listed:5});
+ let signal=null;
+ f.runtime.authorAllWorks=(id,opts)=>{signal=opts?.signal;return new Promise((resolve,reject)=>{signal?.addEventListener('abort',()=>{const e=new Error('aborted');e.name='AbortError';reject(e);});});};
+ await f.bench.show('authors');await settle();
+ assert.ok(signal&&typeof signal.aborted==='boolean','a signal is passed to the runtime');
+ assert.equal(signal.aborted,false,'live while the panel is');
+ f.bench.destroy();
+ assert.equal(signal.aborted,true,'destroying the panel stops the fetch');
+});
+
+test('A7 English: the institution h-index tooltip and a patent\'s registration line are templates, not Korean',async()=>{
+ const i18n=require('../src/i18n.js');
+ try{
+  const f=englishFixture();
+  const rows=[{id:'A1',name:'Ada Lovelace',institution:'MIT',sweptAt:'2026-09-01T00:00:00Z',news:[{id:'W1'}],seen:[],
+   patents:[{id:'US123',title:'A device',granted:'2026-01-02',applicants:['Acme'],status:'Granted'},{id:'US124',title:'Another',filed:'2025-05-05'}],newPatents:[]}];
+  f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+  f.runtime.placeOf=name=>name==='MIT'?{country:'US',flag:'',hIndex:420,tier:{key:'t3',label:'T3',note:'note'}}:null;
+  await f.bench.show('authors');
+  await f.click(require('../src/strings.js').en['목록 관리']||'목록 관리');
+  const places=[...f.body().querySelectorAll('.sc-place')];
+  const titles=places.map(n=>n.getAttribute('title')||'').filter(Boolean);
+  assert.ok(titles.some(t=>/Institution h-index 420/.test(t)),'English words: '+JSON.stringify(titles));
+  assert.ok(!titles.some(t=>/기관/.test(t)));
+  assert.ok(!f.panel?.textContent?.includes('기관 h-index'));
+  f.bench.destroy();
+ }finally{i18n.use('ko-KR');}
 });

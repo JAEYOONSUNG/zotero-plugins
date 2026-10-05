@@ -1068,7 +1068,7 @@
       "label": "논문 추가·수정 시 인용 수 조회 후 Extra 저장",
       "type": "boolean",
       "default": true,
-      "description": "논문을 추가·수정할 때 인용 수를 조회해 Extra에 'Citations: N (출처, 날짜)' 한 줄로 적습니다(동기화됨)."
+      "description": "논문을 추가·수정할 때 인용 수를 조회해 Extra에 'Citations: N (출처, 날짜)' 한 줄로 적습니다(동기화됨). 직접 실행한 인용 수 새로고침이나 인용 목록 가져오기로 값이 바뀌면 이미 있는 그 줄도 같은 때 고칩니다."
     },
     {
       "key": "citationRefreshDays",

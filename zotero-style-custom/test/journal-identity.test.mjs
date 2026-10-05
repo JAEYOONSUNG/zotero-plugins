@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const journals = require("../src/journal-identity.js");
 
@@ -427,7 +427,10 @@ const hexOf = value => {
   return m ? journals.hslToHex(Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100) : value;
 };
 
-test("every journal in the registry has a badge, ink and fill that reach 4.5:1 in light and dark, and badges keep their original 9px", () => {
+// data/journal-registry.json is gitignored (licensed export): without it this test says so and skips, never fails a clean checkout.
+const REGISTRY_FILE = new URL("../data/journal-registry.json", import.meta.url);
+const REGISTRY_SKIP = existsSync(REGISTRY_FILE) ? false : "data/journal-registry.json is absent (gitignored licensed export); skipping the full-registry colour walk";
+test("every journal in the registry has a badge, ink and fill that reach 4.5:1 in light and dark, and badges keep their original 9px", {skip: REGISTRY_SKIP}, () => {
   journals.loadRegistry(JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")));
   const names = new Set([...Object.keys(journals.JOURNAL_COLOURS), ...Object.keys(journals.JOURNAL_HUES)]);
   for (const row of JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")).journals) names.add(row.title);
@@ -477,4 +480,27 @@ test("a dark ink is lightened and a light ink darkened along its own hue, never 
   assert.ok(journals.contrast(ink, "#ffffff") >= 4.5);
   const before = journals.hexToHsl(yellow), after = journals.hexToHsl(ink);
   assert.ok(Math.abs(before.h - after.h) < 8, "the hue is kept");
+});
+
+/* Fact-check 2026-10-05: 16 papers in 11 journals (The ISME Journal, The CRISPR Journal, The Journal of
+   Organic Chemistry, The FEBS Journal, Nitric Oxide, JoVE...) showed a grey badge beside a found IF,
+   because identify(title) matched the registry by title only. */
+test("a leading 'The' and the item's ISSN both reach the registry row", () => {
+  journals.loadRegistry({journals: [
+    {title: "ISME Journal", issns: ["1751-7362", "1751-7370"], abbreviation: "ISME J", impactFactor: 10.8, year: 2024, quartile: 1, publisher: "Springer Nature", levels: []},
+    {title: "Journal of Visualized Experiments", issns: ["1940-087X"], abbreviation: "J Vis Exp", impactFactor: 1.2, year: 2024, quartile: 3, publisher: "MyJoVE Corp", levels: []},
+    {title: "Nitric Oxide-Biology and Chemistry", issns: ["1089-8603"], abbreviation: "NITRIC OXIDE-BIOL CH", impactFactor: 3.2, year: 2024, quartile: 2, publisher: "Elsevier", levels: []}
+  ], subjects: []});
+  assert.equal(journals.identify("The ISME Journal").abbreviation, "ISME J", "the leading The does not hide the row");
+  assert.equal(journals.registryLookup("The ISME Journal")?.title, "ISME Journal");
+  // JoVE: the item says "JoVE (Journal of Visualized Experiments)"; only the ISSN finds it.
+  assert.equal(journals.identify("JoVE (Journal of Visualized Experiments)").abbreviation || "", "");
+  assert.equal(journals.identify("JoVE (Journal of Visualized Experiments)", {issn: "1940-087X"}).abbreviation, "J Vis Exp");
+  assert.equal(journals.identify("Nitric Oxide", {issn: "1089-8603"}).abbreviation, "NITRIC OXIDE-BIOL CH");
+  assert.equal(journals.identify("Nitric Oxide", {issn: "1089-8603"}).impactFactor, 3.2);
+  // The same title without an ISSN is a different, uncached question.
+  assert.equal(journals.identify("Nitric Oxide").abbreviation || "", "");
+  // A bare ISSN written with a stray space or lower case still finds it.
+  assert.equal(journals.registryLookup("whatever", "1089 8603")?.title, "Nitric Oxide-Biology and Chemistry");
+  assert.equal(journals.registryLookup("whatever"), null);
 });

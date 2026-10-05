@@ -73,11 +73,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async pruneDeletedItems() {
     const store = this.cache.items;
     if (!store || typeof store !== 'object') return 0;
-    const keys = Object.keys(store);
-    if (keys.length < 200) return 0;
+    const works = this.paperWorks();
+    const keys = Object.keys(store), workKeys = Object.keys(works);
+    if (keys.length + workKeys.length < 200) return 0;
     const alive = new Set();
     for (const library of this.Z.Libraries?.getAll?.() || []) {
-      for (const item of await this.libraryItems(library.libraryID) || []) alive.add(this.identity(item));
+      // A trashed paper is not alive even if a listing still hands it back.
+      for (const item of await this.libraryItems(library.libraryID) || []) if (!item?.deleted) alive.add(this.identity(item));
     }
     if (!alive.size) return 0;
     /* A trashed preprint that was merged into its published version is "gone" to
@@ -89,7 +91,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       else { try { const gone = this.Z.Items.get(Number(rec?.preprint)); if (gone) ledgered.add(this.identity(gone)); } catch (_) {} }
     }
     let removed = 0;
+    // The works store (citation lists, authors) is keyed the same way; 11 trashed papers left rows there
+    // that the sweeps and the self-check counted as papers (1,214 against 1,204 live).
     for (const key of keys) if (!alive.has(key) && !ledgered.has(key)) { delete store[key]; removed++; }
+    for (const key of workKeys) if (!alive.has(key) && !ledgered.has(key)) { delete works[key]; removed++; }
     if (removed) { this.dirty = true; this.scheduleFlush(5000); }
     return removed;
   }
@@ -163,7 +168,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.settingWriteDepth=(this.settingWriteDepth||0)+1;
     try{if(key==='customFields')this.setCustomFields(value);else if(key==='panelCSS')this.setPanelCSS(value);else this.Z.Prefs.set('extensions.style-custom.'+key,value,true);}finally{this.settingWriteDepth--; }
     // After the write: read before it, the language applied was the one being replaced.
-    if (key === 'language') { this.applyLocale(); }
+    if (key === 'language') { this.applyLocale(); this.timeFormatMemo = null; this.bumpState(); this.relabelColumns(); this.rebuildMenus(); }
     if(key==='workbenchDensity'){this.cache.workbenchUI={...(this.cache.workbenchUI||{}),density:value};this.dirty=true;}
     if(apply)await this.applySettings([key]);return this.getSetting(key);
   }
@@ -296,6 +301,33 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   columnFeature(key) {
     return {if:'IFColumn',oaCitedness:'IFColumn',citations:'citedCountColumn',status:'statusColumn',rating:'ratingColumn',time:'readTimeColumn',tags:'tagsColumn',progress:'readTimeColumn',remark:'remarkColumn',publication:'publicationTagsColumn',authors:'creatorColumn',added:'dateAddedColumn',modified:'dateAddedColumn',lastRead:'Recent',tagCount:'textTagsColumn',summary:'tldr',annotationCount:'annotationColumn',noteCount:'renderItemNotes',venue:'publicationColumn',collections:'collectionsColumn'}[key];
   }
+  /* What is registered for one of the plugin's columns. Kept in one place so a change of
+     language can register the same column again under its new title. */
+  columnOptions(dataKey,label,width) {
+    return {pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','more'].includes(dataKey),...(dataKey==='more'?{fixedWidth:true,noPadding:true,minWidth:28}:{}),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)};
+  }
+  /* Item-tree column titles are fixed when a column is registered, and Zotero has no call to
+     change one. After a language change each is registered again, immediately (so the tree
+     never sees a gap), with the same options; width, order, visibility and sort direction are
+     persisted by Zotero under the column's key (zoteroPersist), which does not change. */
+  relabelColumns() {
+    const manager=this.Z.ItemTreeManager;
+    if(!manager||!this.featureColumns)return 0;
+    let done=0;
+    for(const [dataKey,label,width]of this.columnDefinitions||[]){
+      const existing=this.featureColumns.get(dataKey);
+      if(!existing)continue;
+      try{
+        manager.unregisterColumn(existing);
+        const key=manager.registerColumn(this.columnOptions(dataKey,label,width));
+        if(!key)throw new Error('Could not register Custom column: '+dataKey);
+        this.columns=this.columns.map(entry=>entry===existing?key:entry);
+        this.featureColumns.set(dataKey,key);done++;
+      }catch(error){this.Z.logError(error);}
+    }
+    try{manager.refreshColumns?.();}catch(error){this.Z.logError(error);}
+    return done;
+  }
   syncFeatureColumns() {
     this.featureColumns||=new Map();
     for(const [dataKey,label,width]of this.columnDefinitions||[]){
@@ -304,7 +336,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if(existing){this.Z.ItemTreeManager.unregisterColumn(existing);this.columns=this.columns.filter(key=>key!==existing);this.featureColumns.delete(dataKey);}continue;
       }
       if(existing)continue;
-      const key=this.Z.ItemTreeManager.registerColumn({pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','more'].includes(dataKey),...(dataKey==='more'?{fixedWidth:true,noPadding:true,minWidth:28}:{}),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)});
+      const key=this.Z.ItemTreeManager.registerColumn(this.columnOptions(dataKey,label,width));
       if(!key)throw new Error('Could not register Custom column: '+dataKey);this.columns.push(key);this.featureColumns.set(dataKey,key);
     }
   }
@@ -364,6 +396,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     this.cache = loaded; this.active = true;
     this.retireLooseMoves();
+    try { this.reclassifyStoredNews(); } catch (error) { this.Z.logError?.(error); }
     try { if (this.recheckStoredLinks()) this.dirty = true; } catch (error) { this.Z.logError?.(error); }
     for (const entry of Object.values(loaded.items)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
@@ -490,11 +523,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       else if (!number(merged[field])) { merged[field] = null; merged[source] = null; }
     }
     if(providerRank&&live.impactSource?.startsWith('easyScholar'))merged.impactYear=null;
-    const journal = this.journals.lookup(item);
+    /* A renamed journal's figure belongs to the successor. For a paper from
+       before the rename there is none (a 1976 J Gen Microbiol paper was showing
+       Microbiology's 4.3); after it, the figure stays but is marked as the
+       successor's. An IF typed into Extra is the reader's own and stays. */
+    const detail = this.journals.lookupDetail ? this.journals.lookupDetail(item) : {record: this.journals.lookup(item), successor: null, predates: false};
+    const journal = detail.record;
+    merged.impactSuccessor = '';
     if (journal) {
       merged.impactFactor = journal.impactFactor;
       merged.impactYear = journal.year;
       merged.impactSource = `${journal.title} · JIF ${journal.year ?? this.t("연도 미표기")} · ${journal.sourceURL} · checked ${journal.checkedAt}`;
+      if (detail.successor) merged.impactSuccessor = detail.successor.to;
+    } else if (detail.predates && !number(live.impactFactor)) {
+      merged.impactFactor = null; merged.impactYear = null; merged.impactSource = null;
+      merged.impactSuccessor = '';
     }
     merged.impactKey = impactKey;
     const lookup=old.citationLookup;
@@ -519,6 +562,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
     }
     merged.citationKey=citationKey;
+    // The old plugin's Total(DOI) carries no provider and no date: a figure of unknown age (BBNBV83D 439
+    // against 123 now). Shown marked, never sorted or summed as if current; a refresh replaces it.
+    merged.citationLegacy = number(merged.citations) && /^Style cache: Total\(DOI\)/.test(String(merged.citationSource || ''));
     const own = number(old.seconds) ? old.seconds : 0;
     const prior = number(cached.seconds) ? cached.seconds : 0;
     merged.seconds = Math.max(own, prior, number(live.seconds) ? live.seconds : 0);
@@ -572,9 +618,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   computeState(item) {
     const metrics = this.metrics(item);
-    const state = this.model.readState(item.getTags(), item.getField("extra"), this.pref("autoStatus", true)&&this.featureEnabled("readStatus") ? metrics.seconds : 0);
-    if (this.entry(item).unreadOverride && state.status !== "done") state.status = "unread";
-    return { ...metrics, ...state,lastRead:this.entry(item).lastRead||'',dateAdded:String(item.getField('dateAdded')||''),dateModified:String(item.getField('dateModified')||'') };
+    const tags = item.getTags(), counted = this.pref("autoStatus", true)&&this.featureEnabled("readStatus") ? metrics.seconds : 0;
+    const state = this.model.readState(tags, item.getField("extra"), counted);
+    let statusReason = this.model.statusReason?.(tags, counted) || '';
+    if (this.entry(item).unreadOverride && state.status !== "done") { state.status = "unread"; statusReason = 'tag-unread'; }
+    return { ...metrics, ...state, statusReason,lastRead:this.entry(item).lastRead||'',dateAdded:String(item.getField('dateAdded')||''),dateModified:String(item.getField('dateModified')||'') };
   }
   value(key, item) {
     try {
@@ -582,6 +630,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       /* A sort key, not the figure: see sortKey. The cell draws the figure
          from displayValue. The IF column is Clarivate's JIF alone; OpenAlex's
          two-year citedness, a different scale, has its own column. */
+      if (key === "citations" && state.citationLegacy) return this.sortKey("");
       if (key === "if" || key === "oaCitedness" || key === "citations") return this.sortKey(this.displayValue(key, item));
       if (key === "journalMark") return this.journalAbbreviationOf(item);
 
@@ -974,7 +1023,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   journalIdentityOf(item) {
     const title = this.isRegular(item)
       ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '';
-    const identity = title ? this.journalIdentity.identify(title) : null;
+    let issn = '';
+    try { issn = String(item.getField('ISSN') || ''); } catch (_) {}
+    const identity = title ? this.journalIdentity.identify(title, {issn}) : null;
     return identity ? {title, identity} : null;
   }
   // The journal's standard abbreviation: Zotero's own field when the record has
@@ -1077,7 +1128,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return rows.slice().sort((a, b) => (a.quartile ?? 5) - (b.quartile ?? 5) || (b.percentile ?? -1) - (a.percentile ?? -1))[0];
   }
 
-  paintJournal(cell, item, doc, P, {figure, estimate, name} = {}) {
+  paintJournal(cell, item, doc, P, {figure, estimate, name, successor} = {}) {
     const identityInfo = this.journalIdentityOf(item);
     const title = identityInfo?.title
       || (this.isRegular(item) ? String(item.getField('publicationTitle') || item.getField('proceedingsTitle') || '') : '');
@@ -1089,7 +1140,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
        in four different places, so the eye could not run down it. Every
        figure now reads to a tenth, in tabular digits, right-aligned, so the
        points line up and the column can be scanned. */
-    number.textContent = figure == null ? '—' : (estimate ? '~' : '') + (Number.isFinite(value) ? value.toFixed(1) : String(figure));
+    number.textContent = figure == null ? '—' : (estimate || successor ? '~' : '') + (Number.isFinite(value) ? value.toFixed(1) : String(figure));
     number.style.cssText = `font-variant-numeric:tabular-nums;margin-inline-start:auto;text-align:right;flex:none;`
       // Only how high the figure is, and only in weight. The tier used to be
       // said twice: once by a colour and once by the number right beside it.
@@ -1111,7 +1162,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       ? (title ? `${title} · ${this.t('공식 IF를 아직 확인하지 못했습니다.')}` : this.t('저널 정보가 없습니다.'))
       : estimate
         ? `≈ ${figure} · ${this.t('OpenAlex 2년 평균 피인용')} · ${name || title}\n${this.t('공식 JIF가 아니라 추정치입니다.')}`
-        : `${title}${tier ? ' · ' + this.t(tier.name) : ''} · IF ${figure}${standingText}`;
+        : `${title}${tier ? ' · ' + this.t(tier.name) : ''} · IF ${figure}${standingText}`
+          // The figure is a renamed journal's successor's: marked "~" and said so.
+          + (successor ? '\n' + this.t("후속 저널 {0}의 IF입니다. 이 논문이 실린 시점의 저널과 같은 값이 아닐 수 있습니다.").replace('{0}', successor) : '');
     return cell;
   }
 
@@ -1192,6 +1245,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       where.international ? this.t("국제 공동연구") : null
     ].filter(Boolean).join("\n");
   }
+  /* One line saying why a status is shown, for the status cell's tooltip. */
+  statusWhy(item) {
+    const state = this.state(item);
+    const minutes = Math.max(1, Math.round((state.seconds || 0) / 60));
+    if (state.statusReason === 'time-over-auto-unread')
+      return this.t("자동으로 붙은 /unread 태그가 있지만 읽은 시간 {0}분이 기록되어 읽는 중으로 표시합니다. 직접 안 읽음으로 고르면 유지됩니다.").replace("{0}", String(minutes));
+    if (state.statusReason === 'time') return this.t("태그 없이 읽은 시간 {0}분이 기록되어 읽는 중으로 표시합니다.").replace("{0}", String(minutes));
+    return '';
+  }
   renderCell(key, index, value, column, doc) {
     const cell = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
     cell.className = "cell " + (column.className || "");
@@ -1222,7 +1284,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         cell.textContent=state.citationPending===id?"…":"—";
         cell.style.color=P.faint;
         const attempt=state.citationAttempt?.identity===id?state.citationAttempt:null;
-        cell.title=state.citationPending===id?this.t("인용 수 조회 중"):!this.openAlexKey()&&!attempt?this.t("OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요."):attempt?this.t({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):this.t("아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.");
+        cell.title=state.citationPending===id?this.t("인용 수 조회 중"):!this.openAlexKey()&&!attempt?this.t("OpenAlex 키가 없어 자동 조회를 쉬고 있습니다. 설정 → 인용 수·IF에 키를 넣거나, 우클릭 → 선택한 문헌 인용 수 새로고침을 실행하세요."):attempt?this.t({"not-found":"일치하는 논문의 인용 수를 찾지 못했습니다.",error:"조회 실패: 기존 값은 유지됩니다.",unsupported:"확인 가능한 논문 식별자가 부족합니다."}[attempt.status]||"")+(attempt.reason?" "+attempt.reason:""):this.t("아직 조회하지 않은 인용 수입니다. 0회 인용과 구분합니다.")+(this.citationRecord(item).doi?"":" "+this.t("DOI가 없어도 제목·연도·1저자가 정확히 일치하면 찾습니다. 우클릭 → 인용 수 새로고침."));
       }
       // "Not checked" and "nothing wrong" are different answers, and only one
       // of them is safe to read as reassurance.
@@ -1266,6 +1328,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.append(dot, text);
       if (this.isRegular(item)) {
         cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]) + " · " + this.t("클릭해서 상태 고르기: 안 읽음 / 읽는 중 / 완료");
+        // Why this status, when it is not simply the reader's own tag.
+        const why = this.statusWhy(item);
+        if (why) cell.title += "\n" + why;
         cell.style.cursor = "pointer";
         // The first click on a row selects it, as everywhere in Zotero; only a click on a row already selected changes it.
         const armed = this.guardClick(cell, doc, index);
@@ -1476,17 +1541,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       cell.title = mark?.title || "";
       return cell;
     } else if (key === "if") {
-      this.paintJournal(cell, item, doc, P, {figure: label, estimate: false});
+      this.paintJournal(cell, item, doc, P, {figure: label, estimate: false, successor: this.isRegular(item) ? this.metrics(item).impactSuccessor || '' : ''});
     } else if (key === "oaCitedness") {
       const estimate = this.isRegular(item) ? this.journalCitedness(item) : null;
       this.paintJournal(cell, item, doc, P, {figure: label, estimate: true, name: estimate?.name});
     } else if (key === "citations") {
       const count = Number(value);
       const number = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      number.textContent = label;
+      // A legacy count (no provider, no date) is drawn "~" and grey: a figure of unknown age, not a current one.
+      const legacy = this.isRegular(item) && !!this.metrics(item).citationLegacy;
+      number.textContent = legacy ? "~" + label : label;
       // A fixed, right-aligned number column so every bar starts at one x.
       number.style.cssText = `font-variant-numeric:tabular-nums;min-width:3.4em;text-align:right;`
-        + `flex:none;font-weight:${count >= 100 ? 590 : 400};color:${count > 0 ? P.text : P.faint};`;
+        + `flex:none;font-weight:${count >= 100 && !legacy ? 590 : 400};color:${count > 0 && !legacy ? P.text : P.faint};`;
       cell.appendChild(number);
       /* Grey means "too young to judge", not "few citations".
 
@@ -1526,6 +1593,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const source = metrics[key === "if" ? "impactSource" : "citationSource"] || this.t("저장된 메타데이터");
       if (key === "if" && cell.title) cell.title += ` · ${source}`; else cell.title = `${label} · ${source}`;
       if (key === "citations" && metrics.citationCheckedAt) cell.title += ` · ${metrics.citationCheckedAt}`;
+      if (key === "citations" && metrics.citationLegacy) cell.title += "\n" + this.t("옛 캐시의 값으로 날짜와 출처를 알 수 없습니다(legacy · unverified). 정렬과 합계에는 넣지 않습니다. 우클릭 → 인용 수 새로고침으로 제목·연도·1저자가 정확히 일치하는 논문을 찾아 바꿉니다.");
       if (key === "citations" && this.entry(item).citationAttempt?.status === "error") cell.title += " · " + this.t("최근 조회 실패, 마지막 확인값 유지");
     }
     return cell;
@@ -2981,12 +3049,181 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      author; marked ones only fill what is left, so the oldest dropped are
      always ones the reader has already dealt with. */
   keepNews(works, panelSeen = this.panelSeenKeys(), limit = this.NEWS_LIMIT) {
-    const sorted = [...works].sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
+    const sorted = CustomStyleRuntime.dedupeNews(works).sort((a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || '')));
     const open = sorted.filter(work => !panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, limit);
     const room = Math.max(0, limit - open.length);
     const done = sorted.filter(work => panelSeen.has(CustomStyleRuntime.seenWorkKey(work))).slice(0, room);
     const keep = new Set([...open, ...done]);
     return sorted.filter(work => keep.has(work));
+  }
+
+  static samePlace(a, b, rorA, rorB) {
+      const initials = name => String(name || '').split(/[\s-]+/).filter(w => w && !/^(of|the|and|for|at|de|du|des|la|le)$/i.test(w)).map(w => w[0]).join('').toUpperCase();
+      const lower = v => String(v || '').toLowerCase().trim();
+      const inner = (a, b, rorA, rorB) => {
+        if (rorA && rorB) return rorA === rorB;
+        if (!a || !b) return false;
+        if (lower(a) === lower(b) || lower(a).includes(lower(b)) || lower(b).includes(lower(a))) return true;
+        // "University of Illinois at Urbana-Champaign" and the same without
+        // "at" are one campus written two ways.
+        const bare = name => lower(name).replace(/[,.]/g, '').split(/\s+/).filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le)$/.test(w)).join(' ');
+        if (bare(a) && bare(a) === bare(b)) return true;
+        if (initials(a) === lower(b).toUpperCase() || initials(b) === lower(a).toUpperCase()) return true;
+        // "UC Berkeley" for "University of California, Berkeley": the
+        // leading words shortened, the campus kept.
+        const headed = name => { const w = String(name).replace(/[,.]/g, '').split(/\s+/).filter(Boolean); return w.length > 2 ? (initials(w.slice(0, -1).join(' ')) + ' ' + w[w.length - 1]).toLowerCase() : ''; };
+        // One letter off is a typo, not another university: the remembered
+        // place is typed by hand when an author is followed ("UC berkely").
+        const near = (x, y) => { if (!x || !y || Math.abs(x.length - y.length) > 1 || x.length < 8) return false; let i = 0, j = 0, slips = 0; while (i < x.length && j < y.length) { if (x[i] === y[j]) { i++; j++; continue; } if (++slips > 1) return false; if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; } } return slips + (x.length - i) + (y.length - j) <= 1; };
+        const plainA = lower(a).replace(/[,.]/g, ''), plainB = lower(b).replace(/[,.]/g, '');
+        if ((headed(a) && (headed(a) === plainB || near(headed(a), plainB))) || (headed(b) && (headed(b) === plainA || near(headed(b), plainA))) || near(plainA, plainB)) return true;
+        // "Harvard Medical School" is inside "Harvard University": a unit
+        // named after its university, which OpenAlex files under the
+        // university. The first word has to be the proper name, not a
+        // generic like "University" or "National".
+        const UNIT = /\b(school|institute|center|centre|laboratory|laboratories|lab|hospital|college|faculty|department|division|clinic|medical)\b/;
+        const GENERIC = /^(university|national|institute|the|state|college|school|center|centre|royal|federal|medical|general|technical|academy|hospital|max|mass)$/;
+        const first = name => (bare(name).split(' ')[0] || '');
+        if (first(a) && first(a) === first(b) && !GENERIC.test(first(a)) && (UNIT.test(plainA) || UNIT.test(plainB))) return true;
+        // "DTU" for "Technical University of Denmark": an acronym written in
+        // the local order, so its letters are compared as a set.
+        const acronym = name => { const m = String(name).trim().match(/^([A-Z]{2,5})(?:\s|$)/); return m ? m[1].split('').sort().join('') : ''; };
+        const letters = name => initials(name).split('').sort().join('');
+        return (!!acronym(a) && acronym(a) === letters(b)) || (!!acronym(b) && acronym(b) === letters(a));
+      };
+      return inner(a, b, rorA, rorB);
+  }
+
+  // --- Followed authors' news: namesakes and twins ---
+
+  // A name or title reduced to its letters and digits (Unicode, NFKC), for comparing.
+  static newsKey(text) { return String(text || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''); }
+
+  /* One paper once. The same OpenAlex id twice, the "Angewandte Chemie" and
+     "... International Edition" records of one article, and a preprint beside
+     its journal version all arrived as separate news. By id first, then by
+     the full normalised title; of a preprint/article pair the journal version
+     stays and carries a note of the preprint. */
+  static dedupeNews(works) {
+    const byID = new Map(), list = [];
+    for (const work of works || []) {
+      if (!work) continue;
+      if (work.id && byID.has(work.id)) continue;
+      if (work.id) byID.set(work.id, work);
+      list.push(work);
+    }
+    const groups = new Map();
+    list.forEach((work, index) => {
+      const key = CustomStyleRuntime.newsKey(work.title);
+      if (key.length < 10) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(index);
+    });
+    const drop = new Set();
+    for (const indexes of groups.values()) {
+      if (indexes.length < 2) continue;
+      const rank = index => { const w = list[index]; return (w.preprint ? 0 : 4) + (w.inLibrary ? 2 : 0) + (w.doi ? 1 : 0); };
+      let best = indexes[0];
+      for (const index of indexes) if (rank(index) > rank(best)) best = index;
+      const winner = list[best];
+      for (const index of indexes) {
+        if (index === best) continue;
+        drop.add(index);
+        const twin = list[index];
+        if (twin.preprint && !winner.preprint && !winner.preprintOf) winner.preprintOf = {id: twin.id, venue: twin.venue || '', doi: twin.doi || '', date: twin.date || ''};
+        if (twin.inLibrary) winner.inLibrary = true;
+      }
+    }
+    return list.filter((work, index) => !drop.has(index));
+  }
+
+  /* Where a stored or fresh paper stands for one followed author.
+     item: {id, places: [{name, ror}] or null when unknown, country, subfield, people: [names]}
+     ctx:  {confirmed, knownPlaces, knownCountries, evidence (folded coauthor names), selfKey}
+     A paper that names no institution is not taken on trust: it passes only
+     when it shares a coauthor with papers already verified for this author. */
+  static newsVerdict(item, ctx) {
+    if (ctx.confirmed.has(item.id)) return {verdict: 'ok', basis: 'confirmed'};
+    if (!Array.isArray(item.places)) return {verdict: 'unclassified', basis: ''};
+    if (!item.places.length) {
+      const shared = (item.people || []).some(name => { const key = CustomStyleRuntime.newsKey(name); return key && key !== ctx.selfKey && ctx.evidence.has(key); });
+      return shared ? {verdict: 'ok', basis: 'coauthor'} : {verdict: 'unverified', basis: ''};
+    }
+    if (!ctx.knownPlaces.length) return {verdict: 'ok', basis: 'open'};
+    if (item.places.some(h => ctx.knownPlaces.some(pl => CustomStyleRuntime.samePlace(pl.name, h.name, pl.ror || '', h.ror || '')))) return {verdict: 'ok', basis: 'place'};
+    if (item.country && ctx.knownCountries.has(item.country) && ctx.subfieldKnown && item.subfield === ctx.subfieldKnown) return {verdict: 'ok', basis: 'country'};
+    return {verdict: 'unverified', basis: ''};
+  }
+
+  static newsContext(row, profileNow, extraEvidence = []) {
+    const knownPlaces = [
+      {name: row.institution, ror: row.institutionRor}, {name: row.institutionGiven, ror: ''},
+      {name: row.previousInstitution, ror: row.previousInstitutionRor},
+      ...(row.places || []), ...(row.placesSeen || []), ...(profileNow?.places || [])
+    ].filter(pl => pl && pl.name);
+    const confirmed = new Set(row.confirmed || []);
+    const evidence = new Set(extraEvidence);
+    for (const work of row.news || []) {
+      if (work && (['place', 'country', 'confirmed'].includes(work.verified) || confirmed.has(work.id))) {
+        for (const name of work.people || []) { const key = CustomStyleRuntime.newsKey(name); if (key) evidence.add(key); }
+      }
+    }
+    return {
+      confirmed, knownPlaces, evidence, selfKey: CustomStyleRuntime.newsKey(row.name),
+      knownCountries: new Set(row.countriesSeen || []), subfieldKnown: row.subfield || ''
+    };
+  }
+
+  /* Stored news is judged again by the rules now in force, with no request.
+     A paper whose stored record names its institutions is classified like a
+     fresh one; one swept before the classifier existed has nothing to judge
+     by, so it is marked `unclassified` -- unless it shares a coauthor with
+     verified papers, or the row has verified papers and it shares none, in
+     which case it is held as unverified. Returns how many moved. */
+  static reclassifyNewsRow(row, profileNow, extraEvidence = []) {
+    if (!Array.isArray(row?.news) || !row.news.length) return {moved: 0, unclassified: 0};
+    const ctx = CustomStyleRuntime.newsContext(row, profileNow, extraEvidence);
+    const kept = [], moved = [];
+    let unclassified = 0;
+    for (const work of row.news) {
+      if (!work) continue;
+      if (work.verified) { kept.push(work); continue; }
+      const item = {id: work.id, places: Array.isArray(work.places) ? work.places.map(name => ({name, ror: ''})) : null,
+        country: work.country || '', subfield: work.subfield || '', people: work.people || []};
+      let result = CustomStyleRuntime.newsVerdict(item, ctx);
+      if (result.verdict === 'unclassified') {
+        // No institutions stored: the coauthors are the only evidence left.
+        const shared = (work.people || []).some(name => { const key = CustomStyleRuntime.newsKey(name); return key && key !== ctx.selfKey && ctx.evidence.has(key); });
+        result = shared ? {verdict: 'ok', basis: 'coauthor'} : ctx.evidence.size ? {verdict: 'unverified', basis: ''} : result;
+      }
+      if (result.verdict === 'unverified') { moved.push(work); continue; }
+      if (result.verdict === 'unclassified') { work.unclassified = true; unclassified++; }
+      else { work.verified = result.basis; delete work.unclassified; }
+      kept.push(work);
+    }
+    if (moved.length) {
+      const held = new Map((row.unverified || []).map(w => [w.id, w]));
+      for (const work of moved) if (!held.has(work.id) && !(row.rejected || []).includes(work.id)) held.set(work.id, {
+        id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''), date: work.date || '',
+        people: (work.people || []).slice(0, 6), places: work.places || [], country: work.country || '', subfield: work.subfield || ''
+      });
+      row.unverified = [...held.values()].sort((m, n) => String(n.date || '').localeCompare(String(m.date || ''))).slice(0, 20);
+    }
+    row.news = kept;
+    return {moved: moved.length, unclassified};
+  }
+
+  // The panel's safety net: the same one-paper-once rule, asked through the instance.
+  dedupeNews(list) { return CustomStyleRuntime.dedupeNews(list); }
+
+  reclassifyStoredNews() {
+    let moved = 0;
+    for (const row of this.watchedAuthors?.() || []) {
+      const before = JSON.stringify([row.news, row.unverified]);
+      moved += CustomStyleRuntime.reclassifyNewsRow(row, null).moved;
+      if (JSON.stringify([row.news, row.unverified]) !== before) this.dirty = true;
+    }
+    return moved;
   }
 
   // Pacing, without reaching for a global the rest of this class does not use:
@@ -3291,39 +3528,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          already published, filed as datasets. OpenAlex types them; the type
          used to be fetched and thrown away, so a bioRxiv preprint could not
          be shown as one either. */
-      const initials = name => String(name || '').split(/[\s-]+/).filter(w => w && !/^(of|the|and|for|at|de|du|des|la|le)$/i.test(w)).map(w => w[0]).join('').toUpperCase();
-      const lower = v => String(v || '').toLowerCase().trim();
-      const samePlace = (a, b, rorA, rorB) => {
-        if (rorA && rorB) return rorA === rorB;
-        if (!a || !b) return false;
-        if (lower(a) === lower(b) || lower(a).includes(lower(b)) || lower(b).includes(lower(a))) return true;
-        // "University of Illinois at Urbana-Champaign" and the same without
-        // "at" are one campus written two ways.
-        const bare = name => lower(name).replace(/[,.]/g, '').split(/\s+/).filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le)$/.test(w)).join(' ');
-        if (bare(a) && bare(a) === bare(b)) return true;
-        if (initials(a) === lower(b).toUpperCase() || initials(b) === lower(a).toUpperCase()) return true;
-        // "UC Berkeley" for "University of California, Berkeley": the
-        // leading words shortened, the campus kept.
-        const headed = name => { const w = String(name).replace(/[,.]/g, '').split(/\s+/).filter(Boolean); return w.length > 2 ? (initials(w.slice(0, -1).join(' ')) + ' ' + w[w.length - 1]).toLowerCase() : ''; };
-        // One letter off is a typo, not another university: the remembered
-        // place is typed by hand when an author is followed ("UC berkely").
-        const near = (x, y) => { if (!x || !y || Math.abs(x.length - y.length) > 1 || x.length < 8) return false; let i = 0, j = 0, slips = 0; while (i < x.length && j < y.length) { if (x[i] === y[j]) { i++; j++; continue; } if (++slips > 1) return false; if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; } } return slips + (x.length - i) + (y.length - j) <= 1; };
-        const plainA = lower(a).replace(/[,.]/g, ''), plainB = lower(b).replace(/[,.]/g, '');
-        if ((headed(a) && (headed(a) === plainB || near(headed(a), plainB))) || (headed(b) && (headed(b) === plainA || near(headed(b), plainA))) || near(plainA, plainB)) return true;
-        // "Harvard Medical School" is inside "Harvard University": a unit
-        // named after its university, which OpenAlex files under the
-        // university. The first word has to be the proper name, not a
-        // generic like "University" or "National".
-        const UNIT = /\b(school|institute|center|centre|laboratory|laboratories|lab|hospital|college|faculty|department|division|clinic|medical)\b/;
-        const GENERIC = /^(university|national|institute|the|state|college|school|center|centre|royal|federal|medical|general|technical|academy|hospital|max|mass)$/;
-        const first = name => (bare(name).split(' ')[0] || '');
-        if (first(a) && first(a) === first(b) && !GENERIC.test(first(a)) && (UNIT.test(plainA) || UNIT.test(plainB))) return true;
-        // "DTU" for "Technical University of Denmark": an acronym written in
-        // the local order, so its letters are compared as a set.
-        const acronym = name => { const m = String(name).trim().match(/^([A-Z]{2,5})(?:\s|$)/); return m ? m[1].split('').sort().join('') : ''; };
-        const letters = name => initials(name).split('').sort().join('');
-        return (!!acronym(a) && acronym(a) === letters(b)) || (!!acronym(b) && acronym(b) === letters(a));
-      };
+      const samePlace = CustomStyleRuntime.samePlace;
       /* Namesakes. OpenAlex sometimes merges two people of one name into one
          profile, so every work carrying the followed id arrived as news. The
          followed author's own authorship names the institutions that signed
@@ -3334,30 +3539,45 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          is neither counted nor shown as news until the reader confirms it.
          A paper that lists no institution passes. */
       const profileNow = profiles.get(row.id);
-      const knownPlaces = [
-        {name: row.institution, ror: row.institutionRor}, {name: row.institutionGiven, ror: ''},
-        {name: row.previousInstitution, ror: row.previousInstitutionRor},
-        ...(row.places || []), ...(row.placesSeen || []), ...(profileNow?.places || [])
-      ].filter(pl => pl && pl.name);
-      const knownCountries = new Set(row.countriesSeen || []);
       const shortOf = this.discoverTools.shortID(row.id);
-      const confirmed = new Set(row.confirmed || []), rejected = new Set(row.rejected || []);
-      const classify = work => {
-        if (confirmed.has(work.id)) return 'ok';
-        const own = (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf));
-        const there = own?.institutions?.length ? own.institutions : (own?.institution ? [{institution: own.institution, ror: own.ror}] : []);
-        if (!there.length || !knownPlaces.length) return 'ok';
-        if (there.some(h => knownPlaces.some(pl => samePlace(pl.name, h.institution, pl.ror || '', h.ror || '')))) return 'ok';
-        if (own.country && knownCountries.has(own.country) && row.subfield && work.subfieldName === row.subfield) return 'ok';
-        return 'unverified';
+      const rejected = new Set(row.rejected || []);
+      const ownOf = work => (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf));
+      const placesOf = work => {
+        const own = ownOf(work);
+        const list = own?.institutions?.length ? own.institutions.map(h => ({name: h.institution, ror: h.ror || ''}))
+          : (own?.institution ? [{name: own.institution, ror: own.ror || ''}] : []);
+        return list.filter(pl => pl.name);
       };
-      const checked = fresh.filter(work => !rejected.has(work.id)).map(work => ({work, verdict: classify(work)}));
+      const asItem = work => ({id: work.id, places: placesOf(work), country: ownOf(work)?.country || '',
+        subfield: work.subfieldName || '', people: (work.people || []).map(p => p.name).filter(Boolean)});
+      /* What was stored before this sweep is judged first, by the same rules:
+         a namesake paper kept from an earlier sweep must not stay in the
+         news just because this sweep did not find it again. */
+      CustomStyleRuntime.reclassifyNewsRow(row, profileNow);
+      const ctx = CustomStyleRuntime.newsContext(row, profileNow);
+      const knownCountries = ctx.knownCountries;
+      const candidates = fresh.filter(work => !rejected.has(work.id));
+      const verdicts = new Map();
+      // Papers that name an institution first; their coauthors then vouch for the ones that name none.
+      for (const work of candidates) {
+        const item = asItem(work);
+        if (item.places.length || ctx.confirmed.has(work.id)) verdicts.set(work.id, CustomStyleRuntime.newsVerdict(item, ctx));
+      }
+      for (const work of candidates) {
+        const result = verdicts.get(work.id);
+        if (result && ['place', 'country', 'confirmed'].includes(result.basis))
+          for (const name of asItem(work).people) { const key = CustomStyleRuntime.newsKey(name); if (key) ctx.evidence.add(key); }
+      }
+      for (const work of candidates) if (!verdicts.has(work.id)) verdicts.set(work.id, CustomStyleRuntime.newsVerdict(asItem(work), ctx));
+      const confirmed = ctx.confirmed;
+      const checked = candidates.map(work => ({work, verdict: verdicts.get(work.id).verdict, basis: verdicts.get(work.id).basis}));
+      const basisOf = new Map(checked.map(c => [c.work.id, c.basis]));
       const held = checked.filter(c => c.verdict === 'unverified').map(c => c.work)
         .filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
       const placesSeen = new Map((row.placesSeen || []).map(pl => [pl.name, pl]));
       for (const {work, verdict} of checked) {
         if (verdict !== 'ok') continue;
-        const own = (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf));
+        const own = ownOf(work);
         for (const h of own?.institutions || []) if (h.institution && !placesSeen.has(h.institution)) placesSeen.set(h.institution, {name: h.institution, ror: h.ror || ''});
         if (own?.country) knownCountries.add(own.country);
       }
@@ -3395,7 +3615,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // What the same record says about this followed author's part in it and how often it is cited, so the inbox can say so without a request.
         citations: Number.isInteger(work.citations) ? work.citations : null,
         position: (work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.position || '',
-        corresponding: !!(work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.corresponding
+        corresponding: !!(work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.corresponding,
+        // What the namesake check went by, kept so stored news can be judged again on load.
+        places: placesOf(work).map(pl => pl.name).slice(0, 4),
+        country: ownOf(work)?.country || '', subfield: work.subfieldName || '',
+        verified: basisOf.get(work.id) || ''
       });
       /* Always merged, never replaced: a refresh that finds nothing (the date
          floor hides everything already known) must not empty what the reader
@@ -3403,7 +3627,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          rejected, or older than the retention. */
       const retention = Date.now() - (this.NEWS_RETENTION_DAYS || 180) * 864e5;
       const found_ = new Set(papers.map(work => work.id));
+      const heldIDs = new Set((row.unverified || []).map(w => w?.id));
       const earlier = (row.news || []).filter(old => old && !found_.has(old.id)
+        && !heldIDs.has(old.id)
         && !panelSeen.has(CustomStyleRuntime.seenWorkKey(old)) && !seen.has(old.id) && !rejected.has(old.id)
         && !(Date.parse(old.date || '') < retention));
       row.news = this.keepNews([...papers.map(toNews), ...earlier], panelSeen, storeLimit);
@@ -3580,7 +3806,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: work.type,
         preprint: /preprint/i.test(work.type || '') || /rxiv|research square|preprints?\b|ssrn/i.test(work.venue || ''),
         date: work.date, inLibrary: !!work.doi && owned.has(work.doi), people: work.people || [],
-        citations: null, position: '', corresponding: false
+        citations: null, position: '', corresponding: false,
+        places: work.places || [], country: work.country || '', subfield: work.subfield || '', verified: 'confirmed'
       }, ...(row.news || [])], this.panelSeenKeys(), this.NEWS_STORE_LIMIT || 200);
     } else {
       row.rejected = [...new Set([workID, ...(row.rejected || [])])].slice(0, 200);
@@ -3783,8 +4010,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      the current one checked, as a native popup like Zotero's own menus. Where
      a popup cannot be made the click cycles Unread -> Reading -> Done. The
      write is edit(), the path the context menu and the panel use. */
-  pickStatus(doc, cell, items, current) {
+  pickStatus(doc, cell, items, rendered) {
     const words = {unread: "안 읽음", reading: "읽는 중", done: "완료"};
+    /* The state now, not the one the cell was drawn with: reading time can have
+       turned a paper from unread to reading since the paint, and choosing
+       Unread must not be skipped as "same". Skipped only when every selected
+       paper already has the choice. */
+    const nowOf = item => { try { return this.state(item)?.status || null; } catch (_) { return null; } };
+    const allAre = status => items.length > 0 && items.every(item => (nowOf(item) ?? rendered) === status);
+    const current = nowOf(items[0]) ?? rendered;
     const apply = status => {
       const win = doc.defaultView;
       return this.edit(items, {status})
@@ -3814,8 +4048,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       entry.classList?.add("menuitem-iconic");
       entry.setAttribute("image", icon(status));
       entry.setAttribute("type", "checkbox");
-      if (status === current) entry.setAttribute("checked", "true");
-      entry.addEventListener("command", () => { if (status !== current) apply(status); });
+      if (allAre(status)) entry.setAttribute("checked", "true");
+      entry.addEventListener("command", () => { if (!allAre(status)) apply(status); });
       popup.appendChild(entry);
     }
     popup.addEventListener("popuphidden", () => popup.remove?.(), {once: true});
@@ -3829,6 +4063,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     button.type = "button"; button.className = "sc-more"; button.textContent = "⋯";
     button.title = this.t("더 보기"); button.setAttribute("aria-label", this.t("더 보기"));
     button.setAttribute("data-opens", "menu"); button.tabIndex = -1;
+    // The menu is for the row (openRowMenu selects an unselected row itself); the press must not reach the list and narrow a multi-selection.
+    for (const type of ["mousedown", "mouseup"]) button.addEventListener(type, event => event.stopPropagation());
     button.addEventListener("click", event => {
       event.stopPropagation(); event.preventDefault();
       this.openRowMenu(doc, button, index, item).catch(error => this.Z.logError(error));
@@ -3884,12 +4120,28 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   /* Zotero selects a row on mousedown, so by the click it is always selected.
      The cell asks on its own mousedown, which runs before the tree's, and the
      click reads that answer. */
+  /* On a row that is already selected the control acts and the row's selection must
+     stay as it is. Zotero changes the selection on mouseup (a press-and-release on one
+     of several selected rows narrows the selection to that row), so stopping `click` is
+     not enough: mousedown and mouseup are kept from the row too, as Zotero's own
+     `.cell.clickable` cells do. On an unselected row the press goes through, and the
+     row selects as it always does. */
   guardClick(cell, doc, index) {
-    cell.addEventListener('mousedown', () => { cell.dataset.wasSelected = String(this.rowSelected(doc, index)); });
+    const keep = event => { if (cell.dataset.wasSelected === 'true') event.stopPropagation(); };
+    cell.addEventListener('mousedown', event => { cell.dataset.wasSelected = String(this.rowSelected(doc, index)); keep(event); });
+    cell.addEventListener('mouseup', keep);
     return () => cell.dataset.wasSelected !== 'false';
   }
 
   /* The figure a metric column draws: '' when there is none. */
+  /* state() for the panel's own lists and totals: a legacy count (no provider, no
+     date) is not a current figure, so it is not summed, ranked or averaged there. */
+  panelState(item) {
+    const state = this.state(item);
+    if (!state.citationLegacy) return state;
+    return {...state, citations: null, legacyCitations: state.citations,
+      citationSource: `legacy · unverified: ${state.citations} (${state.citationSource}), not counted`};
+  }
   displayValue(key, item) {
     const state = this.state(item);
     if (key === "if") return state.impactFactor != null && Number.isFinite(Number(state.impactFactor)) ? String(state.impactFactor) : "";
@@ -4306,6 +4558,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!doi) { report.noDOI++; store[key] = {doi: '', missing: true, checkedAt: new Date().toISOString()}; continue; }
       wanted.push({key, doi, item});
     }
+    const extraRows = [];
     for (let start = 0; start < wanted.length; start += 50) {
       if (signal?.aborted || !this.active || this.stopping) break;
       const batch = wanted.slice(start, start + 50);
@@ -4326,6 +4579,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             continue;
           }
           report.found++;
+          extraRows.push({item: row.item, count: work.citations, checkedAt: new Date().toISOString()});
           report.references += work.references.length;
           store[row.key] = {
             v: 2, doi: row.doi, openalex: work.id, year: work.year, citations: work.citations,
@@ -4349,6 +4603,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       } catch (error) { this.Z.logError(error); report.errors++; }
     }
     report.institutions = await this.sweepInstitutions({signal});
+    // The cache just learned these counts; an Extra line that disagrees is brought along (when the reader has that on).
+    if (extraRows.length && typeof this.syncCitationExtras === 'function') {
+      try { report.extras = (await this.syncCitationExtras(extraRows.filter(r => Number.isSafeInteger(r.count)))).written || 0; } catch (error) { this.Z.logError(error); }
+    }
     if (report.found || report.noDOI || report.missing) { await this.flush(); await this.refreshWindows(); }
     return report;
   }
@@ -5044,32 +5302,51 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const hit = store[key];
     if (!refresh && hit && hit.v === 1 && Array.isArray(hit.works) && !this.expiredAt(hit.checkedAt, this.constructor.EXPIRY_DAYS.authorWorks)) return shape(hit, true);
     this.authorWorksPending = this.authorWorksPending || new Map();
-    if (!refresh && this.authorWorksPending.has(key)) return this.authorWorksPending.get(key).then(row => shape(row, false));
-    const job = (async () => {
-      const options = this.discoverOptions(), tools = this.discoverTools, PAGES = 25;
-      const all = new Map();
-      let cursor = '*', truncated = false;
-      for (let page = 0; page < PAGES && cursor; page++) {
-        const url = tools.authorAllWorksURL(authorID, {...options, orcid, cursor});
-        if (!url) break;
-        const payload = await this.discoverJSON(url, {signal});
-        const works = tools.readAuthorWorks(payload, {authorID, orcid});
-        for (const work of works) if (!all.has(work.id)) all.set(work.id, work);
-        cursor = works.length ? payload?.meta?.next_cursor || '' : '';
-        if (cursor && page === PAGES - 1) truncated = true;
-        if (cursor) await this.pause(150);
-      }
-      const row = {v: 1, checkedAt: new Date().toISOString(), truncated, works: [...all.values()].sort(tools.byNewest)};
-      store[key] = row;
-      // Forty people at most: each holds a few hundred rows.
-      const keys = Object.keys(store);
-      if (keys.length > 40) for (const old of keys.sort((a, b) => String(store[a]?.checkedAt).localeCompare(String(store[b]?.checkedAt))).slice(0, keys.length - 40)) delete store[old];
-      this.dirty = true;
-      return row;
-    })();
-    this.authorWorksPending.set(key, job);
-    try { return shape(await job, false); }
-    finally { if (this.authorWorksPending.get(key) === job) this.authorWorksPending.delete(key); }
+    /* One fetch per person, shared by whoever asks while it runs, with its own
+       controller: it stops when every one of them has gone (the panel closed,
+       the window unloaded), and also when the plugin itself is stopping. It
+       checks before each request and again before the cache is written, so a
+       closed panel neither pages on nor leaves a half-grown cache behind. */
+    let entry = !refresh && this.authorWorksPending.get(key);
+    if (!entry) {
+      const Controller = this.Z.getMainWindow?.()?.AbortController || globalThis.AbortController;
+      const controller = new Controller();
+      const check = () => { if (controller.signal.aborted || !this.active || this.stopping) { const error = new Error('Author works fetch aborted'); error.name = 'AbortError'; throw error; } };
+      entry = {controller, holders: 0};
+      entry.job = (async () => {
+        const options = this.discoverOptions(), tools = this.discoverTools, PAGES = 25;
+        const all = new Map();
+        let cursor = '*', truncated = false;
+        for (let page = 0; page < PAGES && cursor; page++) {
+          check();
+          const url = tools.authorAllWorksURL(authorID, {...options, orcid, cursor});
+          if (!url) break;
+          const payload = await this.discoverJSON(url, {signal: controller.signal});
+          check();
+          const works = tools.readAuthorWorks(payload, {authorID, orcid});
+          for (const work of works) if (!all.has(work.id)) all.set(work.id, work);
+          cursor = works.length ? payload?.meta?.next_cursor || '' : '';
+          if (cursor && page === PAGES - 1) truncated = true;
+          if (cursor) { await this.pause(150); check(); }
+        }
+        check();
+        const row = {v: 1, checkedAt: new Date().toISOString(), truncated, works: [...all.values()].sort(tools.byNewest)};
+        store[key] = row;
+        // Forty people at most: each holds a few hundred rows.
+        const keys = Object.keys(store);
+        if (keys.length > 40) for (const old of keys.sort((a, b) => String(store[a]?.checkedAt).localeCompare(String(store[b]?.checkedAt))).slice(0, keys.length - 40)) delete store[old];
+        this.dirty = true;
+        return row;
+      })();
+      this.authorWorksPending.set(key, entry);
+      const clear = () => { if (this.authorWorksPending.get(key) === entry) this.authorWorksPending.delete(key); };
+      entry.job.then(clear, clear);
+    }
+    entry.holders++;
+    const leave = () => { if (--entry.holders <= 0) entry.controller.abort(); };
+    if (signal) { if (signal.aborted) leave(); else signal.addEventListener('abort', leave, {once: true}); }
+    try { return shape(await entry.job, false); }
+    finally { signal?.removeEventListener?.('abort', leave); }
   }
   // Whether a fresh copy is held, so the panel can say "from <date>" without asking.
   authorWorksState(authorID, orcid = '') {
@@ -6086,7 +6363,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         const items=[];
         for(const id of batch){try{const item=await this.Z.Items.getAsync(id);if(this.canEdit(item))items.push(item);}catch(error){this.Z.logError(error);}}
         if(!items.length)return;
-        await this.refreshCitations(items);
+        await this.refreshCitations(items,{syncExtra:false});
         for(const item of items) {
           if(!this.active||this.stopping||!this.featureEnabled("citedCountColumn")||!this.pref("metadataCitations",true))break;
           try { await this.persistCitation(item,this.entry(item).citationLookup); }
@@ -6095,6 +6372,49 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }).catch(error=>this.Z.logError(error));
       return this.metadataQueue;
     },1200);
+  }
+  /* Extra's "Citations:" line follows the cache. 354 items showed a line that
+     disagreed with the count the cache now held, because only the background
+     writer ever touched it. When a refresh the reader asked for brings a new
+     count and "citations in Extra" is on, an existing line is rewritten in the
+     same refresh: one transaction, no Date Modified bump, nothing added to a
+     paper that has no line, an equal count left alone. */
+  async syncCitationExtras(rows) {
+    if (!this.active || this.stopping || !this.featureEnabled("citedCountColumn") || !this.pref("metadataCitations", true)) return {written: 0};
+    const owned = /^\s*Citations:\s*\d[\d,]*(?:\s+\([^\r\n]*\))?\s*$/i;
+    const todo = [];
+    for (const {item, count, checkedAt} of rows || []) {
+      if (!this.canEdit(item) || item.hasChanged?.() || !Number.isSafeInteger(count) || count < 0) continue;
+      const stamp = Date.parse(checkedAt);
+      if (!Number.isFinite(stamp)) continue;
+      const before = String(item.getField("extra") || ""), lines = before.split(/\r?\n/);
+      const line = lines.find(l => owned.test(l));
+      if (line === undefined) continue;
+      if (Number(String(line.match(/\d[\d,]*/)?.[0] || "").replace(/,/g, "")) === count) continue;
+      const written = `Citations: ${count} (OpenAlex, ${new Date(stamp).toISOString().slice(0, 10)})`;
+      todo.push({item, before, after: [...lines.filter(l => !owned.test(l)), written].join("\n").replace(/^\n/, ""), line: written});
+    }
+    if (!todo.length) return {written: 0};
+    const done = [];
+    const work = this.queue.then(async () => {
+      try {
+        await this.Z.DB.executeTransaction(async () => {
+          for (const row of todo) {
+            row.item.setField("extra", row.after);
+            await row.item.save({notifierData: {styleCustomCitations: true}, skipSelect: true, skipDateModifiedUpdate: true});
+            done.push(row);
+          }
+        });
+      } catch (error) {
+        for (const row of todo) { try { if (row.item.getField("extra") === row.after) row.item.setField("extra", row.before); } catch (_) {} }
+        throw error;
+      }
+      for (const row of done) this.entry(row.item).citationExtra = {identity: this.citationTools.identity(this.citationRecord(row.item)), line: row.line};
+      this.dirty = true;
+    });
+    this.queue = work.catch(() => {});
+    try { await work; } catch (error) { this.Z.logError?.(error); return {written: 0, error: String(error?.message || error)}; }
+    return {written: done.length};
   }
   async persistCitation(item,result,{flush=true}={}) {
     if(!this.active||this.stopping||!this.canEdit(item)||item.hasChanged?.()||result?.status!=="ok"||!Number.isSafeInteger(result.count)||result.count<0)return false;
@@ -6126,7 +6446,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const report={libraryID,total:items.length,processed:0,saved:0,unchanged:0,unavailable:0,errors:0,running:true,startedAt:new Date().toISOString()};
       this.cache.lastCitationSave=report;this.dirty=true;await this.flush();
       try {
-        report.lookup=lookup?await this.refreshCitations(items):{cachedOnly:true};
+        report.lookup=lookup?await this.refreshCitations(items,{syncExtra:false}):{cachedOnly:true};
         let lastFlush=0;
         for(const item of items) {
           if(!this.active||this.stopping){report.cancelled=true;break;}
@@ -6190,14 +6510,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const job={controller:new Controller(),background:!!options.background};this.citationJob=job;
     const records=selection.map(item=>this.citationRecord(item)),byKey=new Map(selection.map(item=>[this.identity(item),item]));
     for(const record of records)this.entry(byKey.get(record.key)).citationPending=this.citationTools.identity(record);
-    let lastPaint=0;
+    let lastPaint=0;const okRows=[];
     const ctx={signal:job.controller.signal,email:this.contactEmail(),openalexApiKey:this.openAlexKey(),
       onProgress:progress=>{this.citationProgress=progress;options.onProgress?.(progress);},
       onResult:async result=>{
         const item=byKey.get(result.key);
         if(!this.active||job.controller.signal.aborted||!item||this.citationTools.identity(this.citationRecord(item))!==result.identity)return;
         const entry=this.entry(item);entry.citationAttempt=result;
-        if(result.status==="ok")entry.citationLookup=result;
+        if(result.status==="ok"){entry.citationLookup=result;if(["OpenAlex","Crossref"].includes(result.source))okRows.push({item,count:result.count,checkedAt:result.checkedAt});}
         delete entry.citationPending;summary[result.status]++;this.dirty=true;
         if(Date.now()-lastPaint>1000){lastPaint=Date.now();await this.flush();await this.refreshWindows();}
       }};
@@ -6216,7 +6536,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       signal.addEventListener("abort",abort,{once:true});if(signal.aborted)abort();
     });
     job.promise=this.citationTools.lookupMany(records,this.citationHTTP(job.controller.signal),ctx)
-      .then(()=>summary).catch(error=>{if(error.name!=="AbortError")throw error;return {...summary,cancelled:true};})
+      .then(async()=>{
+        // A refresh the reader asked for also brings an existing Extra line up to date. The background writers persist for themselves.
+        if(options.syncExtra!==false&&!options.background&&okRows.length)await this.syncCitationExtras(okRows);
+        return summary;
+      }).catch(error=>{if(error.name!=="AbortError")throw error;return {...summary,cancelled:true};})
       .finally(async()=>{
         for(const item of selection)delete this.entry(item).citationPending;
         if(this.citationJob===job)this.citationJob=null;
@@ -6747,28 +7071,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       onSession: (item,location) => { if (this.isRegular(item)) {const record=this.entry(item);record.seconds=this.metrics(item).seconds;if(Number.isInteger(location?.attachmentID)&&location.attachmentID>0){record.readingAttachments||={};record.readingAttachments[String(location.attachmentID)]||={pageTimes:{},totalPages:Number.isInteger(location.totalPages)?location.totalPages:0};record.readingAttachmentID=location.attachmentID;}} },
       onTick:(item,seconds,location,shown)=>this.addReading(item,seconds,location,shown), onError:error=>this.Z.logError(error) });}
   }
-  addWindow(win) {
-    if (!this.active || this.stopping || this.windows.has(win)) return;
-    const state = { nodes:[], listeners:[], signature:null,titleNodes:new Set(),titlePositions:new Map(),titleWeights:new Map() }; this.windows.set(win,state);
-    const unload = () => {this.removeWindow(win).catch(error=>this.Z.logError(error));};
-    win.addEventListener("unload", unload, { once: true });
-    state.listeners.push([win, "unload", unload]);
-    this.attachMotion(win,state);
-    this.attachColumnFit(win,state);
-    try{this.attachCells(win,state);}catch(error){this.Z.logError(error);}
-    this.watchItemPane(win,state);
-    state.readerCleanup=this.readerTools.attach(win);
-    for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
-    state.workbench=this.Workbench.attach(win,{runtime:this,library:this.Library.create({Zotero:this.Z,runtime:this}),reader:this.readerTools,model:this.workspaceTools,assist:this.assist});
+  /* The plugin's own menus in one window: the item context menu entry and the Tools menu
+     entry. Built here so a change of language can take them down and put them up again
+     in every window (rebuildMenus); the labels are said in the language of the moment. */
+  buildMenus(win, state) {
     const doc = win.document, popup = doc.getElementById("zotero-itemmenu");
     if (popup) {
       // Menu labels pass through the dictionary like everything the panel writes.
       const make = (tag,label,parent) => { const node=doc.createXULElement(tag); if(label)node.setAttribute("label",this.t(label));parent?.appendChild(node);return node; };
-      const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);
+      const menu=make("menu","Style Custom",popup);menu.id="style-custom-itemmenu";state.nodes.push(menu);(state.menuNodes ||= []).push(menu);
       // A door that needs no paper selected: the Tools menu, beside ZotPoP's.
       const tools=doc.getElementById("menu_ToolsPopup");
       if(tools&&!doc.getElementById("style-custom-tools-item")){
-        const entry=make("menu","Style Custom",tools);entry.id="style-custom-tools-item";state.nodes.push(entry);
+        const entry=make("menu","Style Custom",tools);entry.id="style-custom-tools-item";state.nodes.push(entry);(state.menuNodes ||= []).push(entry);
         const sub=make("menupopup",null,entry);
         const door=(label,fn)=>{const node=make("menuitem",label,sub);node.addEventListener("command",()=>Promise.resolve().then(fn).catch(e=>{this.Z.logError(e);this.say(win,e.message);}));return node;};
         door("연구 작업 패널",()=>state.workbench?.toggle(true));
@@ -6970,6 +7285,32 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         this.say(win,`IF 확인 ${result.updated}개 · 조회 실패 ${result.failed}개 · 미등록 저널 ${result.unknown}개. 기존 확인된 값은 유지됩니다.`);
       },body,"journals","선택한 문헌의 저널 중 출판사 페이지 수치(86종)가 있는 저널만 그 페이지에서 다시 읽습니다. JCR 내보내기와 OpenAlex 값은 바뀌지 않습니다.");
     }
+  }
+  rebuildMenus() {
+    for (const [win, state] of this.windows) {
+      if (win.closed) continue;
+      try {
+        for (const node of (state.menuNodes || []).splice(0)) { try { node.remove(); } catch (_) {} state.nodes = state.nodes.filter(entry => entry !== node); }
+        this.buildMenus(win, state);
+      } catch (error) { this.Z.logError(error); }
+    }
+  }
+  addWindow(win) {
+    if (!this.active || this.stopping || this.windows.has(win)) return;
+    const state = { nodes:[], listeners:[], signature:null,titleNodes:new Set(),titlePositions:new Map(),titleWeights:new Map() }; this.windows.set(win,state);
+    const unload = () => {this.removeWindow(win).catch(error=>this.Z.logError(error));};
+    win.addEventListener("unload", unload, { once: true });
+    state.listeners.push([win, "unload", unload]);
+    this.attachMotion(win,state);
+    this.attachColumnFit(win,state);
+    try{this.attachCells(win,state);}catch(error){this.Z.logError(error);}
+    this.watchItemPane(win,state);
+    state.readerCleanup=this.readerTools.attach(win);
+    for(const tab of this.readerTools.tabs(win))if(tab.itemID)this.tabItems.set(tab.id,tab.itemID);
+    state.workbench=this.Workbench.attach(win,{runtime:this,library:this.Library.create({Zotero:this.Z,runtime:this}),reader:this.readerTools,model:this.workspaceTools,assist:this.assist});
+    const doc = win.document;
+    state.menuNodes = [];
+    this.buildMenus(win, state);
     const poll = async () => {
       if (!this.active || win.closed || state.polling) return;
       state.polling = true;

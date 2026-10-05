@@ -242,3 +242,65 @@ test("the layout puts the author in the middle and every co-author inside the fr
   for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) assert.ok(Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y) >= nodes[i].rad + nodes[j].rad, "twenty around one author do not overlap");
   for (const n of twenty.nodes) assert.ok(n.rad >= 11, "big enough for two letters at 11px");
 });
+
+// Regression review A3: the id is the identity; a name only stands in for a record that has no id.
+test("two co-authors of one name with different ids stay two nodes; one id under two spellings stays one", () => {
+  const me = {id: "A1", name: "Jennifer Doudna"};
+  const g = portrait.egoGraph({me, works: [
+    {id: "W1", doi: "10.1/a", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A20", name: "John Smith"}]},
+    {id: "W2", doi: "10.1/b", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A21", name: "John Smith"}]},
+    {id: "W3", doi: "10.1/c", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A30", name: "Kay Lee"}]},
+    {id: "W4", doi: "10.1/d", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A30", name: "Kay A Lee"}]}]});
+  const smiths = g.nodes.filter(n => n.name === "John Smith");
+  assert.equal(smiths.length, 2, "different ids are different people");
+  assert.deepEqual(smiths.map(n => n.weight), [1, 1]);
+  assert.deepEqual(smiths.map(n => n.id).sort(), ["A20", "A21"]);
+  const lee = g.nodes.filter(n => /Lee/.test(n.name));
+  assert.equal(lee.length, 1, "one id is one person whatever the spelling");
+  assert.equal(lee[0].weight, 2);
+  assert.equal(lee[0].name, "Kay A Lee", "the fuller spelling is shown");
+});
+
+test("a namesake of the centre with another id is a co-author, not the centre", () => {
+  const g = portrait.egoGraph({me: {id: "A1", name: "John Smith"}, works: [
+    {id: "W1", doi: "10.1/a", people: [{id: "A1", name: "John Smith"}, {id: "A9", name: "John Smith"}, {id: "A2", name: "Ann Lee"}]},
+    {id: "W2", doi: "10.1/b", people: [{id: "A9", name: "John Smith"}, {id: "A3", name: "Bo Kim"}]}]});
+  assert.deepEqual(g.nodes.map(n => n.id).sort(), ["A2", "A9"], "the namesake is drawn; Bo Kim's paper (without A1) is not hers");
+  assert.ok(!g.nodes.some(n => n.id === "A3"));
+});
+
+test("a record without an id joins the one person of that name; with two candidates it stands alone", () => {
+  const me = {id: "A1", name: "Jennifer Doudna"};
+  const one = portrait.egoGraph({me, works: [{id: "W1", doi: "10.1/a", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A2", name: "Sam Sternberg"}]}],
+    news: [{id: "W2", doi: "10.1/b", people: ["Jennifer Doudna", "Sam Sternberg"]}]});
+  assert.equal(one.nodes.length, 1);
+  assert.deepEqual([one.nodes[0].id, one.nodes[0].weight], ["A2", 2]);
+  const two = portrait.egoGraph({me, works: [
+    {id: "W1", doi: "10.1/a", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A20", name: "John Smith"}]},
+    {id: "W2", doi: "10.1/b", people: [{id: "A1", name: "Jennifer Doudna"}, {id: "A21", name: "John Smith"}]}],
+    news: [{id: "W3", doi: "10.1/c", people: ["Jennifer Doudna", "John Smith"]}]});
+  assert.equal(two.nodes.filter(n => n.name === "John Smith").length, 3, "the unattributable name is its own node, not credited to either id");
+  assert.equal(two.nodes.find(n => n.id === "A20").weight, 1);
+});
+
+// Regression review A8: narrow panels used to overlap (20 co-authors at 320x400 gave 8 pairs, 48 gave 62).
+test("the ego layout never overlaps or leaves the frame, at 320, 480 and 760 wide with 20 and 48 co-authors, growing taller when it must", () => {
+  for (const width of [320, 480, 760]) for (const count of [1, 5, 20, 48]) {
+    const graph = portrait.egoGraph({me: {id: "A1", name: "Me Self"}, limit: Infinity,
+      works: Array.from({length: count}, (_, i) => ({id: "W" + i, doi: "10/" + i, people: [{id: "A1", name: "Me Self"}, {id: "B" + i, name: "Co " + nm(i) + "y"}]})),
+      followed: [{id: "B0", name: "Co " + nm(0) + "y"}]});
+    const laid = portrait.egoLayout(graph, {width, height: 400});
+    const label = `${width}x${laid.height} with ${count}`;
+    assert.ok(laid.height >= 400, label + ": never shorter than asked");
+    assert.equal(laid.nodes.length, count, label + ": every co-author is placed");
+    const all = [laid.centre, ...laid.nodes];
+    for (const n of all) assert.ok(n.x - n.rad >= -0.5 && n.x + n.rad <= width + 0.5 && n.y - n.rad >= -0.5 && n.y + n.rad <= laid.height + 0.5, `${label}: ${n.name} is inside`);
+    let overlaps = 0;
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) if (Math.hypot(all[i].x - all[j].x, all[i].y - all[j].y) < all[i].rad + all[j].rad) overlaps++;
+    assert.equal(overlaps, 0, `${label}: ${overlaps} overlapping pairs`);
+    for (const n of laid.nodes) assert.ok(n.rad >= 11, "big enough for two letters at 11px");
+    assert.equal(Math.round(laid.centre.y), Math.round(laid.height / 2), label + ": the author stays in the middle");
+  }
+  const roomy = portrait.egoLayout(portrait.egoGraph({me: {id: "A1", name: "Me Self"}, works: [{id: "W", doi: "10/w", people: [{id: "A1", name: "Me Self"}, {id: "B", name: "Co Aay"}]}]}), {width: 760, height: 360});
+  assert.equal(roomy.height, 360, "when everything fits, the asked height stands");
+});
