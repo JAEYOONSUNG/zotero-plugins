@@ -50,8 +50,11 @@ var ZotPoPAffiliations = (function () {
 		if (!list.length) return null;
 		let first = list.find(person => person.position === "first") || list[0];
 		let flagged = list.filter(person => person.corresponding);
-		let last = list.find(person => person.position === "last") || list[list.length - 1];
-		let corresponding = flagged.length ? flagged[0] : (list.length > 1 ? last : null);
+		// A list that names positions but has no last author was cut short (OpenAlex stops at 100): its final
+		// entry is a middle author, and naming that lab as the last author's would be invented.
+		let positioned = list.some(person => person.position);
+		let last = list.find(person => person.position === "last") || (positioned ? null : list[list.length - 1]);
+		let corresponding = flagged.length ? flagged[0] : (list.length > 1 && last ? last : null);
 		return {
 			first,
 			corresponding: corresponding && corresponding !== first ? corresponding : null,

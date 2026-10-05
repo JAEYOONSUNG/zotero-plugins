@@ -54,8 +54,9 @@ test("ORCID works select preferred group assertions and use only unambiguous sel
 	const records = await Authors.loadPublications(orcidProfile, { maxResults: 100 }, { async getJSON() { return works; } }, ctx);
 	assert.equal(records.length, 4); assert.equal(records[0].orcidPutCode, 2); assert.equal(records[0].doi, "10.1234/real");
 	assert.equal(records[0].title, "Reported work 2"); assert.equal(records[0].publicationDate, "2024-02-29");
-	assert.equal(records[1].title, ""); assert.equal(records[1].doi, null); assert.equal(records[1].publicationDate, "2023-02");
-	assert.equal(records[2].doi, null); assert.equal(records[2].metadataWarnings.length, 1);
+	// newest first (round 6): the 2024 conflicting-DOI work comes before the 2023 one
+	assert.equal(records[2].title, ""); assert.equal(records[2].doi, null); assert.equal(records[2].publicationDate, "2023-02");
+	assert.equal(records[1].doi, null); assert.equal(records[1].metadataWarnings.length, 1);
 	assert.equal(records[3].year, null); assert.equal(records[3].itemType, "dataset");
 	for (const record of records) {
 		assert.deepEqual(record.authors, []); assert.equal(record.citations, null); assert.equal(record.authorListComplete, false);
@@ -399,4 +400,11 @@ test("the record summary asks for three small public sections, keeps what answer
 	const partial = await Authors.orcidSummary(A_ID, http(["employments"])); assert.equal(partial.partial, true); assert.equal(partial.bio, "Hello");
 	await assert.rejects(Authors.orcidSummary(A_ID, http(["person", "employments", "educations"])), /nope/);
 	await assert.rejects(Authors.orcidSummary("bad", http([])), /Invalid ORCID/);
+});
+
+test("an ORCID record capped by the result limit keeps its newest works, not the first ones listed (round 6, Astra 4)", async () => {
+	const dated = (n, year) => group(work(n, { "publication-date": { year: { value: String(year) } } }));
+	const records = await Authors.loadPublications(orcidProfile, { maxResults: 2, orcidOnly: true }, { getJSON: async () => ({ group: [dated(1, 2010), dated(2, 2026), dated(3, 2020), group(work(4, { "publication-date": null }))] }) }, {});
+	assert.deepEqual(records.map(r => r.year), [2026, 2020]);
+	assert.equal(records.authorProvenance.truncated, true);
 });

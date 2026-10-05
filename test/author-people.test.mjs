@@ -201,3 +201,94 @@ test("with a picked person and the namesakes shown, the citation graph counts th
 	assert.equal(ui.get("m-papers").textContent, "3");
 	assert.match(ui.get("metrics-trend").textContent, /metricsTrendNote\|3\|3/, "the graph covers the 3 picked papers, not all 6");
 });
+
+test("an OpenAlex person's own profile figures are shown beside the computed ones, and a gap is explained in OpenAlex's terms (round 6)", async () => {
+	// explainMetrics: OpenAlex profile figures against the loaded works
+	const base = { stats: { citations: 100, hIndex: 5 }, computed: { citations: 100, hIndex: 5 }, loaded: 20, total: 20, truncated: false, filtered: false, unverified: false, basis: null, source: "openalex" };
+	assert.deepEqual(Authors.explainMetrics(base), []);
+	assert.deepEqual(Authors.explainMetrics({ ...base, computed: { citations: 96, hIndex: 5 } }), ["profileLag"], "OpenAlex refreshes a profile's totals less often than its papers' counts");
+	assert.deepEqual(Authors.explainMetrics({ ...base, basis: "semanticscholar", computed: { citations: 140, hIndex: 6 } }), ["basisOpenAlex"]);
+	assert.deepEqual(Authors.explainMetrics({ ...base, stats: { citations: 100, hIndex: null }, computed: { citations: 100, hIndex: 7 } }), [], "a merged person has no profile h-index to disagree with");
+	assert.ok(!Authors.explainMetrics({ ...base, computed: { citations: 1, hIndex: 1 } }).includes("otherIndex"), "OpenAlex is not compared with Google Scholar");
+	// the window
+	const ui = uiHarness({ metrics: Metrics, realRows: true, prefs: { popDataDir: "" } });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("combined");
+	const card = { provider: "combined", id: "A5", openalexId: "A5", name: "Pat Lee", mode: "profile", identityConfirmed: true, worksCount: 6, citations: 300, hIndex: 4 };
+	ui.authorSessions.combined.profile = card;
+	const rows = FIXTURE({ authorProfile: { provider: "combined", id: "A5", name: "Pat Lee", mode: "profile", identityConfirmed: true, worksCount: 6 }, authorProvenance: { via: "openalex", truncated: false } })
+		.map(r => ({ ...r, citationSource: "openalex", citationsBy: undefined }));
+	ui.displaySearchResults(rows);
+	ui.originalRenderMetrics(ui.state.visible);
+	const box = ui.get("metrics-scholar");
+	assert.equal(box.hidden, false, "the OpenAlex profile's own figures are shown");
+	assert.match(box.textContent, /openAlexStatsTitle/); assert.match(box.textContent, /300/); assert.match(box.textContent, /mPapers/);
+	assert.doesNotMatch(box.textContent, /scholarStatsTitle|i10/);
+	assert.match(ui.get("metrics-explain").textContent, /metricsWhy_profileLag/, "computed 210 citations against the profile's 300");
+	assert.doesNotMatch(ui.get("metrics-explain").textContent, /otherIndex|Google Scholar/);
+	// papers read from the ORCID record (no OpenAlex works) are not compared with OpenAlex's profile
+	ui.displaySearchResults(rows.map(r => ({ ...r, authorProvenance: { via: "orcid" } })));
+	ui.originalRenderMetrics(ui.state.visible);
+	assert.equal(ui.get("metrics-scholar").hidden, true);
+});
+
+test("a name search's papers are marked unconfirmed from the first streamed batch, so no figures show before a person is picked, even after Stop (round 6, Astra 1)", async () => {
+	const work = n => ({ id: "https://openalex.org/W" + n, title: "P" + n, publication_year: 2020, type: "article", cited_by_count: n, authorships: [{ author: { display_name: "Pat Lee", id: "https://openalex.org/A" + n } }], primary_location: { source: { display_name: "J" } }, biblio: {} });
+	const http = { async getJSON(url) {
+		if (url.includes("/authors?search=")) return { meta: { count: 2 }, results: [{ id: "https://openalex.org/A1", display_name: "Pat Lee" }, { id: "https://openalex.org/A2", display_name: "Pat Lee" }] };
+		return { meta: { count: 2 }, results: [work(1), work(2)] };
+	} };
+	const batches = [];
+	const records = await Authors.loadNamePublications("Pat Lee", { maxResults: 10 }, http, { onResults: list => batches.push(list.map(r => r.authorProfile?.mode)) }, "combined");
+	assert.ok(batches.length >= 2, "streamed, then final");
+	for (const modes of batches) assert.ok(modes.length && modes.every(mode => mode === "name-search"), "every streamed row already says it is unconfirmed");
+	assert.equal(records[0].authorProfile.mode, "name-search");
+	// the window: rows of a name search without identity on them still ask for a person
+	const ui = uiHarness({ metrics: Metrics, realRows: true, prefs: { popDataDir: "" } });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("combined");
+	ui.get("author-input").value = TYPED;
+	ui.authorSessions.combined.action = "name-papers"; ui.authorSessions.combined.profile = null;
+	ui.displaySearchResults(FIXTURE());
+	assert.equal(ui.unverifiedAuthorResults(), true);
+	ui.originalRenderMetrics(ui.state.visible);
+	assert.equal(ui.get("metrics-table").hidden, true, "no h-index for namesakes mixed together");
+});
+
+test("a person's papers reopened from recent searches read newest first, as they did when loaded (round 6, Astra 4)", async () => {
+	const ui = uiHarness({ metrics: Metrics, realRows: true, prefs: { popDataDir: "" } });
+	await ui.switchSearchMode("authors");
+	const profile = { provider: "combined", id: "A5", openalexId: "A5", name: "Pat Lee", mode: "profile", identityConfirmed: true };
+	const records = FIXTURE({ authorProfile: profile });
+	await ui.showAuthorHistory({ query: { authorProvider: "combined", authorInput: "Pat Lee", authorAction: "publications", authorProfile: profile, maxResults: 100 }, records, savedAt: Date.now() });
+	assert.equal(ui.state.sortKey, "year"); assert.equal(ui.state.sortDir, "desc");
+	await ui.showAuthorHistory({ query: { authorProvider: "combined", authorInput: "Pat Lee", authorAction: "profiles", maxResults: 100 }, records: [], savedAt: Date.now() });
+	assert.equal(ui.state.sortKey, "rank");
+});
+
+test("the lookup caches an author search paid for are saved when it ends, finished or stopped (round 6, Astra 8)", async () => {
+	const files = new Map(); let exports = 0;
+	const ui = uiHarness({ metrics: Metrics, realRows: true, prefs: { popDataDir: "" }, historyFiles: files, sources: { exportCaches: () => { exports++; return { institutions: [["I1", { hIndex: 9 }]] }; } } });
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("combined");
+	ui.get("author-input").value = "Pat Lee";
+	const profile = { provider: "combined", id: "A5", openalexId: "A5", name: "Pat Lee", mode: "profile", identityConfirmed: true };
+	await ui.runAuthorAction("publications", profile);
+	assert.ok(exports >= 1, "the caches are written after an author search, not only after a paper search");
+	assert.ok([...files.keys()].some(key => /cache\.json$/.test(key)));
+});
+
+test("two people with different ORCID iDs are never clustered as one, even through a shared co-author; one iD joins its papers (round 6, Astra 2)", () => {
+	const OA = "0000-0002-1825-0097", OB = "0000-0001-1111-1118";
+	const r = (n, me, coauthor, venue = "J" + n) => ({ key: "k" + n, title: "T" + n, venue, year: 2020, authors: [me, { name: coauthor }] });
+	const records = [
+		r(1, { name: "Pat Lee", orcid: "https://orcid.org/" + OA }, "John Kim"),
+		r(2, { name: "Pat Lee", orcid: "https://orcid.org/" + OB }, "John Kim"),
+		r(3, { name: "Pat Lee" }, "John Kim"),
+		r(4, { name: "Pat Lee", orcid: "https://orcid.org/" + OA }, "Ann Ray"),
+		r(5, { name: "Pat Lee", orcid: "https://orcid.org/" + OB }, "Bo Yu")
+	];
+	const { clusters, rest } = Authors.clusterPeople(records, "Pat Lee", x => x.key);
+	const groupOf = key => clusters.find(c => c.keys.includes(key)) || (rest?.keys.includes(key) ? rest : null);
+	assert.notEqual(groupOf("k1"), groupOf("k2"), "different iDs stay apart");
+	assert.equal(groupOf("k1"), groupOf("k4"), "the same iD joins papers with no co-author in common");
+	assert.equal(groupOf("k2"), groupOf("k5"));
+	assert.ok(groupOf("k1") && groupOf("k1") !== rest);
+});

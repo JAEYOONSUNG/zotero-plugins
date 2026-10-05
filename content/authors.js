@@ -207,6 +207,29 @@ var ZotPoPAuthors = (function () {
 		return candidates;
 	}
 
+	const lastInstitutionOf = inst => {
+		if (!inst?.display_name) return null;
+		const out = { name: inst.display_name, country: String(inst.country_code || "").toUpperCase() || null };
+		const id = String(inst.id || "").match(/I[1-9]\d*/i)?.[0];
+		if (id) out.id = id.toUpperCase();
+		return out;
+	};
+	/* The standing of each card's last institution (T1-T4, from the lab's OpenAlex h-index), asked for every card
+	   in one filter request through the institution cache the result rows use, so a lab is asked about once. */
+	async function institutionTiers(candidates, http, ctx) {
+		const Aff = typeof ZotPoPAffiliations !== "undefined" ? ZotPoPAffiliations : typeof require === "function" ? require("./affiliations.js") : null;
+		const people = candidates.filter(c => c.lastInstitution?.id).map(c => ({ card: c, name: c.name || "?", institutionId: c.lastInstitution.id, institutionH: null }));
+		if (!people.length || ctx.openAlexSpent || typeof Sources?.enrichInstitutions !== "function" || typeof http?.getJSON !== "function") return;
+		try {
+			await Sources.enrichInstitutions(people.map(p => ({ people: [p] })), { getJSON: (url, headers) => cancellable(() => http.getJSON(url, headers, ctx.signal), ctx) }, { ...ctx, onProgress: null });
+		} catch (error) { if (error.name === "AbortError") throw error; ctx.log?.("Institution tiers for author cards failed: " + error.message); return; }
+		for (const p of people) {
+			if (!Number.isFinite(p.institutionH)) continue;
+			p.card.lastInstitution.hIndex = p.institutionH;
+			p.card.lastInstitution.tier = Aff?.tierOf(p.institutionH)?.key || null;
+		}
+	}
+
 	// One OpenAlex request for all the candidates: papers, citations, h-index, last institution, top topic.
 	async function enrichCandidates(candidates, http, ctx) {
 		if (!candidates.length || ctx.openAlexSpent || typeof http?.getJSON !== "function") return false;
@@ -231,7 +254,7 @@ var ZotPoPAuthors = (function () {
 				Object.assign(c, { worksCount: Number(a.works_count) || 0, citations: Number(a.cited_by_count) || 0,
 					hIndex: Number.isFinite(Number(a.summary_stats?.h_index)) ? Number(a.summary_stats.h_index) : null,
 					topic: text(a.topics?.[0]?.display_name), openalexId: Sources.openAlexAuthorId?.(a.id) || String(a.id || "").replace("https://openalex.org/", "") || null,
-					lastInstitution: inst?.display_name ? { name: inst.display_name, country: String(inst.country_code || "").toUpperCase() || null } : null });
+					lastInstitution: lastInstitutionOf(inst) });
 				const others = extra.get(c.id) || [];
 				if (others.length) {
 					const lead = { openalexId: c.openalexId, hIndex: c.hIndex };
@@ -270,6 +293,7 @@ var ZotPoPAuthors = (function () {
 	async function searchOrcidNames(value, http, ctx) {
 		const { candidates, parsed, provenance } = await orcidNameCandidates(value, http, ctx);
 		await enrichCandidates(candidates, http, ctx);
+		await institutionTiers(candidates, http, ctx);
 		rankOrcidCandidates(candidates, parsed);
 		candidates.authorProvenance = provenance;
 		return candidates;
@@ -289,7 +313,7 @@ var ZotPoPAuthors = (function () {
 		return { provider: "combined", sources: ["openalex"], id: openalexId, openalexId, orcid: parseOrcid(a.orcid), name, givenNames: "", familyNames: "", creditName: name,
 			otherNames: alternatives, affiliation: "", institutions: [], worksCount: Number(a.works_count) || 0, citations: Number(a.cited_by_count) || 0,
 			hIndex: Number.isFinite(Number(a.summary_stats?.h_index)) ? Number(a.summary_stats.h_index) : null, topic: text(a.topics?.[0]?.display_name),
-			lastInstitution: inst?.display_name ? { name: inst.display_name, country: String(inst.country_code || "").toUpperCase() || null } : null,
+			lastInstitution: lastInstitutionOf(inst),
 			url: "https://openalex.org/" + openalexId, identityConfirmed: true, mode: "profile" };
 	}
 
@@ -337,6 +361,7 @@ var ZotPoPAuthors = (function () {
 			const c = openAlexCandidate(a);
 			if (!c) throw new Error("OpenAlex returned no author for " + identifier.id);
 			c.direct = true;
+			await institutionTiers([c], http, ctx);
 			return finish([c]);
 		}
 		if (identifier?.type === "orcid") {
@@ -344,6 +369,7 @@ var ZotPoPAuthors = (function () {
 			const c = orcidAsCombined(person[0]);
 			await enrichCandidates([c], http, ctx);
 			c.direct = true;
+			await institutionTiers([c], http, ctx);
 			return finish([c]);
 		}
 		const tasks = [ctx.openAlexSpent ? Promise.reject(new Error("OpenAlex budget spent for today")) : openAlexAuthorSearch(value, http, ctx), orcidNameCandidates(value, http, ctx)];
@@ -375,11 +401,26 @@ var ZotPoPAuthors = (function () {
 		// One batched OpenAlex request for the ORCID profiles the search did not already return.
 		if (orcidOnly.length) await enrichCandidates(orcidOnly, http, ctx);
 		for (const c of orcidOnly) {
+			// One iD on several OpenAlex records: the ORCID card holds them all (ids, summed figures), and any of
+			// those records the name search listed on its own, without the iD, is that same person, not a second card.
+			if (c.alsoIds?.length) {
+				const dupes = [...new Set([c.openalexId, ...c.alsoIds].map(id => byOa.get(id)).filter(hit => hit && !hit.orcid))];
+				if (dupes.length) {
+					for (const dupe of dupes) list.splice(list.indexOf(dupe), 1);
+					c.sources = ["openalex", "orcid"];
+					c.otherNames = [...new Set([...(c.otherNames || []), ...dupes.flatMap(d => [d.name, ...(d.otherNames || [])])])].filter(name => name && name !== c.name);
+					if (!c.topic) c.topic = dupes[0].topic;
+				}
+				c.id = c.openalexId || c.orcid; list.push(c);
+				for (const id of [c.openalexId, ...c.alsoIds]) byOa.set(id, c);
+				continue;
+			}
 			const hit = c.openalexId ? byOa.get(c.openalexId) : null;
 			if (hit && !hit.orcid) { hit.orcid = c.orcid; mergeCandidate(hit, c); }
 			else { c.id = c.openalexId || c.orcid; list.push(c); }
 		}
 		const parsed = or.status === "fulfilled" ? or.value.parsed : parseNameInput(value);
+		await institutionTiers(list, http, ctx);
 		return finish(rankCombinedCandidates(list, parsed));
 	}
 
@@ -436,18 +477,23 @@ var ZotPoPAuthors = (function () {
 			const skip = at >= 0 ? at : alt;
 			const coauthors = new Map();
 			authors.forEach((a, i) => { if (i === skip) return; const p = nameParts(a?.name || [a?.firstName, a?.lastName].filter(Boolean).join(" ")); if (p?.family) coauthors.set(coauthorKey(p), a.name || p.form); });
-			return { index, record, me, altForm: alt >= 0 ? authors[alt].name : "", openalexId: at >= 0 ? authors[at].openalexId || null : null, coauthors, venue: fold(record.venue).replace(/[^\p{L}\p{N}]+/gu, " ").trim(),
+			return { index, record, me, altForm: alt >= 0 ? authors[alt].name : "", openalexId: at >= 0 ? authors[at].openalexId || null : null,
+				orcid: at >= 0 ? parseOrcid(String(authors[at].orcid || "").replace(/^https?:\/\/orcid\.org\//i, "")) : null, coauthors, venue: fold(record.venue).replace(/[^\p{L}\p{N}]+/gu, " ").trim(),
 				year: Number.isFinite(record.year) ? record.year : null, key: keyOf(record) };
 		});
 		const parent = items.map((_, i) => i);
 		const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
-		const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+		// The ORCID iDs each group carries: two groups holding different iDs are two people, whatever else they share.
+		const iDs = items.map(item => new Set(item.orcid ? [item.orcid] : []));
+		const conflict = (a, b) => iDs[a].size > 0 && iDs[b].size > 0 && ![...iDs[a]].some(id => iDs[b].has(id));
+		const union = (a, b) => { a = find(a); b = find(b); if (a === b || conflict(a, b)) return; parent[b] = a; for (const id of iDs[b]) iDs[a].add(id); };
 		const placed = items.filter(item => item.me);
 		const bucket = (keyFn, join) => {
 			const map = new Map();
 			for (const item of placed) for (const key of [].concat(keyFn(item))) { if (!key) continue; if (!map.has(key)) map.set(key, []); map.get(key).push(item); }
 			for (const list of map.values()) for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (join(list[i], list[j])) union(list[i].index, list[j].index);
 		};
+		bucket(item => item.orcid, () => true);
 		bucket(item => item.openalexId, (a, b) => formsCompatible(a.me, b.me));
 		bucket(item => [...item.coauthors.keys()], (a, b) => formsCompatible(a.me, b.me));
 		const specific = p => p.initials.length >= 2 || p.full;
@@ -458,7 +504,7 @@ var ZotPoPAuthors = (function () {
 		let big = [...groups.values()].filter(list => list.length > 1), lone = [...groups.values()].filter(list => list.length === 1).map(list => list[0]);
 		const leftovers = items.filter(item => !item.me);
 		for (const item of lone) {
-			const fits = big.filter(list => list.some(other => formsCompatible(other.me, item.me)));
+			const fits = big.filter(list => list.some(other => formsCompatible(other.me, item.me)) && !conflict(find(list[0].index), find(item.index)));
 			if (fits.length === 1) fits[0].push(item); else leftovers.push(item);
 		}
 		const count = (values, top) => { const map = new Map(); for (const v of values) if (v) map.set(v, (map.get(v) || 0) + 1); return [...map].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))).slice(0, top).map(x => x[0]); };
@@ -488,8 +534,13 @@ var ZotPoPAuthors = (function () {
 		else if (Number.isFinite(facts.total) && facts.loaded < facts.total) out.push("capped");
 		if (facts.filtered) out.push("filtered");
 		if (facts.source === "scholar" && facts.basis !== "scholar") out.push("basis");
-		if (stats && computed && facts.source !== "scholar") out.push("otherIndex");
-		if (stats && computed && out.length === 0 && (stats.citations !== computed.citations || stats.hIndex !== computed.hIndex)) out.push("unknown");
+		// An OpenAlex person's own totals, read against counts from another index.
+		if (facts.source === "openalex" && facts.basis && facts.basis !== "openalex") out.push("basisOpenAlex");
+		if (stats && computed && facts.source !== "scholar" && facts.source !== "openalex") out.push("otherIndex");
+		// A figure the profile does not give (a merged person has no single h-index) is not a disagreement.
+		const differs = key => Number.isFinite(stats?.[key]) && stats[key] !== computed?.[key];
+		if (stats && computed && out.length === 0 && (differs("citations") || differs("hIndex")))
+			out.push(facts.source === "openalex" ? "profileLag" : "unknown");
 		return out;
 	}
 	/* Scholar's own per-paper counts are the default basis for Scholar results; any other result set keeps the highest-per-paper default. */
@@ -800,7 +851,10 @@ var ZotPoPAuthors = (function () {
 		const actual = { ...profile, id, url: "https://orcid.org/" + id, identityConfirmed: true };
 		// /works returns all public groups in one response; each group is one work,
 		// and display-index selects its preferred assertion without merging by title.
-		const records = data.group.map((group, index) => orcidWork(group, index, actual)).slice(0, maxResults);
+		// Newest first before the cap, so a limit keeps the latest works rather than whatever ORCID listed first.
+		const records = data.group.map((group, index) => orcidWork(group, index, actual))
+			.sort((a, b) => String(b.publicationDate || "").localeCompare(String(a.publicationDate || "")))
+			.slice(0, maxResults);
 		// The DOIs ask OpenAlex for their citation counts; the list keeps ORCID's order and the window sorts it.
 		if (records.some(record => record.doi) && !ctx.openAlexSpent && typeof http?.getJSON === "function") {
 			try {
@@ -859,8 +913,17 @@ var ZotPoPAuthors = (function () {
 		if (provider === "combined") {
 			// OpenAlex resolves the name to its author profiles and returns all of their works together.
 			const maxResults = limit(options);
-			const found = await Sources.search("openalex", { authors, sort: "date", maxResults }, http, ctx);
 			const profile = { provider: "combined", id: null, name: authors, affiliation: "", url: "", mode: "name-search", identityConfirmed: false };
+			// Every streamed batch already says whose it is not: a window drawing it (or keeping it after Stop)
+			// must ask for the person before any figure, not compute one over namesakes.
+			const outer = ctx.onResults, identity = profileIdentity(profile);
+			if (outer) ctx.onResults = (records, details) => {
+				for (const record of records) if (!record.authorProfile) record.authorProfile = clone(identity);
+				outer(records, details);
+			};
+			let found;
+			try { found = await Sources.search("openalex", { authors, sort: "date", maxResults }, http, ctx); }
+			finally { if (outer) ctx.onResults = outer; }
 			return attach(found, profile, { provider: "combined", mode: "name-search", via: "openalex", endpoint: "openalex-works", identityConfirmed: false, capturedAt: new Date().toISOString(),
 				returned: found.length, truncated: found.length >= maxResults, complete: found.length < maxResults, authorListComplete: true, citationCountsAvailable: true }, ctx);
 		}

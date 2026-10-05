@@ -148,3 +148,53 @@ test("two profiles with distinct [4,4] papers show no h-index of 2 (item 10)", a
 	const [card] = await Authors.searchProfiles("combined", "Sheila Jensen", http, {});
 	assert.equal(card.hIndex, null); assert.equal(card.hIndexes.length, 2);
 });
+
+test("person cards carry their institution's tier: one batched OpenAlex filter request for every card's lab, remembered (round 6)", async () => {
+	const inst = id => [{ id: "https://openalex.org/" + id, display_name: "Lab " + id, country_code: "dk" }];
+	const urls = [];
+	const http = { async getJSON(url) {
+		urls.push(url);
+		if (url.startsWith("https://api.openalex.org/authors?search=")) return { results: [oaAuthor(2, "Sheila Jensen", null, { last_known_institutions: inst("I71") }), oaAuthor(3, "Sheila Jensen", null, { last_known_institutions: inst("I72") })] };
+		if (url.startsWith("https://api.openalex.org/institutions?filter=ids.openalex:")) return { results: [{ id: "https://openalex.org/I71", display_name: "Lab I71", country_code: "DK", summary_stats: { h_index: 2100 } }, { id: "https://openalex.org/I72", display_name: "Lab I72", country_code: "DK", summary_stats: { h_index: 300 } }] };
+		if (url.includes("expanded-search")) return { "expanded-result": [] };
+		throw new Error("unexpected " + url);
+	} };
+	const list = await Authors.searchProfiles("combined", "Sheila Jensen", http, {});
+	assert.equal(urls.filter(u => u.includes("/institutions?")).length, 1, "one request for both labs");
+	assert.match(urls.find(u => u.includes("/institutions?")), /ids\.openalex:I7[12]\|I7[12]/);
+	const byId = Object.fromEntries(list.map(c => [c.openalexId, c.lastInstitution]));
+	assert.deepEqual([byId.A3.tier, byId.A3.hIndex, byId.A3.country], ["t4", 300, "DK"]);
+	assert.deepEqual([byId.A2.tier, byId.A2.hIndex], ["t1", 2100]);
+	// the next search for the same people asks nothing about their labs again
+	urls.length = 0;
+	await Authors.searchProfiles("combined", "Sheila Jensen", http, {});
+	assert.equal(urls.filter(u => u.includes("/institutions?")).length, 0);
+	// a failing lookup leaves the cards without a tier, never without the cards
+	const failing = { async getJSON(url) { if (url.includes("/institutions?")) throw new Error("down"); return http.getJSON(url); } };
+	const list2 = await Authors.searchProfiles("combined", "Pat Lee", { async getJSON(url) {
+		if (url.startsWith("https://api.openalex.org/authors?search=")) return { results: [oaAuthor(9, "Pat Lee", null, { last_known_institutions: inst("I99") })] };
+		return failing.getJSON(url);
+	} }, {});
+	assert.equal(list2.length, 1); assert.equal(list2[0].lastInstitution.tier ?? null, null);
+	// no lookup once the day's budget is spent
+	urls.length = 0;
+	const spent = await Authors.searchProfiles("combined", "Sheila Jensen", http, { openAlexSpent: true });
+	assert.ok(urls.every(u => !u.includes("openalex")));
+	assert.ok(Array.isArray(spent));
+});
+
+test("an ORCID person whose iD sits on two OpenAlex records the search found without it becomes one card with both ids (round 6, Astra 3)", async () => {
+	const { urls, http } = stub({ oa: [oaAuthor(2, "Sheila Jensen", null), oaAuthor(1, "S. Jensen", null)], orcid: [orcidRow(O1, "Sheila", "Jensen")],
+		enrich: [oaAuthor(2, "Sheila Jensen", O1), oaAuthor(1, "S. Jensen", O1)] });
+	const list = await Authors.searchProfiles("combined", "Sheila Jensen", http, {});
+	assert.equal(urls.filter(u => u.includes("filter=orcid:")).length, 1);
+	assert.equal(list.length, 1, "A1 is the same person, not a second card");
+	const [card] = list;
+	assert.equal(card.openalexId, "A2"); assert.deepEqual(card.alsoIds, ["A1"]); assert.equal(card.orcid, O1);
+	assert.equal(card.worksCount, 30, "both records' papers"); assert.equal(card.citations, 300);
+	assert.equal(card.hIndex, null); assert.equal(card.hIndexes.length, 2);
+	assert.deepEqual(card.sources, ["openalex", "orcid"]);
+	const seen = [];
+	await Authors.loadPublications({ ...card }, { maxResults: 50 }, { async getJSON(url) { seen.push(url); return { meta: { count: 1 }, results: [work(1, "A1", O1)] }; } }, {});
+	assert.match(seen[0], /authorships\.author\.orcid:/, "the union is read through the iD");
+});

@@ -17,7 +17,29 @@
 var ZotPoPJCR = (function () {
 	"use strict";
 
-	const EDITION = "JCR 2026 (JIF 2025)";
+	/* Which edition the figures are is the reader's file's to say, never the plugin's: a year built in
+	   here labelled every export "JCR 2026" whatever year it was. The file records it as
+	   { jcrYear: 2026, rows: [...] } (or jifYear, the year before the release), or in its name,
+	   jcr-2026.json; a bare list of rows is labelled "JCR" with no year. */
+	const YEAR = value => { let n = Number(String(value ?? "").match(/^\s*(?:JCR\s*)?(\d{4})\s*$/i)?.[1]); return Number.isInteger(n) && n >= 1975 && n <= 2100 ? n : null; };
+	function editionOf(data, fileName) {
+		let jcrYear = null, jifYear = null;
+		if (data && !Array.isArray(data) && typeof data === "object") {
+			jcrYear = YEAR(data.jcrYear ?? data.edition);
+			jifYear = YEAR(data.jifYear);
+		}
+		if (!jcrYear && !jifYear) jcrYear = YEAR(String(fileName || "").match(/jcr[\s_-]*(\d{4})/i)?.[1]);
+		if (jcrYear && !jifYear) jifYear = jcrYear - 1;
+		if (jifYear && !jcrYear) jcrYear = jifYear + 1;
+		return { jcrYear, jifYear, label: jcrYear ? "JCR " + jcrYear + " (JIF " + jifYear + ")" : "JCR" };
+	}
+	let edition = editionOf(null);
+	// The export to read from the journals folder: the newest jcr-YYYY.json, else jcr.json; null for none.
+	function pickFile(names) {
+		let list = (names || []).map(name => String(name).split(/[\\/]/).pop());
+		let dated = list.map(name => ({ name, year: YEAR(name.match(/^jcr[\s_-]*(\d{4})\.json$/i)?.[1]) })).filter(x => x.year).sort((a, b) => b.year - a.year);
+		return dated[0]?.name || list.find(name => /^jcr\.json$/i.test(name)) || null;
+	}
 	const flat = value => String(value == null ? "" : value).normalize("NFKC").toLowerCase()
 		.replace(/&/g, " and ").replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/^the /, "");
 	// Titles Zotero writes one way and the JCR another, and journals the JCR lists
@@ -77,8 +99,12 @@ var ZotPoPJCR = (function () {
 	}
 
 	let table = null, held = null;
-	// Rows as the export gives them: [title, abbreviation, issn, eIssn, jif].
-	function load(rows) { held = Array.isArray(rows) ? rows : []; table = build(held); return table; }
+	// Rows as the export gives them: [title, abbreviation, issn, eIssn, jif], as a bare list or { jcrYear, rows }.
+	function load(data, { fileName = "" } = {}) {
+		let rows = Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
+		edition = editionOf(data, fileName);
+		held = rows; table = build(held); return table;
+	}
 	// The rows the table was built from: the journal box finds journals by their JCR names and abbreviations too.
 	function rows() { return held || (typeof ZotPoPJCRData !== "undefined" ? ZotPoPJCRData : []); }
 	function shared() {
@@ -93,7 +119,7 @@ var ZotPoPJCR = (function () {
 			let hit = source.find(r);
 			if (!hit) continue;
 			r.journalIF = hit.jif;
-			r.journalIFSource = EDITION;
+			r.journalIFSource = edition.label;
 			// The JCR's own abbreviations are shouted in capitals ("NAT COMMUN"); the
 			// reference-list form comes from elsewhere, so they are not copied over.
 			n++;
@@ -101,7 +127,7 @@ var ZotPoPJCR = (function () {
 		return n;
 	}
 
-	return { EDITION, build, load, rows, shared, apply, flat, issnKey };
+	return { get EDITION() { return edition.label; }, edition: () => ({ ...edition }), pickFile, build, load, rows, shared, apply, flat, issnKey };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPJCR;

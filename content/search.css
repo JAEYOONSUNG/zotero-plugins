@@ -244,6 +244,8 @@ input[type=checkbox] { accent-color: var(--pill); }
 .author-profile-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .author-profile-name { font-weight: 600; }
 .author-profile-meta { color: var(--muted); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
+.author-profile-where { display: flex; align-items: center; gap: 6px; }
+.author-profile-where .tier { flex: none; min-width: 26px; padding: 0 6px; }
 .author-profile-actions { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 /* inside a card every control is 26px */
 .author-profile button { height: 26px; padding: 0 12px; font-size: 12px; line-height: 16px; }

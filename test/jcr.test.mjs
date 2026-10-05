@@ -91,3 +91,36 @@ test("a title shared by two different journals is ambiguous; an ISSN still decid
 	assert.equal(t.find({ venue: "Microbiology", issn: "1350-0872" }).jif, 2.8);
 	assert.equal(t.find({ venue: "Microbiology-SGM" }).jif, 2.8);
 });
+
+test("the JCR label is the edition the reader's own file records, never a year built into the plugin (round 6)", () => {
+	// A bare list of rows says nothing about its year: the label says JCR and no year.
+	J.load(EXPORT);
+	assert.equal(J.EDITION, "JCR", "no edition year is invented for a file that does not record one");
+	assert.equal(J.edition().jcrYear, null);
+	const plain = [{ venue: "Nature", issn: "0028-0836" }]; J.apply(plain);
+	assert.equal(plain[0].journalIFSource, "JCR");
+	// The file records its year: { jcrYear, rows } (the JIF year is the one before the release).
+	J.load({ jcrYear: 2025, rows: EXPORT });
+	assert.equal(J.EDITION, "JCR 2025 (JIF 2024)");
+	const recs = [{ venue: "Nature", issn: "0028-0836" }]; J.apply(recs);
+	assert.equal(recs[0].journalIFSource, "JCR 2025 (JIF 2024)");
+	// only the JIF year given
+	J.load({ jifYear: 2023, rows: EXPORT });
+	assert.equal(J.EDITION, "JCR 2024 (JIF 2023)");
+	// or the file name carries it: jcr-2026.json, JCR_2026.json
+	J.load(EXPORT, { fileName: "jcr-2026.json" });
+	assert.equal(J.EDITION, "JCR 2026 (JIF 2025)");
+	J.load(EXPORT, { fileName: "JCR_2027.json" });
+	assert.equal(J.EDITION, "JCR 2027 (JIF 2026)");
+	// a year inside the file wins over one in its name; nonsense years are ignored
+	J.load({ jcrYear: 2024, rows: EXPORT }, { fileName: "jcr-2026.json" });
+	assert.equal(J.EDITION, "JCR 2024 (JIF 2023)");
+	J.load({ jcrYear: "soon", rows: EXPORT });
+	assert.equal(J.EDITION, "JCR");
+	assert.equal(J.shared().find({ issn: "0028-0836" }).jif, 56.1, "the rows of an object-shaped file are read");
+	// which file in the folder is read: the newest edition year, else jcr.json
+	assert.equal(J.pickFile(["journal-registry.json", "jcr.json", "jcr-2024.json", "jcr-2026.json", "notes.txt"]), "jcr-2026.json");
+	assert.equal(J.pickFile(["journal-registry.json", "jcr.json"]), "jcr.json");
+	assert.equal(J.pickFile(["journal-registry.json"]), null);
+	J.load([]);
+});

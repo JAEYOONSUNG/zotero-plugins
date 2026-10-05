@@ -68,7 +68,8 @@ var ZotPoPMetrics = (function () {
 		let authorsUnknown = n - whole.length - authorsTruncated;
 		let nAuthors = whole.map(r => r.authors.length);
 		let normCites = whole.map((r, i) => (r.citations || 0) / nAuthors[i]);
-		let computable = whole.length > 0;
+		// ...and at least one of them with a citation count somebody gave: an unknown count is not a 0 to normalise.
+		let computable = whole.some(r => r.citations != null && Number.isFinite(Number(r.citations)));
 		let annual = records.map(r => citesPerYear(r, now) || 0);
 
 		let hi = hIndex(cites);

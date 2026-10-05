@@ -76,3 +76,15 @@ test("a record with no authors field at all is an unknown author list too", () =
 	assert.equal(m.perAuthorPapers, 0);
 	assert.equal(m.citesPerAuthor, null);
 });
+
+test("hI,norm is not computable when no paper has both a whole author list and a known citation count (round 6, Astra 5)", () => {
+	const m = M.compute([
+		{ year: 2020, citations: null, authors: [{ name: "A" }, { name: "B" }] },
+		{ year: 2020, citations: 200, authors: [{ name: "A" }], authorsTruncated: true }
+	], 2026);
+	assert.equal(m.hiNorm, null, "never 0 from a count nobody gave");
+	assert.equal(m.citesPerAuthor, null);
+	assert.equal(m.hiAnnual, null);
+	const ok = M.compute([{ year: 2020, citations: 4, authors: [{ name: "A" }, { name: "B" }] }, { year: 2020, citations: null, authors: [{ name: "A" }] }], 2026);
+	assert.equal(ok.hiNorm, 1, "one paper with both is enough");
+});

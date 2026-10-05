@@ -61,3 +61,16 @@ test("tier table is identical to Style Custom's", () => {
 	assert.equal(floors.length, 4);
 	assert.deepEqual(A.TIERS.map(t => [t.key, t.floor]), floors);
 });
+
+test("a byline whose positions are known but holds no last author (cut at 100) names no last author's lab (round 6, Astra 6)", () => {
+	const people = Array.from({ length: 100 }, (_, i) => ({ name: "Author " + (i + 1), position: i === 0 ? "first" : "middle", institution: "Lab " + (i + 1), country: i ? "US" : "DK" }));
+	const picked = A.principals(people);
+	assert.equal(picked.first.name, "Author 1");
+	assert.equal(picked.corresponding, null, "Author 100 is a middle author of a cut list, not the last one");
+	const s = A.summarise(people);
+	assert.deepEqual(s.countries, ["DK"]);
+	// a list without positions (other sources) keeps the last-author convention
+	assert.equal(A.principals([{ name: "X" }, { name: "Y" }]).corresponding.name, "Y");
+	// and an explicit last author is still used
+	assert.equal(A.principals([...people.slice(0, 99), { name: "Z", position: "last" }]).corresponding.name, "Z");
+});

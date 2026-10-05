@@ -145,6 +145,7 @@
 			writeText: (path, text) => IOUtils.writeUTF8(path, text),
 			remove: path => IOUtils.remove(path, { ignoreAbsent: true }),
 			exists: path => IOUtils.exists(path),
+			list: dir => IOUtils.getChildren(dir),
 			makeDir: dir => IOUtils.makeDirectory(dir, { ignoreExisting: true, createAncestors: true })
 		};
 	}
@@ -158,10 +159,14 @@
 		try {
 			let io = diskIO();
 			if (!io) return;
-			let path = dataPath("journals", "jcr.json");
-			if (!await io.exists(path)) return;
-			let rows = JSON.parse(await io.readText(path));
-			if (Array.isArray(rows) && rows.length) ZotPoPJCR.load(rows);
+			// The newest jcr-YYYY.json, else jcr.json; the file (or its name) says which JCR edition it is.
+			let dir = dataPath("journals");
+			if (!await io.exists(dir)) return;
+			let name = ZotPoPJCR.pickFile(typeof io.list === "function" ? await io.list(dir) : ["jcr.json"]);
+			if (!name || !await io.exists(dataPath("journals", name))) return;
+			let data = JSON.parse(await io.readText(dataPath("journals", name)));
+			let rows = Array.isArray(data) ? data : data?.rows;
+			if (Array.isArray(rows) && rows.length) ZotPoPJCR.load(data, { fileName: name });
 		}
 		catch (e) { Zotero.debug("ZotPoP: local journal figures not loaded: " + (e && e.message)); }
 	}
@@ -955,7 +960,15 @@
 			let last = profile.lastInstitution, shown = (profile.affiliation || "").toLowerCase();
 			let where = last && !(shown && shown.includes(String(last.name).toLowerCase())) ? ((last.country ? ZotPoPAffiliations.flag(last.country) + " " : "") + last.name) : "";
 			let extra = [where, profile.topic].filter(Boolean);
-			if (extra.length) { let node = document.createElement("div"); node.className = "author-profile-meta"; node.textContent = extra.join(" · "); info.appendChild(node); }
+			// The lab's standing (T1–T4 from its OpenAlex h-index) leads the line, as in the results table.
+			let chip = last?.tier ? tierChip(last) : null;
+			if (chip) tip(chip, last.name + "\n" + t("thTierTip") + (last.hIndex != null ? "\n" + t("affHIndex", last.hIndex) : ""));
+			if (extra.length || chip) {
+				let node = document.createElement("div"); node.className = "author-profile-meta author-profile-where";
+				if (chip) node.appendChild(chip);
+				if (extra.length) { let span = document.createElement("span"); span.textContent = extra.join(" · "); node.appendChild(span); }
+				info.appendChild(node);
+			}
 			if (orcid) {
 				let toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "ghost author-sum-toggle"; toggle.setAttribute("aria-expanded", String(summaryOpen));
 				toggle.appendChild(iconNode(summaryOpen ? "ic-chevron-up" : "ic-chevron-down")); let label = document.createElement("span"); label.textContent = t(summaryOpen ? "authorSummaryHide" : "authorSummary"); toggle.appendChild(label);
@@ -1020,7 +1033,9 @@
 		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
 		session.action = authorAction = query.authorAction || "profiles"; session.pick = validPick(query.authorPick); state.metricsBasisUser = false;
 		state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
-		state.sortKey = entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = "asc";
+		// A person's papers come back newest first, as they were shown when first loaded.
+		let personWorks = query.authorAction === "publications" && provider !== "scholar";
+		state.sortKey = personWorks ? "year" : entry.records.some(r => r.popOriginal) ? "popOrdinal" : "rank"; state.sortDir = personWorks ? "desc" : "asc";
 		displaySearchResults(entry.records); updateAuthorHint(); renderAuthorProfiles(); saveAuthorPreferences();
 		// The rows just drawn are the ones the library is asked about: title matches, reading state, collections.
 		refreshLibraryFlags().catch(e => log("library flags after restore: " + e.message));
@@ -1117,6 +1132,8 @@
 			if (state.searchController === controller || !state.searchController) { state.searching = false; state.searchController = null;
 				$("author-search-btn").disabled = false; $("author-name-btn").disabled = false; $("author-stop-btn").disabled = true; $("search-btn").disabled = false;
 				$("busy").hidden = true; setProgress(null); renderAuthorProfiles(); render(); }
+			// What this search paid OpenAlex for (institution tiers, journal figures) is kept for the next window, as a paper search does.
+			saveCaches();
 			resolveDone();
 		}
 		// An ORCID iD or OpenAlex id names one person: their papers load without another click.
@@ -3995,7 +4012,8 @@
 	function unverifiedAuthorResults() {
 		if (searchSurface !== "authors" || !state.records.length) return false;
 		let session = authorSessions[activeAuthorProvider], profile = state.records[0]?.authorProfile || session.profile;
-		return profile?.mode === "name-search" || profile?.identityConfirmed === false;
+		// A name search is unconfirmed whatever its rows carry (streamed or stopped rows may carry nothing).
+		return session.action === "name-papers" || profile?.mode === "name-search" || profile?.identityConfirmed === false;
 	}
 	const pickSets = new WeakMap();
 	function personPick() { return unverifiedAuthorResults() ? authorSessions[activeAuthorProvider].pick || null : null; }
@@ -4098,17 +4116,18 @@
 		sync();
 	}
 	// The profile's own "Cited by" table, as Google Scholar prints it: all years and since a year.
-	function drawScholarStats(stats) {
+	// An OpenAlex person gets the same table from OpenAlex's own author record: papers, citations, h-index.
+	function drawScholarStats(stats, source = "scholar") {
 		let box = $("metrics-scholar"); if (!box) return;
 		box.textContent = "";
 		box.hidden = !stats;
 		if (!stats) return;
-		box.appendChild(fel("div", "ms-title", t("scholarStatsTitle")));
+		box.appendChild(fel("div", "ms-title", t(source === "openalex" ? "openAlexStatsTitle" : "scholarStatsTitle")));
 		let table = document.createElement("table"); table.className = "ms-table";
 		let head = document.createElement("tr"); table.appendChild(head); head.appendChild(fel("th", null, ""));
 		head.appendChild(fel("th", null, t("scholarStatsAll")));
 		if (stats.since) head.appendChild(fel("th", null, t("scholarStatsSince", stats.sinceYear)));
-		for (let [key, label] of [["citations", t("mCitations")], ["hIndex", "h-index"], ["i10", "i10-index"]]) {
+		for (let [key, label] of [["works", t("mPapers")], ["citations", t("mCitations")], ["hIndex", "h-index"], ["i10", "i10-index"]]) {
 			if (!Number.isFinite(stats[key])) continue;
 			let tr = document.createElement("tr"); table.appendChild(tr); tr.appendChild(fel("td", null, label));
 			tr.appendChild(fel("td", null, stats[key].toLocaleString(t.locale || undefined)));
@@ -4129,7 +4148,7 @@
 		if (Number.isFinite(info.total) && info.loaded < info.total) lines.push(t("metricsLoadedOf", info.total, info.loaded));
 		else if (info.truncated) lines.push(t("metricsCappedOpen", info.loaded));
 		for (let key of info.reasons) if (key !== "capped") lines.push(t("metricsWhy_" + key));
-		if (info.matches) lines.push(t("metricsWhy_match"));
+		if (info.matches) lines.push(t(info.source === "openalex" ? "metricsWhy_matchOpenAlex" : "metricsWhy_match"));
 		if (!lines.length) return;
 		why.hidden = false;
 		for (let line of lines) why.appendChild(fel("p", "metrics-why", line));
@@ -4143,17 +4162,23 @@
 		let session = authorSessions[activeAuthorProvider], first = state.records[0];
 		let profile = first?.authorProfile ? { ...(session.profile || {}), ...first.authorProfile } : session.profile;
 		let verified = !unverifiedAuthorResults();
-		let source = profile?.provider === "scholar" || (!profile && activeAuthorProvider === "scholar") ? "scholar" : "other";
-		let stats = verified && profile?.scholarStats ? profile.scholarStats : null;
+		let scholar = profile?.provider === "scholar" || (!profile && activeAuthorProvider === "scholar");
+		// OpenAlex's own totals for the person, when the papers on screen are OpenAlex's records of them.
+		let viaOpenAlex = !scholar && first?.authorProvenance?.via === "openalex" && profile?.mode !== "name-search"
+			&& (Number.isFinite(profile?.citations) || Number.isFinite(profile?.hIndex));
+		let source = scholar ? "scholar" : viaOpenAlex ? "openalex" : "other";
+		let stats = !verified ? null : profile?.scholarStats ? profile.scholarStats
+			: viaOpenAlex ? { works: Number.isFinite(profile.worksCount) ? profile.worksCount : null, citations: Number.isFinite(profile.citations) ? profile.citations : null, hIndex: Number.isFinite(profile.hIndex) ? profile.hIndex : null } : null;
 		let pick = personPick();
 		let pool = pick ? state.records.filter(r => inPick(pick, r)) : state.records;
 		let total = verified && Number.isFinite(profile?.worksCount) ? profile.worksCount : null;
 		let truncated = verified && first?.authorProvenance?.truncated === true;
 		let reasons = ZotPoPAuthors.explainMetrics({ stats, computed: { citations: m.citations, hIndex: m.hIndex }, papers: m.papers, loaded: state.records.length, total, truncated,
 			filtered: list.length < pool.length, unverified: !verified && !pick, basis, source });
-		let matches = Boolean(stats) && !reasons.length && stats.citations === m.citations && stats.hIndex === m.hIndex;
+		let same = key => !Number.isFinite(stats?.[key]) || stats[key] === m[key];
+		let matches = Boolean(stats) && !reasons.length && same("citations") && same("hIndex");
 		let basisLabel = basis ? (ZotPoPSources.SOURCES?.[basis]?.label || basis).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : t("metricsBasisMax");
-		return { basisLabel, papers: m.papers, loaded: state.records.length, total, truncated, reasons, matches, stats, profile: truncated || reasons.includes("capped") ? profile : null };
+		return { basisLabel, papers: m.papers, loaded: state.records.length, total, truncated, reasons, matches, stats, source, profile: truncated || reasons.includes("capped") ? profile : null };
 	}
 	function renderMetrics(list) {
 		// The graphs and the table describe the same papers: the picked person's, not the namesakes shown beside them.
@@ -4215,7 +4240,7 @@
 		set("m-ha", String(m.hA));
 		if (authors && list.length && typeof ZotPoPAuthors !== "undefined") {
 			let info = authorMetricsInfo(list, m, state.metricsBasis, sources);
-			drawScholarStats(info.stats); drawMetricsAccount(info);
+			drawScholarStats(info.stats, info.source); drawMetricsAccount(info);
 		}
 	}
 

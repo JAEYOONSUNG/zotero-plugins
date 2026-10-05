@@ -1614,3 +1614,21 @@ test("the statistics say not computable, and how many papers they rest on, when 
 	assert.equal(ui.get("m-h").textContent, "3");
 	assert.match(ui.get("metrics-notes").textContent, /metricsPerAuthorNone\|3/);
 });
+
+test("a person card leads its institution line with the lab's tier chip, the lab named in its tip (round 6)", async () => {
+	const ui = uiHarness();
+	await ui.switchSearchMode("authors"); await ui.switchAuthorProvider("combined");
+	ui.authorSessions.combined.profiles = [
+		{ provider: "combined", sources: ["openalex"], id: "A1", openalexId: "A1", name: "Pat Lee", identityConfirmed: true, mode: "profile", worksCount: 3,
+			lastInstitution: { name: "Technical University of Denmark", country: "DK", id: "I1", hIndex: 520, tier: "t3" }, topic: "Biosensors" },
+		{ provider: "combined", sources: ["openalex"], id: "A2", openalexId: "A2", name: "Pat Lee", identityConfirmed: true, mode: "profile", worksCount: 2,
+			lastInstitution: { name: "Small College", country: "US" } }];
+	ui.renderAuthorProfiles();
+	const cards = ui.get("author-profiles").children.filter(child => child.className.includes("author-profile"));
+	const chip = cards[0].querySelector(".tier");
+	assert.ok(chip, "the tier chip is drawn");
+	assert.equal(chip.textContent, "T3"); assert.match(chip.getAttribute("data-tip"), /Technical University of Denmark/);
+	assert.match(cards[0].querySelector(".author-profile-where").textContent, /Technical University of Denmark · Biosensors/);
+	assert.equal(cards[1].querySelector(".tier"), null, "no tier without a known h-index");
+	assert.match(cards[1].querySelector(".author-profile-where").textContent, /Small College/);
+});
