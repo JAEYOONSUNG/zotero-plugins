@@ -53,11 +53,11 @@ test('hovering a body cell names its column on the tree, marks the cell, and the
   assert.equal(tree.getAttribute('data-sc-hover-col'), 'ext-if');
   assert.ok(document.querySelector('.row .cell.ext-if').hasAttribute('data-sc-hover-cell'));
   const css = document.getElementById('style-custom-cells').textContent;
-  assert.match(css, /\[data-sc-hover-col="ext-if"\] \.virtualized-table-body \.row:not\(\.selected\) \.cell\.ext-if\{background-color:#EEF0F3\}/);
-  assert.match(css, /\[data-sc-hover-col="ext-if"\] \.virtualized-table-header \.cell\.ext-if\{background-color:#EEF0F3/);
+  assert.match(css, /\[data-sc-hover-col="ext-if"\] \.virtualized-table-body \.row:not\(\.selected\) \.cell\.ext-if\{background-color:#F1F6FF\}/);
+  assert.match(css, /\[data-sc-hover-col="ext-if"\] \.virtualized-table-header \.cell\.ext-if\{background-color:#E8F0FF/);
   assert.match(css, /\[data-sc-hover-col="title"\]/, 'a rule for every visible column');
-  assert.match(css, /inset 0 0 0 1\.5px #3A3F4B/);
-  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]\{box-shadow:inset 0 0 0 1\.5px #FFFFFF/, 'a selected row gets a light outline');
+  assert.match(css, /border-radius:7px;background-color:#E3EDFF;box-shadow:inset 0 0 0 1\.5px #5B9BFF/);
+  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]\{border-radius:7px;box-shadow:inset 0 0 0 1\.5px rgba\(255,255,255,\.9\)/, 'a selected row gets a light outline');
   assert.match(css, /prefers-color-scheme: dark/);
   // Moving to another column moves the attribute and the mark; leaving clears both.
   document.querySelector('.row .cell.title').dispatchEvent(new window.Event('mouseover', {bubbles: true}));
@@ -79,7 +79,7 @@ test('the column tint never repaints a selected row, and the setting turns the h
   document.querySelector('.row .cell.title').dispatchEvent(new window.Event('mouseover', {bubbles: true}));
   const css = document.getElementById('style-custom-cells').textContent;
   assert.ok(!/\.row \.cell\.title\{background/.test(css), 'no tint rule reaches a row without :not(.selected)');
-  for (const line of css.split('\n').filter(l => /background-color:#EEF0F3/.test(l) && /virtualized-table-body/.test(l))) assert.match(line, /:not\(\.selected\)/);
+  for (const line of css.split('\n').filter(l => /background-color:#F1F6FF/.test(l) && /virtualized-table-body/.test(l))) assert.match(line, /:not\(\.selected\)/);
   // Off: no hover rules and no attribute.
   const off = await page();
   const rt2 = fakeRT(off.window);

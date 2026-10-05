@@ -5185,3 +5185,13 @@ test('a right-aligned figure stretched across its cell is measured by its text: 
   assert.equal(resized.length, 1, 'fitting again changes nothing');
   assert.match(state.columnFit.last, /already fits/);
 });
+
+test('status tag colours: only the old muted /unread, /reading and /done colours are brightened, a colour the user chose is kept', async () => {
+  const {plugin} = fixture();
+  const colors = new Map([['/unread', {color: '#6196bc', position: 2}], ['/reading', {color: '#c8963a', position: 1}], ['/done', {color: '#123456', position: 0}]]);
+  const set = [];
+  plugin.Z.Libraries = {getAll: () => [{libraryID: 1}]};
+  plugin.Z.Tags = {getColors: () => colors, setColor: async (lib, name, color, position) => set.push([lib, name, color, position])};
+  assert.equal(await plugin.brightenStatusTagColors(), 2);
+  assert.deepEqual(set, [[1, '/unread', '#2F8CFF', 2], [1, '/reading', '#FFB020', 1]]);
+});

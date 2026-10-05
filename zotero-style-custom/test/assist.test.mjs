@@ -105,3 +105,32 @@ test('translateParagraphs sends a JSON batch and reads it back; a batch that doe
 test('available() says whether an endpoint and model are set, without calling anything',()=>{
  assert.equal(harness().api.available(),true);assert.equal(harness({aiModel:''}).api.available(),false);
 });
+
+test('a chat\'s own cancel token stops that request only; a summary beside it is untouched',async()=>{
+ const h=harness();const cancelled=[];
+ h.respond(options=>new Promise(resolve=>{const me=JSON.parse(options.body).messages[0].content.slice(0,10);options.cancellerReceiver(()=>{cancelled.push(me);});setTimeout(()=>resolve({status:200,response:{choices:[{message:{content:'ok'}}]},responseText:'{"choices":[{"message":{"content":"ok"}}]}',getResponseHeader:()=>'application/json'}),30);}));
+ const T=(await import('../src/paper-translate.js')).default;
+ const chatToken=T.token();
+ const chat=h.api.chat([{role:'system',content:'chat-sys'},{role:'user',content:'q'}],{signal:chatToken});
+ const summary=h.api.paperSummary({title:'T',abstract:'A',text:'body'});
+ chatToken.cancel();
+ await assert.rejects(chat,/중지/);
+ assert.equal(await summary,'ok','the summary finishes');
+ assert.equal(cancelled.length,1);
+});
+
+test('the limit is inactivity, not the total: a slow stream that keeps sending is not cut off, a silent server is',async()=>{
+ const timers=[];const fake={set:(fn,ms)=>{const t={fn,ms,live:true};timers.push(t);return t;},clear:t=>{if(t)t.live=false;}};
+ const prefs={aiEndpoint:'http://localhost:1234/v1/chat/completions',aiModel:'m'};
+ let xhr;const api=A.create({timers:fake,runtime:{pref:k=>prefs[k]},Zotero:{HTTP:{request:async(m,u,options)=>{
+  assert.equal(options.timeout,0,'no total timeout on the XHR');
+  const ls={};xhr={readyState:3,responseText:'',getResponseHeader:()=>'text/event-stream',addEventListener:(n,f)=>(ls[n]||=[]).push(f)};options.requestObserver(xhr);
+  for(let i=0;i<5;i++){xhr.responseText+=`data: {"choices":[{"delta":{"content":"w${i} "}}]}\n\n`;for(const f of ls.progress)f();}
+  return new Promise(()=>{});}}}});
+ const p=api.chat([{role:'user',content:'q'}]);
+ await new Promise(r=>setImmediate(r));
+ const live=timers.filter(t=>t.live);
+ assert.equal(live.length,1,'one quiet timer, re-armed by every chunk');assert.ok(timers.length>=6);
+ live[0].fn();
+ await assert.rejects(p,/아무것도 보내지 않아/);
+});

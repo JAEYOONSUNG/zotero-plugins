@@ -396,3 +396,15 @@ test('a name set by hand before the palette split survives a palette and the way
  assert.equal(f.runtime.cache.readerSettings.colorLabels['#5fb236'],'Method');
  f.service.stop();
 });
+
+test('the toolbar group is one row of icon buttons: no text label hangs under the toolbar',()=>{
+ const f=fixture();f.service.attach(f.win);
+ let container=null;f.Z.Reader._registeredListeners.find(l=>l.type==='renderToolbar').handler({reader:f.reader,doc:f.doc,append:n=>{container=n;}});
+ assert.ok(container,'the group is appended');
+ assert.match(container.style.cssText,/display:flex/,'buttons side by side, not stacked as blocks inside an inline span');
+ const style=container.children.find(n=>n.attrs['aria-label']==='Style Custom reader tools');
+ assert.ok(style);assert.equal(style.textContent,undefined,'no visible text');assert.equal(style.children[0].tagName,'svg');
+ assert.equal(style.title,'Style Custom reader tools','the name is the tooltip');
+ assert.ok(f.Z.Reader._registeredListeners.some(l=>l.type==='renderTextSelectionPopup'),'the selection popup hook is registered');
+ f.service.stop();
+});

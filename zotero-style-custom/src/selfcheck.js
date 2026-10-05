@@ -1360,14 +1360,19 @@
 
     /* The reader panel (listen, summary, chat, translation) on whatever readers are open: measured, never pressed. The probe
        opens the panel for a moment, reads sizes, colours and overflow on each tab, checks that every button declares what it
-       does (data-safe / data-opens / data-writes), and puts the panel back. It does not call the speaker, an AI or a translator. */
+       does (data-safe / data-opens / data-writes), that the PDF view is beside the panel and not under it, and that page 1
+       extracts through pdf.js; then it puts the panel back. It does not call the speaker, an AI or a translator, and while it
+       runs nothing is persisted (no tab, no .struct file) and no summary starts by itself. */
     results.push(await attempt('the reader panel lays out on an open reader and presses nothing', async () => {
       if (!runtime.readerAssist || typeof runtime.readerAssist.probeAll !== 'function') throw new Error('the reader panel is not loaded');
       const probes = await runtime.readerAssist.probeAll();
       if (!probes.length) return 'no PDF reader is open, so there is nothing to measure';
       const problems = probes.flatMap(p => p.problems.map(x => `reader ${p.reader}: ${x}`));
       if (problems.length) throw new Error(problems.slice(0, 6).join(' ; ') + (problems.length > 6 ? ` ; and ${problems.length - 6} more` : ''));
-      return `${probes.length} reader(s), ${probes.reduce((n, p) => n + p.checked, 0)} elements measured on three tabs, player ${probes.map(p => p.player).join('/')}`;
+      // Also checked per reader: the PDF view ends where the panel begins (never under it), the player, filter and tab rows
+      // fit their cards, and page 1 is read through pdf.js with positions (no plain-text fallback), without writing the cache.
+      const pages = probes.map(p => p.extraction ? `${p.extraction.sentences} sentences/${p.extraction.rects} with positions` : 'no extraction').join(', ');
+      return `${probes.length} reader(s), ${probes.reduce((n, p) => n + p.checked, 0)} elements measured on three tabs, no overlap with the PDF, page 1 extracted: ${pages}, player ${probes.map(p => p.player).join('/')}`;
     }));
 
     const passed = results.filter(row => row.pass).length;

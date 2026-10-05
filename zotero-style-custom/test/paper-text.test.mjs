@@ -452,7 +452,8 @@ test("debug prints what was classified as what, page by page", () => {
     item("Journal of Imaginary Results", 54, 28, 8), item(String(n + 1), 300, 760, 8),
     ...para(72, 90, 468, prose(1 + 6 * n, 6 + 6 * n)).items,
   ]));
-  const out = PT.debug(PT.structure({ pages }));
+  const out = PT.debug(PT.structure({ pages, debug: true }));
+  assert.equal(PT.structure({ pages }).log, undefined, "no per-block log unless asked: a cached result stays small");
   assert.match(out, /3 pages/);
   assert.match(out, /--- page 1/);
   assert.match(out, /--- page 3/);
@@ -488,7 +489,12 @@ for (const name of fixtureNames) {
     const r = run(name);
     const sents = flat(r);
     const st = r.stats;
-    if (UNREADABLE.has(name)) { assert.equal(st.unreadable, true, "a garbled text layer is reported"); return; }
+    if (UNREADABLE.has(name)) {
+      assert.equal(st.unreadable, true, "a garbled text layer is reported");
+      assert.equal(st.useFallback, true);
+      assert.deepEqual(PT.readingOrder(r), [], "no body is offered from a garbled layer");
+      return;
+    }
     assert.equal(st.unreadable, false);
     // no running head, footer or page number among the body sentences
     const junk = [...r.skipped.headers, ...r.skipped.footers, ...r.skipped.pageNumbers].map(e => norm(e.text)).filter(t => t.length >= 14 && t.split(" ").length >= 2);
@@ -504,7 +510,8 @@ for (const name of fixtureNames) {
     for (const s of sents) { const n = s.text.split(/\s+/).length; assert.ok(n >= 2 && n <= 120, `${n} words: ${s.text.slice(0, 80)}`); }
     const ended = sents.filter(s => TERMINAL.test(s.text)).length / sents.length;
     assert.ok(ended >= (name === "nature1992" ? 0.9 : 0.95), `terminal punctuation ${Math.round(ended * 100)}%`);
-    if (!NOT_NORMAL.has(name)) assert.ok(st.bodyChars >= 0.55 * st.totalChars * (name === "mdpi" || name === "akkaya" || name === "aparicio" ? 0.88 : 1), `body ${Math.round(100 * st.bodyChars / st.totalChars)}% of ${st.totalChars}`);
+    // at least half the characters are body (legends set as text and table footnotes are not)
+    if (!NOT_NORMAL.has(name)) assert.ok(st.bodyChars >= 0.5 * st.totalChars * (name === "mdpi" || name === "akkaya" || name === "aparicio" ? 0.88 : 1), `body ${Math.round(100 * st.bodyChars / st.totalChars)}% of ${st.totalChars}`);
     // reading order is monotonic by page, zone, column and y
     for (let i = 1; i < sents.length; i++) {
       const a = sents[i - 1], b = sents[i];
@@ -533,7 +540,7 @@ const LABELS = {
   natcomm: {
     // Nature Communications, two columns, drop cap, bold run-in subheads in a sans face that the font names do not mark as bold
     first: "In the evolutionary arms race against phage, bacteria have assembled a diverse arsenal of antiviral immune strategies.",
-    last: "Samples were incubated and EMSAs were performed as described above.",
+    last: "For the overhang binding assay, a 3′-Cy5-labeled DNA substrate was hybridized to unlabeled DNAs of various lengths and binding was tested as described above.",
     mainSentences: [235, 262], backHeadings: ["Data availability", "Acknowledgements", "Author contributions", "Competing interests", "Additional information", "Peer review information", "Open Access"],
     headings: ["Results", "Architecture of DrmAB nucleoprotein complex", "DNA binding requirements of DrmAB", "ATPase activity is critical for DISARM function",
       "DrmA contains an unstructured trigger loop that partially occludes the DNA-binding site", "Methylation sensing and DNA-mediated DrmAB activation", "Discussion", "Methods",
@@ -605,12 +612,154 @@ test("the layout cases the labelled papers stand for", { skip: SKIP }, () => {
   assert.ok(glued.length <= 3, glued.slice(0, 3).map(s => s.text).join("\n"));
 });
 
-test("without font names the body, captions and references hold; only headings degrade", { skip: SKIP }, () => {
-  for (const name of ["nature", "natcomm", "pnas", "mdpi", "wiley", "annrev"]) {
+/* Reviewer findings on the real papers, each quoted from the text it got wrong. */
+
+const mainOf = name => PT.readingOrder(run(name)).filter(s => s.kind !== "back");
+const bodyHas = (name, text) => mainOf(name).some(s => s.text.includes(text));
+const sentence = (name, start) => mainOf(name).find(s => s.text.startsWith(start));
+const skipped = r => Object.values(r.skipped).flat();
+
+test("layout changes down the page: each stretch gets its own columns, and a narrow column beside a figure carries on below it", { skip: SKIP }, () => {
+  // Science p3: a figure with a narrow column beside it, two columns of another width under it
+  assert.ok(!bodyHas("science", "We first and fig. S4"), "the narrow column was cut into the left column below it");
+  assert.equal(sentence("science", "We first").text, "We first examined the sequences of various ncRNA genes that encode msDNA in different Retron-Septu systems, including Ec83 and Ec78.");
+  assert.equal(sentence("science", "The RNA and DNA latches").text, "The RNA and DNA latches form a DNA-RNA duplex, stabilizing their assembly (Fig. 2, B and C).");
+  assert.match(sentence("science", "K35 and R41 within").text, /highlighting their functional importance in stabilizing the incoming nucleotide during reverse transcription \(30\)/);
+  // NAR 2025 p1: three lines in two columns between the abstract and the licence box
+  assert.equal(sentence("nar2025", "In prokaryotes").text, "In prokaryotes, transcription and translation occur simultaneously on the same messenger RNA (mRNA) transcript due to the lack of spatial separation between transcriptional and translational machinery [1, 2].");
+  // Wiley p1: the correspondence and funding sidebar beside the abstract
+  assert.ok(!mainOf("wiley").some(s => /Correspondence|Grant\/Award|Worringer Weg|rwth-aachen/.test(s.text)), "sidebar threaded into the abstract");
+  assert.ok(bodyHas("wiley", "P. putida KT2440 was repeatedly subjected to temporary oxygen limitations in scale-down approaches to assess the effect on growth and an exemplary production of rhamnolipids."));
+});
+
+test("a reference list that starts across both columns does not swallow the body above it in the next column", { skip: SKIP }, () => {
+  // Crampton p6: the Methods carry on at the top of the right column, above reference 20
+  assert.match(sentence("crampton", "EcoP15I-DNA complexes were formed").text, /recognition site:enzyme ratio in buffer \(5 mM MgCl2\/5 mM KCl\/5 mM Tris HCl, pH 7\.9\) supplemented/);
+  assert.ok(bodyHas("crampton", "Video files were manipulated and compressed"));
+  const r = run("crampton");
+  assert.ok(!r.references.some(e => /buffer \(5 mM|Image Analysis|Video files/.test(e.text)), "body text in a reference");
+  assert.ok(r.references.length >= 34 && r.references.length <= 38, `${r.references.length} references`);
+});
+
+test("affiliations, licences, dates, footers and stamps on the first pages are not threaded into a sentence", { skip: SKIP }, () => {
+  const early = name => mainOf(name).filter(s => s.page <= 1);
+  // Science p2: affiliations and the correspondence note at the foot of the first column
+  assert.deepEqual(early("science").filter(s => /Department of|contributed equally|umassmed|UMass Chan/.test(s.text)).map(s => s.text), []);
+  assert.match(sentence("science", "Septu exists in many microbes").text, /one of the most abundant antiphage defense systems \(26–28\)\.$/);
+  // NAR 2025 p1: dates, copyright and licence in a box under the columns
+  assert.deepEqual(early("nar2025").filter(s => /Received:|Accepted:|©|reprints@oup|Creative Commons|Oxford University Press/.test(s.text)).map(s => s.text), []);
+  assert.match(sentence("nar2025", "A ribosome begins").text, /^A ribosome begins translation on a nascent mRNA shortly after an RNA polymerase \(RNAP\) synthesizes/);
+  assert.ok(!run("nar2025").references.some(e => /Received:|non-commercial re-use/.test(e.text)), "the last page's licence box in a reference");
+  // Cell p2: the first-page footer is seen once, with more on it than the running footer
+  assert.equal(sentence("cell", "Some of these systems show homology").text, "Some of these systems show homology to human genes involved in antiviral innate immune functions, implying that these functions may have evolved from prokaryotic phage-defense systems.");
+  // Nature p1: the crossmark label beside the abstract
+  assert.ok(!mainOf("nature").some(s => /Check for updates/.test(s.text)));
+  assert.match(run("nature").abstract, /^Whole-genome synthesis provides a powerful approach for understanding and expanding organism function\./);
+});
+
+test("real paragraphs are not dropped as figure text or small print", { skip: SKIP }, () => {
+  // Wiley p2: a medium recipe dense with concentrations and formulas is still a paragraph
+  assert.match(sentence("wiley", "For secondary seed cultivations and MTP cultivations").text, /mineral salts medium modified from Hartmans et al\. \(1989\) was used \(10 g L⁻¹ glucose, 11\.64 g L⁻¹ K2HPO4/);
+  // Wiley p11: a run that starts with a subscript keeps the rest of the line at the subscript's size
+  assert.match(sentence("wiley", "The protein exhibiting the most severe").text, /downregulated synthesis at t1 and t2 was the isocitrate lyase \(AceA, PP_4116\), indicating downregulation of the glyoxylate shunt/);
+  // Science p2: an 18pt title line reaching over two lines of the next column
+  assert.equal(sentence("science", "PtuA contains").text, "PtuA contains a conserved ATP-binding cassette (ABC) ATPase domain and a C-terminal domain (CTD) composed of three α helices; it assembles into an oligomer and interacts with PtuB via its CTD (28).");
+  // Annual Reviews p7: the first paragraph under a heading, below figure labels packed close in the same column
+  assert.ok(bodyHas("annrev", "While RMF is confined to the gammaproteobacteria, HPF homologs can be found in almost all"));
+  // Nature Biotechnology p3: a paragraph at the foot of a column under a figure
+  assert.match(sentence("natbiotech", "Phylogenetic analysis of isolates showed").text, /CAMII-optimized colony picking substantially improved the diversity of obtained microbes \(Supplementary Fig\. 5\)\.$/);
+  // Nature Communications p9: a two-line Methods paragraph in the Methods' smaller type
+  assert.ok(bodyHas("natcomm", "All the mutants used here were generated by round-the-horn side-directed mutagenesis and purified as the wild-type (WT) proteins."));
+  // Nature 1992 p3: a paragraph's first line on its own above a figure
+  assert.ok(bodyHas("nature1992", "In conclusion, Eco P15 restriction is a very fast reaction that"));
+});
+
+test("legends, figure panels and table footnotes are not read as body", { skip: SKIP }, () => {
+  // Annual Reviews p14: a label alone on its line ("Figure 5") opens the caption
+  const fig5 = run("annrev").captions.find(c => c.label === "Figure 5");
+  assert.ok(fig5 && /Ribosome dimerization by long hibernation promoting factor/.test(fig5.text), "the Figure 5 legend is a caption");
+  assert.ok(!mainOf("annrev").some(s => /^Ribosome dimerization by long|^Panels c–e adapted/.test(s.text)));
+  // Science p4: "Fig. 2. msrRNA ..." opens with a mixed-case word; its panels "(A)" to "(F)" are the legend
+  assert.ok(!mainOf("science").some(s => /^\([A-F]\) /.test(s.text)), "a legend panel in the body");
+  assert.ok(run("science").captions.some(c => c.label === "Fig. 2" && /\(F\) Close-up view of the RT active site/.test(c.text)));
+  // Wiley p7, p10: a table's footnotes, their letter glued to the note
+  assert.ok(!mainOf("wiley").some(s => /^[a-e](?:Slopes|Control|Specific|Biomass|Data) /.test(s.text)));
+  // MDPI p11: a table cell no longer runs into the sentence beside it
+  assert.equal(sentence("mdpi", "However, the K166/H174/H194 variant showed").text, "However, the K166/H174/H194 variant showed 4.6-fold higher kcat/KM than K166/R174/Y194.");
+  // Akkaya p9: a table footnote no longer splits a sentence
+  assert.match(sentence("akkaya", "All the mutations detected in this analysis").text, /between nucleotides 1,528 and 1,626 of rpoB, as defined by Jatsenko et al\. \[65\]\), and they could be grouped into eight categories\.$/);
+});
+
+test("a stale second text layer in another typeface is read once", { skip: SKIP }, () => {
+  const ro = mainOf("mdpi");
+  const seen = new Map(); let dup = 0;
+  ro.forEach((s, i) => { const w = s.text.split(/\s+/); for (let k = 0; k + 15 <= w.length; k++) { const sh = w.slice(k, k + 15).join(" "); if (seen.has(sh) && seen.get(sh) !== i) { dup++; break; } seen.set(sh, i); } });
+  assert.ok(dup <= 3, `${dup} sentences repeat a 15-word run`);
+  assert.equal(ro.filter(s => s.text.startsWith("In this paper, we performed mutagenesis experiments at the positions 166, 174, and 194")).length, 1);
+  assert.ok(run("mdpi").skipped.other.some(e => /stale text layer/.test(e.reason)));
+});
+
+test("a reporting-summary form, symbol-font bullets, a contents list and the correspondence lines are not main text", { skip: SKIP }, () => {
+  // Nature pp. 30-32: the form is back matter to its end; its subheadings ("Statistics", "Methodology") do not re-open the body
+  const nat = PT.readingOrder(run("nature"));
+  assert.deepEqual(nat.filter(s => s.page >= 29 && s.kind !== "back").map(s => s.text), []);
+  assert.ok(!nat.some(s => s.kind !== "back" && /Tick this box/.test(s.text)));
+  assert.ok(mainOf("nature").some(s => s.page === 14 && /^For CRISPR–Cas9-mediated cleavage/.test(s.text)), "a run-in 'Reporting summary' paragraph in the Methods does not start the form");
+  // Nature Biotechnology p14: correspondence and reprint lines are back matter
+  assert.ok(!mainOf("natbiotech").some(s => /should be addressed to Harris H\. Wang|www\.nature\.com\/reprints/.test(s.text)));
+  // Cell: a bullet drawn as "d" in a symbol font, and the STAR Methods contents list with "B" bullets
+  const cell = PT.readingOrder(run("cell"));
+  assert.ok(cell.some(s => s.text === "This paper does not report original code."));
+  assert.ok(!cell.some(s => /^d [A-Z]/.test(s.text)));
+  assert.ok(!cell.some(s => /(?:^|\s)B Computational prediction of defense systems B /.test(s.text)));
+});
+
+test("a charge set as two raised items stays a charge; compound hyphens stay; a figure number after Fig. is not a sentence start", { skip: SKIP }, () => {
+  // Nature Communications p3: pdf.js gives "2" and "+" as two items; "2" alone looked like citation 2
+  assert.ok(mainOf("natcomm").some(s => s.page === 2 && /Zn²⁺/.test(s.text)));
+  assert.ok(!mainOf("natcomm").some(s => /Zn⁺/.test(s.text)));
+  assert.ok(bodyHas("murray", "high-fidelity") && !bodyHas("murray", "highfidelity"));
+  assert.ok(bodyHas("aparicio", "motif-adaptable module") && !bodyHas("aparicio", "motifadaptable"));
+  assert.ok(bodyHas("natcomm", "self-versus-non-self") && !bodyHas("natcomm", "selfversus"));
+  assert.match(sentence("crampton", "To demonstrate that the translocation events depicted in Fig. 2 A were indeed").text, /powered by ATP hydrolysis/);
+});
+
+test("adjacent raised items are judged together, compound prefixes keep their hyphen", () => {
+  const sup = (str, x) => ({ str, sup: true, x, w: 3, size: 6 });
+  const r = PT._.joinParts([{ str: "binds Zn", x: 0, w: 40, size: 10 }, sup("2", 40), sup("+", 43), { str: " ions", x: 46, w: 25, size: 10 }], true);
+  assert.equal(r.text, "binds Zn²⁺ ions");
+  const c = PT._.joinParts([{ str: "were found", x: 0, w: 50, size: 10 }, sup("12", 50), sup(",13", 56), { str: " here", x: 64, w: 25, size: 10 }], true);
+  assert.equal(c.text, "were found here");
+  const lex = { words: new Set(["motif", "binding"]) };
+  assert.equal(PT.decideHyphen("high", "fidelity", lex).action, "keep");
+  assert.equal(PT.decideHyphen("self", "versus", lex).action, "keep");
+  assert.equal(PT.decideHyphen("motif", "adaptable", lex).action, "keep");
+  assert.equal(PT.decideHyphen("high", "lights", lex).action, "join");
+  assert.equal(PT.decideHyphen("measure", "ments", { words: new Set(["measure"]) }).action, "join");
+});
+
+test("each sentence has a spoken form without inline citations; the written text keeps them", () => {
+  assert.equal(PT.spokenOf("Retrons are elements (1–12) and exist [1, 2]."), "Retrons are elements and exist.");
+  assert.equal(PT.spokenOf("Binding was tight ( 31 ), as reported (Smith et al., 2020; Nikel & de Lorenzo, 2018)."), "Binding was tight, as reported.");
+  assert.equal(PT.spokenOf("See Fig. (2) and equation (3) at 10 mM (n = 3)."), "See Fig. (2) and equation (3) at 10 mM (n = 3).");
+  assert.equal(PT.spokenOf("We (1) grew cells and (2) lysed them."), "We (1) grew cells and (2) lysed them.");
+  const items = [item("1. Introduction", 72, 80, 13, { bold: true }), ...para(72, 110, 468, "Defense systems are common in bacteria (29, 106, 125). " + prose(1, 5)).items];
+  const ro = PT.readingOrder(PT.structure({ pages: [page(0, items)] }));
+  assert.equal(ro[0].text, "Defense systems are common in bacteria (29, 106, 125).");
+  assert.equal(ro[0].spoken, "Defense systems are common in bacteria.");
+  assert.equal(ro[1].spoken, ro[1].text);
+});
+
+test("without font names the body, captions, references and headings hold", { skip: SKIP }, () => {
+  // what pdf.js gives before a page is rendered: an id per font (g_d0_f4), its generic family, no weight
+  const anonymous = pages => { const ids = new Map(); const id = n => { if (!ids.has(n)) ids.set(n, "g_d0_f" + (ids.size + 1)); return ids.get(n); };
+    return pages.map(p => ({ ...p, items: p.items.map(({ bold, italic, fontName, ...rest }) => ({ ...rest, fontName: id(fontName || "") })) })); };
+  const heads = r => r.sections.filter(s => s.heading && s.kind !== "back").length;
+  for (const name of ["nature", "natcomm", "pnas", "mdpi", "wiley", "annrev", "nar", "natbiotech", "science"]) {
     if (!fixtureNames.includes(name)) continue;
     const a = run(name);
-    const pages = load(name).pages.map(p => ({ ...p, items: p.items.map(({ bold, italic, ...rest }) => rest) }));
-    const b = PT.structure({ pages });
+    const b = PT.structure({ pages: anonymous(load(name).pages) });
+    assert.ok(heads(b) >= 0.75 * heads(a) && heads(b) <= 1.35 * heads(a) + 2, `${name}: headings ${heads(a)} with font names, ${heads(b)} without`);
     assert.ok(Math.abs(b.references.length - a.references.length) <= Math.max(3, 0.08 * a.references.length), `${name}: references ${a.references.length} vs ${b.references.length}`);
     assert.ok(Math.abs(b.stats.bodyChars - a.stats.bodyChars) <= 0.18 * a.stats.bodyChars, `${name}: body ${a.stats.bodyChars} vs ${b.stats.bodyChars}`);
     assert.ok(b.captions.length >= 0.7 * a.captions.length, `${name}: captions ${a.captions.length} vs ${b.captions.length}`);

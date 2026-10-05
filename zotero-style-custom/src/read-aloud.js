@@ -2,7 +2,7 @@
 
    Two engines sit behind one small contract, and one player drives either:
 
-     engine.speak({text, lang, voiceURI, rate, onstart, onend, onerror})
+     engine.speak({text, lang, voiceURI, rate, onstart, onend, onerror, oninterrupt})
      engine.cancel()          drop everything queued or speaking
      engine.pause()/resume()  only when engine.supportsPause
      engine.voices()          [{voiceURI, name, lang, localService, default}]
@@ -11,6 +11,10 @@
      system voices (free). Utterances are queued by the engine itself, so the
      player can hand it the next sentence before the current one ends and there
      is no gap.
+     It is shared with everything else in the window, Zotero's own Read Aloud
+     included: anyone's cancel() drops everyone's queue. An utterance stopped by
+     a cancel this engine did not make is reported as oninterrupt(), so the
+     player can say "paused" instead of playing on in silence.
    - macOS `say`, when speechSynthesis has no voices. `say` cannot be paused, so
      the player pauses by killing the process and resumes by speaking again from
      the START OF THE CURRENT SENTENCE (never from the middle of a word). That is
@@ -76,20 +80,28 @@
  /* ---- engines ---------------------------------------------------------- */
  function speechEngine(win){
   const synth=win&&win.speechSynthesis,Utterance=win&&win.SpeechSynthesisUtterance;const live=new Set();
+  // Every cancel() this engine makes starts a new epoch; an utterance from the current epoch that is cancelled was cancelled by someone else.
+  let epoch=0;
   const voices=()=>{try{return Array.from(synth.getVoices()||[]);}catch(_){return [];}};
   return {name:'speechSynthesis',supportsPause:true,
    available(){return !!synth&&typeof Utterance==='function'&&voices().length>0;},
    voices(){return voices().map(v=>({voiceURI:v.voiceURI,name:v.name,lang:v.lang,localService:!!v.localService,default:!!v.default}));},
-   speak({text,lang,voiceURI,rate,onstart,onend,onerror}){
-    const u=new Utterance(text);u.lang=lang||'';u.rate=rate||1;
+   speak({text,lang,voiceURI,rate,onstart,onend,onerror,oninterrupt}){
+    const u=new Utterance(text);u.lang=lang||'';u.rate=rate||1;const mine=epoch;
     if(voiceURI){const voice=voices().find(v=>v.voiceURI===voiceURI);if(voice)u.voice=voice;}
     // Gecko drops an utterance nobody holds a reference to, and its end event with it.
     live.add(u);const done=()=>live.delete(u);
     u.onstart=()=>{onstart&&onstart();};u.onend=()=>{done();onend&&onend();};
-    u.onerror=event=>{done();if(event&&(event.error==='canceled'||event.error==='interrupted'))return;onerror&&onerror(event&&event.error||'error');};
+    u.onerror=event=>{
+     done();
+     if(event&&(event.error==='canceled'||event.error==='interrupted')){if(mine===epoch&&oninterrupt)oninterrupt(event.error);return;}
+     onerror&&onerror(event&&event.error||'error');
+    };
     synth.speak(u);
    },
-   cancel(){try{synth.cancel();}catch(_){}live.clear();},
+   cancel(){epoch++;try{synth.cancel();}catch(_){}live.clear();},
+   /* Whether the window's speech queue is doing anything at all: false while this player thinks it is playing means someone else cancelled it. */
+   busy(){try{return !!(synth.speaking||synth.pending);}catch(_){return true;}},
    pause(){try{synth.pause();}catch(_){}},resume(){try{synth.resume();}catch(_){}}};
  }
  /* macOS `say`. `spawn(args, onexit)` starts /usr/bin/say with an argument
@@ -97,6 +109,7 @@
     returns {kill()}; onexit receives the exit status. Plain Zotero.Utilities
     .Internal.exec cannot be stopped, which is why the runtime supplies a spawn
     built on nsIProcess. */
+ const SAY_WPM=200;
  const SAY_VOICES={ko:'Yuna',en:'Samantha',ja:'Kyoko',zh:'Tingting',de:'Anna',fr:'Thomas',es:'Monica',it:'Alice'};
  function sayEngine({spawn,voiceNames=SAY_VOICES}){
   const queue=[];let current=null,generation=0;const broken=new Set();
@@ -105,13 +118,15 @@
    const utt=queue.shift(),mine=++generation;current={utt,mine};
    const short=String(utt.lang||'').split(/[-_]/)[0],fallbackName=voiceNames[short];
    const name=utt.voiceURI&&!broken.has(utt.voiceURI)?utt.voiceURI:(fallbackName&&!broken.has(fallbackName)?fallbackName:'');
-   const args=[];if(name)args.push('-v',name);args.push('-r',String(Math.round(175*(utt.rate||1))),'--',utt.text);
-   utt.onstart&&utt.onstart();
+   // 200 words a minute is what the system voices speak at rate 1, so the same slider position sounds the same with either engine.
+   const args=[];if(name)args.push('-v',name);args.push('-r',String(Math.round(SAY_WPM*(utt.rate||1))),'--',utt.text);
+   // Started after the caller has finished queueing: a synchronous start let the player queue the next sentence between the pieces of this one.
+   const start=utt.onstart;if(start)Promise.resolve().then(()=>{if(current&&current.mine===mine)start();});
    let proc;
    try{proc=spawn(args,status=>{
     if(!current||current.mine!==mine)return;       // killed on purpose
     current=null;
-    if(status!==0&&name){broken.add(name);queue.unshift(utt);utt.onstart=null;run();return;}   // that voice is not installed: once more with the system voice
+    if(status!==0&&name){broken.add(name);queue.unshift({...utt,onstart:null});run();return;}   // that voice is not installed: once more with the system voice
     if(status!==0){utt.onerror&&utt.onerror('say-failed');return;}
     utt.onend&&utt.onend();run();
    });}catch(error){current=null;utt.onerror&&utt.onerror(String(error&&error.message||error));return;}
@@ -127,10 +142,19 @@
  /* ---- composing what is read -------------------------------------------- */
  const sentencesOf=entry=>{
   if(!entry)return [];
-  if(Array.isArray(entry.sentences))return entry.sentences.filter(s=>s&&clean(s.text)).map(s=>({text:clean(s.text),page:s.page??entry.page,rects:s.rects||entry.rects||[]}));
+  if(Array.isArray(entry.sentences))return entry.sentences.filter(s=>s&&clean(s.text)).map(s=>({text:clean(s.text),spoken:typeof s.spoken==='string'?clean(s.spoken):undefined,page:s.page??entry.page,rects:s.rects||entry.rects||[]}));
   const text=clean(entry.text||entry.caption||entry);
   return typeof entry==='string'||text?[{text:clean(typeof entry==='string'?entry:text),page:entry.page,rects:entry.rects||[]}]:[];
  };
+ /* What to say for a sentence: the extraction module's citation-free `spoken` text when it has one,
+    looked up in the paragraph when the reading order did not carry it. */
+ function spokenOf(u,sections){
+  if(typeof u.spoken==='string')return clean(u.spoken);
+  const paragraph=sections[u.sectionIndex]&&Number.isInteger(u.paragraphIndex)&&(sections[u.sectionIndex].paragraphs||[])[u.paragraphIndex];
+  const s=paragraph&&(paragraph.sentences||[]).find(x=>x&&x.text===u.text);
+  return s&&typeof s.spoken==='string'?clean(s.spoken):undefined;
+ }
+ const sayable=u=>{const spoken=u&&typeof u.spoken==='string'?clean(u.spoken):'';return spoken&&/[\p{L}\p{N}]/u.test(spoken)?spoken:clean(u&&u.text);};
  const isBack=section=>!!section&&(section.kind==='back'||section.kind==='references'||section.back===true);
  /* The body in reading order, with the captions and the reference list added
     only when asked. Captions go after the last sentence on their page. */
@@ -138,7 +162,7 @@
   if(!structured||!paperText)return [];
   const sections=Array.isArray(structured.sections)?structured.sections:[];
   const ordered=(paperText.readingOrder?paperText.readingOrder(structured):[])||[];
-  let body=ordered.map((u,i)=>({...u,kind:isBack(sections[u.sectionIndex])?'back':'body',order:i,sectionLabel:clean(sections[u.sectionIndex]&&sections[u.sectionIndex].heading)}));
+  let body=ordered.map((u,i)=>({...u,spoken:spokenOf(u,sections),kind:isBack(sections[u.sectionIndex])?'back':'body',order:i,sectionLabel:clean(sections[u.sectionIndex]&&sections[u.sectionIndex].heading)}));
   if(!references)body=body.filter(u=>u.kind!=='back');
   const extra=[];
   if(captions)for(const c of structured.captions||[])for(const s of sentencesOf(c).flatMap(x=>splitSentences(x.text).map(text=>({...x,text}))))extra.push({text:s.text,page:s.page,rects:s.rects,sectionIndex:-1,sentenceIndex:0,kind:'caption',sectionLabel:'caption'});
@@ -195,39 +219,62 @@
  function create({engine,now=()=>Date.now(),timers=null,onChange=()=>{},onCredit=()=>{},lang='en',voiceURI='',rate=1,filters={},watchdogMs=6000}={}){
   if(!engine)throw new Error('A speech engine is required');
   const timer=timers||{set:(fn,ms)=>setTimeout(fn,ms),clear:id=>clearTimeout(id)};
-  let all=[],list=[],index=0,status='idle',gen=0,queuedTo=-1,entered=-1,queueLive=false,dead=false,watch=null,error='';
+  let all=[],list=[],index=0,status='idle',gen=0,queuedTo=-1,entered=-1,queueLive=false,dead=false,watch=null,error='',heard=false,queueing=false,deferred=null;
   let speakRate=clamp(rate,RATE_MIN,RATE_MAX,1),speakVoice=voiceURI||'',speakLang=lang||'en';
   const filter={captions:filters.captions===true,references:filters.references===true};
   const clock={since:null,accum:0};
   const emit=type=>{if(dead)return;try{onChange({type,state:snapshot()});}catch(_){}};
   const snapshot=()=>({status,index,total:list.length,unit:list[index]||null,rate:speakRate,voiceURI:speakVoice,lang:speakLang,filters:{...filter},error,engine:engine.name,supportsPause:engine.supportsPause!==false});
   const clearWatch=()=>{if(watch!==null){timer.clear(watch);watch=null;}};
-  const armWatch=g=>{clearWatch();if(!watchdogMs)return;watch=timer.set(()=>{watch=null;if(g!==gen||status!=='playing')return;fail(g,'no-audio');},watchdogMs);};
+  /* The watchdog: no sound at all after starting is an error ("no-audio"); a queue that went quiet after it had
+     been speaking means someone else cancelled it (the reader's own Read Aloud shares the speech queue), which is a pause. */
+  const armWatch=g=>{clearWatch();if(!watchdogMs)return;watch=timer.set(()=>{
+   watch=null;if(g!==gen||status!=='playing'||dead)return;
+   if(!heard){fail(g,'no-audio');return;}
+   if(typeof engine.busy==='function'&&!engine.busy()){interrupt(g,'interrupted');return;}
+   armWatch(g);
+  },watchdogMs);};
   function fail(g,reason){if(g!==gen)return;gen++;clearWatch();try{engine.cancel();}catch(_){}queueLive=false;status='error';error=String(reason||'error');emit('error');}
+  /* Stopped by a cancel this player did not make: become paused where we are, and do not cancel back (that would stop the other speaker). */
+  function interrupt(g,reason){
+   if(g!==gen||dead||status!=='playing')return;
+   gen++;clearWatch();queueLive=false;entered=-1;queuedTo=-1;
+   if(clock.since!==null){clock.accum+=now()-clock.since;clock.since=null;}
+   status='paused';error=String(reason||'interrupted');emit('interrupted');
+  }
   function enqueue(u,g){
    const unit=list[u];if(!unit)return;
-   const chunks=splitForEngine(unit.text);if(!chunks.length)chunks.push(clean(unit.text)||'.');
+   const text=sayable(unit);
+   const chunks=splitForEngine(text);if(!chunks.length)chunks.push(text||'.');
    queuedTo=u;
-   chunks.forEach((chunk,k)=>engine.speak({text:chunk,lang:speakLang,voiceURI:speakVoice,rate:speakRate,
-    onstart:()=>onStart(g,u,k),onend:()=>onEnd(g,u,k===chunks.length-1),onerror:reason=>fail(g,reason)}));
+   // Every piece of this sentence is queued before anything else can be: an engine that starts synchronously must not slip the next sentence in between.
+   queueing=true;
+   try{
+    chunks.forEach((chunk,k)=>engine.speak({text:chunk,lang:speakLang,voiceURI:speakVoice,rate:speakRate,
+     onstart:()=>onStart(g,u,k),onend:()=>onEnd(g,u,k===chunks.length-1),onerror:reason=>fail(g,reason),oninterrupt:reason=>interrupt(g,reason)}));
+   }finally{queueing=false;}
+   if(deferred){const next=deferred;deferred=null;if(next.g===gen&&queuedTo<next.u)enqueue(next.u,next.g);}
   }
   function enter(u,g){
    if(entered===u)return;
    entered=u;index=u;clock.accum=0;clock.since=now();status='playing';error='';
-   if(u+1<list.length&&queuedTo<u+1)enqueue(u+1,g);
+   if(u+1<list.length&&queuedTo<u+1){if(queueing)deferred={u:u+1,g};else enqueue(u+1,g);}
    emit('sentence');
   }
-  function onStart(g,u,k){if(g!==gen||dead)return;clearWatch();if(k===0)enter(u,g);}
+  function onStart(g,u,k){if(g!==gen||dead)return;heard=true;clearWatch();if(k===0)enter(u,g);if(watchdogMs&&typeof engine.busy==='function')armWatch(g);}
   function onEnd(g,u,last){
-   if(g!==gen||dead||!last)return;
+   if(g!==gen||dead)return;
+   if(watchdogMs)armWatch(g);
+   if(!last)return;
    const spent=(clock.accum+(clock.since!==null?now()-clock.since:0))/1000;clock.since=null;
    if(entered===u){try{onCredit(list[u],Math.min(CREDIT_MAX_SECONDS,Math.max(0,spent)));}catch(_){}}
-   if(u+1>=list.length){queueLive=false;status='done';emit('done');return;}
+   if(u+1>=list.length){clearWatch();queueLive=false;status='done';emit('done');return;}
    enter(u+1,g);
   }
   function startAt(i){
+   if(dead)return;
    gen++;const g=gen;clearWatch();try{engine.cancel();}catch(_){}
-   index=Math.max(0,Math.min(list.length-1,i));entered=-1;queuedTo=index-1;queueLive=true;status='playing';error='';clock.accum=0;clock.since=null;
+   index=Math.max(0,Math.min(list.length-1,i));entered=-1;queuedTo=index-1;queueLive=true;status='playing';error='';clock.accum=0;clock.since=null;heard=false;deferred=null;
    emit('status');armWatch(g);enqueue(index,g);
   }
   function rebuild(keep){
@@ -245,7 +292,7 @@
    state:snapshot,units:()=>list,
    /* What to store to come back to this sentence: its text, its page, its index. */
    position:()=>({index,sig:signature(list[index]),page:list[index]&&list[index].page,total:list.length}),
-   play(from){if(!list.length)return snapshot();startAt(from===undefined?(status==='done'?0:index):from);return snapshot();},
+   play(from){if(dead||!list.length)return snapshot();startAt(from===undefined?(status==='done'?0:index):from);return snapshot();},
    pause(){
     if(status!=='playing')return snapshot();
     clearWatch();
@@ -254,14 +301,14 @@
     status='paused';emit('status');return snapshot();
    },
    resume(){
-    if(status!=='paused')return snapshot();
+    if(dead||status!=='paused')return snapshot();
     if(engine.supportsPause===false||!queueLive){startAt(index);return snapshot();}
     status='playing';clock.since=now();engine.resume();emit('status');return snapshot();
    },
    toggle(){return status==='playing'?api.pause():status==='paused'?api.resume():api.play();},
    stop(silent){gen++;clearWatch();try{engine.cancel();}catch(_){}queueLive=false;entered=-1;queuedTo=-1;clock.since=null;clock.accum=0;if(status!=='idle'){status='idle';if(!silent)emit('status');}return snapshot();},
    seek(i){
-    if(!list.length)return snapshot();
+    if(dead||!list.length)return snapshot();
     const target=Math.max(0,Math.min(list.length-1,Math.round(Number(i)||0)));
     if(status==='playing'){startAt(target);return snapshot();}
     gen++;clearWatch();try{engine.cancel();}catch(_){}queueLive=false;entered=-1;index=target;
@@ -299,10 +346,11 @@
     if(best<0)return list.findIndex(u=>Number(u.page)===Number(page));
     return best;
    },
-   destroy(){if(dead)return;api.stop(true);dead=true;}
+   destroy(){if(dead)return;api.stop(true);dead=true;},
+   get destroyed(){return dead;}
   };
   return api;
  }
- const api={create,speechEngine,sayEngine,splitSentences,splitForEngine,detectLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,RATE_MIN,RATE_MAX,CHUNK_MAX};
+ const api={create,speechEngine,sayEngine,splitSentences,splitForEngine,detectLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
  root.CustomStyleReadAloud=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

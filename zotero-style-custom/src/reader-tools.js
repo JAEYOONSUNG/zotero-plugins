@@ -400,13 +400,31 @@
       }
       record.reload=reload;reload();
     }
+    /* An outline palette, drawn like the reader's own toolbar icons (no text under the button). */
+    function styleIcon(doc){
+      if(typeof doc.createElementNS!=='function')return null;
+      const NS='http://www.w3.org/2000/svg',svg=doc.createElementNS(NS,'svg');if(!svg||typeof svg.setAttribute!=='function')return null;
+      for(const[k,v]of [['viewBox','0 0 24 24'],['width','16'],['height','16'],['fill','none'],['stroke','currentColor'],['stroke-width','1.8'],['stroke-linecap','round'],['stroke-linejoin','round'],['aria-hidden','true']])svg.setAttribute(k,v);
+      for(const d of ['M12 4a8 8 0 1 0 0 16c1.2 0 1.6-.8 1.2-1.6-.5-1 .1-2.4 1.6-2.4H17a3 3 0 0 0 3-3c0-5-3.6-9-8-9z','M7.5 11.5h.01','M10 7.5h.01','M14.5 7.5h.01']){const path=doc.createElementNS(NS,'path');path.setAttribute('d',d);svg.appendChild(path);}
+      return svg;
+    }
+    /* "여기서부터 듣기" in the reader's own text-selection popup: the reader panel starts at the selected sentence. */
+    function selectionHook(event){
+      if(stopped)return;
+      try{runtime.readerAssist?.selectionPopup?.(event);}catch(e){report(e);}
+    }
     function toolbarHook({reader,doc,append}){
       if(stopped||!reader?._window||!doc||typeof append!=='function')return;
       const win=reader._window;if(win.closed||detached.has(win))return;if(!windows.has(win))attach(win);const state=windows.get(win);
       state.toolbars.get(reader)?.remove();
+      /* One row of icon buttons like Zotero's own: the reader's toolbar-button is display:flex, so inside an inline
+         span they stacked vertically and the label of the last one hung below the toolbar. */
       const container=doc.createElement('span'),button=doc.createElement('button'),menu=doc.createElement('div');
+      container.className='sc-toolbar-group';container.style.cssText='display:flex;align-items:center;gap:4px;';
       let assistButtons=null;try{assistButtons=runtime.readerAssist?.mountToolbar({reader,doc,container});}catch(e){report(e);}
-      button.type='button';button.textContent=t('스타일');button.className='toolbar-button';button.title=t('Style Custom 리더 도구');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label',t('Style Custom 리더 도구'));container.appendChild(button);
+      button.type='button';button.className='toolbar-button';button.title=t('Style Custom 리더 도구');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label',t('Style Custom 리더 도구'));
+      const paint=styleIcon(doc);if(paint)button.appendChild(paint);else button.textContent=t('스타일');
+      container.appendChild(button);
       menu.hidden=true;menu.setAttribute('aria-label',t('리더 모양과 작업 공간'));
       menu.style.cssText='position:fixed;right:8px;top:42px;z-index:10000;padding:10px;width:235px;max-height:calc(100vh - 58px);overflow:auto;border:1px solid GrayText;border-radius:2px;background:Canvas;color:CanvasText;font:12px system-ui;';
       /* Every action said nothing: a bad palette line, a margin width of 900 or
@@ -575,7 +593,7 @@
       if(stopped||type!=='item'||!['add','modify','delete','trash'].includes(event))return;
       if(['delete','trash'].includes(event)||(Array.isArray(ids)?ids:[ids]).some(id=>{const item=Z.Items.get(id);return !item||item.isNote?.()||item.isAnnotation?.();})){backlinkRevision++;backlinkCache.clear();}
     }},['item'],toolbarOwner+'-backlinks');
-    const hookEntries=[['renderToolbar',toolbarHook],['renderSidebarAnnotationHeader',backlinkHook],['createAnnotationContextMenu',mergeMenuHook]];
+    const hookEntries=[['renderToolbar',toolbarHook],['renderSidebarAnnotationHeader',backlinkHook],['createAnnotationContextMenu',mergeMenuHook],['renderTextSelectionPopup',selectionHook]];
     if(typeof Z.Reader?.registerEventListener==='function'){for(const[type,handler]of hookEntries)Z.Reader.registerEventListener(type,handler,toolbarOwner);toolbarRegistered=true;}
     return Object.freeze({contrast,attach,applyPreferences,applyTheme,resetAppearance,marginOptions,setMarginOptions,setMarginAnnotations,setColorLabel,setSidebar,setVerticalTabs,mergeSelectedAnnotations,attachmentVersions,switchAttachmentVersion,annotationPalettes,saveAnnotationPalette,applyAnnotationPalette,deleteAnnotationPalette,setAnnotationColor,tabs,selectTab,closeTab,moveTab,closeOtherTabs,tabGroups,saveTabGroup,renameTabGroup,updateTabGroup,restoreTabGroup,deleteTabGroup,undeleteTabGroup,viewGroups,saveView,renameView,updateView,applyView,deleteView,undeleteView,stop});
   }

@@ -2,8 +2,12 @@
 (function(root){
  'use strict';
  function endpoint(value){const s=String(value||'').trim();if(!/^https:\/\/[a-z0-9.-]+(?::\d+)?\/[^\s]*$/i.test(s)&&!/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/[^\s]*$/i.test(s))throw new Error('설정에서 https로 시작하는 AI 서버 주소나 localhost 주소를 입력하세요.');return s;}
- function create({Zotero,runtime}){
+ /* Seconds without a byte before a paper request is given up. Not a total: a slow local model that keeps
+    streaming is never cut off mid-answer, and one that is still thinking about a long prompt gets minutes. */
+ const QUIET_STREAM_MS=180000,QUIET_WHOLE_MS=300000;
+ function create({Zotero,runtime,timers=null}){
   let active=true;const jobs=new Set();
+  const timer=timers||{set:(fn,ms)=>setTimeout(fn,ms),clear:id=>clearTimeout(id)};
   async function run(task,item,{language='Korean'}={}){
    if(!active)throw new Error('플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.');
    if(task==='paperSummary')return paperSummary(item,{language});
@@ -82,30 +86,41 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    return {model,url,headers};
   }
   function available(){try{configured();return true;}catch(_){return false;}}
-  async function transport(messages,{stream=false,onDelta=null,timeout=120000}={}){
+  /* `signal` is the caller's own cancel token ({cancelled, onCancel(fn)}): Stop on one chat cancels that request
+     only, not a summary or a translation running beside it. `quietMs` is the inactivity limit (see QUIET_*). */
+  async function transport(messages,{stream=false,onDelta=null,signal=null,quietMs=stream?QUIET_STREAM_MS:QUIET_WHOLE_MS}={}){
    const {model,url,headers}=configured();
    const total=messages.reduce((n,m)=>n+String(m.content||'').length,0);
    if(total>120000)throw new Error('선택한 텍스트가 너무 깁니다. 50,000자 이하로 줄이세요.');
-   const job={cancel:null,cancelled:false,transportCancelled:false};jobs.add(job);
+   if(signal&&signal.cancelled)throw new Error('요청이 중지되었습니다.');
+   const job={cancel:null,cancelled:false,transportCancelled:false,quiet:null,timedOut:false};jobs.add(job);
    const cancelTransport=()=>{if(job.cancel&&!job.transportCancelled){job.transportCancelled=true;try{job.cancel();}catch(_){}}};
    const reader=stream?chatTools().streamReader((piece,all)=>{if(!job.cancelled&&onDelta)onDelta(piece,all);}):null;
-   let eventStream=false,sniffed=false;
+   let eventStream=false,sniffed=false,off=()=>{};
+   const stopQuiet=()=>{if(job.quiet!==null){timer.clear(job.quiet);job.quiet=null;}};
    try{
     const result=await new Promise((resolve,reject)=>{
-     let settled=false;const finish=(fn,value)=>{if(settled)return;settled=true;fn(value);};
+     let settled=false;const finish=(fn,value)=>{if(settled)return;settled=true;stopQuiet();fn(value);};
      job.abort=()=>{job.cancelled=true;cancelTransport();finish(reject,new Error('요청이 중지되었습니다.'));};
-     const options={headers,body:JSON.stringify({model,messages,store:false,...(stream?{stream:true}:{})}),timeout,successCodes:false,errorDelayMax:0,
+     const quiet=()=>{stopQuiet();if(!quietMs||settled)return;job.quiet=timer.set(()=>{job.quiet=null;job.timedOut=true;job.cancelled=true;cancelTransport();
+      const e=new Error('AI 서버가 한동안 아무것도 보내지 않아 중단했습니다. 서버가 켜져 있는지, 모델이 너무 크지 않은지 확인하세요.');e.own=true;finish(reject,e);},quietMs);};
+     if(signal)off=signal.onCancel(()=>job.abort());
+     // timeout 0: no limit on the whole request; the quiet timer above is the limit, reset by every byte that arrives.
+     const options={headers,body:JSON.stringify({model,messages,store:false,...(stream?{stream:true}:{})}),timeout:0,successCodes:false,errorDelayMax:0,
       cancellerReceiver:fn=>{job.cancel=fn;if(!active||job.cancelled)cancelTransport();}};
-     if(stream)options.requestObserver=xhr=>{
+     options.requestObserver=xhr=>{
       const read=()=>{
+       quiet();
+       if(!stream)return;
        try{
         if(!sniffed&&xhr.readyState>=2){sniffed=true;eventStream=chatTools().isEventStream(xhr.getResponseHeader&&xhr.getResponseHeader('Content-Type'));}
         if(eventStream&&xhr.readyState>=3)reader.update(xhr.responseText);
        }catch(_){}
       };
-      xhr.addEventListener('progress',read);xhr.addEventListener('readystatechange',read);
+      try{xhr.addEventListener('progress',read);xhr.addEventListener('readystatechange',read);}catch(_){}
      };
-     else options.responseType='json';
+     if(!stream)options.responseType='json';
+     quiet();
      try{Promise.resolve(Zotero.HTTP.request('POST',url,options)).then(value=>finish(resolve,value),error=>finish(reject,error));}catch(error){finish(reject,error);}
     });
     if(!active||job.cancelled)throw new Error('요청이 중지되었습니다.');
@@ -125,18 +140,18 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
     if(output.length>100000)throw new Error('AI 서버 응답이 너무 깁니다. 더 짧은 글을 고르거나 모델을 바꾸세요.');
     return output.trim();
    }catch(error){if(error?.own||/^AI 서|요청|태그|올바른|설정|플러그인|선택한/.test(error.message))throw error;throw new Error('AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.');}
-   finally{jobs.delete(job);}
+   finally{stopQuiet();off();jobs.delete(job);}
   }
-  async function paperSummary(input,{language='Korean'}={}){
+  async function paperSummary(input,{language='Korean',signal=null}={}){
    if(runtime.featureEnabled?.('tldr')===false)throw new Error('설정에서 이 기능을 켜세요.');
    const text=String(input&&input.text||'').trim();
    if(!text||!String(input.abstract||input.title||'').trim())throw new Error('먼저 논문의 제목과 초록을 가져오세요.');
-   return transport([{role:'system',content:chatTools().summaryPrompt(language)},{role:'user',content:text}]);
+   return transport([{role:'system',content:chatTools().summaryPrompt(language)},{role:'user',content:text}],{signal});
   }
   /* `messages` come from paper-chat.chatMessages(); onDelta(piece, all) is called as text arrives. */
-  async function chat(messages,{onDelta=null,stream=true}={}){
+  async function chat(messages,{onDelta=null,stream=true,signal=null}={}){
    if(!Array.isArray(messages)||!messages.length)throw new Error('질문을 입력하세요.');
-   return transport(messages,{stream,onDelta});
+   return transport(messages,{stream,onDelta,signal});
   }
   function parseTranslations(output,count){
    let parsed;try{parsed=JSON.parse(String(output).replace(/^```(?:json)?\s*|\s*```$/g,''));}catch(_){return null;}
@@ -144,18 +159,20 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    const texts=parsed.map(x=>typeof x==='string'?x:x&&typeof x.text==='string'?x.text:null);
    return texts.some(x=>x===null||!x.trim())?null:texts.map(x=>x.trim());
   }
-  async function translateParagraphs(texts,{language='Korean'}={}){
+  async function translateParagraphs(texts,{language='Korean',signal=null}={}){
+   const stopped=()=>{if(signal&&signal.cancelled)throw new Error('요청이 중지되었습니다.');};
    if(!Array.isArray(texts)||!texts.length)return [];
    const out=[];let group=[],size=0;const groups=[];
    for(const t of texts){if(group.length&&(size+t.length>6000||group.length>=8)){groups.push(group);group=[];size=0;}group.push(t);size+=t.length;}
    if(group.length)groups.push(group);
    const single=`Translate the supplied paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written. Return only the translation.`;
    for(const g of groups){
+    stopped();
     if(g.length>1){
-     const reply=await transport([{role:'system',content:`Translate each numbered paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written. Return ONLY a JSON array of ${g.length} strings, in the same order, nothing else.`},{role:'user',content:JSON.stringify(g.map((text,i)=>({n:i+1,text})))}]);
+     const reply=await transport([{role:'system',content:`Translate each numbered paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written. Return ONLY a JSON array of ${g.length} strings, in the same order, nothing else.`},{role:'user',content:JSON.stringify(g.map((text,i)=>({n:i+1,text})))}],{signal});
      const parsed=parseTranslations(reply,g.length);if(parsed){out.push(...parsed);continue;}
     }
-    for(const text of g)out.push(await transport([{role:'system',content:single},{role:'user',content:text}]));
+    for(const text of g){stopped();out.push(await transport([{role:'system',content:single},{role:'user',content:text}],{signal}));}
    }
    return out;
   }

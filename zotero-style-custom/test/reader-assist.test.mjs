@@ -55,7 +55,7 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  if(doc.defaultView!==win)Object.defineProperty(doc,'defaultView',{configurable:true,get:()=>win});
  const fileIO=io||memoryIO();
  const folder='/data/style-custom-reader/';
- if(structCache)fileIO.files.set(folder+'1-ATT.struct.json',JSON.stringify({v:1,sig:'1000:5',structured,sizes:sizes(),fallback:false}));
+ if(structCache)fileIO.files.set(folder+'1-ATT.struct.json',JSON.stringify({v:2,extractor:String(globalThis.StyleCustomPaperText&&globalThis.StyleCustomPaperText.VERSION||'1')+'.2',sig:'1000:5',structured,sizes:sizes(),fallback:false}));
  const attachment={id:11,key:'ATT',libraryID:1,parentID:10,getFilePathAsync:async()=> '/lib/ATT.pdf'};
  const parent={id:10,key:'ITEM',libraryID:1,isRegularItem:()=>true,getField:k=>({title:'Thermostable polymerase evolution',abstractNote:'We evolved a polymerase that tolerates 95 C.'}[k]||''),getTags:()=>[{tag:'#topic/PCR'},{tag:'/reading'}]};
  const requests=[],aiReplies=[];
@@ -120,7 +120,7 @@ test('every button in the panel says what it does, and nothing that plays, calls
  const marks=Object.fromEntries([...f.panel().querySelectorAll('button')].map(b=>[(b.textContent.trim()||b.getAttribute('aria-label')||b.title),b.getAttribute('data-safe')?'safe':b.getAttribute('data-opens')?'opens:'+b.getAttribute('data-opens'):'writes:'+b.getAttribute('data-writes')]));
  assert.equal(marks['Make summary'],'opens:ai');assert.equal(marks['Send'],'opens:ai');assert.equal(marks['Translate all'],'opens:ai');assert.equal(marks['From this page'],'opens:ai');
  assert.equal(marks['Add to memo'],'writes:memo');assert.equal(marks['Save as note'],'writes:note');assert.equal(marks['Clear conversation'],'writes:cache');
- assert.equal(marks['Read aloud'],'opens:audio');assert.equal(marks['Next sentence'],'opens:audio');assert.equal(marks['Refresh usage'],'opens:network');
+ assert.equal(marks['Read body only'],'opens:audio');assert.equal(marks['Next sentence'],'opens:audio');assert.equal(marks['Refresh usage'],'opens:network');
  for(const b of f.panel().querySelectorAll('[data-safe="view"]'))assert.doesNotMatch(b.textContent+b.title,/Make summary|Send|Translate|Read aloud|memo|note/i,'a view button must not be one of the others');
  f.stop();
 });
@@ -289,7 +289,8 @@ test('"전체 번역" translates the paragraphs in reading order, one request, f
  const f=fixture({prefs:{deeplApiKey:'abc:fx'},io});await f.open();
  f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
  f.press(f.byText('Translate all'));await settle(30);
- const calls=f.requests.filter(r=>/deepl/.test(r.url));
+ assert.equal(f.requests.filter(r=>/deepl/.test(r.url))[0].url,'https://api-free.deepl.com/v2/usage','DeepL\'s own count first (free)');
+ const calls=f.requests.filter(r=>/deepl/.test(r.url)&&r.method==='POST');
  assert.equal(calls.length,1);assert.equal(calls[0].url,'https://api-free.deepl.com/v2/translate');
  assert.equal(calls[0].options.headers.Authorization,'DeepL-Auth-Key abc:fx');
  assert.equal(calls[0].body.target_lang,'KO');assert.equal(calls[0].body.text[0],'DNA polymerases drive PCR. Thermal stability limits cycling speed.');
@@ -300,7 +301,7 @@ test('"전체 번역" translates the paragraphs in reading order, one request, f
  const g=fixture({prefs:{deeplApiKey:'abc:fx'},io});await g.open();g.press(g.panel().querySelector('[data-tab="translate"]'));await settle(15);
  assert.match(g.panel().querySelector('.sc-ra-row-card').textContent,/KO:DNA polymerases/,'shown without asking');
  assert.equal(g.requests.filter(r=>/deepl/.test(r.url)).length,0);
- g.press(g.byText('Translate all'));await settle(20);assert.equal(g.requests.filter(r=>/deepl/.test(r.url)).length,0,'all cached: nothing sent');
+ g.press(g.byText('Translate all'));await settle(20);assert.equal(g.requests.filter(r=>/deepl/.test(r.url)&&r.method==='POST').length,0,'all cached: nothing translated again');
  g.stop();
 });
 
@@ -308,7 +309,7 @@ test('"현재 페이지부터" starts at the paragraph of the page on screen',as
  const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
  f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
  f.press(f.byText('From this page'));await settle(30);
- const call=f.requests.find(r=>/deepl/.test(r.url));
+ const call=f.requests.find(r=>/deepl/.test(r.url)&&r.method==='POST');
  assert.deepEqual(call.body.text.length,2,'the Methods and Results paragraphs, not the Introduction');
  assert.match(call.body.text[0],/Libraries were screened/);
  f.stop();
@@ -359,14 +360,14 @@ test('pressing a row goes to its page; "다시 번역" asks again for that parag
  f.press(rows[1].querySelector('.sc-ra-row-meta'));await settle();
  assert.equal(f.navs.at(-1).pageIndex,2);assert.ok(f.navs.at(-1).position.rects[0].every(Number.isFinite),'the rectangle is converted to the reader\'s own coordinates');
  f.press(rows[1].querySelector('[data-opens="ai"]'));await settle(20);
- assert.equal(f.requests.filter(r=>/deepl/.test(r.url)).length,2);
+ assert.equal(f.requests.filter(r=>/deepl/.test(r.url)&&r.method==='POST').length,2);
  f.stop();
 });
 
-test('listening: the toolbar ▶ speaks from the page on screen, follows along on the page and in the list, and credits the listening',async()=>{
+test('listening: the toolbar ▶ speaks from the page on screen without opening the panel, follows along on the page and in the list, and credits the listening',async()=>{
  const f=fixture();await f.sync();
  f.press(f.container.querySelectorAll('button')[1]);await settle(20);
- assert.equal(f.panel().hidden,false);assert.equal(f.panel().querySelector('[data-pane="listen"]').hidden,false);
+ assert.equal(f.panel().hidden,true,'listening does not need the panel: the toolbar ▶ is play/pause');
  assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak').map(l=>l[1]),['Libraries were screened by compartmentalised self-replication.'],'from the page on screen (page 3), body only');
  f.synth.begin();await settle();
  assert.match(f.panel().querySelector('.sc-ra-progress').textContent,/Sentence \d+\/\d+ · Methods/);
@@ -382,17 +383,22 @@ test('listening: the toolbar ▶ speaks from the page on screen, follows along o
  f.stop();assert.equal(f.viewDoc.querySelectorAll('[data-sc-ra-hl]').length,0,'the overlay goes with the panel');
 });
 
-test('a sentence on another page scrolls the reader there; the highlight is an overlay, never an annotation',async()=>{
- const f=fixture();await f.sync();f.press(f.container.querySelectorAll('button')[1]);await settle(20);
+test('a sentence off screen is scrolled into view directly, not through reader.navigate (no Back entry, no blink); the highlight is an overlay, never an annotation',async()=>{
+ const f=fixture();await f.sync();
+ const scrolled=[];f.viewDoc.defaultView.Element.prototype.scrollIntoView=function(o){scrolled.push([this.parentNode.getAttribute('data-page-number'),o&&o.block]);};
+ const rect=f.viewDoc.defaultView.Element.prototype.getBoundingClientRect;
+ f.viewDoc.defaultView.Element.prototype.getBoundingClientRect=function(){return this.parentNode&&this.parentNode.getAttribute&&this.parentNode.getAttribute('data-page-number')==='4'?{top:2000,bottom:2012,left:0,right:10,width:10,height:12}:rect.call(this);};
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);
  f.synth.begin();f.synth.finish();f.synth.begin();f.synth.finish();f.synth.begin();await settle();     // Methods x2, then Results (page 4)
- assert.equal(f.navs.at(-1).pageIndex,3);assert.ok(f.navs.at(-1).position.rects.length===1);
+ assert.deepEqual(scrolled,[['4','nearest']]);
+ assert.equal(f.navs.length,0,'navigate is kept for explicit jumps');
  assert.equal(f.Z.annotationWrites,undefined);
  f.stop();
 });
 
 test('the player bar: play/pause, skip sentence, skip section, rate, voice and the three range choices',async()=>{
  const f=fixture();await f.open();
- f.press(f.byText('Read aloud'));await settle(20);f.synth.begin();await settle();
+ f.press(f.byText('Read body only'));await settle(20);f.synth.begin();await settle();
  f.press(f.byText('Next sentence'));await settle();
  assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
  f.press(f.byText('Next section'));await settle();
@@ -413,7 +419,7 @@ test('the player bar: play/pause, skip sentence, skip section, rate, voice and t
 });
 
 test('the voice menu lists voices for the paper language, remembers the choice, and uses it',async()=>{
- const f=fixture();await f.open();f.press(f.byText('Read aloud'));await settle(20);
+ const f=fixture();await f.open();f.press(f.byText('Read body only'));await settle(20);
  const toggle=f.panel().querySelector('[aria-label="Choose a voice"]');f.press(toggle);await settle();
  const items=[...f.panel().querySelectorAll('.sc-ra-menu-item')];
  assert.ok(items.some(i=>/Samantha/.test(i.textContent)));assert.ok(!items.some(i=>/Yuna/.test(i.textContent)),'an English paper is offered English voices');
@@ -431,7 +437,7 @@ test('"왜 건너뛰었나" shows the extraction module\'s own account',async()=
 
 test('the last position is remembered and offered as "이어서 듣기" in the next session; it plays from that sentence',async()=>{
  const io=memoryIO();
- const f=fixture({io});await f.open();f.press(f.byText('Read aloud'));await settle(20);f.synth.begin();f.synth.finish();f.synth.begin();await settle();
+ const f=fixture({io});await f.open();f.press(f.byText('Read body only'));await settle(20);f.synth.begin();f.synth.finish();f.synth.begin();await settle();
  await new Promise(r=>setTimeout(r,900));f.stop();
  const g=fixture({io});await g.open();await settle(10);
  const resume=g.panel().querySelector('.sc-ra-more .sc-ra-link');assert.equal(resume.hidden,false);assert.match(resume.textContent,/Continue listening · p\. 3/);
@@ -440,20 +446,23 @@ test('the last position is remembered and offered as "이어서 듣기" in the n
  g.stop();
 });
 
-test('a double-click on the page starts reading at the sentence there, only while the panel is open',async()=>{
+test('Alt(Option)+double-click on the page starts reading at the sentence there, only while the panel is open; a plain double-click selects a word as usual',async()=>{
  const f=fixture();await f.sync();
  const page=f.viewDoc.querySelector('.page[data-page-number="3"]');
  page.getBoundingClientRect=()=>({left:0,top:0,width:612,height:792});
- const dbl=(y)=>{const e=new f.win.Event('dblclick',{bubbles:true});Object.assign(e,{clientX:100,clientY:y,target:page});page.dispatchEvent(e);};
- dbl(106);await settle(20);assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak'),[],'panel closed: a double-click is only a double-click');
- await f.open();dbl(122);await settle(30);
+ const dbl=(y,altKey)=>{const e=new f.win.Event('dblclick',{bubbles:true});Object.assign(e,{clientX:100,clientY:y,target:page,altKey});page.dispatchEvent(e);};
+ dbl(106,true);await settle(20);assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak'),[],'panel closed: a double-click is only a double-click');
+ await f.open();
+ dbl(122,false);await settle(30);assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak'),[],'a plain double-click is how a word is selected');
+ assert.match(f.byText('Read body only').title,/Alt\(Option\)\+double-click/,'the gesture is in the tooltip');
+ dbl(122,true);await settle(30);
  assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
  f.stop();
 });
 
 test('without any voice and without macOS say the player says why instead of staying silent',async()=>{
  const f=fixture({voices:[]});f.Z.isMac=false;await f.open();
- f.press(f.byText('Read aloud'));await settle(30);
+ f.press(f.byText('Read body only'));await settle(30);
  assert.match(f.panel().querySelector('.sc-ra-status').textContent,/No voice is available/);
  f.stop();
 });
@@ -462,7 +471,7 @@ test('without the extraction module the plain text index still reads, summarises
  const saved=globalThis.StyleCustomPaperText;delete globalThis.StyleCustomPaperText;
  try{
   const f=fixture({structCache:false});await f.open();
-  f.press(f.byText('Read aloud'));await settle(30);
+  f.press(f.byText('Read body only'));await settle(30);
   assert.ok(f.synth.log.some(l=>l[0]==='speak'));
   f.synth.begin();await settle();assert.equal(f.viewDoc.querySelectorAll('[data-sc-ra-hl]').length,0,'no rectangles, no overlay');
   f.stop();
@@ -475,7 +484,7 @@ test('the extraction path reads pdf.js page by page through pageFromPdfjs and ca
   async getTextContent(){return {items:[{str:'Abstract',transform:[11,0,0,11,72,700],width:50,height:11,fontName:'f1'},{str:'We study polymerases. They are useful.',transform:[10,0,0,10,72,680],width:200,height:10,fontName:'f2'}],styles:{f1:{fontFamily:'sans-serif'},f2:{fontFamily:'serif'}}};},
   async getOperatorList(){return {};},commonObjs:{get:()=>{throw new Error('not loaded');}}});
  f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:2,getPage:async n=>pdfPage(n)}};
- await f.open();f.press(f.byText('Read aloud'));await settle(40);
+ await f.open();f.press(f.byText('Read body only'));await settle(40);
  const cached=JSON.parse(f.fileIO.files.get(f.folder+'1-ATT.struct.json'));
  assert.equal(cached.sig,'1000:5');assert.equal(cached.structured.stats.pages,2);assert.equal(cached.sizes.length,2);assert.deepEqual(cached.sizes[0].transform,[1,0,0,-1,0,792]);
  f.stop();
@@ -483,6 +492,9 @@ test('the extraction path reads pdf.js page by page through pageFromPdfjs and ca
 
 test('the self-check probe measures the panel on an open reader and presses nothing, starts no audio and calls no server',async()=>{
  const f=fixture();await f.sync();
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:1,getPage:async()=>({view:[0,0,612,792],rotate:0,
+  async getTextContent(){return {items:[{str:'We study polymerases. They are useful.',transform:[10,0,0,10,72,680],width:200,height:10,fontName:'f2'}],styles:{f2:{fontFamily:'serif'}}};},
+  async getOperatorList(){return {};},commonObjs:{has:()=>true,get:()=>({name:'Serif'})}})}};
  let clicks=0;for(const b of f.panel().querySelectorAll('button'))b.addEventListener('click',()=>clicks++);
  const out=await f.service.probe(f.reader);
  assert.deepEqual(out.problems,[]);assert.ok(out.checked>40);assert.equal(clicks,0);assert.equal(out.player,'idle');
@@ -534,4 +546,269 @@ test('a real paper runs through the whole chain: sections, reading order, chunks
  assert.ok(paragraphs.length>10);assert.ok(paragraphs.every(p=>p.page===null||p.page>=1));
  assert.ok(!paragraphs.some(p=>/^References$/i.test(p.heading)));
  const first=units[0];assert.ok(first.rects.length&&first.rects[0].length===4);
+});
+
+/* ---- the runtime defects --------------------------------------------------- */
+function secondReader(f){
+ const {document:doc,window:win}=parseHTML('<html><head></head><body><div id="split-view"></div></body></html>');
+ Object.defineProperty(win,'setTimeout',{value:(fn,ms)=>realSetTimeout(fn,ms),configurable:true,writable:true});
+ Object.defineProperty(win,'clearTimeout',{value:id=>realClearTimeout(id),configurable:true,writable:true});
+ const frame={document:doc,closed:false,setTimeout:win.setTimeout,speechSynthesis:f.reader._iframeWindow.speechSynthesis,SpeechSynthesisUtterance:f.reader._iframeWindow.SpeechSynthesisUtterance};
+ const reader={type:'pdf',itemID:21,tabID:'t2',_window:f.win,_iframeWindow:frame,_internalReader:{_state:{primaryViewStats:{pageIndex:0,pagesCount:10}},_primaryView:{_iframeWindow:{document:parseHTML('<html><body></body></html>').document}}},navigate:async()=>{}};
+ const orig=f.Z.Items.get;f.Z.Items.get=id=>id===21?{id:21,key:'ATT2',libraryID:1,parentID:10,getFilePathAsync:async()=>'/lib/ATT2.pdf'}:orig(id);
+ f.fileIO.files.set(f.folder+'1-ATT2.struct.json',f.fileIO.files.get(f.folder+'1-ATT.struct.json'));
+ return reader;
+}
+
+test('extraction never hands pdf.js a chrome object: the viewport is computed from page.view, and fonts are awaited in commonObjs',async()=>{
+ const f=fixture({structCache:false});
+ let ready=false;
+ const pdfPage=()=>({view:[0,0,612,792],rotate:0,
+  getViewport(){throw new Error('Permission denied to access property "scale"');},
+  async getTextContent(o){if(o!==undefined)throw new Error('a chrome options object reached pdf.js');return {items:[{str:'Abstract',transform:[11,0,0,11,72,700],width:50,height:11,fontName:'f1'},{str:'We study polymerases. They are useful.',transform:[10,0,0,10,72,680],width:200,height:10,fontName:'f2'}],styles:{f1:{fontFamily:'sans-serif'},f2:{fontFamily:'serif'}}};},
+  async getOperatorList(){realSetTimeout(()=>{ready=true;},50);return {};},
+  commonObjs:{has:()=>ready,get:id=>{if(!ready)throw new Error('not resolved');return {name:id==='f1'?'Helvetica-Bold':'Times',bold:id==='f1'};}}});
+ const seen=[];const PTsaved=globalThis.StyleCustomPaperText;
+ globalThis.StyleCustomPaperText={...PTsaved,pageFromPdfjs:(i,vp,content,opts)=>{seen.push({vp,fonts:opts.fonts});return PTsaved.pageFromPdfjs(i,vp,content,opts);}};
+ try{
+  f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:1,getPage:async()=>pdfPage()}};
+  await f.open();f.press(f.byText('Read body only'));await settle(80);await new Promise(r=>setTimeout(r,200));
+  const cached=JSON.parse(f.fileIO.files.get(f.folder+'1-ATT.struct.json'));
+  assert.equal(cached.fallback,false,'pdf.js was read, not the plain-text index');
+  assert.deepEqual(seen[0].vp.transform,[1,0,0,-1,0,792]);
+  assert.equal(seen[0].fonts.f1.bold,true,'the font that arrived a moment later is used');
+  assert.ok(f.synth.log.some(l=>l[0]==='speak'));
+ }finally{globalThis.StyleCustomPaperText=PTsaved;f.stop();}
+});
+
+test('the viewport matrix is pdf.js\'s own for every rotation, and the overlay boxes follow a rotated, zoomed page',()=>{
+ assert.deepEqual(ReaderAssist.viewportFor([0,0,612,792],0).transform,[1,0,0,-1,0,792]);
+ const r90=ReaderAssist.viewportFor([0,0,612,792],90);assert.deepEqual([r90.width,r90.height],[792,612]);assert.deepEqual(r90.transform,[0,1,1,0,0,0]);
+ const r180=ReaderAssist.viewportFor([0,0,612,792],180);assert.deepEqual(r180.transform,[-1,0,0,1,612,0]);
+ const size={width:612,height:792,transform:[1,0,0,-1,0,792]};
+ const flat=ReaderAssist.overlayBoxes([[72,100,300,12]],size,null)[0];
+ assert.ok(Math.abs(flat.left-72/612*100)<1e-9&&Math.abs(flat.top-100/792*100)<1e-9);
+ const live=ReaderAssist.viewportFor([0,0,612,792],90,{scale:2});
+ const turned=ReaderAssist.overlayBoxes([[72,100,300,12]],size,live)[0];
+ // rotated 90°: the line runs down the page; its box is tall and narrow
+ assert.ok(turned.height>turned.width,'a horizontal line becomes vertical on a page turned 90 degrees');
+ assert.ok(Math.abs(turned.top-72/612*100)<1e-6);
+});
+
+test('Zotero\'s own Read Aloud playing: ours offers to stop it instead of fighting it; an interruption becomes a pause with a reason',async()=>{
+ const f=fixture();await f.open();
+ const core=f.reader._internalReader;let stoppedIt=0;
+ core._state.readAloudState={active:true,paused:false};core.toggleReadAloudPopup=open=>{if(open===false){stoppedIt++;core._state.readAloudState={active:false,paused:false};}};
+ f.press(f.byText('Read body only'));await settle(20);
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').length,0,'nothing spoken over the other reader');
+ const clash=f.panel().querySelector('.sc-ra-clash');assert.equal(clash.hidden,false);
+ f.press(f.byText("Stop Zotero's Read Aloud and listen"));await settle(20);
+ assert.equal(stoppedIt,1);assert.ok(f.synth.log.some(l=>l[0]==='speak'));
+ f.synth.begin();await settle();
+ f.synth.cur.onerror({error:'interrupted'});await settle();          // the other speaker cancelled us
+ assert.equal(f.sessionOf().player.state().status,'paused');
+ assert.match(f.panel().querySelector('.sc-ra-status').textContent,/another read-aloud started/i);
+ f.stop();
+});
+
+test('only one of our players speaks at a time across readers',async()=>{
+ const f=fixture();await f.sync();
+ const other=secondReader(f);f.service.sync(f.win,[f.reader,other],'t1');await settle(10);
+ const [a,b]=f.service.sessions();
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);f.synth.begin();await settle();
+ assert.equal(a.player.state().status,'playing');
+ const otherToolbar=parseHTML('<html><body><span></span></body></html>').document;const span=otherToolbar.querySelector('span');
+ f.service.mountToolbar({reader:other,doc:otherToolbar,container:span});
+ span.querySelectorAll('button')[1].dispatchEvent(new otherToolbar.defaultView.Event('click'));await settle(20);
+ b.player&&b.player.state().status==='playing'||f.synth.begin();await settle();
+ assert.equal(a.player.state().status,'paused','starting the other reader paused this one');
+ f.stop();
+});
+
+test('a reader closed while the text is still loading starts nothing when the text arrives',async()=>{
+ const f=fixture();await f.sync();
+ let release;const read=f.fileIO.readUTF8;f.fileIO.readUTF8=p=>/struct/.test(p)?new Promise(r=>{release=()=>r(read(p));}):read(p);
+ f.press(f.container.querySelectorAll('button')[1]);await settle(10);
+ f.service.sync(f.win,[],'t1');await settle(5);          // the reader tab closes
+ release();await settle(30);
+ assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak'),[]);
+ f.stop();
+});
+
+test('closing the reader cancels a translation in flight; Stop during the first request sends nothing more',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});let cancelled=0;const pending=[];
+ f.http.deepl=req=>req.method==='POST'?new Promise(r=>{pending.push(r);req.options.cancellerReceiver(()=>{cancelled++;r({status:0,response:null});});}):null;
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.press(f.byText('Translate all'));await settle(15);
+ assert.equal(f.requests.filter(r=>r.method==='POST'&&/deepl/.test(r.url)).length,1);
+ f.service.sync(f.win,[],'t1');await settle(15);
+ assert.equal(cancelled,1,'the request was aborted with the reader');
+ f.stop();
+});
+
+test('the language is fixed per run, and the note carries the translations of the language it names',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});
+ f.http.deepl=req=>req.method==='POST'?{status:200,response:{translations:req.body.text.map(x=>({text:req.body.target_lang+':'+x}))}}:null;
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.press(f.byText('Translate all'));await settle(30);
+ f.allPrefs.translateTarget='JA';f.allSettings.translateTarget='JA';
+ const s=f.sessionOf();await settle();
+ f.press(f.byText('Save as note'));await settle(10);
+ assert.equal(f.notes.length,0,'nothing is translated into Japanese yet: no note with Korean under a (JA) title');
+ f.allPrefs.translateTarget='KO';
+ f.press(f.byText('Save as note'));await settle(10);
+ assert.match(f.notes[0].html,/\(KO\)<\/h1>/);assert.match(f.notes[0].html,/KO:DNA polymerases/);assert.doesNotMatch(f.notes[0].html,/JA:/);
+ void s;f.stop();
+});
+
+test('Stop in the chat cancels that question only; a summary running beside it finishes',async()=>{
+ const f=fixture();await f.open();
+ const finish={};
+ f.aiReplies.push(options=>new Promise(r=>{finish.summary=()=>r({status:200,response:{choices:[{message:{content:'## Summary\nDone.'}}]}});options.cancellerReceiver(()=>{finish.summaryCancelled=true;});}));
+ f.aiReplies.push(options=>new Promise(r=>{options.cancellerReceiver(()=>{finish.chatCancelled=true;r({status:0,response:null});});}));
+ f.press(f.byText('Make summary'));await settle(10);
+ f.panel().querySelector('.sc-ra-input').value='Anything?';f.press(f.byText('Send'));await settle(10);
+ f.press(f.byText('Stop'));await settle(10);
+ assert.equal(finish.chatCancelled,true);assert.notEqual(finish.summaryCancelled,true,'the summary was not touched');
+ finish.summary();await settle(20);
+ assert.match(f.panel().querySelector('.sc-ra-summary').textContent,/Done\./);
+ f.stop();
+});
+
+test('a replaced PDF starts summary, chat and translations over; the same file keeps them',async()=>{
+ const io=memoryIO();
+ const f=fixture({io});await f.open();f.aiReplies.push('## Summary\nOld file.');f.press(f.byText('Make summary'));await settle(20);
+ await new Promise(r=>setTimeout(r,900));f.stop();
+ const same=fixture({io});await same.open();await settle(10);assert.match(same.panel().textContent,/Old file\./);same.stop();
+ const stat=io.stat;io.stat=async p=>p==='/lib/ATT.pdf'?{size:2222,lastModified:9}:stat(p);
+ const g=fixture({io});await g.open();await settle(10);
+ assert.doesNotMatch(g.panel().textContent,/Old file\./,'a summary of the old file is not shown for the new one');
+ g.stop();
+});
+
+test('the selection popup offers "여기서부터 듣기", which starts at the selected sentence',async()=>{
+ const f=fixture();await f.sync();
+ let node=null;f.service.selectionPopup({reader:f.reader,doc:f.doc,params:{annotation:{position:{pageIndex:2,rects:[[80,792-128,200,792-116]]}}},append:n=>{node=n;}});
+ assert.ok(node);assert.equal(node.textContent,'Listen from here');assert.equal(node.getAttribute('data-opens'),'audio');
+ node.dispatchEvent(new f.win.Event('click'));await settle(30);
+ assert.equal(f.synth.log.filter(l=>l[0]==='speak').at(-1)[1],'Kinetics were measured at 72 C.');
+ f.stop();
+});
+
+test('the probe writes nothing: no structure file, no remembered tab, no translation prepared, no summary by itself',async()=>{
+ const f=fixture({structCache:false,settings:{aiSummaryOnOpen:true},runtimeState:{readerAssist:{tab:'translate'}}});
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:1,getPage:async()=>({view:[0,0,612,792],rotate:0,
+  async getTextContent(){return {items:[{str:'We study polymerases. They are useful.',transform:[10,0,0,10,72,680],width:200,height:10,fontName:'f2'}],styles:{}};},async getOperatorList(){return {};},commonObjs:{has:()=>true,get:()=>null}})}};
+ const writes=[];const w=f.fileIO.writeUTF8;f.fileIO.writeUTF8=async(p,text)=>{writes.push(p);return w(p,text);};
+ const probing=f.service.probe(f.reader);
+ for(let i=0;i<3;i++){f.service.sync(f.win,[f.reader],'t1');await settle(5);}
+ const out=await probing;
+ assert.equal(out.extraction.fallback,false);assert.ok(out.extraction.rects>0);
+ assert.deepEqual(writes.filter(p=>/struct/.test(p)),[],'no .struct written');
+ assert.equal(f.runtime.cache.readerAssist.tab,'translate','the remembered tab is unchanged');
+ assert.deepEqual(f.requests.filter(r=>r.body),[],'no summary started during the probe');
+ f.stop();
+});
+
+test('a 429 from DeepL says "in a moment", not a daily quota; the AI translator shows its token cost first',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});f.http.deepl=req=>req.method==='POST'?{status:429,response:{}}:null;
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ const s=f.sessionOf();s.tr.service.translateAll=async()=>({provider:'deepl',done:0,total:3,stopped:'rate',error:Object.assign(new Error('DeepL에 요청이 잠시 몰렸습니다. 잠시 후 다시 시도하세요.'),{code:'rate',status:429,own:true})});
+ f.press(f.byText('Translate all'));await settle(20);
+ assert.match(f.panel().querySelector('.sc-ra-tr [role="status"]').textContent,/in a moment/);
+ assert.doesNotMatch(f.panel().textContent,/daily|midnight/i);
+ f.stop();
+ const g=fixture();await g.open();g.press(g.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ assert.match(g.panel().textContent,/Tokens to and from the AI server: about [\d,]+/);
+ g.stop();
+});
+
+test('an unreadable text layer says so and reads, summarises and chats from Zotero\'s full-text index',async()=>{
+ const f=fixture({structCache:false});
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={pdfDocument:{numPages:1,getPage:async()=>({view:[0,0,612,792],rotate:0,async getTextContent(){return {items:[],styles:{}};},async getOperatorList(){return {};},commonObjs:{has:()=>true,get:()=>null}})}};
+ const PTsaved=globalThis.StyleCustomPaperText;globalThis.StyleCustomPaperText={...PTsaved,structure:a=>({...PTsaved.structure(a),sections:[],stats:{unreadable:true}})};
+ try{
+  await f.open();f.press(f.byText('Read body only'));await settle(60);
+  assert.match(f.panel().textContent,/text layer is broken/);
+  assert.ok(f.synth.log.some(l=>l[0]==='speak'&&/Plain text/.test(l[1])),'read from the full-text index');
+ }finally{globalThis.StyleCustomPaperText=PTsaved;f.stop();}
+});
+
+test('the cache keeps at most N papers, least recently used first, and drops papers whose item is gone',async()=>{
+ const f=fixture();await f.sync();
+ const io=f.fileIO;io.getChildren=async()=>[...io.files.keys()];
+ const times={};io.stat=async p=>({size:10,lastModified:times[p]||1});
+ const add=(name,t)=>{for(const k of ['struct','state']){const p=f.folder+name+'.'+k+'.json';io.files.set(p,'{}');times[p]=t;}};
+ add('1-AAAAAAAA',5);add('1-BBBBBBBB',9);add('1-GONEGONE',7);
+ f.Z.Items.getByLibraryAndKey=(lib,key)=>key==='GONEGONE'?false:{id:1};
+ await f.service.pruneCache({maxPapers:2});
+ const left=[...io.files.keys()].map(p=>p.replace(f.folder,''));
+ assert.ok(!left.some(p=>p.startsWith('1-GONEGONE')),'deleted item');
+ assert.ok(left.some(p=>p.startsWith('1-ATT')),'the open paper stays');
+ assert.ok(left.some(p=>p.startsWith('1-BBBBBBBB')));assert.ok(!left.some(p=>p.startsWith('1-AAAAAAAA')),'the least recently used goes');
+ f.stop();
+});
+
+test('after the reader reloads its viewer document, the listeners follow the new one',async()=>{
+ const f=fixture();await f.open();
+ const fresh=parseHTML('<html><body><div class="page" data-page-number="3"></div></body></html>').document;
+ f.reader._internalReader._primaryView._iframeWindow.document=fresh;
+ await f.sync();
+ const page=fresh.querySelector('.page');page.getBoundingClientRect=()=>({left:0,top:0,width:612,height:792});
+ const e=new fresh.defaultView.Event('dblclick',{bubbles:true});Object.assign(e,{clientX:100,clientY:122,altKey:true});page.dispatchEvent(e);await settle(30);
+ assert.ok(f.synth.log.some(l=>l[0]==='speak'));
+ f.stop();
+});
+
+test('the panel takes its own column: the PDF view ends where it begins, folds to a rail, resizes within 280 px and half the reader, and closing restores the view',async()=>{
+ const f=fixture();
+ Object.defineProperty(f.doc.documentElement,'clientWidth',{value:1200,configurable:true});
+ const split=f.doc.querySelector('#split-view');split.style.setProperty('inset-inline-end','0px');
+ let resized=0;const view=f.reader._internalReader._primaryView._iframeWindow;view.Event=f.win.Event;view.dispatchEvent=e=>{if(e.type==='resize')resized++;};
+ const pv={currentScaleValue:'page-width',sets:0};view.PDFViewerApplication={pdfViewer:new Proxy(pv,{set(o,k,v){if(k==='currentScaleValue')o.sets++;o[k]=v;return true;}})};
+ await f.open();await new Promise(r=>setTimeout(r,10));
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'372px');
+ assert.ok(resized>=1&&pv.sets>=1,'pdf.js is told to fit the page width again');
+ f.press(f.byText('Fold the panel'));await settle();
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'52px');assert.equal(f.panel().getAttribute('data-collapsed'),'true');
+ assert.equal(f.runtime.cache.readerAssist.collapsed,true,'remembered');
+ f.press(f.byText('Expand the panel'));await settle();
+ const handle=f.panel().querySelector('.sc-ra-resizer');
+ const key=k=>{const e=new f.win.Event('keydown');e.key=k;handle.dispatchEvent(e);};
+ for(let i=0;i<40;i++)key('ArrowLeft');
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'600px','at most half the reader');
+ for(let i=0;i<60;i++)key('ArrowRight');
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'280px','at least 280 px');
+ assert.equal(f.runtime.cache.readerAssist.width,280);
+ f.press(f.byText('Close panel'));await settle();
+ assert.equal(split.style.getPropertyValue('inset-inline-end'),'0px','the original value comes back');
+ f.stop();
+});
+
+test('the remembered tab is drawn as soon as the panel opens, even if the toolbar button died', async()=>{
+ const f=fixture({runtimeState:{readerAssist:{tab:'listen'}}});await f.sync();
+ f.sessionOf().toolbarState={panel:{setAttribute(){throw new Error("can't access dead object");}}};
+ f.press(f.container.querySelector('button[data-safe="view"]'));await settle();
+ assert.equal(f.panel().querySelector('[data-tab="listen"]').getAttribute('aria-selected'),'true');
+ assert.equal(f.panel().querySelector('[data-pane="listen"]').hidden,false);
+ f.stop();
+});
+
+test('a re-render (zoom, rotation) that empties the page gets the highlight back, sized from the live viewport',async()=>{
+ const f=fixture();
+ const handlers={};const bus={on:(n,fn)=>{(handlers[n]||=[]).push(fn);},off:(n,fn)=>{handlers[n]=(handlers[n]||[]).filter(x=>x!==fn);}};
+ let viewport={width:1224,height:1584,transform:[2,0,0,-2,0,1584]};
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={eventBus:bus,pdfViewer:{getPageView:()=>({viewport})}};
+ await f.sync();
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);f.synth.begin();await settle();
+ const page=f.viewDoc.querySelector('.page[data-page-number="3"]');
+ assert.equal(page.querySelectorAll('[data-sc-ra-hl]').length,1);
+ for(const m of [...page.querySelectorAll('[data-sc-ra-hl]')])m.remove();          // PDFPageView.reset
+ viewport={width:1584,height:1224,transform:[0,2,2,0,0,0]};                          // turned 90 degrees
+ for(const fn of handlers.pagerendered||[])fn({pageNumber:3});
+ const mark=page.querySelector('[data-sc-ra-hl]');assert.ok(mark,'the mark is back');
+ const h=Number(/height:([\d.]+)%/.exec(mark.getAttribute('style'))[1]),w=Number(/width:([\d.]+)%/.exec(mark.getAttribute('style'))[1]);
+ assert.ok(h>w,'a line on a turned page is tall and narrow');
+ assert.equal(f.navs.length,0);
+ f.stop();assert.equal((handlers.pagerendered||[]).length,0,'the listener goes with the panel');
 });

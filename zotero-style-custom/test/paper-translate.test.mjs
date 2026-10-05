@@ -187,13 +187,13 @@ test('"사용량 새로고침" reads DeepL\'s own count and limit',async()=>{
  const none=harness({prefs:{}});await assert.rejects(none.service.refreshUsage(),/키/);
 });
 
-test('providers: DeepL when there is a key, then the AI endpoint, then Translate for Zotero; the next one is offered after a stop',()=>{
+test('providers: DeepL when there is a key, then Translate for Zotero, then the AI endpoint; the next one is offered after a stop',()=>{
  const ai={available:()=>true,translate:async t=>t},pdf={translate:async t=>t};
  const all=harness({ai,pdf}).service;
- assert.deepEqual(all.providers(),['deepl','ai','pdftranslate']);
- assert.equal(all.pickProvider(),'deepl');assert.equal(all.nextProvider('deepl'),'ai');assert.equal(all.nextProvider('ai'),'pdftranslate');assert.equal(all.nextProvider('pdftranslate'),null);
+ assert.deepEqual(all.providers(),['deepl','pdftranslate','ai']);
+ assert.equal(all.pickProvider(),'deepl');assert.equal(all.nextProvider('deepl'),'pdftranslate');assert.equal(all.nextProvider('pdftranslate'),'ai');assert.equal(all.nextProvider('ai'),null);
  const noKey=harness({prefs:{},ai,pdf}).service;
- assert.deepEqual(noKey.providers(),['ai','pdftranslate']);assert.equal(noKey.pickProvider(),'ai');assert.equal(noKey.pickProvider('pdftranslate'),'pdftranslate');
+ assert.deepEqual(noKey.providers(),['pdftranslate','ai']);assert.equal(noKey.pickProvider(),'pdftranslate');assert.equal(noKey.pickProvider('ai'),'ai');
  assert.equal(harness({prefs:{}}).service.pickProvider(),null);
 });
 
@@ -236,4 +236,88 @@ test('DeepL error codes map to plain Korean messages',()=>{
  assert.equal(T.deeplError(456).code,'quota');assert.match(T.deeplError(456).message,/무료 한도/);
  assert.equal(T.deeplError(429).retry,true);assert.equal(T.deeplError(403).code,'key');assert.equal(T.deeplError(500).retry,true);
  assert.equal(T.deeplError(400,{message:'bad'}).code,'bad');
+});
+
+/* ---- cancelling, frozen settings, revisions, usage ------------------------- */
+const tick=()=>new Promise(r=>setImmediate(r));
+test('Stop during the first Translate for Zotero request ends the run there: no further paragraph is sent',async()=>{
+ let release;const sent=[];
+ const pdf={translate:(t)=>{sent.push(t);return new Promise(r=>{release=()=>r({result:'PDF:'+t});});}};
+ const h=harness({prefs:{translateTarget:'KO'},pdf});
+ const rows=Array.from({length:50},(_,i)=>para('p'+i,'Text '+i+'.'));
+ const run=h.service.translateAll(rows);await tick();
+ h.service.cancel();release();
+ const summary=await run;
+ assert.equal(summary.stopped,'cancelled');assert.equal(sent.length,1,'one request, not fifty');assert.equal(h.service.busy,false);
+});
+
+test('Stop at DeepL\'s first 429 ends the back-off sleep and makes no second POST',async()=>{
+ const sleeps=[];let wake;
+ const h=harness({replies:()=>({status:429,json:{}})});
+ const service=T.create({http:async(m,u,o)=>{h.calls.push({method:m,url:u,options:o});return {status:429,json:{}};},sleep:ms=>{sleeps.push(ms);return new Promise(r=>{wake=r;});},now:()=>new Date('2026-10-15'),pref:k=>({deeplApiKey:'abc:fx',translateTarget:'KO'})[k],uiKorean:true});
+ const run=service.translateAll([para('a','Hello.')]);await tick();await tick();
+ assert.equal(h.calls.length,1);assert.equal(sleeps.length,1,'waiting before the retry');
+ service.cancel();
+ const summary=await run;
+ assert.equal(summary.stopped,'cancelled');assert.equal(h.calls.length,1,'no retry after Stop');
+ wake&&wake();
+});
+
+test('the cancel token reaches the request and the AI sub-calls',async()=>{
+ const seen=[];let gotSignal=null;
+ const service=T.create({http:async(m,u,o)=>{seen.push(o.signal);return new Promise(()=>{});},pref:k=>({deeplApiKey:'abc:fx'})[k],uiKorean:true});
+ const run=service.translateAll([para('a','Hello.')]);await tick();
+ assert.ok(seen[0]&&typeof seen[0].onCancel==='function','the HTTP call is handed the token');
+ let cancelled=0;seen[0].onCancel(()=>cancelled++);service.cancel();assert.equal(cancelled,1,'which the transport turns into an abort');
+ void run;
+ const ai={available:()=>true,translate:async(texts,o)=>{gotSignal=o.signal;return new Promise(()=>{});}};
+ const g=harness({prefs:{},ai});g.service.translateAll([para('a','Hello.')]);await tick();
+ assert.ok(gotSignal&&typeof gotSignal.onCancel==='function');g.service.cancel();assert.equal(gotSignal.cancelled,true);
+});
+
+test('the target is fixed when a run starts: switching the language mid-run files nothing under the new one',async()=>{
+ let release;const h=harness({replies:call=>new Promise(r=>{release=()=>r({status:200,json:{translations:call.body.text.map(t=>({text:call.body.target_lang+':'+t}))}});})});
+ const run=h.service.translateAll([para('a','Hello.')]);await tick();
+ h.prefs.translateTarget='JA';release();
+ const summary=await run;
+ assert.equal(summary.target,'KO');
+ assert.equal(h.service.cached('deepl','Hello.','KO'),'KO:Hello.');
+ assert.equal(h.service.cached('deepl','Hello.','JA'),undefined,'the Japanese cache is untouched');
+ assert.equal(h.service.cached('deepl','Hello.'),undefined,'the current target (JA) has nothing yet');
+});
+
+test('a change of formality, or of the AI model or endpoint, is a new translation; the key never carries a secret',async()=>{
+ const h=harness({prefs:{deeplApiKey:'abc:fx',translateTarget:'DE',translateFormality:'default'}});
+ await h.service.translateAll([para('a','Hello.')]);
+ h.prefs.translateFormality='prefer_more';await h.service.translateAll([para('a','Hello.')]);
+ assert.equal(h.calls.length,2,'formal German is asked for again');
+ assert.equal(h.calls[1].body.formality,'prefer_more');
+ for(const key of h.store.keys())assert.doesNotMatch(key,/abc:fx/);
+ const asked=[];const ai={available:()=>true,translate:async t=>{asked.push(t.length);return t.map(x=>'AI:'+x);}};
+ const g=harness({prefs:{translateTarget:'KO',aiModel:'m1',aiEndpoint:'http://localhost:1/v1',aiKey:'sk-secret'},ai});
+ await g.service.translateAll([para('a','Hello.')]);await g.service.translateAll([para('a','Hello.')]);
+ assert.equal(asked.length,1,'same model: cached');
+ g.prefs.aiModel='m2';await g.service.translateAll([para('a','Hello.')]);
+ assert.equal(asked.length,2,'another model: asked again');
+ for(const key of g.store.keys())assert.doesNotMatch(key,/sk-secret|localhost/);
+ assert.notEqual(T.settingsRevision({provider:'deepl',target:'KO'}),T.settingsRevision({provider:'ai',target:'KO',model:'m'}));
+});
+
+test('a paid key\'s limit is not assumed to be 500,000: unknown until DeepL\'s own usage says',async()=>{
+ const h=harness({prefs:{deeplApiKey:'pro-key',translateTarget:'KO'},replies:call=>call.method==='GET'?{status:200,json:{character_count:10,character_limit:2000000}}:null});
+ assert.equal(h.service.usage().limit,null);assert.equal(h.service.estimate([para('a','x'.repeat(900000))]).fits,true,'unknown is not "does not fit"');
+ const u=await h.service.refreshUsage();
+ assert.equal(u.limit,2000000);assert.equal(u.remaining,2000000-10);
+});
+
+test('the AI estimate gives the tokens it will be billed for',()=>{
+ const ai={available:()=>true,translate:async t=>t};
+ const h=harness({prefs:{},ai});
+ const e=h.service.estimate([para('a','x'.repeat(4000))],'ai');
+ assert.equal(e.chars,4000);assert.equal(e.tokens,1000+1500);
+});
+
+test('DeepL 429 is "a moment", not a daily quota',()=>{
+ const e=T.deeplError(429);
+ assert.equal(e.code,'rate');assert.match(e.message,/잠시 후 다시/);assert.doesNotMatch(e.message,/하루|자정|일일/);
 });

@@ -20,13 +20,59 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(root){
  'use strict';
  const HTML='http://www.w3.org/1999/xhtml',SVG='http://www.w3.org/2000/svg';
- const WIDTH=372,TOP=41,MAX_CHAT=20,CHAT_LIMIT=4000;
+ const WIDTH=372,MIN_WIDTH=280,RAIL_WIDTH=52,TOP=41,MAX_CHAT=20,CHAT_LIMIT=4000;
+ // The cached structure's own version: v2 is the extraction that reads the viewport itself (v1 often fell back to plain text).
+ const STRUCT_VERSION=2,CACHE_PAPERS=200,CACHE_BYTES=100*1024*1024;
  const need=(name,file)=>root[name]||(typeof require==='function'?require(file):null);
  const clean=text=>String(text==null?'':text).replace(/\s+/g,' ').trim();
  // The extraction module (and the plain-text fallback) number pages from 0 and give rectangles as [x, y, w, h] from the top left of the page at scale 1.
  const PAGES_ARE_INDEXES=true;
  const PAGE_BASE=PAGES_ARE_INDEXES?1:0;
  const pageNumberOf=unit=>{const n=Number(unit&&unit.page);return Number.isFinite(n)?n+PAGE_BASE:null;};
+
+ /* ---- talking to pdf.js in the reader's content compartment --------------
+    pdf.js runs as content code; an object made here (chrome) cannot be read by it,
+    so pdf.js destructuring {scale} from a chrome literal threw and every paper fell
+    back to plain text. Nothing made here is handed to pdf.js any more except
+    through toContent() (Cu.cloneInto, as Zotero's own reader code does), and the
+    viewport is computed here from page.view and page.rotate instead of asking. */
+ function toContent(value,win){
+  const C=root.Components||globalThis.Components;
+  try{if(C&&C.utils&&typeof C.utils.cloneInto==='function'&&win)return C.utils.cloneInto(value,win,{cloneFunctions:true});}catch(_){}
+  return value;
+ }
+ function contentFunction(fn,win){
+  const C=root.Components||globalThis.Components;
+  try{if(C&&C.utils&&typeof C.utils.exportFunction==='function'&&win)return C.utils.exportFunction(fn,win);}catch(_){}
+  return fn;
+ }
+ /* pdf.js PageViewport at a scale, as numbers: the same matrix pdf.js builds (see PageViewport in pdf.mjs). */
+ function viewportFor(view,rotate=0,{scale=1,userUnit=1}={}){
+  const box=Array.from(view||[0,0,612,792]).map(Number),k=scale*(Number(userUnit)||1);
+  const cx=(box[2]+box[0])/2,cy=(box[3]+box[1])/2;
+  let r=((Number(rotate)||0)%360+360)%360;
+  const [a,b,c,d]=r===90?[0,1,1,0]:r===180?[-1,0,0,1]:r===270?[0,-1,-1,0]:[1,0,0,-1];
+  let ox,oy,width,height;
+  if(a===0){ox=Math.abs(cy-box[1])*k;oy=Math.abs(cx-box[0])*k;width=(box[3]-box[1])*k;height=(box[2]-box[0])*k;}
+  else{ox=Math.abs(cx-box[0])*k;oy=Math.abs(cy-box[1])*k;width=(box[2]-box[0])*k;height=(box[3]-box[1])*k;}
+  return {width,height,rotation:r,scale,transform:[a*k,b*k,c*k,d*k,ox-a*k*cx-c*k*cy,oy-b*k*cx-d*k*cy]};
+ }
+ /* Rectangles from the extraction ([x, y, w, h], top left, scale 1, the page's own rotation) as boxes in percent
+    of a live viewport (any zoom, any rotation the reader applies): back to PDF user space, then forward. */
+ function overlayBoxes(rects,size,viewport){
+  if(!size||!Array.isArray(size.transform)||!Array.isArray(rects))return [];
+  const [a,b,c,d,e,f]=size.transform,det=a*d-b*c;if(!det)return [];
+  const back=(vx,vy)=>[(d*(vx-e)-c*(vy-f))/det,(-b*(vx-e)+a*(vy-f))/det];
+  const v=viewport&&Array.isArray(viewport.transform)&&viewport.width>0&&viewport.height>0?viewport:{transform:size.transform,width:size.width,height:size.height};
+  const [A,B,C,D,E,F]=v.transform;
+  const fwd=([x,y])=>[A*x+C*y+E,B*x+D*y+F];
+  return rects.filter(r=>Array.isArray(r)&&r.length>=4).map(([x,y,w,h])=>{
+   const pts=[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map(([px,py])=>fwd(back(px,py)));
+   const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+   const L=Math.min(...xs),T=Math.min(...ys),R=Math.max(...xs),Bm=Math.max(...ys);
+   return {left:L/v.width*100,top:T/v.height*100,width:(R-L)/v.width*100,height:(Bm-T)/v.height*100};
+  });
+ }
 
  /* ---- small DOM helpers ------------------------------------------------- */
  const ICONS={
@@ -36,7 +82,8 @@
   refresh:['M20 12a8 8 0 1 1-2.3-5.6','M20 4v5h-5'],send:['M4 12l16-8-6 16-3-7z'],stop:['M7 7h10v10H7z'],trash:['M5 7h14','M10 7V5h4v2','M7 7l1 12h8l1-12'],
   headphones:['M4 14v-2a8 8 0 0 1 16 0v2','M4 14h3v5H5a1 1 0 0 1-1-1z','M20 14h-3v5h2a1 1 0 0 0 1-1z'],
   translate:['M4 6h9','M8.5 4v2','M6 6c0 4 3 7 6 8','M12 6c-1 4-4 7-7 8','M13 20l4-9 4 9','M14.5 17h5'],
-  message:['M5 5h14v10H10l-4 4v-4H5z'],list:['M5 7h14','M5 12h14','M5 17h9'],caret:['M7 10l5 5 5-5'],panel:['M4 5h16v14H4z','M15 5v14']
+  message:['M5 5h14v10H10l-4 4v-4H5z'],list:['M5 7h14','M5 12h14','M5 17h9'],caret:['M7 10l5 5 5-5'],panel:['M4 5h16v14H4z','M15 5v14'],
+  collapse:['M13 6l6 6-6 6','M6 6l6 6-6 6'],expand:['M11 6l-6 6 6 6','M18 6l-6 6 6 6']
  };
  function icon(doc,name,size=16){
   const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -89,9 +136,10 @@
   const t=value=>typeof runtime.t==='function'?runtime.t(value):value;
   const T=(key,...values)=>t(key).replace(/\{(\d+)\}/g,(m,i)=>values[Number(i)]);
   const log=error=>{try{Z.logError?.(error);}catch(_){}};
-  const describe=error=>{const fail=root.CustomStyleFailures;return t(fail?fail.describe(error):String(error&&error.message||error));};
+  // A message this plugin wrote for its reader is shown as written; only transport errors go through the generic wording (whose 429 means a daily quota).
+  const describe=error=>{if(error&&error.own)return t(String(error.message));const fail=root.CustomStyleFailures;return t(fail?fail.describe(error):String(error&&error.message||error));};
   const paperText=()=>root.StyleCustomPaperText||RA.fallbackPaperText;
-  const sessions=new Map();let stopped=false,cssPromise=null,sequence=0;
+  const sessions=new Map();let stopped=false,cssPromise=null,sequence=0,probing=0;
   const setting=(key,fallback)=>{try{const v=runtime.getSetting(key);return v===undefined||v===null?fallback:v;}catch(_){return fallback;}};
   const language=()=>setting('aiLanguage','Korean');
   const owner=(runtime.id||'style-custom')+'/reader-assist-'+Math.random().toString(36).slice(2);
@@ -106,7 +154,9 @@
     try{
      const file=safeName(name)&&paths().join(folder(),name+'.json');if(!file||!await io().exists(file))return null;
      if((await io().stat(file)).size>16*1024*1024)return null;
-     return JSON.parse(await io().readUTF8(file));
+     const value=JSON.parse(await io().readUTF8(file));
+     try{if(io().setModificationTime)await io().setModificationTime(file);}catch(_){}      // a read is a use: the cache drops the least recently used papers
+     return value;
     }catch(error){log(error);return null;}
    },
    async write(name,value){
@@ -150,44 +200,73 @@
 
   /* ---- the paper's text, once per attachment ------------------------------ */
   const sleepIn=(win,ms)=>new Promise(resolve=>(win&&win.setTimeout?win:globalThis).setTimeout(resolve,ms));
-  const plainContent=content=>({items:(content.items||[]).map(i=>({str:String(i.str||''),dir:i.dir,transform:Array.from(i.transform||[]),width:Number(i.width)||0,height:Number(i.height)||0,fontName:i.fontName,hasEOL:!!i.hasEOL})),styles:JSON.parse(JSON.stringify(content.styles||{}))});
+  const plainContent=content=>({items:Array.from(content.items||[]).map(i=>({str:String(i.str||''),dir:i.dir,transform:Array.from(i.transform||[]),width:Number(i.width)||0,height:Number(i.height)||0,fontName:i.fontName,hasEOL:!!i.hasEOL})),styles:JSON.parse(JSON.stringify(content.styles||{}))});
+  /* A font reaches commonObjs only once pdf.js has bound it, a moment after the operator list: wait a little, then go without its name. */
+  async function fontsOf(page,content,win,{waitMs=400}={}){
+   const fonts={},ids=Object.keys(content.styles||{});
+   const has=id=>{try{return typeof page.commonObjs.has==='function'?page.commonObjs.has(id):true;}catch(_){return false;}};
+   for(let waited=0;ids.some(id=>!has(id))&&waited<waitMs;waited+=25)await sleepIn(win,25);
+   for(const id of ids){if(!has(id))continue;try{const font=page.commonObjs.get(id);if(font)fonts[id]={name:String(font.name||''),bold:!!font.bold||!!font.black,italic:!!font.italic};}catch(_){}}
+   return fonts;
+  }
+  async function pdfDocumentOf(session,{tries=60}={}){
+   const win=session.doc.defaultView;
+   for(let i=0;i<tries;i++){if(session.destroyed)return null;const app=viewerWindow(session.reader)?.PDFViewerApplication;if(app&&app.pdfDocument)return app.pdfDocument;await sleepIn(win,250);}
+   return null;
+  }
+  /* One page through pdf.js into the extraction module's page shape, and its size. Nothing chrome-made is passed to pdf.js. */
+  async function readPage(session,pdf,number,{fonts=true}={}){
+   const win=session.doc.defaultView;
+   const page=await pdf.getPage(number);
+   const viewport=viewportFor(Array.from(page.view||[0,0,612,792]),Number(page.rotate)||0,{userUnit:Number(page.userUnit)||1});
+   const content=await page.getTextContent();
+   // Bold and italic come from the fonts pdf.js has loaded for the page; without them the extractor infers headings from glyph widths.
+   let fontMap={};
+   if(fonts)try{await page.getOperatorList();fontMap=await fontsOf(page,content,win);}catch(_){}
+   return {page:paperText().pageFromPdfjs(number-1,viewport,plainContent(content),{fonts:fontMap}),size:{width:viewport.width,height:viewport.height,transform:viewport.transform,rotation:viewport.rotation}};
+  }
   async function extractWithPdfjs(session,progress){
-   const win=session.doc.defaultView,reader=session.reader;
-   const wait=async()=>{for(let i=0;i<60;i++){const app=viewerWindow(reader)?.PDFViewerApplication;if(app&&app.pdfDocument)return app.pdfDocument;await sleepIn(win,250);}return null;};
-   const pdf=await wait();if(!pdf)return null;
+   const win=session.doc.defaultView;
+   const pdf=await pdfDocumentOf(session);if(!pdf)return null;
    const pages=[],sizes=[];
    for(let i=1;i<=pdf.numPages;i++){
     if(session.destroyed)return null;
-    const page=await pdf.getPage(i),viewport=page.getViewport({scale:1}),content=await page.getTextContent();
-    // Bold and italic come from the fonts pdf.js has loaded for the page; without them the extractor infers headings from glyph widths.
-    const fonts={};
-    if(pdf.numPages<=60)try{await page.getOperatorList();for(const id of Object.keys(content.styles||{})){try{const font=page.commonObjs.get(id);fonts[id]={name:font.name,bold:!!font.bold||!!font.black,italic:!!font.italic};}catch(_){}}}catch(_){}
-    const transform=Array.from(viewport.transform||[1,0,0,-1,0,viewport.height]);
-    const plainViewport={width:viewport.width,height:viewport.height,rotation:viewport.rotation||0,scale:1,transform};
-    pages.push(paperText().pageFromPdfjs(i-1,plainViewport,plainContent(content),{fonts}));
-    sizes.push({width:viewport.width,height:viewport.height,transform,rotation:viewport.rotation||0});
+    const got=await readPage(session,pdf,i,{fonts:pdf.numPages<=60});
+    pages.push(got.page);sizes.push(got.size);
     progress&&progress(i,pdf.numPages);
     if(i%3===0)await sleepIn(win,0);
    }
    return {pages,sizes};
   }
+  /* The fingerprint of the file the derived data was made from: size and time, and the extractor that read it. */
+  const extractorVersion=()=>String(paperText().VERSION||'1')+'.'+STRUCT_VERSION;
+  function fileSignature(session){
+   if(!session.sigPromise)session.sigPromise=(async()=>{
+    try{const attachment=attachmentOf(session.reader);const path=await attachment.getFilePathAsync();if(path){const st=await io().stat(path);return st.size+':'+(st.lastModified||st.lastModifiedMs||0);}}catch(_){}
+    return '';
+   })();
+   return session.sigPromise;
+  }
+  const fingerprintOf=sig=>sig?sig+'|'+extractorVersion():'';
   async function loadStructure(session){
    const attachment=attachmentOf(session.reader),item=itemOf(session.reader);
    const meta={title:fieldOf(item,'title'),abstract:fieldOf(item,'abstractNote')};
-   let sig='';
-   try{const path=await attachment.getFilePathAsync();if(path){const s=await io().stat(path);sig=s.size+':'+(s.lastModified||s.lastModifiedMs||0);}}catch(_){}
+   const sig=await fileSignature(session);
    const name=session.name+'.struct';
    const saved=await store.read(name);
    // A structure made from plain text is not kept once the real extractor is there to do better.
-   if(saved&&sig&&saved.sig===sig&&saved.structured&&saved.v===1&&(!saved.fallback||!root.StyleCustomPaperText)){session.pageSizes=saved.sizes||[];return {structured:saved.structured,fallback:!!saved.fallback,fromCache:true};}
-   let structured=null,fallback=false,sizes=[];
+   if(saved&&sig&&saved.sig===sig&&saved.structured&&saved.v===STRUCT_VERSION&&saved.extractor===extractorVersion()&&(!saved.fallback||saved.unreadable||!root.StyleCustomPaperText)){session.pageSizes=saved.sizes||[];session.unreadable=!!saved.unreadable;return {structured:saved.structured,fallback:!!saved.fallback,unreadable:!!saved.unreadable,fromCache:true};}
+   let structured=null,fallback=false,sizes=[],unreadable=false;
    const setProgress=(i,n)=>{session.extracting={i,n};session.onProgress&&session.onProgress();};
    try{
     if(root.StyleCustomPaperText){
      const got=await extractWithPdfjs(session,setProgress);
      if(got&&got.pages.length){structured=root.StyleCustomPaperText.structure({pages:got.pages,meta});sizes=got.sizes;}
+     // A broken text layer (a font without a usable map): the extractor says so and leaves the sections empty.
+     if(structured&&structured.stats&&structured.stats.unreadable){unreadable=true;structured=null;}
     }
    }catch(error){log(error);}
+   if(session.destroyed)throw new Error('The reader was closed');
    session.extracting=null;
    if(!structured){
     // Zotero's own text index: no positions, so no highlight on the page, but the rest works.
@@ -197,17 +276,29 @@
     structured=RA.fallbackPaperText.structure({text,meta});fallback=true;
     if(!structured.title)structured.title=meta.title;if(!structured.abstract)structured.abstract=meta.abstract;
    }
-   session.pageSizes=sizes;
-   if(sig)store.write(name,{v:1,sig,structured,sizes,fallback,at:Date.now()});
-   return {structured,fallback,fromCache:false};
+   session.pageSizes=unreadable?[]:sizes;session.unreadable=unreadable;
+   if(sig&&!session.probing)store.write(name,{v:STRUCT_VERSION,extractor:extractorVersion(),sig,structured,sizes:session.pageSizes,fallback,unreadable,at:Date.now()});
+   return {structured,fallback,unreadable,fromCache:false};
   }
-  const structure=session=>session.structurePromise||(session.structurePromise=loadStructure(session).then(result=>{session.structured=result.structured;session.fallback=result.fallback;session.chunks=null;return result;},error=>{session.structureError=error;session.structurePromise=null;throw error;}));
+  const structure=session=>session.structurePromise||(session.structurePromise=loadStructure(session).then(result=>{session.structured=result.structured;session.fallback=result.fallback;session.unreadable=!!result.unreadable;session.chunks=null;if(result.unreadable)noteUnreadable(session);return result;},error=>{session.structureError=error;session.structurePromise=null;throw error;}));
+  function noteUnreadable(session){
+   if(session.destroyed||!session.ui)return;
+   say(session,t('이 PDF는 글자층이 깨져 본문을 구분할 수 없습니다'),true);
+   if(session.ui.unreadable)session.ui.unreadable.hidden=false;
+  }
   const tools=session=>session.fallback?RA.fallbackPaperText:paperText();
 
   /* ---- per-paper saved state -------------------------------------------- */
+  /* Summary, chat and translations belong to the file they were made from: a replaced PDF starts them over (the listening position stays; it finds its sentence by text). */
   async function loadData(session){
-   const saved=await store.read(session.name+'.state');
-   if(saved&&saved.v===1)Object.assign(session.data,saved);
+   const [saved,sig]=await Promise.all([store.read(session.name+'.state'),fileSignature(session)]);
+   const fp=fingerprintOf(sig);
+   if(saved&&saved.v===1){
+    const stale=fp&&saved.fp&&saved.fp!==fp;
+    Object.assign(session.data,saved);
+    if(stale){session.data.summary={};session.data.chat=[];session.data.tr={};session.data.autoSummary=false;}
+   }
+   if(fp)session.data.fp=fp;
    if(!session.data.summary||typeof session.data.summary!=='object')session.data.summary={};
    if(!Array.isArray(session.data.chat))session.data.chat=[];
    if(!session.data.tr||typeof session.data.tr!=='object')session.data.tr={};
@@ -216,6 +307,7 @@
   function saveSoon(session){
    if(session.saveTimer||session.destroyed)return;
    const win=session.doc.defaultView;
+   if(session.probing)return;
    session.saveTimer=win.setTimeout(()=>{session.saveTimer=null;store.write(session.name+'.state',session.data);},800);
   }
   async function saveNow(session){
@@ -273,41 +365,68 @@
    session.menus.add(handle);return handle;
   }
 
+  const TABS=[['ask','AI','message','요약과 논문에 대한 대화'],['translate','번역','translate','문단별 번역'],['listen','문장','list','읽을 문장 목록']];
+  const validTab=id=>TABS.some(x=>x[0]===id)?id:'ask';
   function buildPanel(session){
    const doc=session.doc,ui=session.ui={};
-   const rootEl=el(doc,'aside',{'class':'sc-ra','data-sc-ra':'1','aria-label':t('논문 도우미'),role:'complementary',hidden:true});
+   const rootEl=el(doc,'aside',{'class':'sc-ra','data-sc-ra':'1','aria-label':t('논문 도우미'),role:'complementary',hidden:true,'data-collapsed':'false'});
    ui.root=rootEl;
-   const head=el(doc,'header',{'class':'sc-ra-head'},rootEl);
+   // The left edge is a drag handle for the width (and arrow keys when it has focus).
+   ui.resizer=el(doc,'div',{'class':'sc-ra-resizer',role:'separator','aria-orientation':'vertical','aria-label':t('패널 너비 조절'),title:t('끌어서 패널 너비 조절'),tabindex:'0'},rootEl);
+   wireResizer(session);
+   // The slim rail when collapsed: the player and the two tabs stay one click away while the paper has the room.
+   ui.rail=el(doc,'nav',{'class':'sc-ra-rail','aria-label':t('논문 도우미 접힘')},rootEl);
+   button(session,ui.rail,{title:'패널 펼치기',iconName:'expand',cls:'sc-ra-icon',mark:'view',onClick:()=>setCollapsed(session,false)});
+   ui.railPlay=button(session,ui.rail,{title:'본문만 읽기',iconName:'play',cls:'sc-ra-icon sc-ra-rail-play',mark:'audio',onClick:()=>togglePlay(session)});
+   button(session,ui.rail,{title:'AI 요약·대화',iconName:'message',cls:'sc-ra-icon',mark:'view',onClick:()=>{setCollapsed(session,false);showTab(session,'ask');}});
+   button(session,ui.rail,{title:'번역',iconName:'translate',cls:'sc-ra-icon',mark:'view',onClick:()=>{setCollapsed(session,false);showTab(session,'translate');}});
+   const main=ui.main=el(doc,'div',{'class':'sc-ra-main'},rootEl);
+   const head=el(doc,'header',{'class':'sc-ra-head'},main);
    el(doc,'strong',{'class':'sc-ra-title',text:t('논문 도우미')},head);
    ui.status=el(doc,'span',{'class':'sc-ra-status',role:'status','aria-live':'polite'},head);
+   button(session,head,{title:'패널 접기',iconName:'collapse',cls:'sc-ra-icon',mark:'view',onClick:()=>setCollapsed(session,true)});
    button(session,head,{title:'패널 닫기',iconName:'close',cls:'sc-ra-icon',mark:'view',onClick:()=>setOpen(session,false)});
-   buildPlayer(session,rootEl);
-   const tabs=el(doc,'nav',{'class':'sc-ra-tabs',role:'tablist','aria-label':t('도우미 메뉴')},rootEl);ui.tabs={};
-   for(const[id,label,ic]of [['ask','요약·대화','message'],['translate','번역','translate'],['listen','듣기 목록','list']]){
-    const b=el(doc,'button',{type:'button',role:'tab','class':'sc-ra-tab','data-safe':'view','data-tab':id,'aria-selected':'false'},tabs);
+   ui.unreadable=el(doc,'p',{'class':'sc-ra-banner',hidden:true,text:t('이 PDF는 글자층이 깨져 본문을 구분할 수 없습니다')+' '+t('Zotero 전문 색인의 글자로 읽고 대화합니다.')},main);
+   buildClash(session,main);
+   buildPlayer(session,main);
+   const tabs=el(doc,'nav',{'class':'sc-ra-tabs',role:'tablist','aria-label':t('도우미 메뉴')},main);ui.tabs={};
+   for(const[id,label,ic,title]of TABS){
+    const b=el(doc,'button',{type:'button',role:'tab','class':'sc-ra-tab','data-safe':'view','data-tab':id,'aria-selected':'false',title:t(title)},tabs);
     b.appendChild(icon(doc,ic,14));el(doc,'span',{'class':'sc-ra-tab-text',text:t(label)},b);ui.tabs[id]={button:b,badge:el(doc,'span',{'class':'sc-ra-badge',hidden:true},b)};
     b.addEventListener('click',event=>{event.stopPropagation();showTab(session,id);});
    }
-   const body=el(doc,'div',{'class':'sc-ra-body'},rootEl);ui.body=body;ui.panes={};
-   for(const id of ['ask','translate','listen'])ui.panes[id]=el(doc,'div',{'class':'sc-ra-pane',role:'tabpanel','data-pane':id,hidden:true},body);
+   const body=el(doc,'div',{'class':'sc-ra-body'},main);ui.body=body;ui.panes={};
+   for(const[id]of TABS)ui.panes[id]=el(doc,'div',{'class':'sc-ra-pane',role:'tabpanel','data-pane':id,hidden:true},body);
    buildAsk(session,ui.panes.ask);buildTranslate(session,ui.panes.translate);buildListen(session,ui.panes.listen);
+   // The remembered tab is drawn from the start, so an open panel is never an empty grey column.
+   paintTab(session,validTab(session.tab));
    // A click anywhere else closes an open menu.
    session.onDocClick=()=>{for(const m of session.menus)m.close();};doc.addEventListener('click',session.onDocClick);
    session.onKey=event=>{if(event.key==='Escape')for(const m of session.menus)m.close();};doc.addEventListener('keydown',session.onKey);
    return rootEl;
   }
+  /* Zotero 9's own Read Aloud shares the speech queue: offer to stop it rather than fight it. */
+  function buildClash(session,parent){
+   const doc=session.doc,ui=session.ui;
+   ui.clash=el(doc,'section',{'class':'sc-ra-card sc-ra-clash',hidden:true,role:'alert'},parent);
+   el(doc,'p',{'class':'sc-ra-note',text:t('Zotero의 읽어주기가 재생 중입니다. 둘이 같은 음성을 써서 함께 들을 수 없습니다.')},ui.clash);
+   const row=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},ui.clash);
+   button(session,row,{label:'Zotero 읽어주기 멈추고 듣기',cls:'sc-ra-primary',mark:'audio',onClick:()=>{const go=session.pendingPlay;session.pendingPlay=null;ui.clash.hidden=true;stopBuiltIn(session.reader);if(go)return go();}});
+   button(session,row,{label:'취소',cls:'sc-ra-secondary',mark:'view',onClick:()=>{session.pendingPlay=null;ui.clash.hidden=true;}});
+  }
 
   /* -- the player bar -- */
+  const PLAY_TIP='본문만 읽어 줍니다. 그림·표 캡션, 참고문헌, 머리말·꼬리말·쪽 번호는 건너뜁니다(Zotero의 읽어주기는 페이지의 글을 모두 읽습니다). PDF에서 Alt(Option)+더블클릭하거나 글을 선택해 ‘여기서부터 듣기’를 누르면 그 문장부터 읽습니다.';
   function buildPlayer(session,parent){
    const doc=session.doc,ui=session.ui;
    const bar=el(doc,'section',{'class':'sc-ra-card sc-ra-player','aria-label':t('읽어주기')},parent);
-   const row=el(doc,'div',{'class':'sc-ra-row'},bar);
+   const row=el(doc,'div',{'class':'sc-ra-row sc-ra-transport'},bar);
    ui.sectionPrev=button(session,row,{title:'이전 섹션',iconName:'sectionPrev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prevSection())});
    ui.prev=button(session,row,{title:'이전 문장',iconName:'prev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prev())});
-   ui.play=button(session,row,{title:'읽어주기',iconName:'play',cls:'sc-ra-icon sc-ra-play',mark:'audio',onClick:()=>togglePlay(session)});
+   ui.play=button(session,row,{label:'본문만 읽기',title:PLAY_TIP,iconName:'play',cls:'sc-ra-play',mark:'audio',onClick:()=>togglePlay(session)});
    ui.next=button(session,row,{title:'다음 문장',iconName:'next',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.next())});
    ui.sectionNext=button(session,row,{title:'다음 섹션',iconName:'sectionNext',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.nextSection())});
-   ui.progress=el(doc,'span',{'class':'sc-ra-progress',text:''},row);
+   ui.progress=el(doc,'p',{'class':'sc-ra-progress',text:''},bar);
    const opts=el(doc,'div',{'class':'sc-ra-row sc-ra-opts'},bar);
    const rateWrap=el(doc,'label',{'class':'sc-ra-rate'},opts);el(doc,'span',{text:t('속도')},rateWrap);
    ui.rate=el(doc,'input',{type:'range',min:'80',max:'180',step:'10',value:String(setting('readAloudSpeed',100)),'aria-label':t('읽는 속도'),'data-opens':'audio'},rateWrap);
@@ -316,13 +435,14 @@
    ui.rate.addEventListener('change',()=>setRate(session,Number(ui.rate.value)/100));
    ui.rateText.textContent=(Number(ui.rate.value)/100).toFixed(1)+'×';
    ui.voice=menu(session,opts,{label:'목소리',ariaLabel:'목소리 고르기',items:[{value:'',label:t('자동')}],current:'',mark:'audio',onPick:value=>setVoice(session,value)});
+   // Short labels so the three fit side by side at any panel width; the full meaning is the tooltip.
    const filters=el(doc,'div',{'class':'sc-ra-seg',role:'group','aria-label':t('읽을 범위')},bar);ui.filters={};
-   for(const[id,label]of [['body','본문만'],['captions','캡션 포함'],['references','참고문헌 포함']]){
-    const b=el(doc,'button',{type:'button','class':'sc-ra-seg-btn','data-opens':'audio','data-filter':id,'aria-pressed':String(id==='body')},filters);b.textContent=t(label);ui.filters[id]=b;
+   for(const[id,label,title]of [['body','본문','본문만 읽습니다'],['captions','+ 캡션','본문과 그림·표 캡션을 읽습니다'],['references','+ 참고문헌','본문, 캡션, 참고문헌까지 읽습니다']]){
+    const b=el(doc,'button',{type:'button','class':'sc-ra-seg-btn','data-opens':'audio','data-filter':id,'aria-pressed':String(id==='body'),title:t(title)},filters);b.textContent=t(label);ui.filters[id]=b;
     b.addEventListener('click',event=>{event.stopPropagation();setFilter(session,id);});
    }
-   const more=el(doc,'div',{'class':'sc-ra-row sc-ra-more'},bar);
-   ui.resume=button(session,more,{label:'이어서 듣기',iconName:'play',cls:'sc-ra-link',mark:'audio',onClick:()=>resumeListening(session)});ui.resume.hidden=true;
+   ui.more=el(doc,'div',{'class':'sc-ra-row sc-ra-more',hidden:true},bar);
+   ui.resume=button(session,ui.more,{label:'이어서 듣기',iconName:'play',cls:'sc-ra-link',mark:'audio',onClick:()=>resumeListening(session)});
    const why=el(doc,'details',{'class':'sc-ra-why'},bar);
    const sum=el(doc,'summary',{text:t('왜 건너뛰었나')},why);void sum;
    ui.why=el(doc,'pre',{'class':'sc-ra-pre'},why);
@@ -359,7 +479,7 @@
    const composer=el(doc,'div',{'class':'sc-ra-composer'},chat);
    ui.input=el(doc,'textarea',{'class':'sc-ra-input',rows:'2',placeholder:t('이 논문에 대해 물어보세요'),'aria-label':t('질문 입력')},composer);
    ui.send=button(session,composer,{title:'보내기',iconName:'send',cls:'sc-ra-send',mark:'ai',onClick:()=>sendTyped(session)});
-   ui.stop=button(session,composer,{title:'중지',iconName:'stop',cls:'sc-ra-send',mark:'view',onClick:()=>{runtime.assist?.cancel?.();}});ui.stop.hidden=true;
+   ui.stop=button(session,composer,{title:'중지',iconName:'stop',cls:'sc-ra-send',mark:'view',onClick:()=>{session.chatToken&&session.chatToken.cancel();}});ui.stop.hidden=true;
    ui.input.addEventListener('keydown',event=>{
     // Enter sends; Shift+Enter is a new line; Enter that confirms a Korean/Japanese composition does not send.
     if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendTyped(session);}
@@ -390,7 +510,10 @@
     let structured=null;try{structured=(await structure(session)).structured;}catch(error){log(error);}
     const item=itemOf(session.reader),meta={title:fieldOf(item,'title'),abstract:fieldOf(item,'abstractNote')};
     const input=PC.summaryInput(structured||{},{meta,pageBase:PAGE_BASE});
-    const text=await runtime.assist.run('paperSummary',{title:input.title,abstract:input.abstract,text:input.text},{language:language()});
+    if(session.destroyed)return;
+    session.summaryToken=TR.token();
+    const text=await runtime.assist.paperSummary({title:input.title,abstract:input.abstract,text:input.text},{language:language(),signal:session.summaryToken});
+    if(session.destroyed)return;
     session.data.summary[summaryKey()]={text,at:Date.now(),model:String(runtime.pref('aiModel','')).trim(),language:language(),truncated:input.truncated};
     const keys=Object.keys(session.data.summary);if(keys.length>6)delete session.data.summary[keys[0]];
     session.summaryState='done';saveSoon(session);
@@ -427,8 +550,8 @@
    session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined}));
   }
   const sendTyped=session=>{const q=clean(session.ui.input.value);if(!q)return;session.ui.input.value='';return sendQuestion(session,q,{});};
-  const sendQuick=(session,id)=>{const q=PC.quickPrompt(id,t);return sendQuestion(session,q.question,{forcePage:q.forcePage,mine:q.mine});};
-  async function sendQuestion(session,question,{forcePage=false,mine=false}={}){
+  const sendQuick=(session,id)=>{const q=PC.quickPrompt(id,t);return sendQuestion(session,q.question,{forcePage:q.forcePage,mine:q.mine,intent:q.intent});};
+  async function sendQuestion(session,question,{forcePage=false,mine=false,intent=null}={}){
    if(session.chatBusy)return;
    const history=session.data.chat.filter(m=>!m.error).slice();
    const user={role:'user',content:question.slice(0,CHAT_LIMIT),at:Date.now()},answer={role:'assistant',content:'',streaming:true,at:Date.now()};
@@ -445,9 +568,12 @@
     const viewing={page,sectionIndex,section:sectionIndex>=0?clean(structured.sections[sectionIndex].heading):''};
     const own=mine?{memo:String(runtime.entry?.(item)?.remark||''),tags:(item?.getTags?.()||[]).map(x=>String(x.tag||x))}:null;
     const entry=summaryEntry(session);
-    const {messages}=PC.chatMessages({question,history,chunks:session.chunks,summary:entry?entry.text:'',language:language(),viewing,mine:own,forcePage});
+    const {messages}=PC.chatMessages({question,history,chunks:session.chunks,summary:entry?entry.text:'',language:language(),viewing,mine:own,forcePage,intent});
     session.ui.chatNote.textContent=notice;
-    const text=await runtime.assist.chat(messages,{onDelta:(piece,all)=>{answer.content=all;if(timer===null&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);}});
+    if(session.destroyed)return;
+    // Stop cancels this question only, not a summary or a translation beside it.
+    const chatToken=session.chatToken=TR.token();
+    const text=await runtime.assist.chat(messages,{signal:chatToken,onDelta:(piece,all)=>{answer.content=all;if(timer===null&&!session.destroyed&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);}});
     answer.content=text;
    }catch(error){answer.error=describe(error);}
    answer.streaming=false;session.chatBusy=false;if(timer!==null){try{session.doc.defaultView.clearTimeout(timer);}catch(_){}}
@@ -495,7 +621,7 @@
    const row=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
    ui.trPage=button(session,row,{label:'현재 페이지부터',cls:'sc-ra-primary',mark:'ai',onClick:()=>runTranslate(session,'page')});
    ui.trAll=button(session,row,{label:'전체 번역',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'all')});
-   ui.trStop=button(session,row,{label:'중지',cls:'sc-ra-secondary',mark:'view',onClick:()=>session.tr&&session.tr.service.cancel()});ui.trStop.hidden=true;
+   ui.trStop=button(session,row,{label:'중지',cls:'sc-ra-secondary',mark:'view',onClick:()=>{if(session.tr)session.tr.service.cancel();}});ui.trStop.hidden=true;
    ui.trNext=button(session,row,{label:'다른 번역기로 이어서',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'resume',{next:true})});ui.trNext.hidden=true;
    const row2=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
    ui.trUsage=button(session,row2,{label:'사용량 새로고침',iconName:'refresh',cls:'sc-ra-link',mark:'network',onClick:()=>refreshUsage(session)});
@@ -507,20 +633,27 @@
    if(session.tr)return session.tr;
    const data=session.data;
    const cache={get:k=>data.tr[k],set:(k,v)=>{data.tr[k]=v;const keys=Object.keys(data.tr);if(keys.length>4000)delete data.tr[keys[0]];},save:async()=>{saveSoon(session);}};
-   const http=async(method,url,{headers,body})=>{
+   // The job's cancel token aborts the request in flight (Zotero.HTTP's canceller).
+   const http=async(method,url,{headers,body,signal=null})=>{
+    let off=()=>{};
     try{
-     const r=await Z.HTTP.request(method,url,{headers,body,responseType:'json',timeout:60000,successCodes:false,errorDelayMax:0});
+     if(signal&&signal.cancelled)return {status:0,json:null};
+     const r=await Z.HTTP.request(method,url,{headers,body,responseType:'json',timeout:60000,successCodes:false,errorDelayMax:0,
+      cancellerReceiver:cancel=>{if(!signal)return;off();off=signal.onCancel(()=>{try{cancel();}catch(_){}});}});
      return {status:r.status,json:r.response,retryAfter:Number(r.getResponseHeader&&r.getResponseHeader('Retry-After'))||0};
     }catch(_){return {status:0,json:null};}
+    finally{off();}
    };
    const service=TR.create({http,now:()=>new Date(),pref:key=>runtime.pref(key,''),cache,
     usageStore:{get:()=>runtime.cache.deeplUsage,set:v=>{runtime.cache.deeplUsage=v;persistUI();}},
     pdfTranslate:()=>Z.PDFTranslate&&Z.PDFTranslate.api,
     ai:{available:()=>!!runtime.assist?.available?.(),translate:(texts,o)=>runtime.assist.translateParagraphs(texts,o)},
     uiKorean:runtime.i18n?.isKorean?.()!==false});
-   return session.tr={service,paragraphs:[],texts:new Map()};
+   // Translations shown are kept per target language: switching the menu shows that language's set, never another's.
+   return session.tr={service,paragraphs:[],byTarget:new Map(),texts(code){if(!this.byTarget.has(code))this.byTarget.set(code,new Map());return this.byTarget.get(code);}};
   }
   async function prepareTranslate(session){
+   if(session.probing)return;
    const tr=translator(session);
    try{
     const {structured}=await structure(session);
@@ -530,26 +663,28 @@
   }
   function renderTranslate(session){
    const ui=session.ui,tr=translator(session),doc=session.doc,service=tr.service;
-   const providers=service.providers(),current=service.pickProvider(),target=service.target();
+   const providers=service.providers(),current=service.pickProvider(),target=service.target(),texts=tr.texts(target.code);
    ui.trTarget.set({items:TR.TARGETS.map(x=>({value:x.code,label:x.label})),current:target.code,label:target.label});
    ui.trProvider.textContent=current?T('번역기: {0}',service.providerLabel(current))+(providers.length>1?' · '+T('대체: {0}',providers.slice(providers.indexOf(current)+1).map(service.providerLabel).join(', ')||'—'):''):t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요. DeepL 무료 키는 한 달 50만 자까지 쓸 수 있습니다.');
    const usage=service.usage();
    const start=Math.max(0,tr.paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1)));
    const est=service.estimate(tr.paragraphs,current);
    const pageEst=service.estimate(tr.paragraphs.slice(start),current);
+   const limitText=usage.limit===null?t('한도 미확인'):usage.limit.toLocaleString();
    ui.trEstimate.textContent=!tr.paragraphs.length?t('번역할 본문을 아직 읽지 못했습니다.'):
     T('전체 약 {0}자 · 이미 번역한 {1}문단은 제외',est.chars.toLocaleString(),est.cached)+' · '+T('현재 페이지부터 약 {0}자',pageEst.chars.toLocaleString())
-    +(current==='deepl'?' · '+T('이번 달 {0} / {1}자 사용',usage.chars.toLocaleString(),usage.limit.toLocaleString())+(usage.free?'':' · '+t('유료 키')):'')
+    +(current==='deepl'?' · '+T('이번 달 {0} / {1}자 사용',usage.chars.toLocaleString(),limitText)+(usage.free?'':' · '+t('유료 키')):'')
+    +(current==='ai'&&est.chars?' · '+(isLocalAI()?T('AI 서버로 약 {0}토큰 (내 컴퓨터의 모델이라 무료)',est.tokens.toLocaleString()):T('AI 서버로 약 {0}토큰을 보내고 받습니다. 모델 요금이 붙습니다.',est.tokens.toLocaleString())):'')
     +(current==='deepl'&&!est.fits?' · '+t('전체는 남은 한도를 넘습니다. 한도에 닿으면 거기서 멈추고 번역한 부분은 남습니다.'):'');
    for(const b of [ui.trPage,ui.trAll])b.disabled=!current||!tr.paragraphs.length||service.busy;
    ui.trStop.hidden=!service.busy;ui.trUsage.hidden=!service.providers().includes('deepl');ui.trNote.disabled=!tr.paragraphs.length;
    // rows
    ui.trRows.replaceChildren();let done=0;
    tr.paragraphs.forEach((p,i)=>{
-    const text=current?service.cached(current,p.text)||tr.texts.get(p.id)||'':tr.texts.get(p.id)||'';
-    if(text){tr.texts.set(p.id,text);done++;}
+    const text=(current?service.cached(current,p.text,target.code):'')||texts.get(p.id)||'';
+    if(text){texts.set(p.id,text);done++;}
     const row=el(doc,'article',{'class':'sc-ra-row-card','data-id':p.id,'data-state':text?'done':'todo'},ui.trRows);
-    const meta=el(doc,'button',{type:'button','class':'sc-ra-row-meta','data-safe':'view',title:t('이 문단으로 이동')},row);
+    const meta=el(doc,'button',{type:'button','class':'sc-ra-row-meta','data-safe':'view',title:(p.heading?p.heading+' — ':'')+t('이 문단으로 이동')},row);
     meta.textContent=(p.heading||'—')+(p.page?' · p. '+p.page:'');
     meta.addEventListener('click',()=>goToPage(session,p.page,p.rects));
     const body=el(doc,'p',{'class':'sc-ra-tr-text'},row);body.textContent=text||'—';
@@ -559,48 +694,59 @@
    });
    setBadge(session,'translate',tr.paragraphs.length?done+'/'+tr.paragraphs.length:0);
   }
-  function paintParagraph(session,p,text){
-   const tr=translator(session);tr.texts.set(p.id,text);
+  function paintParagraph(session,p,text,code){
+   const tr=translator(session);tr.texts(code).set(p.id,text);
+   if(code!==tr.service.target().code)return;      // a run for another language: stored, not shown here
    const row=session.ui.trRows.querySelector('[data-id="'+p.id+'"]');
    if(row){row.setAttribute('data-state','done');const body=row.querySelector('.sc-ra-tr-text');if(body)body.textContent=text;}
   }
+  const isLocalAI=()=>/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\//i.test(String(runtime.pref('aiEndpoint','')||'').trim());
+  const usageLine=u=>T('이번 달 {0} / {1}자 사용',u.chars.toLocaleString(),u.limit===null?t('한도 미확인'):u.limit.toLocaleString());
   async function runTranslate(session,mode,{next=false}={}){
    const tr=translator(session),service=tr.service,ui=session.ui;
    if(service.busy)return;
    if(!tr.paragraphs.length)await prepareTranslate(session);
+   if(session.destroyed)return;
    let provider=service.pickProvider();
    if(next)provider=service.nextProvider(session.trProvider||provider)||provider;
    if(!provider){ui.trProgress.textContent=t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요.');return;}
    session.trProvider=provider;ui.trNext.hidden=true;
+   // Fixed for this run: the language the menu shows now.
+   const code=service.target().code;
    let start=0;
    if(mode==='page')start=Math.max(0,tr.paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1)));
    ui.trStop.hidden=false;for(const b of [ui.trPage,ui.trAll])b.disabled=true;
-   const summary=await service.translateAll(tr.paragraphs,{start,provider,
-    onParagraph:(p,text)=>paintParagraph(session,p,text),
-    onProgress:p=>{const u=service.usage();ui.trProgress.textContent=T('번역 {0}/{1}문단 · {2}',p.done,p.total,service.providerLabel(provider))+(provider==='deepl'?' · '+T('이번 달 {0} / {1}자 사용',u.chars.toLocaleString(),u.limit.toLocaleString()):'');}}).catch(error=>({provider,done:0,total:0,stopped:error.code||'failed',error}));
+   // DeepL's own count (free to ask) before spending it; a failure here only means the local count is used.
+   if(provider==='deepl'){try{await service.refreshUsage();}catch(error){log(error);}if(session.destroyed)return;}
+   const summary=await service.translateAll(tr.paragraphs,{start,provider,target:code,
+    onParagraph:(p,text)=>{if(!session.destroyed)paintParagraph(session,p,text,code);},
+    onProgress:p=>{if(session.destroyed)return;ui.trProgress.textContent=T('번역 {0}/{1}문단 · {2}',p.done,p.total,service.providerLabel(provider))+(provider==='deepl'?' · '+usageLine(service.usage()):'');}}).catch(error=>({provider,done:0,total:0,stopped:error.code||'failed',error}));
    if(session.destroyed)return;
    ui.trProgress.textContent=summary.stopped==='cancelled'?T('중지했습니다. {0}문단 번역됨',summary.done):summary.stopped?describe(summary.error)+(summary.error&&summary.error.detail?' ('+summary.error.detail+')':'')+' · '+T('{0}문단 번역됨',summary.done):T('{0}문단 번역을 마쳤습니다.',summary.done);
    if(summary.stopped&&['quota','key','rate','server','failed','shape'].includes(summary.stopped)&&service.nextProvider(provider))ui.trNext.hidden=false;
    renderTranslate(session);
   }
   async function retranslate(session,paragraph){
-   const tr=translator(session);
-   const result=await tr.service.translateOne(paragraph,{provider:tr.service.pickProvider(),force:true});
-   paintParagraph(session,paragraph,result.text);session.ui.trProgress.textContent=T('다시 번역했습니다 · {0}',tr.service.providerLabel(result.provider));
+   const tr=translator(session),code=tr.service.target().code;
+   const result=await tr.service.translateOne(paragraph,{provider:tr.service.pickProvider(),force:true,target:code});
+   if(session.destroyed)return;
+   paintParagraph(session,paragraph,result.text,code);session.ui.trProgress.textContent=T('다시 번역했습니다 · {0}',tr.service.providerLabel(result.provider));
   }
   async function refreshUsage(session){
    const tr=translator(session);const u=await tr.service.refreshUsage();
-   session.ui.trProgress.textContent=T('DeepL 사용량 {0} / {1}자',u.chars.toLocaleString(),u.limit.toLocaleString());renderTranslate(session);
+   if(session.destroyed)return;
+   session.ui.trProgress.textContent=T('DeepL 사용량 {0} / {1}자',u.chars.toLocaleString(),u.limit===null?t('한도 미확인'):u.limit.toLocaleString());renderTranslate(session);
   }
   async function setTarget(session,code){
    try{await runtime.setSetting('translateTarget',code,{apply:false});}catch(error){log(error);}
-   renderTranslate(session);
+   if(!session.destroyed)renderTranslate(session);
   }
+  /* The note is the language the menu shows, with that language's translations only. */
   async function saveTranslationNote(session){
    const tr=translator(session),item=itemOf(session.reader),library=runtime.libraryService;
    if(!item||!library?.createNoteHTML)throw new Error('Note creation is unavailable');
-   const provider=tr.service.pickProvider()||'';
-   const made=TR.noteHTML({title:fieldOf(item,'title'),target:tr.service.target().code,provider:tr.service.providerLabel(provider),date:new Date().toISOString().slice(0,10),paragraphs:tr.paragraphs,translations:tr.texts});
+   const provider=tr.service.pickProvider()||'',code=tr.service.target().code;
+   const made=TR.noteHTML({title:fieldOf(item,'title'),target:code,provider:tr.service.providerLabel(provider),date:new Date().toISOString().slice(0,10),paragraphs:tr.paragraphs,translations:tr.texts(code)});
    if(!made.count){say(session,t('저장할 번역이 아직 없습니다.'),true);return;}
    await library.createNoteHTML(item.id,made.html);
    say(session,T('원문·번역 {0}문단을 노트로 저장했습니다.',made.count));
@@ -628,7 +774,7 @@
     const name=u.kind==='caption'?t('캡션'):u.kind==='reference'?t('참고문헌'):u.sectionLabel||t('본문');
     if(name!==label||!group){label=name;const h=el(doc,'h4',{'class':'sc-ra-h'},ui.transcript);h.textContent=name;group=el(doc,'div',{'class':'sc-ra-group'},ui.transcript);}
     const b=el(doc,'button',{type:'button','class':'sc-ra-sentence','data-opens':'audio','data-index':i},group);
-    b.textContent=u.text;b.addEventListener('click',()=>{player.play(i);});
+    b.textContent=u.text;b.addEventListener('click',()=>{playFrom(session,i,{jump:true});});
    });
    markCurrent(session);setBadge(session,'listen',units.length);
   }
@@ -668,9 +814,11 @@
   async function ensurePlayer(session){
    if(session.player)return session.player;
    if(session.playerPromise)return session.playerPromise;
+   // Every await below may outlive the reader: a closed session makes no player, and a player made too late is destroyed.
+   const alive=()=>{if(session.destroyed)throw Object.assign(new Error('The reader was closed'),{closed:true});};
    session.playerPromise=(async()=>{
-    const {structured}=await structure(session);
-    const engine=await pickEngine(session);
+    const {structured}=await structure(session);alive();
+    const engine=await pickEngine(session);alive();
     const filters=session.filters||{captions:false,references:false};
     // Everything is composed once; the player's own switches decide what is read.
     const units=RA.composeUnits(structured,{captions:true,references:true},tools(session));
@@ -684,6 +832,7 @@
      onChange:event=>onPlayerEvent(session,event),onCredit:(unit,seconds)=>credit(session,unit,seconds)});
     const resume=session.data.position&&session.data.position.sig?session.data.position:null;
     player.load(units,{resume:null});
+    if(session.destroyed){player.destroy();alive();}
     session.player=player;session.engine=engine;session.langCode=lang;session.resumePosition=resume;
     fillVoices(session,voices,lang,voice);
     renderTranscript(session);renderPlayer(session);
@@ -696,11 +845,39 @@
    const items=[{value:'',label:t('자동')},...(same.length?same:voices).slice(0,60).map(v=>({value:v.voiceURI,label:v.name+(v.lang?' · '+v.lang:'')}))];
    session.ui.voice.set({items,current:setting('readAloudVoice','')&&items.some(i=>i.value===setting('readAloudVoice',''))?setting('readAloudVoice',''):'',label:current?current.name:t('목소리')});
   }
-  async function withPlayer(session,fn){const p=await ensurePlayer(session);fn(p);}
+  async function withPlayer(session,fn){if(session.destroyed)return;const p=await ensurePlayer(session);if(!session.destroyed)fn(p);}
+  /* Zotero 9's own Read Aloud (always on, the toolbar's #read-aloud) speaks through the same queue. */
+  const builtInState=reader=>{try{return coreOf(reader)?._state?.readAloudState||null;}catch(_){return null;}};
+  const builtInPlaying=reader=>{const st=builtInState(reader);return !!(st&&st.active&&!st.paused);};
+  function stopBuiltIn(reader){
+   const core=coreOf(reader);
+   try{if(core&&typeof core.toggleReadAloudPopup==='function')core.toggleReadAloudPopup(false);else if(core&&typeof core.toggleReadAloudPaused==='function')core.toggleReadAloudPaused(true);}catch(error){log(error);}
+  }
+  /* Everything that starts sound goes through here: never after the reader closed, never over Zotero's own
+     Read Aloud without asking, and only one of our players at a time across readers. */
+  async function startPlayback(session,go){
+   if(session.destroyed)return;
+   const builtIn=[...sessions.values()].some(s=>builtInPlaying(s.reader));
+   if(builtIn){
+    session.pendingPlay=()=>startPlayback(session,go);
+    if(!session.open)setOpen(session,true,{remember:false});
+    if(session.collapsed)setCollapsed(session,false,{remember:false});
+    session.ui.clash.hidden=false;return;
+   }
+   const p=await ensurePlayer(session);
+   if(session.destroyed||p.destroyed)return;
+   go(p);
+  }
+  function pauseOthers(session){for(const other of sessions.values())if(other!==session&&other.player&&other.player.state().status==='playing')other.player.pause();}
+  async function playFrom(session,index,{jump=false}={}){
+   return startPlayback(session,p=>{p.play(index);if(jump){const u=p.units()[index];if(u)goToPage(session,pageNumberOf(u),u.rects);}});
+  }
   async function togglePlay(session){
-   const p=await ensurePlayer(session),status=p.state().status;
+   if(session.destroyed)return;
+   const current=session.player?session.player.state().status:'idle';
+   if(current==='playing'){session.player.pause();return;}
    // From the top of the page being read when nothing is playing; "이어서 듣기" is the way back to the saved sentence.
-   if(status==='idle'||status==='done'||status==='error')p.play(startIndexForPage(session,p));else p.toggle();
+   return startPlayback(session,p=>{const status=p.state().status;if(status==='idle'||status==='done'||status==='error')p.play(startIndexForPage(session,p));else p.toggle();});
   }
   function startIndexForPage(session,player){
    const page=currentPage(session.reader);
@@ -709,10 +886,12 @@
    return at>=0?at:0;
   }
   async function resumeListening(session){
-   const p=await ensurePlayer(session),pos=session.data.position;
-   let index=pos&&pos.sig?p.units().findIndex(u=>RA.signature(u)===pos.sig):-1;
-   if(index<0&&pos&&Number.isInteger(pos.index)&&pos.index<p.units().length)index=pos.index;
-   p.play(Math.max(0,index));
+   return startPlayback(session,p=>{
+    const pos=session.data.position;
+    let index=pos&&pos.sig?p.units().findIndex(u=>RA.signature(u)===pos.sig):-1;
+    if(index<0&&pos&&Number.isInteger(pos.index)&&pos.index<p.units().length)index=pos.index;
+    p.play(Math.max(0,index));
+   });
   }
   function setRate(session,rate){
    setSettingQuiet('readAloudSpeed',Math.round(rate*100));
@@ -740,7 +919,9 @@
   }
   function onPlayerEvent(session,{type,state}){
    if(session.destroyed)return;
+   if(state.status==='playing'&&(type==='status'||type==='sentence'))pauseOthers(session);
    renderPlayer(session);
+   if(type==='interrupted')say(session,t('다른 읽어주기가 시작되어 멈췄습니다'),true);
    if(type==='sentence'||type==='status'&&state.status==='playing'){
     if(state.unit)markCurrent(session);
     if(type==='sentence'){
@@ -751,10 +932,14 @@
   }
   function renderPlayer(session){
    const ui=session.ui,p=session.player,state=p?p.state():null,playing=state&&state.status==='playing';
-   const playBtn=ui.play;
-   playBtn.replaceChildren(icon(session.doc,playing?'pause':'play'));
-   const label=playing?t('일시정지'):state&&state.status==='paused'?t('이어 읽기'):t('읽어주기');
-   playBtn.setAttribute('aria-label',label);playBtn.title=label;
+   const playBtn=ui.play,f0=session.filters||{captions:false,references:false};
+   const label=playing?t('일시정지'):state&&state.status==='paused'?t('이어 읽기'):f0.captions?t('읽기 시작'):t('본문만 읽기');
+   playBtn.replaceChildren(icon(session.doc,playing?'pause':'play'));el(session.doc,'span',{'class':'sc-ra-btn-text',text:label},playBtn);
+   playBtn.setAttribute('aria-label',label);playBtn.title=playing?label:label+' — '+t(PLAY_TIP);
+   ui.railPlay.replaceChildren(icon(session.doc,playing?'pause':'play'));ui.railPlay.setAttribute('aria-label',label);ui.railPlay.title=label;
+   // The toolbar ▷ doubles as play/pause, so listening does not need the panel open.
+   const tb=session.toolbarState&&session.toolbarState.listen;
+   if(tb)try{tb.replaceChildren(icon(tb.ownerDocument,playing?'pause':'play'));tb.setAttribute('aria-label',playing?t('일시정지'):t('본문만 읽기'));tb.title=playing?t('일시정지'):t('본문만 읽기')+' — '+t(PLAY_TIP);}catch(_){}
    const has=!!state&&state.total>0;
    for(const b of [ui.prev,ui.next,ui.sectionPrev,ui.sectionNext])b.disabled=!has;
    if(state&&state.unit){
@@ -763,42 +948,72 @@
    }else ui.progress.textContent=has?'':t('아직 시작하지 않았습니다');
    const pos=session.data&&session.data.position;
    const idle=!state||state.status==='idle';
-   ui.resume.hidden=!(pos&&pos.sig&&idle);
+   ui.resume.hidden=!(pos&&pos.sig&&idle);ui.more.hidden=ui.resume.hidden;
    if(!ui.resume.hidden){const text=ui.resume.querySelector('.sc-ra-btn-text');if(text)text.textContent=pos.page?T('이어서 듣기 · p. {0}',pos.page):t('이어서 듣기');}
    for(const[name,b]of Object.entries(ui.filters)){const f_=session.filters||{captions:false,references:false};b.setAttribute('aria-pressed',String(name==='body'?!f_.captions:name==='captions'?f_.captions&&!f_.references:f_.references));}
   }
 
-  /* -- following along in the PDF -- */
-  function clearHighlight(session){
+  /* -- following along in the PDF --
+     The mark is an overlay in the page element, sized from the page's live viewport (zoom and rotation), and
+     scrolled into view directly: reader.navigate() is kept for explicit jumps (a transcript line, a citation),
+     because every navigate adds a Back entry, blinks for two seconds and centres the page. pdf.js empties a
+     page when it re-renders (zoom, rotation), so the mark is put back on pagerendered / textlayerrendered. */
+  function clearHighlight(session,{keepUnit=false}={}){
    for(const n of session.marks||[]){try{n.remove();}catch(_){}}session.marks=[];session.markedPage=null;
+   if(!keepUnit)session.markedUnit=null;
+  }
+  function liveViewport(session,page){
+   try{
+    const app=viewerWindow(session.reader)?.PDFViewerApplication,view=app&&app.pdfViewer&&app.pdfViewer.getPageView&&app.pdfViewer.getPageView(page-1);
+    const v=view&&view.viewport;if(!v||!(v.width>0))return null;
+    return {width:Number(v.width),height:Number(v.height),transform:Array.from(v.transform||[]).map(Number)};
+   }catch(_){return null;}
+  }
+  function drawMarks(session,unit){
+   clearHighlight(session,{keepUnit:true});session.markedUnit=unit;
+   const page=pageNumberOf(unit);if(!page)return false;
+   const size=session.pageSizes&&session.pageSizes[page-1];
+   if(!(size&&size.width>0&&size.height>0&&Array.isArray(unit.rects)&&unit.rects.length))return false;
+   const doc=viewerDoc(session.reader),pageEl=doc&&doc.querySelector('.page[data-page-number="'+page+'"]');
+   if(!pageEl)return false;
+   for(const box of overlayBoxes(unit.rects.slice(0,12),size,liveViewport(session,page))){
+    const mark=doc.createElementNS(HTML,'div');mark.setAttribute('data-sc-ra-hl','1');
+    // Percentages of the page, so the box follows every zoom level until the next re-render redraws it.
+    mark.style.cssText=`position:absolute;left:${box.left}%;top:${box.top}%;width:${box.width}%;height:${box.height}%;background:rgba(255,212,0,0.32);border-radius:3px;box-shadow:0 0 0 1px rgba(204,146,0,0.55);pointer-events:none;z-index:6;`;
+    pageEl.appendChild(mark);session.marks.push(mark);
+   }
+   session.markedPage=page;
+   return session.marks.length>0;
   }
   function highlight(session,unit){
    if(uiState().follow===false)return;
-   clearHighlight(session);
-   const page=pageNumberOf(unit);if(!page)return;
-   const size=session.pageSizes&&session.pageSizes[page-1];
-   if(size&&size.width>0&&size.height>0&&Array.isArray(unit.rects)&&unit.rects.length){
-    const doc=viewerDoc(session.reader),pageEl=doc&&doc.querySelector('.page[data-page-number="'+page+'"]');
-    if(pageEl){
-     const W=size.width,H=size.height;
-     for(const r of unit.rects.slice(0,12)){
-      if(!Array.isArray(r)||r.length<4)continue;
-      const mark=doc.createElementNS(HTML,'div');mark.setAttribute('data-sc-ra-hl','1');
-      // Percentages of the page, so the box follows every zoom level.
-      mark.style.cssText=`position:absolute;left:${r[0]/W*100}%;top:${r[1]/H*100}%;width:${r[2]/W*100}%;height:${r[3]/H*100}%;background:rgba(255,212,0,0.32);border-radius:3px;box-shadow:0 0 0 1px rgba(204,146,0,0.55);pointer-events:none;z-index:6;`;
-      pageEl.appendChild(mark);session.marks.push(mark);
-     }
-    }
-    session.markedPage=page;
-   }
-   // Scroll only when the sentence is not on screen, or is on another page.
-   const shown=currentPage(session.reader);
+   drawMarks(session,unit);
+   const first=session.marks[0];if(!first)return;
+   // Scroll only when the sentence is not on screen.
    let visible=false;
+   try{const win=viewerDoc(session.reader)?.defaultView,r=first.getBoundingClientRect();visible=r.height>0&&r.top>=48&&r.bottom<=win.innerHeight-48;}catch(_){}
+   if(!visible)try{first.scrollIntoView({block:'nearest',inline:'nearest'});}catch(error){log(error);}
+  }
+  function redrawMarks(session){
+   if(session.destroyed||!session.markedUnit||uiState().follow===false)return;
+   if((session.marks||[]).length&&session.marks.every(m=>m.isConnected))return;
+   drawMarks(session,session.markedUnit);
+  }
+  /* pdf.js's own events, through a function the content side may call. */
+  function watchRendering(session){
+   unwatchRendering(session);
    try{
-    const first=session.marks[0],win=viewerDoc(session.reader)?.defaultView;
-    if(first&&win&&first.getBoundingClientRect){const r=first.getBoundingClientRect();visible=r.top>=48&&r.bottom<=win.innerHeight-48&&r.height>0;}
-   }catch(_){}
-   if(!visible||shown!==page)goToPage(session,page,unit.rects);
+    const vwin=viewerWindow(session.reader),bus=vwin&&vwin.PDFViewerApplication&&vwin.PDFViewerApplication.eventBus;
+    if(!bus||typeof bus.on!=='function')return;
+    const raw=coreOf(session.reader)?._primaryView?._iframeWindow;
+    const fn=contentFunction(()=>{try{redrawMarks(session);}catch(error){log(error);}},raw);
+    for(const name of ['pagerendered','textlayerrendered'])bus.on(name,fn);
+    session.renderWatch={bus,fn};
+   }catch(error){log(error);}
+  }
+  function unwatchRendering(session){
+   const w=session.renderWatch;session.renderWatch=null;if(!w)return;
+   for(const name of ['pagerendered','textlayerrendered'])try{w.bus.off(name,w.fn);}catch(_){}
   }
   function credit(session,unit,seconds){
    if(session.destroyed||setting('readAloudCredit',true)===false||!(seconds>0))return;
@@ -810,72 +1025,189 @@
    const location={attachmentID:reader.itemID,pageIndex:page-1,totalPages:total};
    Promise.resolve(runtime.addReading(item,seconds,location,location)).catch(log);
   }
+  /* A start at a point of the page, in the extraction's page space. */
+  function playAt(session,pageIndex,x,y){
+   return structure(session).then(()=>{
+    if(session.destroyed)return;
+    const size=session.pageSizes&&session.pageSizes[pageIndex];if(!size||!(size.width>0))return;
+    return startPlayback(session,p=>{const at=p.indexNear(pageIndex,x,y);if(at>=0)p.play(at);});
+   }).catch(error=>say(session,describe(error),true));
+  }
+  /* Alt(Option)+double-click on the page starts reading there. A plain double-click is how people select a word, so it is left alone. */
   function onDoubleClick(session,event){
-   if(!session.open)return;
+   if(!session.open||!event||!event.altKey)return;
    try{
     const target=event.target,pageEl=target&&target.closest&&target.closest('.page[data-page-number]');if(!pageEl||!pageEl.getBoundingClientRect)return;
     const page=Number(pageEl.getAttribute('data-page-number')),rect=pageEl.getBoundingClientRect();
     if(!(rect.width>0&&rect.height>0))return;
     const fx=(event.clientX-rect.left)/rect.width,fy=(event.clientY-rect.top)/rect.height;
-    // The text may not have been read yet: the first double-click waits for it, then starts there.
     structure(session).then(()=>{
-     const size=session.pageSizes&&session.pageSizes[page-1];if(!size||!(size.width>0))return null;
-     return ensurePlayer(session).then(p=>{const at=p.indexNear(page-1,fx*size.width,fy*size.height);if(at>=0)p.play(at);});
+     const size=session.pageSizes&&session.pageSizes[page-1];if(!size||!(size.width>0))return;
+     return playAt(session,page-1,fx*size.width,fy*size.height);
     }).catch(error=>say(session,describe(error),true));
    }catch(error){log(error);}
   }
+  /* "여기서부터 듣기" in the reader's text-selection popup. The selection's position is in PDF user space; the
+     extraction's page space is that through the page's transform. */
+  function selectionPopup({reader,doc,params,append}){
+   if(stopped||!reader||reader.type!=='pdf'||typeof append!=='function')return;
+   const position=params&&params.annotation&&params.annotation.position;
+   if(!position||!Number.isInteger(position.pageIndex)||!position.rects||!position.rects.length)return;
+   const b=el(doc,'button',{type:'button','class':'sc-ra-selection-listen','data-opens':'audio',title:t(PLAY_TIP)});
+   b.textContent=t('여기서부터 듣기');
+   b.style.cssText='display:block;width:100%;margin-top:4px;padding:4px 6px;border-radius:5px;text-align:center;color:var(--fill-primary);background:var(--material-button);box-shadow:0 .5px 2.5px rgba(0,0,0,.3),0 0 0 .5px rgba(0,0,0,.05);';
+   const r=Array.from(position.rects[0]).map(Number),pageIndex=position.pageIndex;
+   b.addEventListener('click',()=>{
+    const session=sessions.get(reader)||createSession(reader);if(!session)return;
+    structure(session).then(()=>{
+     const size=session.pageSizes&&session.pageSizes[pageIndex];if(!size||!Array.isArray(size.transform))return;
+     const [a,b_,c,d,e,f]=size.transform,x=(r[0]+r[2])/2,y=(r[1]+r[3])/2;
+     return playAt(session,pageIndex,a*x+c*y+e,b_*x+d*y+f);
+    }).catch(error=>say(session,describe(error),true));
+   });
+   append(b);
+  }
 
-  /* ---- open, close, tabs ---------------------------------------------------- */
+  /* ---- open, close, tabs ----------------------------------------------------
+     The panel takes its own column: the reader's view containers (#split-view and the React .split-view) end
+     where the panel begins, and pdf.js is told to fit again, so the paper is never under the panel. The width is
+     the user's (dragged on the left edge, 280 px to half the reader), and the panel folds to a 52 px rail. */
+  const docWidth=session=>{try{return Number(session.doc.documentElement.clientWidth)||Number(session.doc.defaultView.innerWidth)||0;}catch(_){return 0;}};
+  function panelWidth(session){
+   const saved=Number(uiState().width)||WIDTH,total=docWidth(session);
+   const max=total>0?Math.max(MIN_WIDTH,Math.floor(total*0.5)):Math.max(MIN_WIDTH,saved);
+   return Math.round(Math.min(max,Math.max(MIN_WIDTH,saved)));
+  }
+  const occupied=session=>!session.open?0:session.collapsed?RAIL_WIDTH:panelWidth(session);
+  const viewContainers=session=>{try{return [...session.doc.querySelectorAll('#split-view, .split-view')];}catch(_){return [];}};
   function applyLayout(session,open){
-   const doc=session.doc,split=doc.querySelector&&doc.querySelector('#split-view');
-   if(split&&split.style){if(open)split.style.setProperty('inset-inline-end',WIDTH+'px');else split.style.removeProperty('inset-inline-end');}
-   session.ui.root.hidden=!open;
+   if(open!==undefined)session.open=!!open;
+   const w=occupied(session),root_=session.ui.root;
+   root_.hidden=!session.open;
+   root_.setAttribute('data-collapsed',String(!!session.collapsed));
+   try{root_.style.setProperty('--sc-ra-w',(session.collapsed?RAIL_WIDTH:panelWidth(session))+'px');}catch(_){}
+   for(const node of viewContainers(session)){
+    if(!node.style)continue;
+    if(!session.layoutOriginal)session.layoutOriginal=new Map();
+    const priority=()=>typeof node.style.getPropertyPriority==='function'?node.style.getPropertyPriority('inset-inline-end'):'important';
+    if(!session.layoutOriginal.has(node))session.layoutOriginal.set(node,{value:node.style.getPropertyValue('inset-inline-end'),priority:priority()});
+    if(w>0){if(node.style.getPropertyValue('inset-inline-end')!==w+'px'||priority()!=='important')node.style.setProperty('inset-inline-end',w+'px','important');}
+    else{const o=session.layoutOriginal.get(node);if(o.value)node.style.setProperty('inset-inline-end',o.value,o.priority);else node.style.removeProperty('inset-inline-end');}
+   }
+   if(w===0)session.layoutOriginal=null;
+   if(session.appliedWidth!==w){session.appliedWidth=w;refit(session);}
+  }
+  /* pdf.js fits "page width" and "auto" again only when it hears a resize: say so to each view, after layout. */
+  function refit(session){
+   const win=session.doc.defaultView;if(!win||!win.setTimeout)return;
+   win.setTimeout(()=>{
+    if(session.destroyed)return;
+    const core=coreOf(session.reader);
+    for(const view of [core&&core._primaryView,core&&core._secondaryView]){
+     try{
+      const w=view&&view._iframeWindow;if(!w)continue;
+      if(typeof w.dispatchEvent==='function'&&w.Event)w.dispatchEvent(new w.Event('resize'));
+      const app=(w.wrappedJSObject||w).PDFViewerApplication,pv=app&&app.pdfViewer;
+      const scale=pv&&pv.currentScaleValue;
+      if(typeof scale==='string'&&/^(?:page-width|page-fit|auto|page-actual)$/.test(scale))pv.currentScaleValue=scale;
+     }catch(error){log(error);}
+    }
+   },0);
+  }
+  function setCollapsed(session,collapsed,{remember=true}={}){
+   session.collapsed=!!collapsed;applyLayout(session);
+   if(remember&&!session.probing){uiState().collapsed=session.collapsed;persistUI();}
+  }
+  function wireResizer(session){
+   const handle=session.ui.resizer,doc=session.doc;
+   const setWidth=(w,save)=>{
+    const total=docWidth(session),max=total>0?Math.max(MIN_WIDTH,Math.floor(total*0.5)):w;
+    uiState().width=Math.round(Math.min(max,Math.max(MIN_WIDTH,w)));
+    handle.setAttribute('aria-valuenow',String(uiState().width));applyLayout(session);
+    if(save)persistUI();
+   };
+   let drag=null;
+   handle.addEventListener('pointerdown',event=>{
+    if(event.button!==undefined&&event.button!==0)return;
+    drag={x:event.clientX,width:panelWidth(session)};try{handle.setPointerCapture(event.pointerId);}catch(_){}
+    event.preventDefault&&event.preventDefault();
+   });
+   handle.addEventListener('pointermove',event=>{if(!drag)return;const ltr=(doc.documentElement.getAttribute('dir')||'ltr')!=='rtl';setWidth(drag.width+(ltr?drag.x-event.clientX:event.clientX-drag.x),false);});
+   const end=()=>{if(!drag)return;drag=null;persistUI();};
+   handle.addEventListener('pointerup',end);handle.addEventListener('pointercancel',end);
+   handle.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setWidth(panelWidth(session)+(event.key==='ArrowLeft'?16:-16),true);}});
   }
   function setOpen(session,open,{remember=true}={}){
-   session.open=!!open;applyLayout(session,session.open);
-   if(session.toolbarState)session.toolbarState.panel.setAttribute('aria-pressed',String(session.open));
-   if(remember){uiState().open=session.open;persistUI();}
-   if(session.open){showTab(session,session.tab||uiState().tab||'ask');ensureReady(session);}
+   session.open=!!open;
+   if(session.open)paintTab(session,validTab(session.tab||uiState().tab));
+   applyLayout(session);
+   // The toolbar button may belong to a toolbar that was redrawn since: never let it stop the panel from opening.
+   try{if(session.toolbarState)session.toolbarState.panel.setAttribute('aria-pressed',String(session.open));}catch(_){session.toolbarState=null;}
+   if(remember&&!session.probing){uiState().open=session.open;persistUI();}
+   if(session.open){showTab(session,validTab(session.tab||uiState().tab));ensureReady(session);}
   }
-  function showTab(session,id){
-   session.tab=id;if(remember(id)){uiState().tab=id;persistUI();}
+  function paintTab(session,id){
    for(const[name,pane]of Object.entries(session.ui.panes))pane.hidden=name!==id;
    for(const[name,t_]of Object.entries(session.ui.tabs))t_.button.setAttribute('aria-selected',String(name===id));
+  }
+  function showTab(session,id){
+   id=validTab(id);session.tab=id;
+   if(!session.probing){uiState().tab=id;persistUI();}
+   paintTab(session,id);
    if(id==='translate')prepareTranslate(session);
    if(id==='listen')markCurrent(session);
   }
-  const remember=id=>['ask','translate','listen'].includes(id);
   async function ensureReady(session){
    if(session.ready||session.destroyed)return;
    session.ready=true;
    try{
     await loadData(session);
+    if(session.destroyed)return;
     session.loaded=true;
     renderSummary(session);renderChat(session);renderPlayer(session);renderTranscript(session);
     // Translations already made for this paper are shown without asking for anything.
-    if(session.tab==='translate')prepareTranslate(session);
-    const pos=session.data.position;if(pos&&pos.sig)renderPlayer(session);
+    if(session.tab==='translate'&&session.open)prepareTranslate(session);
    }catch(error){log(error);}
   }
 
   /* ---- sessions per reader ------------------------------------------------- */
+  const ACTIVITY=['pointermove','pointerdown','keydown','wheel'];
+  /* The viewer document is replaced when the reader reloads the file: listeners and the render watch follow it. */
+  function attachViewer(session){
+   const vdoc=viewerDoc(session.reader);
+   if(vdoc===session.vdoc)return;
+   detachViewer(session);
+   if(!vdoc)return;
+   session.onDbl=session.onDbl||(event=>onDoubleClick(session,event));
+   vdoc.addEventListener('dblclick',session.onDbl,true);
+   for(const name of ACTIVITY)vdoc.addEventListener(name,session.onActivity,{capture:true,passive:true});
+   session.vdoc=vdoc;session.marks=[];
+   watchRendering(session);
+  }
+  function detachViewer(session){
+   const vdoc=session.vdoc;session.vdoc=null;unwatchRendering(session);if(!vdoc)return;
+   try{vdoc.removeEventListener('dblclick',session.onDbl,true);for(const name of ACTIVITY)vdoc.removeEventListener(name,session.onActivity,true);}catch(_){}
+  }
   function createSession(reader){
    const doc=reader._iframeWindow&&reader._iframeWindow.document;if(!doc||!doc.documentElement)return null;
    const attachment=attachmentOf(reader);if(!attachment)return null;
-   const session={reader,doc,id:++sequence,name:attachment.libraryID+'-'+attachment.key,menus:new Set(),filters:{captions:false,references:false},tab:uiState().tab||'ask',open:false,destroyed:false,marks:[],data:{v:1,summary:{},chat:[],tr:{}},ready:false};
+   const session={reader,doc,id:++sequence,name:attachment.libraryID+'-'+attachment.key,menus:new Set(),filters:{captions:false,references:false},tab:validTab(uiState().tab),open:false,collapsed:uiState().collapsed===true,destroyed:false,marks:[],data:{v:1,summary:{},chat:[],tr:{}},ready:false};
    buildPanel(session);
    (doc.body||doc.documentElement).appendChild(session.ui.root);
    stylesheet().then(css=>{if(session.destroyed||!css)return;const style=doc.createElementNS(HTML,'style');style.setAttribute('data-sc-ra-style','1');style.textContent=css;(doc.head||doc.documentElement).appendChild(style);session.style=style;});
    // Let the panel know the reader's pointer activity, so listening is credited only when the person is not already being counted.
    session.onActivity=()=>{session.lastActivity=Date.now();};
-   for(const name of ['pointermove','pointerdown','keydown','wheel'])doc.addEventListener(name,session.onActivity,{capture:true,passive:true});
-   const vdoc=viewerDoc(reader);if(vdoc){session.onDbl=event=>onDoubleClick(session,event);vdoc.addEventListener('dblclick',session.onDbl,true);session.vdoc=vdoc;
-    for(const name of ['pointermove','pointerdown','keydown','wheel'])vdoc.addEventListener(name,session.onActivity,{capture:true,passive:true});}
+   for(const name of ACTIVITY)doc.addEventListener(name,session.onActivity,{capture:true,passive:true});
+   attachViewer(session);
+   // A window resize keeps the panel within half the reader.
+   session.onResize=()=>{if(session.open)applyLayout(session);};
+   try{doc.defaultView.addEventListener('resize',session.onResize);}catch(_){}
    session.say=(m,e)=>say(session,m,e);
    sessions.set(reader,session);
    ensureReady(session).then(()=>{
+    if(session.destroyed)return;
     const want=uiState().open===true||(uiState().open===undefined&&setting('aiSummaryOnOpen',false)===true);
-    if(want)setOpen(session,true,{remember:false});
+    if(want&&!session.open)setOpen(session,true,{remember:false});
    });
    return session;
   }
@@ -883,19 +1215,24 @@
    if(session.destroyed)return;
    session.destroyed=true;sessions.delete(session.reader);
    try{session.player&&session.player.destroy();}catch(_){}
+   for(const tok of [session.chatToken,session.summaryToken])try{tok&&tok.cancel();}catch(_){}
    try{session.tr&&session.tr.service.cancel();}catch(_){}
    try{saveNow(session);}catch(_){}
    clearHighlight(session);
-   try{applyLayout(session,false);}catch(_){}
+   try{session.open=false;applyLayout(session);}catch(_){}
    try{session.ui.root.remove();}catch(_){}try{session.style&&session.style.remove();}catch(_){}
-   try{session.doc.removeEventListener('click',session.onDocClick);session.doc.removeEventListener('keydown',session.onKey);for(const name of ['pointermove','pointerdown','keydown','wheel'])session.doc.removeEventListener(name,session.onActivity,true);}catch(_){}
-   try{if(session.vdoc){session.vdoc.removeEventListener('dblclick',session.onDbl,true);for(const name of ['pointermove','pointerdown','keydown','wheel'])session.vdoc.removeEventListener(name,session.onActivity,true);}}catch(_){}
+   try{session.doc.removeEventListener('click',session.onDocClick);session.doc.removeEventListener('keydown',session.onKey);for(const name of ACTIVITY)session.doc.removeEventListener(name,session.onActivity,true);}catch(_){}
+   try{session.doc.defaultView.removeEventListener('resize',session.onResize);}catch(_){}
+   detachViewer(session);
    try{if(session.saveTimer)session.doc.defaultView.clearTimeout(session.saveTimer);if(session.sayTimer)session.doc.defaultView.clearTimeout(session.sayTimer);}catch(_){}
    try{session.toolbarState=null;}catch(_){}
   }
+  /* Started by a self-check (the pref is still set while this module is created): nothing runs by itself in that session. */
+  const quietStart=(()=>{try{return !!(Z.Prefs&&Z.Prefs.get&&Z.Prefs.get('extensions.style-custom.selfCheck',true));}catch(_){return false;}})();
   /* Called by reader-tools every second with the PDF readers of one window and the selected tab. */
   function sync(win,readers,selectedTabID){
    if(stopped)return;
+   pruneSoon();
    const live=new Set(readers.filter(r=>r.type==='pdf'));
    for(const[reader,session]of [...sessions])if(reader._window===win&&!live.has(reader))destroySession(session);
    for(const reader of live){
@@ -904,8 +1241,11 @@
     if(session&&(session.doc!==doc||!session.ui.root.isConnected)){destroySession(session);session=null;}
     if(!session)session=createSession(reader);
     if(!session)continue;
+    attachViewer(session);
+    if(!session.renderWatch)watchRendering(session);   // pdf.js may not have been ready when the session began
+    if(session.open)applyLayout(session);      // the reader may have re-rendered and dropped the column
     const shown=!selectedTabID||!reader.tabID||reader.tabID===selectedTabID;
-    if(shown&&!session.autoChecked&&session.loaded){
+    if(shown&&!session.autoChecked&&session.loaded&&!probing&&!quietStart){
       session.autoChecked=true;
       // The one thing that runs by itself, and only because the reader asked for it in the settings.
       if(setting('aiSummaryOnOpen',false)===true&&!summaryEntry(session)&&!session.data.autoSummary&&runtime.assist?.available?.()){
@@ -914,25 +1254,56 @@
     }
    }
   }
-  /* The two toolbar buttons: read aloud, and the panel. */
+  /* The two toolbar buttons: the panel, and play/pause (which works with the panel closed or folded). */
   function mountToolbar({reader,doc,container}){
    if(stopped)return null;
    const state={};
    const panel=el(doc,'button',{type:'button','class':'toolbar-button sc-ra-toolbar','data-safe':'view',title:t('논문 도우미 (요약·대화·번역)'),'aria-label':t('논문 도우미 (요약·대화·번역)'),'aria-pressed':'false'},container);
    panel.appendChild(icon(doc,'panel'));
-   const listen=el(doc,'button',{type:'button','class':'toolbar-button sc-ra-toolbar','data-opens':'audio',title:t('읽어주기'),'aria-label':t('읽어주기')},container);
+   const listen=el(doc,'button',{type:'button','class':'toolbar-button sc-ra-toolbar','data-opens':'audio',title:t('본문만 읽기')+' — '+t(PLAY_TIP),'aria-label':t('본문만 읽기')},container);
    listen.appendChild(icon(doc,'play'));
    state.panel=panel;state.listen=listen;
    const sessionOf=()=>sessions.get(reader)||createSession(reader);
    panel.addEventListener('click',()=>{const s=sessionOf();if(!s)return;s.toolbarState=state;setOpen(s,!s.open);});
    listen.addEventListener('click',async()=>{
     const s=sessionOf();if(!s)return;s.toolbarState=state;
-    try{if(!s.open)setOpen(s,true);showTab(s,'listen');await togglePlay(s);}catch(error){log(error);say(s,describe(error),true);}
+    try{await togglePlay(s);}catch(error){log(error);if(!s.open)setOpen(s,true,{remember:false});say(s,describe(error),true);}
    });
    const s=sessions.get(reader);if(s){s.toolbarState=state;panel.setAttribute('aria-pressed',String(!!s.open));}
    return {remove(){panel.remove();listen.remove();const cur=sessions.get(reader);if(cur&&cur.toolbarState===state)cur.toolbarState=null;}};
   }
   function releaseWindow(win){for(const[reader,session]of [...sessions])if(reader._window===win)destroySession(session);}
+
+  /* ---- the cache folder stays bounded ------------------------------------
+     At most 200 papers or 100 MB in style-custom-reader/, least recently used first; a paper whose item is gone
+     is removed. Once per run, a minute after the first reader is seen. */
+  let pruneTimer=null,pruned=false;
+  function pruneSoon(){
+   if(pruned||pruneTimer||quietStart)return;
+   const win=[...sessions.values()][0]?.doc?.defaultView;if(!win||!win.setTimeout)return;
+   pruneTimer=win.setTimeout(()=>{pruneTimer=null;pruned=true;pruneCache().catch(log);},60000);
+  }
+  async function pruneCache({maxPapers=CACHE_PAPERS,maxBytes=CACHE_BYTES}={}){
+   const fs=io(),dir=folder();if(!fs||!fs.getChildren)return {removed:0};
+   let children;try{children=await fs.getChildren(dir);}catch(_){return {removed:0};}
+   const papers=new Map();
+   for(const file of children||[]){
+    const m=/([^/\\]+?)\.(struct|state)\.json$/.exec(file);if(!m)continue;
+    let st;try{st=await fs.stat(file);}catch(_){continue;}
+    const p=papers.get(m[1])||{name:m[1],files:[],bytes:0,used:0};
+    p.files.push(file);p.bytes+=Number(st.size)||0;p.used=Math.max(p.used,Number(st.lastModified||st.lastModifiedMs)||0);papers.set(m[1],p);
+   }
+   const live=new Set([...sessions.values()].map(s=>s.name));
+   const gone=p=>{const m=/^(\d+)-([A-Z0-9]{8})$/.exec(p.name);if(!m||live.has(p.name))return false;try{return Z.Items.getByLibraryAndKey(Number(m[1]),m[2])===false;}catch(_){return false;}};
+   const drop=[],keep=[];
+   for(const p of papers.values())(gone(p)?drop:keep).push(p);
+   // Open papers first (always kept), then the most recently used.
+   keep.sort((a,b)=>(live.has(b.name)?1:0)-(live.has(a.name)?1:0)||b.used-a.used);
+   let bytes=0,count=0;
+   for(const p of keep){count++;bytes+=p.bytes;if(!live.has(p.name)&&(count>maxPapers||bytes>maxBytes))drop.push(p);}
+   for(const p of drop)for(const file of p.files)try{await fs.remove(file);}catch(error){log(error);}
+   return {removed:drop.length};
+  }
 
   /* ---- the self-check probe: measure, press nothing --------------------- */
   const rgb=value=>{const m=/rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+))?\)/.exec(String(value||''));return m?[Number(m[1]),Number(m[2]),Number(m[3]),m[4]===undefined?1:Number(m[4])]:null;};
@@ -945,20 +1316,51 @@
    for(const c of layers.reverse())base=[0,1,2].map(i=>c[i]*c[3]+base[i]*(1-c[3]));
    return base;
   }
-  /* Measure the panel on one reader without clicking anything: open it, visit each tab, read sizes, colours and overflow, put it back. */
+  /* Page 1 through the real pdf.js, read only (nothing is written to the cache): the check that extraction does not fall back. */
+  async function probeExtraction(session){
+   const out={fallback:true,rects:0,sentences:0,error:''};
+   try{
+    if(!root.StyleCustomPaperText){out.error='the extraction module is not loaded';return out;}
+    const pdf=await pdfDocumentOf(session,{tries:20});if(!pdf){out.error='pdf.js has no document';return out;}
+    const got=await readPage(session,pdf,1,{fonts:true});
+    const structured=root.StyleCustomPaperText.structure({pages:[got.page],meta:{}});
+    const units=(root.StyleCustomPaperText.readingOrder?root.StyleCustomPaperText.readingOrder(structured):[])||[];
+    out.fallback=false;out.sentences=units.length;out.rects=units.filter(u=>Array.isArray(u.rects)&&u.rects.length).length;
+   }catch(error){out.error=String(error&&error.message||error);}
+   return out;
+  }
+  const rectOf=node=>{try{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};}catch(_){return null;}};
+  /* Measure the panel on one reader without clicking anything: open it, visit each tab, read sizes, colours and
+     overflow, check that the paper is beside the panel and not under it, put it back. While probing nothing is
+     persisted, no translation is prepared and no summary starts by itself. */
   async function probe(reader){
    const result={reader:reader.itemID,problems:[],checked:0,tabs:{}};
    const session=sessions.get(reader)||createSession(reader);if(!session){result.problems.push('no panel could be mounted');return result;}
-   const win=session.doc.defaultView,wasOpen=session.open,wasTab=session.tab;
-   await ensureReady(session);
+   const win=session.doc.defaultView,wasOpen=session.open,wasTab=session.tab,wasCollapsed=session.collapsed;
+   probing++;session.probing=true;
    try{
-    setOpen(session,true,{remember:false});
+    await ensureReady(session);
+    setOpen(session,true,{remember:false});session.collapsed=false;applyLayout(session);
     const unmarked=unmarkedButtons(session.ui.root);if(unmarked.length)result.problems.push('buttons without data-safe/data-opens/data-writes: '+unmarked.map(b=>clean(b.textContent||b.getAttribute('aria-label'))).join(' | '));
+    await sleepIn(win,60);
+    // The paper is beside the panel, never under it.
+    const panelRect=rectOf(session.ui.root);
+    for(const view of viewContainers(session)){
+     const r=rectOf(view);if(!r||!panelRect||!(r.width>0))continue;
+     if(r.right>panelRect.left+1)result.problems.push(`the PDF view (${view.id?'#'+view.id:'.'+view.className}) reaches ${Math.round(r.right)}px, under the panel that starts at ${Math.round(panelRect.left)}px`);
+    }
+    // Rows that must stay on one line inside their card.
+    for(const sel of ['.sc-ra-seg','.sc-ra-tabs','.sc-ra-transport','.sc-ra-opts']){
+     const node=session.ui.root.querySelector(sel),box=node&&rectOf(node);if(!box)continue;
+     const card=node.closest('.sc-ra-card')||session.ui.root,cr=rectOf(card);
+     for(const child of node.children){const r=rectOf(child);if(r&&r.width>0&&(r.right>box.right+1||(cr&&r.right>cr.right+1)))result.problems.push(`${sel}: "${clean(child.textContent||child.getAttribute('aria-label')).slice(0,20)}" overflows by ${Math.round(r.right-Math.min(box.right,cr?cr.right:box.right))}px`);}
+     if(node.scrollWidth>node.clientWidth+1&&node.clientWidth>0)result.problems.push(`${sel} overflows (${node.scrollWidth}>${node.clientWidth})`);
+    }
     for(const id of ['ask','translate','listen']){
-     session.tab=id;for(const[name,pane]of Object.entries(session.ui.panes))pane.hidden=name!==id;
+     session.tab=id;paintTab(session,id);
      if(id==='translate')renderTranslate(session);
      await sleepIn(win,30);
-     const rootRect=session.ui.root.getBoundingClientRect?session.ui.root.getBoundingClientRect():null;
+     const rootRect=rectOf(session.ui.root);
      const found=[];
      const all=[session.ui.root,...session.ui.root.querySelectorAll('*')];
      for(const node of all){
@@ -971,19 +1373,29 @@
        const fg=rgb(style.color),bg=backdrop(win,node);
        if(fg){const eff=fg[3]<1?[0,1,2].map(i=>fg[i]*fg[3]+bg[i]*(1-fg[3])):fg;const ratio=contrastOf(eff,bg);if(ratio<4.5)found.push(`${node.tagName.toLowerCase()}.${node.className||''} "${clean(node.textContent).slice(0,24)}": contrast ${ratio.toFixed(2)}:1`);}
       }
+      // An icon-only button: its stroke colour against its own background.
+      if(node.tagName==='BUTTON'&&!own&&node.querySelector&&node.querySelector('svg')&&!node.disabled){
+       const fg=rgb(style.color),bg=backdrop(win,node);
+       if(fg){const eff=fg[3]<1?[0,1,2].map(i=>fg[i]*fg[3]+bg[i]*(1-fg[3])):fg;const ratio=contrastOf(eff,bg);if(ratio<3)found.push(`icon button "${clean(node.getAttribute('aria-label')).slice(0,20)}": contrast ${ratio.toFixed(2)}:1`);}
+      }
       if(rootRect&&node!==session.ui.root&&node.getBoundingClientRect){
        const r=node.getBoundingClientRect();
        if(r.width>0&&r.right>rootRect.right+1&&!node.closest('.sc-ra-menu'))found.push(`${node.tagName.toLowerCase()}.${node.className||''} pokes out ${Math.round(r.right-rootRect.right)}px to the right`);
       }
       if(node.tagName==='BUTTON'&&node.getBoundingClientRect){const r=node.getBoundingClientRect();if(r.width>0&&(r.height<22||r.width<22))found.push(`button "${clean(node.textContent||node.getAttribute('aria-label')).slice(0,20)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);}
-      if(style.overflowX==='hidden'&&node.scrollWidth>node.clientWidth+1&&node.clientWidth>0&&!/sc-ra-(sentence|row-meta|pill-text|progress)/.test(node.className||''))found.push(`${node.tagName.toLowerCase()}.${node.className||''} clips its text (${node.scrollWidth}>${node.clientWidth})`);
+      if(style.overflowX==='hidden'&&node.scrollWidth>node.clientWidth+1&&node.clientWidth>0&&!/sc-ra-(sentence|row-meta|pill-text|progress|tab-text|status)/.test(node.className||''))found.push(`${node.tagName.toLowerCase()}.${node.className||''} clips its text (${node.scrollWidth}>${node.clientWidth})`);
      }
      result.tabs[id]=found.length;result.problems.push(...found.map(x=>id+': '+x));
     }
+    // The text of page 1 comes from pdf.js with positions, not from the plain-text fallback.
+    result.extraction=await probeExtraction(session);
+    if(result.extraction.fallback)result.problems.push('page 1 extraction fell back to plain text: '+(result.extraction.error||'unknown'));
+    else if(result.extraction.sentences&&!result.extraction.rects)result.problems.push('page 1 extraction has no rectangles');
     result.player=session.player?session.player.state().status:'idle';
     if(result.player==='playing')result.problems.push('the probe started audio');
    }finally{
-    session.tab=wasTab;setOpen(session,wasOpen,{remember:false});if(wasOpen)showTab(session,wasTab);
+    session.tab=wasTab;session.collapsed=wasCollapsed;setOpen(session,wasOpen,{remember:false});if(wasOpen)paintTab(session,validTab(wasTab));
+    session.probing=false;probing--;
    }
    return result;
   }
@@ -1000,7 +1412,7 @@
    for(const session of [...sessions.values()])destroySession(session);
    sessions.clear();
   }
-  return Object.freeze({sync,mountToolbar,releaseWindow,probe,probeAll,stop,sessions:()=>[...sessions.values()],owner});
+  return Object.freeze({sync,mountToolbar,releaseWindow,selectionPopup,probe,probeAll,pruneCache,stop,sessions:()=>[...sessions.values()],owner});
  }
- return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,icon,ICONS,WIDTH});
+ return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,viewportFor,overlayBoxes});
 });

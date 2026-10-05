@@ -43,16 +43,16 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     for (const key of keys) {
       const col = `${TREE}[data-sc-hover-col="${attr(key)}"]`;
       const cls = `.cell.${esc(key)}`;
-      out.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#EEF0F3}`);
-      out.push(`${col} .virtualized-table-header ${cls}{background-color:#EEF0F3;box-shadow:inset 0 -2px 0 #C9CED6}`);
-      dark.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#2C3038}`);
-      dark.push(`${col} .virtualized-table-header ${cls}{background-color:#2C3038;box-shadow:inset 0 -2px 0 #4A505B}`);
+      out.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#F1F6FF}`);
+      out.push(`${col} .virtualized-table-header ${cls}{background-color:#E8F0FF;box-shadow:inset 0 -2px 0 #7FAEFF}`);
+      dark.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#1E2A3D}`);
+      dark.push(`${col} .virtualized-table-header ${cls}{background-color:#22314A;box-shadow:inset 0 -2px 0 #5B8EE6}`);
     }
     out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(58,63,75,.045)}`);
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{box-shadow:inset 0 0 0 1.5px #3A3F4B}`);
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row.selected .cell[data-sc-hover-cell]{box-shadow:inset 0 0 0 1.5px #FFFFFF}`);
+    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{border-radius:7px;background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
+    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row.selected .cell[data-sc-hover-cell]{border-radius:7px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9)}`);
     dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(255,255,255,.04)}`);
-    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{box-shadow:inset 0 0 0 1.5px #D5D9E0}`);
+    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{border-radius:7px;background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
     return out.join("\n") + `\n@media (prefers-color-scheme: dark){\n${dark.join("\n")}\n}\n`;
   }
 

@@ -185,10 +185,21 @@
     let lastEnd = null, lastStr = '', lastSize = 0, lastSpace = false, any = false, supSpace = false;
     const push = (ch, part, ci) => { text += ch; toks.push({ch, part, ci}); };
     const lastPart = parts[parts.length - 1];
+    // adjacent raised items are one superscript: "2" then "+" is a charge, not citation 2 and a plus
+    const supRun = new Map();
+    for (let i = 0; i < parts.length; i++) {
+      if (!parts[i].sup || supRun.has(parts[i])) continue;
+      const run = [parts[i]];
+      for (let j = i + 1; j < parts.length && parts[j].sup && parts[j].x - (run[run.length - 1].x + run[run.length - 1].w) < 0.5 * parts[j].size; j++) run.push(parts[j]);
+      const str = run.map(q => q.str).join('');
+      for (const q of run) supRun.set(q, {str, first: run[0], decided: null});
+    }
     for (const p of parts) {
       const s = p.str;
       if (!s) continue;
-      if (stripSup !== false && p.sup && isCiteSup(p, text)) {
+      const runInfo = p.sup ? supRun.get(p) : null;
+      if (runInfo && runInfo.first === p) runInfo.decided = isCiteSup({str: runInfo.str}, text);
+      if (stripSup !== false && p.sup && (runInfo ? runInfo.decided : isCiteSup(p, text))) {
         marks.push({pos: toks.length, part: p});
         lastEnd = p.x + p.w;
         if (/\s$/.test(s) || p.spaceAfter) supSpace = true;
@@ -237,7 +248,41 @@
       cur = {items: [p], core: p};
       rows.push(cur);
     }
-    return rows;
+    return rows.flatMap(splitStacked);
+  }
+
+  /* A large item (an 18pt title line) can reach over two lines of the column beside it, and
+     the overlap rule would make them one row. Two items of like size that stand over each
+     other on different baselines are never one row: the row is cut by baseline, and the
+     items of another size (superscripts, the title) go to the line beside them. */
+  function splitStacked(row) {
+    const its = row.items;
+    if (its.length < 3) return [row];
+    const stacked = (a, b) => Math.max(a.size, b.size) < 1.25 * Math.min(a.size, b.size) && nsLen(a.str) >= 2 && nsLen(b.str) >= 2
+      && Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0 && Math.abs(a.baseline - b.baseline) > 0.5 * Math.min(a.size, b.size);
+    // a sweep along x: only items that overlap horizontally are compared
+    const byX = its.slice().sort((a, b) => a.x - b.x);
+    let conflict = false;
+    for (let i = 0; i < byX.length && !conflict; i++) for (let j = i + 1; j < byX.length && byX[j].x < byX[i].x + byX[i].w; j++) if (stacked(byX[i], byX[j])) { conflict = true; break; }
+    if (!conflict) return [row];
+    const norm = dominantSize(its);
+    const anchors = its.filter(p => Math.abs(p.size - norm) <= 0.15 * norm).sort((a, b) => a.baseline - b.baseline);
+    const groups = [];
+    for (const p of anchors) {
+      const g = groups[groups.length - 1];
+      if (g && Math.abs(p.baseline - g.baseline) <= 0.3 * p.size) g.items.push(p); else groups.push({items: [p], baseline: p.baseline});
+    }
+    if (groups.length < 2) return [row];
+    for (const p of its) {
+      if (anchors.includes(p)) continue;
+      const c = p.y + p.h / 2;
+      const near = groups.filter(g => g.items.some(q => Math.max(q.x - (p.x + p.w), p.x - (q.x + q.w)) < 2 * Math.max(p.size, q.size)));
+      const pool = near.length ? near : groups;
+      let best = pool[0], bd = Infinity;
+      for (const g of pool) { const d = Math.abs(g.baseline - (p.size < norm ? p.baseline : c)); if (d < bd) { bd = d; best = g; } }
+      best.items.push(p);
+    }
+    return groups.map(g => ({items: g.items, core: g.items.reduce((a, b) => (b.size > a.size ? b : a))}));
   }
 
   function makeSegment(parts) {
@@ -314,6 +359,120 @@
     return segs;
   }
 
+  /* List bullets drawn as a letter from a symbol font (Cell's "d" before each item of a list): a font
+     named as a symbol or pi font, or one that only ever draws single letters in another family than the
+     text beside it. Its single glyphs are not text. */
+  const SYMBOL_FONT = /(?:^|[+_-])(?:[A-Za-z]*Pi\d*|[A-Za-z]*Symbol[A-Za-z]*|[A-Za-z]*Dingbat[A-Za-z]*|Wingdings\d*|ZapfDingbats|MT-?Extra)$/i;
+  function dropBullets(pages) {
+    const stat = new Map();
+    for (const pg of pages) for (const p of pg.parts) {
+      let f = stat.get(p.font);
+      if (!f) { f = {single: 0, longer: 0, family: p.family, letters: new Set()}; stat.set(p.font, f); }
+      if (nsLen(p.str) <= 1) { f.single++; if (/[A-Za-z]/.test(p.str)) f.letters.add(p.str.trim()); } else f.longer++;
+    }
+    const famW = new Map();
+    for (const pg of pages) for (const p of pg.parts) famW.set(p.family, (famW.get(p.family) || 0) + nsLen(p.str));
+    const mainFam = [...famW.entries()].sort((a, b) => b[1] - a[1])[0];
+    const bullet = new Set();
+    for (const [font, f] of stat) {
+      if (SYMBOL_FONT.test(fontKey(font).replace(/[-,](?:Regular|Roman)$/i, ''))) bullet.add(font);
+      else if (f.single >= 3 && f.longer === 0 && ((mainFam && f.family && f.family !== mainFam[0]) || (f.letters.size <= 2 && f.single >= 6))) bullet.add(font);
+    }
+    if (!bullet.size) return;
+    for (const pg of pages) pg.parts = pg.parts.filter(p => !(bullet.has(p.font) && /^\s*[a-zA-Z]\s*$/.test(p.str)));
+  }
+
+  /* A document that carries its text twice, in two typefaces (a stale, reflowed text layer under
+     the final one, a few points off or on the next page): when at least three long runs appear
+     verbatim in two fonts at different places, the fonts fall into two layers and the layer with
+     less text in the document goes, with the other styles of its typeface. */
+  function dropStaleLayer(pages, skipped) {
+    const long = new Map();
+    for (const pg of pages) for (const p of pg.parts) if (p.str.trim().length >= 40) { const k = p.str.trim(); if (!long.has(k)) long.set(k, []); long.get(k).push(p); }
+    const edges = [];
+    for (const ps of long.values()) {
+      if (ps.length !== 2 || ps[0].font === ps[1].font) continue;
+      if (ps[0].page === ps[1].page && Math.abs(ps[0].x - ps[1].x) < 0.5 && Math.abs(ps[0].y - ps[1].y) < 0.5) continue;
+      if (ps[0].str.trim().length < 60) continue;
+      edges.push([ps[0].font, ps[1].font, ps[0].str.trim().length]);
+    }
+    if (edges.length < 3) return;
+    const face = f => fontKey(f).split(/[-,]/)[0];
+    const real = edges.every(([a, b]) => realFontName(a) && realFontName(b));
+    const flat = edges.map(([a, b]) => [a, b]);
+    // with real names the two layers are two typefaces; without them, each set of linked fonts on its own
+    const side = new Map();
+    let comp = 0;
+    for (const [a0] of edges) {
+      if (side.has(a0)) continue;
+      side.set(a0, {c: comp, k: 0});
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const [a, b] of edges) {
+          if (side.has(a) && !side.has(b)) { side.set(b, {c: side.get(a).c, k: 1 - side.get(a).k}); changed = true; }
+          else if (side.has(b) && !side.has(a)) { side.set(a, {c: side.get(b).c, k: 1 - side.get(b).k}); changed = true; }
+        }
+      }
+      comp++;
+    }
+    if (edges.some(([a, b]) => side.get(a).k === side.get(b).k)) return;
+    const weight = new Map();
+    const keyOfPart = p => {
+      if (real) { const fa = face(p.font); const e = edges.find(([a, b]) => face(a) === fa || face(b) === fa); return e ? fa : null; }
+      const sd = side.get(p.font); return sd ? sd.c + ':' + sd.k : null;
+    };
+    for (const pg of pages) for (const p of pg.parts) { const k = keyOfPart(p); if (k) weight.set(k, (weight.get(k) || 0) + nsLen(p.str)); }
+    const dropKeys = new Set();
+    if (real) {
+      const faces = [...new Set(flat.flat().map(face))];
+      if (faces.length !== 2) return;
+      dropKeys.add((weight.get(faces[0]) || 0) < (weight.get(faces[1]) || 0) ? faces[0] : faces[1]);
+    } else for (let c = 0; c < comp; c++) dropKeys.add((weight.get(c + ':0') || 0) < (weight.get(c + ':1') || 0) ? c + ':0' : c + ':1');
+    const sideOf = p => (dropKeys.has(keyOfPart(p)) ? 1 : 0);
+    // the layer to drop must be largely a copy: headings repeated in a contents list are not a layer
+    let dropped = 0;
+    for (const [k, w] of weight) if (dropKeys.has(k)) dropped += w;
+    if (sum(edges.map(e => e[2])) < 0.05 * dropped) return;
+    const drop = 1;
+    for (const pg of pages) {
+      const gone = pg.parts.filter(p => sideOf(p) === drop);
+      if (!gone.length) continue;
+      pg.parts = pg.parts.filter(p => sideOf(p) !== drop);
+      skipped.other.push({text: gone.map(p => p.str).join(' ').replace(/\s+/g, ' ').slice(0, 300), page: pg.index, reason: 'a second, stale text layer in another typeface'});
+    }
+  }
+
+  /* A run that starts with a subscript or superscript can carry that small size for the rest of the
+     line ("t" + "2 was the isocitrate lyase ..." set at 5.3pt in an 8pt paragraph). Its glyphs are as wide
+     as the paragraph's, so the width per character, against what the same font gives elsewhere, says
+     the real size. Only ever made larger, and only for runs long enough to measure. */
+  function fixRunSizes(pages) {
+    const per = new Map(), all = [];
+    for (const pg of pages) for (const p of pg.parts) {
+      if (p.str.length < 10 || !(p.w > 0)) continue;
+      const r = p.w / (p.str.length * p.size);
+      if (!per.has(p.font)) per.set(p.font, []);
+      per.get(p.font).push(r); all.push(r);
+    }
+    const R0 = median(all);
+    // only runs set well below the paper's running size: the subscript's size carried on
+    const sizes = [];
+    for (const pg of pages) for (const p of pg.parts) if (p.str.length >= 10) sizes.push(p.size);
+    const runSize = median(sizes);
+    const norm = new Map();
+    for (const [f, rs] of per) norm.set(f, rs.length >= 8 ? median(rs) : R0);
+    for (const pg of pages) for (const p of pg.parts) {
+      if (p.str.length < 12 || !(p.w > 0) || p.size > 0.85 * runSize) continue;
+      // capitals and letter-spaced headings are wide by nature; only running text is measured
+      const low = (p.str.match(/\p{Ll}/gu) || []).length;
+      if (low < 0.6 * nsLen(p.str) || / \S /.test(p.str.trim().slice(0, 12))) continue;
+      const R = norm.get(p.font) || R0;
+      if (!R || p.w / (p.str.length * p.size) < 1.35 * R) continue;
+      const size = Math.round(10 * p.w / (p.str.length * R)) / 10;
+      p.size = size; p.y = p.baseline - size; p.h = size;
+    }
+  }
+
   /* Bold from glyph widths when the caller could not name the fonts: a bold cut
      of the body face is wider per character than its regular. */
   function inferBold(pages) {
@@ -337,7 +496,7 @@
       const d = dominant.get(f.family || '');
       bold.set(name, !!(d && d !== f && ratio(d) > 0 && ratio(f) >= ratio(d) * 1.07));
     }
-    for (const pg of pages) for (const p of pg.parts) if (p.bold === undefined) p.bold = bold.get(p.font) || false;
+    for (const pg of pages) for (const p of pg.parts) if (p.bold === undefined) { p.bold = bold.get(p.font) || false; p.boldGuess = true; }
   }
 
   /* ---------------------------------------- headers, footers, numbers */
@@ -355,6 +514,9 @@
     /\be-?mail:\s*\S+@\S+/i,
   ];
   const keyOf = s => String(s).toLowerCase().replace(/[^\p{L}]/gu, '');
+  const STAMP = /^\s*(?:check for updates|crossmark|click for updates|view article online|view journal(?: \| view issue)?)\s*$/i;
+  // a journal's own line: name, volume, pages and a date or year ("Cell Host & Microbe 30, 1556–1569, November 9, 2022")
+  const JOURNAL_LINE = /^\s*(?:\d{1,5}\s+)?\p{Lu}[\p{L}&.\s]{2,60}\s\d{1,4}\s*[,:(]\s*(?:\d{1,4}\)\s*[,:]?\s*)?[e]?\d{1,6}\s*[\u2013-]\s*[e]?\d{1,6}.{0,40}\b(?:19|20)\d{2}\b.{0,40}$|[\u00AA\u00A9]\s*(?:19|20)\d{2}\s+\p{Lu}/u;
 
   function detectMargins(pages, skipped, meta) {
     const n = pages.length;
@@ -381,11 +543,17 @@
       const pageSet = new Set(segs.map(s => s.page));
       if (pageSet.size >= need || (k.length >= 8 && pageSet.size >= needLong)) for (const s of segs) if (!s.skip) s.skip = s.zone === 'top' ? 'header' : 'footer';
     }
+    // a footer seen once with more on it than the repeated one ("1556 Cell Host & Microbe 30, 1556-1569, November 9,
+    // 2022 ª 2022 Elsevier Inc." on the first text page) still carries the repeated text
+    const repeated = [...zones.entries()].filter(([k, sg]) => k.length >= 12 && sg.some(x => x.skip === 'header' || x.skip === 'footer')).map(([k]) => k);
     for (const pg of pages) for (const seg of pg.segs) {
       if (seg.skip || !seg.zone) continue;
       const text = seg.plain.trim();
-      if (MARGIN_PATTERNS.some(re => re.test(text)) || (doi && keyOf(text).includes(doi))) seg.skip = seg.zone === 'top' ? 'header' : 'footer';
+      const k = keyOf(text);
+      if (MARGIN_PATTERNS.some(re => re.test(text)) || (doi && k.includes(doi)) || repeated.some(r => k.includes(r)) || JOURNAL_LINE.test(text)) seg.skip = seg.zone === 'top' ? 'header' : 'footer';
     }
+    // a stamp is a stamp wherever it stands (the crossmark label beside the abstract)
+    for (const pg of pages) for (const seg of pg.segs) if (!seg.skip && STAMP.test(seg.plain)) { seg.skip = 'stamp'; skipped.other.push({text: seg.plain, page: pg.index, reason: 'stamp'}); }
     // line numbers down the margin (preprints, review copies): a column of bare numbers. A page
     // with few lines (a figure legend page) joins in when the paper shows the column elsewhere.
     const numberEdges = new Set();
@@ -418,7 +586,7 @@
     }
     for (const pg of pages) for (const seg of pg.segs) {
       if (!seg.skip) continue;
-      if (seg.skip === 'duplicate') continue;
+      if (seg.skip === 'duplicate' || seg.skip === 'stamp') continue;
       const kind = seg.skip === 'header' ? 'headers' : seg.skip === 'footer' ? 'footers' : (seg.skip === 'lineNumber' || seg.skip === 'margin') ? 'other' : 'pageNumbers';
       skipped[kind].push({text: seg.plain, page: pg.index, y: round1(seg.top), reason: seg.skip === 'pageNumber' ? 'page number' : seg.skip === 'lineNumber' ? 'line number in the margin' : seg.skip === 'margin' ? 'note in the margin beside the text' : 'repeated or boilerplate in the page margin'});
     }
@@ -504,10 +672,11 @@
      (paired rows), and the segments that cross it do not cut through the run of
      paired rows. The crossing ones are what spans the gutter: a title or an
      abstract over two columns, or a figure caption in the middle of them. */
-  function findGutters(segs, W, lo, hi, out, depth) {
+  function findGutters(segs, W, lo, hi, out, depth, minPaired) {
+    const need = minPaired || 5;
     const minLong = Math.max(0.17 * W, 60);
     const long = segs.filter(s => s.x1 - s.x0 >= minLong && s.plain.length >= 20);
-    if (long.length < 8) return;
+    if (long.length < (need >= 5 ? 8 : 6)) return;
     let best = null;
     const xs0 = Math.ceil(lo + 0.12 * W), xs1 = Math.floor(hi - 0.12 * W);
     for (let x = xs0; x <= xs1; x++) {
@@ -516,7 +685,7 @@
       const rt = right.map(s => s.baseline).sort((a, b) => a - b);
       const paired = [];
       for (const s of left) { if (rt.some(t => Math.abs(t - s.baseline) <= 0.5 * s.size)) paired.push(s.baseline); }
-      if (paired.length < 5) continue;
+      if (paired.length < need) continue;
       const pTop = Math.min(...paired) - 4, pBottom = Math.max(...paired) + 4;
       let C = 0, inside = 0;
       for (const s of segs) if (s.x0 < x - 1 && s.x1 > x + 1) { C++; if (s.baseline >= pTop && s.baseline <= pBottom) inside++; }
@@ -528,8 +697,8 @@
     const g = (best.from + best.to) / 2;
     out.push(g);
     if (depth < 1) {
-      findGutters(segs.filter(s => s.x1 <= g), W, lo, g, out, depth + 1);
-      findGutters(segs.filter(s => s.x0 >= g), W, g, hi, out, depth + 1);
+      findGutters(segs.filter(s => s.x1 <= g), W, lo, g, out, depth + 1, minPaired);
+      findGutters(segs.filter(s => s.x0 >= g), W, g, hi, out, depth + 1, minPaired);
     }
   }
 
@@ -568,39 +737,120 @@
     });
   }
 
-  /* One page into lines in reading order: for each zone (the stretch between
-     two spanning rows) column by column, top to bottom, then the spanning row. */
-  function layoutPage(pg, bodySize) {
+  /* Where a gutter holds. A long line that crosses it cuts the page there; a piece
+     between two cuts carries the gutter when long lines stand on both sides of it at
+     the same height (paired). A gutter is therefore not the page's but a stretch's:
+     a figure with a narrow column beside it, then two columns of another width below,
+     is three stretches with two gutters. lo..hi clips the pieces to a range of the page. */
+  const isLongSeg = (s, W) => s.x1 - s.x0 >= Math.max(0.17 * W, 60) && s.plain.length >= 15;
+  const crossesAt = (s, g) => s.x0 < g - 1 && s.x1 > g + 1;
+  function gutterPieces(segs, g, W, lo, hi) {
+    const long = segs.filter(s => isLongSeg(s, W) && s.baseline >= lo && s.baseline <= hi);
+    const cuts = long.filter(s => crossesAt(s, g)).map(s => s.baseline).sort((a, b) => a - b);
+    const left = long.filter(s => s.x1 <= g + 1 && s.plain.length >= 20), right = long.filter(s => s.x0 >= g - 1 && s.plain.length >= 20);
+    const pairs = left.filter(s => right.some(t => Math.abs(t.baseline - s.baseline) <= 0.5 * s.size)).map(s => s.baseline);
+    const bounds = [-Infinity, ...cuts, Infinity];
+    const pieces = [];
+    for (let k = 0; k + 1 < bounds.length; k++) {
+      const a = bounds[k], b = bounds[k + 1];
+      const n = pairs.filter(y => y > a && y < b).length;
+      if (n) pieces.push({g, a, b, lo, hi, pairs: n});
+    }
+    return pieces;
+  }
+  const inPiece = (pc, y) => y > pc.a && y < pc.b && y >= pc.lo && y <= pc.hi;
+
+  /* The page's gutters as pieces: those found on the page, then, where none of them
+     holds, a gutter the rest of the document uses (a first page with only three lines
+     in two columns) and, failing that, one found in that stretch alone (a sidebar beside
+     the abstract). */
+  function activePieces(segs, W, pageGutters, docGutters) {
+    const live = segs;
+    const pieces = [];
+    for (const g of pageGutters) for (const pc of gutterPieces(live, g, W, -Infinity, Infinity)) pieces.push(pc);
+    const uncovered = () => {
+      const ys = [...new Set(live.map(s => s.baseline))].sort((a, b) => a - b);
+      const out = [];
+      let cur = null;
+      for (const y of ys) {
+        if (pieces.some(pc => inPiece(pc, y))) { cur = null; continue; }
+        if (!cur) { cur = {lo: y, hi: y}; out.push(cur); } else cur.hi = y;
+      }
+      return out.filter(r => live.filter(s => s.baseline >= r.lo && s.baseline <= r.hi && isLongSeg(s, W)).length >= 4);
+    };
+    for (const r of uncovered()) {
+      let best = null;
+      for (const g of docGutters) {
+        if (pageGutters.some(p => Math.abs(p - g) < 0.04 * W)) continue;
+        const pcs = gutterPieces(live, g, W, r.lo, r.hi).filter(pc => pc.pairs >= 2);
+        const n = sum(pcs.map(pc => pc.pairs));
+        if (pcs.length && (!best || n > best.n)) best = {n, pcs};
+      }
+      if (best) pieces.push(...best.pcs);
+    }
+    if (pieces.length) {
+      for (const r of uncovered()) {
+        const inR = live.filter(s => s.baseline >= r.lo && s.baseline <= r.hi);
+        const found = [];
+        findGutters(inR, W, 0, W, found, 1, 3);
+        for (const g of found) pieces.push(...gutterPieces(inR, g, W, r.lo, r.hi).filter(pc => pc.pairs >= 2));
+      }
+    }
+    return pieces;
+  }
+
+  /* The first line of a reference list in a column: small type, an entry's start, and
+     only small type after it in the column. */
+  const refHead = (ls, i, bodySize) => {
+    const l = ls[i];
+    if (l.size > 0.93 * bodySize) return false;
+    const two = l.text + ' ' + (ls[i + 1] ? ls[i + 1].text : '');
+    if (!(REF_MARKER.test(l.text) || REF_START.test(l.text)) || !/\b(?:19|20)\d{2}[a-z]?\b/.test(two)) return false;
+    const rest = ls.slice(i);
+    return rest.length >= 3 && rest.filter(q => q.size <= 0.93 * bodySize).length >= 0.9 * rest.length;
+  };
+
+  /* One page into lines in reading order. Segments that cross a gutter where it holds
+     (a title, an abstract, a caption across the page) and lines where no gutter holds on
+     a page that has columns elsewhere are spanning rows; runs of them cut the page into
+     zones. Inside a zone the columns of each stretch are chained top to bottom: a column
+     is read after every column above it that it lies under, and a column carries on into
+     the one below it, so the narrow column beside a figure continues into the wide column
+     under the figure. A reference list that starts across the columns at one height closes
+     the zone: the body above it in every column is read first. */
+  function layoutPage(pg, bodySize, docGutters) {
     const dropCaps = pg.segs.filter(s => !s.skip && bodySize && s.size >= 1.6 * bodySize && s.plain.length <= 3 && /^[\p{L}\d]+$/u.test(s.plain.trim()) && !pg.segs.some(q => q !== s && !q.skip && Math.abs(q.size - s.size) < 0.2 * s.size && Math.abs(q.baseline - s.baseline) < 0.5 * s.size));
     for (const d of dropCaps) d.skip = 'dropcap';
     const segs = pg.segs.filter(s => !s.skip);
     const W = pg.width;
-    const gutters = [];
-    findGutters(segs, W, 0, W, gutters, 0);
-    gutters.sort((a, b) => a - b);
+    const pageGutters = pg.pageGutters || [];
+    const pieces = activePieces(segs, W, pageGutters, docGutters || []);
+    const gutters = [...new Set(pieces.map(pc => pc.g))].sort((a, b) => a - b);
     pg.gutters = gutters;
-    const colOf = s => {
-      for (const g of gutters) if (s.x0 < g - 1 && s.x1 > g + 1) return -1;
+    const activeAt = y => [...new Set(pieces.filter(pc => inPiece(pc, y)).map(pc => pc.g))].sort((a, b) => a - b);
+    for (const s of segs) {
+      const act = activeAt(s.baseline);
+      s.sig = act.join('/');
+      if (!pieces.length) { s.col = 0; continue; }
+      if (!act.length || act.some(g => crossesAt(s, g))) { s.col = -1; continue; }
       let c = 0;
-      for (const g of gutters) if (s.x0 >= g - 2) c++;
-      return c;
-    };
-    for (const s of segs) s.col = colOf(s);
-    // a column segment on the baseline of a spanning one is part of the spanning row
-    if (gutters.length) {
-      const spanBase = segs.filter(s => s.col < 0).map(s => s.baseline);
-      if (spanBase.length) for (const s of segs) if (s.col >= 0 && spanBase.some(bl => Math.abs(bl - s.baseline) <= 0.4 * s.size)) s.col = -1;
+      for (const g of act) if (s.x0 >= g - 2) c++;
+      s.col = c;
+    }
+    // a column segment beside a spanning one on its baseline, in its type, is part of the spanning row
+    if (pieces.length) {
+      const spans = segs.filter(s => s.col < 0);
+      for (const s of segs) if (s.col >= 0 && spans.some(t => Math.abs(t.baseline - s.baseline) <= 0.4 * s.size && Math.abs(t.size - s.size) <= 0.6 && Math.max(t.x0 - s.x1, s.x0 - t.x1) < 3 * s.size)) s.col = -1;
     }
     // the short last line of a paragraph that spans the gutter does not itself reach the gutter:
     // a line that closes a sentence right under a spanning row, from the same left edge, belongs to it
-    if (gutters.length) {
+    if (pieces.length) {
       const rowsNow = lineify(segs.filter(s => s.col < 0), pg.index, -1, 0, '');
       for (const row of rowsNow) {
-        const below = segs.filter(s => s.col >= 0 && s.baseline > row.baseline && s.baseline - row.baseline <= 1.5 * Math.max(s.size, row.size) && Math.abs(s.x0 - row.x0) < 0.5 * s.size && /[.!?]["\u201D')\]]*$/.test(s.plain) && row.x1 - row.x0 > 0.85 * (Math.max(...rowsNow.map(r => r.x1 - r.x0))));
+        const below = segs.filter(s => s.col >= 0 && s.baseline > row.baseline && s.baseline - row.baseline <= 1.5 * Math.max(s.size, row.size) && Math.abs(s.x0 - row.x0) < 0.5 * s.size && /[.!?]["”')\]]*$/.test(s.plain) && row.x1 - row.x0 > 0.85 * (Math.max(...rowsNow.map(r => r.x1 - r.x0))));
         for (const s of below) s.col = -1;
       }
     }
-    const ncol = gutters.length + 1;
     const spanRows = lineify(segs.filter(s => s.col < 0), pg.index, -1, 0, '');
     // consecutive spanning rows form one run (a title block, an abstract); a column
     // segment inside a run (an icon, a stray label) is read after the run, not in it
@@ -611,14 +861,72 @@
       if (last && r.baseline - last.baseline <= 1.9 * Math.max(r.size, last.size)) cur.push(r); else runs.push([r]);
     }
     const zoneOf = s => { let z = 0; for (const run of runs) if (s.baseline > run[0].baseline - 0.3 * s.size) z++; return z; };
-    for (const s of segs) if (s.col >= 0) s.zone = zoneOf(s);
+    const byZone = [];
+    for (let z = 0; z <= runs.length; z++) byZone.push([]);
+    for (const s of segs) if (s.col >= 0) byZone[zoneOf(s)].push(s);
     const lines = [];
-    for (let z = 0; z <= runs.length; z++) {
-      for (let c = 0; c < ncol; c++) {
-        const g = segs.filter(s => s.col === c && s.zone === z);
-        if (g.length) lines.push(...lineify(g, pg.index, c, z, pg.index + ':' + z + ':' + c));
+    let zoneId = 0, nodeId = 0;
+    const chainCols = (zsegs) => {
+      // stretches: consecutive baselines with the same set of gutters
+      const sorted = zsegs.slice().sort((a, b) => a.baseline - b.baseline || a.x0 - b.x0);
+      const nodes = [];
+      let band = -1, lastSig = null;
+      const nodeOf = new Map();
+      for (const s of sorted) {
+        if (s.sig !== lastSig) { band++; lastSig = s.sig; }
+        const key = band + ':' + s.col;
+        let n = nodeOf.get(key);
+        if (!n) { n = {band, col: s.col, segs: [], id: nodeId++}; nodeOf.set(key, n); nodes.push(n); }
+        n.segs.push(s);
       }
-      if (z < runs.length) for (const l of runs[z]) { l.zone = z; l.group = pg.index + ':' + z + ':s'; l.col = -1; lines.push(l); }
+      for (const n of nodes) {
+        const use = n.segs.filter(s => isLongSeg(s, W));
+        const src = use.length ? use : n.segs;
+        n.x0 = Math.min(...src.map(s => s.x0)); n.x1 = Math.max(...src.map(s => s.x1));
+      }
+      const overlaps = (u, v) => Math.min(u.x1, v.x1) - Math.max(u.x0, v.x0) > 0.3 * Math.min(u.x1 - u.x0, v.x1 - v.x0);
+      for (const v of nodes) {
+        v.preds = [];
+        for (let b = v.band - 1; b >= 0 && !v.preds.length; b--) v.preds = nodes.filter(u => u.band === b && overlaps(u, v));
+      }
+      const order = [];
+      const done = new Set();
+      let last = null, chain = -1;
+      const ready = v => !done.has(v) && v.preds.every(u => done.has(u));
+      const first = a => a.sort((u, v) => u.band - v.band || u.x0 - v.x0)[0];
+      while (order.length < nodes.length) {
+        let next = last ? first(nodes.filter(v => ready(v) && v.preds.includes(last))) : null;
+        if (!next) { next = first(nodes.filter(ready)) || first(nodes.filter(v => !done.has(v))); chain++; }
+        next.chain = chain; done.add(next); order.push(next); last = next;
+      }
+      return order;
+    };
+    const emitZone = (zsegs) => {
+      const order = chainCols(zsegs);
+      const out = order.map(n => ({n, ls: lineify(n.segs, pg.index, n.chain, 0, '')}));
+      // a reference list starting at one height across the columns closes the zone above it
+      if (order.length >= 2) {
+        const starts = [];
+        for (const {n, ls} of out) {
+          const i = ls.findIndex((l, k) => refHead(ls, k, bodySize));
+          if (i >= 0) starts.push({n, y: ls[i].baseline, top: ls[i].top, above: ls.slice(0, i).some(l => l.size > 0.93 * bodySize && l.chars >= 25)});
+        }
+        if (starts.length >= 2) {
+          const y0 = Math.min(...starts.map(t => t.y)), y1 = Math.max(...starts.map(t => t.y));
+          const sz = Math.max(...starts.map(t => t.n.segs[0].size));
+          if (y1 - y0 <= 6 * sz && starts.some(t => t.above)) {
+            const cut = Math.min(...starts.map(t => t.top)) - 0.5;
+            const above = zsegs.filter(s => s.bottom <= cut + 0.2 * s.size || s.baseline < cut), below = zsegs.filter(s => !above.includes(s));
+            if (above.length && below.length) { emitZone(above); emitZone(below); return; }
+          }
+        }
+      }
+      const z = zoneId++;
+      for (const {n, ls} of out) for (const l of ls) { l.zone = z; l.col = n.chain; l.group = pg.index + ':' + z + ':' + n.id; lines.push(l); }
+    };
+    for (let z = 0; z <= runs.length; z++) {
+      if (byZone[z].length) emitZone(byZone[z]);
+      if (z < runs.length) { const zz = zoneId++; for (const l of runs[z]) { l.zone = zz; l.group = pg.index + ':' + zz + ':s'; l.col = -1; lines.push(l); } }
     }
     // a drop cap joins the first line beside it, and the lines it pushes in are not paragraph indents
     for (const d of dropCaps) {
@@ -633,16 +941,22 @@
       for (const l of cand.slice(1)) l.dropIndent = true;
       first.dropFirst = true;
     }
-    pg.columns = ncol;
+    pg.columns = gutters.length ? Math.max(...segs.map(s => (s.sig ? s.sig.split('/').length : 0))) + 1 : 1;
     pg.lines = lines;
     let id = 0;
     for (const l of lines) { l.id = pg.index + '.' + (id++); for (const p of l.parts) p.lineId = l.id; }
+    // the measure of a column: its own lines when it has enough of them, else the chain it belongs to
     pg.geom = {};
-    for (const c of new Set(lines.map(l => l.col))) {
-      const all = lines.filter(l => l.col === c);
-      const ls = all.filter(l => l.chars >= 25);
-      const use = ls.length >= 3 ? ls : all;
-      pg.geom[c] = {left: percentile(use.map(l => l.x0), 0.15), right: percentile(use.map(l => l.x1), 0.85)};
+    const measure = (ls, lo, hi) => {
+      const long = ls.filter(l => l.chars >= 25);
+      const use = long.length >= 3 ? long : ls;
+      return {left: percentile(use.map(l => l.x0), lo), right: percentile(use.map(l => l.x1), hi), n: long.length};
+    };
+    for (const c of new Set(lines.map(l => l.col))) pg.geom[c] = measure(lines.filter(l => l.col === c), 0.15, 0.85);
+    pg.groupGeom = {};
+    for (const gk of new Set(lines.map(l => l.group))) {
+      const m = measure(lines.filter(l => l.group === gk), 0.15, 0.85);
+      if (m.n >= 3) pg.groupGeom[gk] = m;
     }
     const gAll = lines.filter(l => l.chars >= 25);
     const gUse = gAll.length ? gAll : lines;
@@ -671,7 +985,7 @@
       'additionalinformation', 'reportingsummary', 'peerreviewinformation', 'peerreview', 'publishersnote', 'openaccess', 'rightsandpermissions', 'reprintsandpermissions',
       'aboutthisarticle', 'onlinecontent', 'authorinformation', 'abbreviations', 'abbreviation', 'notes', 'authornotes', 'correspondence', 'materialsavailability', 'leadcontact',
       'authorstatement', 'statementofauthorship', 'conflictofinterestdisclosure', 'consentforpublication', 'competingfinancialinterests', 'orcid', 'notefromthepublisher',
-      'footnotes', 'footnote', 'dedication', 'inmemoriam', 'authorsnote', 'contributorinformation', 'sourceofsupport', 'grantsupport'],
+      'footnotes', 'footnote', 'correspondenceandrequestsformaterials', 'reprintsandpermissionsinformation', 'reprintsandpermissionsinformationisavailable', 'dedication', 'inmemoriam', 'authorsnote', 'contributorinformation', 'sourceofsupport', 'grantsupport'],
     main: ['introduction', 'background', 'results', 'resultsanddiscussion', 'discussion', 'discussionandconclusion', 'discussionandconclusions', 'conclusion', 'conclusions',
       'concludingremarks', 'perspectives', 'outlook', 'main', 'methods', 'materialsandmethods', 'materialandmethods', 'materialsandmethod', 'materialandmethod', 'methodsandmaterials', 'experimentalprocedures', 'experimentalsection',
       'experimental', 'starmethods', 'onlinemethods', 'methodsummary', 'methodology', 'materials', 'subjectsandmethods', 'patientsandmethods', 'theory', 'rationale',
@@ -769,6 +1083,9 @@
     'associated', 'coupled', 'terminal', 'wide', 'scale', 'phage', 'fold', 'stranded', 'rich', 'poor', 'positive', 'negative', 'deficient', 'sensitive', 'tolerant', 'controlled',
     'limited', 'targeting', 'treated', 'expressing', 'containing', 'producing', 'resolution', 'throughput', 'to', 'driven', 'regulated', 'activated', 'inducible', 'knockout',
     'tagged', 'fused', 'linked', 'bound', 'loaded', 'dose', 'response', 'only', 'sized', 'shaped', 'weight', 'wild', 'phase', 'dimensional', 'step', 'copy', 'cell', 'cells']);
+  const SUFFIX_ONLY = /^(?:ments?|ings?|ed|ers?|ions?|ations?|ly|ness(?:es)?|able|ible|ity|ities|ives?|al|ally|ics?|ous|ences?|ances?|ants?|ents?|isms?|ists?|i[sz]e[sd]?|i[sz]ing|i[sz]ations?|ional|ionally|ary|ory|ure|ures)$/;
+  const JOINED_WORD = /^(?:highlight|highway|nonetheless|crossover|crossroad|halfway|wholesale|wholly|longitud|shortcut|shortage|shortly|fullness|wildlife|allow|allocat|alleviat|allele|allel|ultrason|panel|pandemic|pancrea|realiz|realis|reality|wellness|lowest)/;
+  const KEEP_PREFIX = new Set(['high', 'low', 'self', 'non', 'multi', 'cross', 'well', 'semi', 'quasi', 'single', 'double', 'long', 'short', 'full', 'half', 'whole', 'real', 'wild', 'all', 'pan', 'ultra']);
   const KEEP_LEFT = new Set(['non', 'anti', 'self', 'cross', 'semi', 'quasi', 'co', 'high', 'low', 'long', 'short', 'well', 'single', 'double', 'whole', 'real', 'full', 'large',
     'small', 'half', 'cell', 'host', 'phage', 'dna', 'rna', 'trna', 'mrna', 'gene', 'protein', 'head', 'liquid', 'rate', 'two', 'three', 'one', 'time', 'dose']);
 
@@ -787,6 +1104,12 @@
     const words = lex && lex.words ? lex.words : new Set();
     if (words.has(l + '-' + r)) return {action: 'keep', why: 'hyphenated word occurs in the document'};
     if (words.has(l + r)) return {action: 'join', why: 'joined word occurs in the document'};
+    // a compound prefix keeps its hyphen ("high-fidelity", "self-versus", "non-self") unless the paper joins it
+    if (JOINED_WORD.test(l + r)) return {action: 'join', why: 'a common word'};
+    if (KEEP_PREFIX.has(l)) return {action: 'keep', why: 'compound prefix'};
+    // two words the paper uses on their own are a compound ("motif-adaptable"); syllables are not words
+    if (l.length >= 4 && r.length >= 4 && words.has(l) && words.has(r)) return {action: 'keep', why: 'both halves are words of the document'};
+    if (l.length >= 4 && r.length >= 6 && words.has(l) && !SUFFIX_ONLY.test(r) && !/^(?:trans|under|over|inter|intra|super|counter|with|back|fore|after|there|where|some|every|work|path|frame|break|cross|thermo|photo|hydro|micro|macro|poly|para|meta|peri|post|retro|extra|ultra)$/.test(l)) return {action: 'keep', why: 'a word of the document, then a word'};
     // a typical compound element beside a word the document also uses on its own
     if (((KEEP_RIGHT.has(r) && l.length >= 3 && words.has(l)) || (KEEP_LEFT.has(l) && r.length >= 3 && words.has(r)))) return {action: 'keep', why: 'compound element beside a word the document uses on its own'};
     if (r.length >= 3 && l.length >= 2) return {action: 'join', why: 'syllable break'};
@@ -935,12 +1258,35 @@
         const ft = st.toks[ca] || firstTok;
         const line = ft ? lineById.get(ft.part.lineId) : null;
         result.push({
-          text: ch, page: ft ? ft.part.page : page, rects: rectsOf(st.toks, st.marks, ca, cb),
+          text: ch, spoken: spokenOf(ch), page: ft ? ft.part.page : page, rects: rectsOf(st.toks, st.marks, ca, cb),
           col: line ? line.col : 0, zone: line ? line.zone : 0, y: ft ? round1(ft.part.y) : 0,
         });
       }
     }
     return result;
+  }
+
+  /* A sentence as it is spoken: inline citations left out ("(29, 106, 125)", "[1, 2]", "( 31 )",
+     "(Smith et al., 2020; Lee, 2019)"), the written text unchanged. A figure or equation reference,
+     a quantity in brackets and an enumeration "(1) ... (2) ..." stay. */
+  const CITE_NUM = /\s*[\[(]\s*(\d{1,3}(?:\s*[,\u2013\u2014-]\s*\d{1,3})*)\s*[\])]/g;
+  const CITE_NAME = String.raw`(?:(?:de|van|von|der|den|da|di|du|la|le|del)\s+)*\p{Lu}[\p{L}'\u2019-]+`;
+  const CITE_AUTHOR = new RegExp(String.raw`\s*\((?:see\s+(?:also\s+)?|e\.g\.,?\s*|reviewed in\s+|cf\.\s*)?(?:${CITE_NAME}(?:\s+(?:et\s+al\.?|and|&)(?:\s+${CITE_NAME})?)?,?\s+(?:19|20)\d{2}[a-z]?(?:,\s*(?:19|20)\d{2}[a-z]?)*(?:;\s*)?)+\)`, 'gu');
+  function spokenOf(text) {
+    const singles = [];
+    let m;
+    CITE_NUM.lastIndex = 0;
+    while ((m = CITE_NUM.exec(text))) if (/^\d+$/.test(m[1])) singles.push(+m[1]);
+    const enumerated = singles.includes(1) && singles.includes(2);
+    let out = text.replace(CITE_NUM, (all, nums, at) => {
+      if (enumerated && /^\d$/.test(nums)) return all;
+      // "(Fig. 2)", "equation (3)", "step [2]" keep their number
+      if (/(?:\b(?:fig|figs|figure|figures|eq|eqs|equation|equations|table|tables|step|steps|ref|lane|lanes|panel|panels|section|chapter|no)\.?|[=<>\u00B1\u00D7])\s*$/i.test(text.slice(0, at))) return all;
+      return '';
+    });
+    out = out.replace(CITE_AUTHOR, '');
+    out = out.replace(/\s+([.,;:!?)])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+    return out || text;
   }
 
   /* ----------------------------------------------- block building */
@@ -964,7 +1310,15 @@
     });
   }
 
-  function buildBlocks(pg, bodySize) {
+  // consecutive lines of text in one type size, and how far apart they are
+  function pitchesOf(ls, size) {
+    const t = ls.filter(l => Math.abs(l.size - size) <= 0.4 && l.chars >= 20);
+    const out = [];
+    for (let k = 1; k < t.length; k++) { const p = t[k].baseline - t[k - 1].baseline; if (p > 0.8 * size && p < 3.5 * size) out.push(p); }
+    return out;
+  }
+
+  function buildBlocks(pg, bodySize, docPitch) {
     const blocks = [];
     const lines = pg.lines;
     const byGroup = new Map();
@@ -982,18 +1336,18 @@
         if ((j - i < 3 && !(smallPrint && j - i >= 2)) || !aligned(tabRows)) for (let k = i; k < j; k++) ls[k].tab = false;
         i = j;
       }
-      const pitches = [];
-      for (let k = 1; k < ls.length; k++) {
-        const p = ls[k].baseline - ls[k - 1].baseline;
-        if (Math.abs(ls[k].size - ls[k - 1].size) <= 0.4 && p > 0 && p < 3.5 * ls[k].size) pitches.push(p);
+      // the line pitch of each type size in the column, from lines of text: figure labels packed
+      // close together in the same column would make every paragraph line look far apart
+      for (const l of ls) {
+        const own = pitchesOf(ls, l.size);
+        const doc = docPitch && docPitch.get(sizeKey(l.size));
+        if (own.length >= 3) { l.typPitch = median(own); l.typKnown = true; } else if (doc) { l.typPitch = doc; l.typKnown = true; } else { l.typPitch = l.size * 1.2; l.typKnown = false; }
       }
-      const typ = median(pitches);
-      for (const l of ls) { l.typPitch = pitches.length >= 3 ? typ : l.size * 1.2; l.typKnown = pitches.length >= 3; }
     }
     let cur = null;
     for (let li = 0; li < lines.length; li++) {
       const l = lines[li];
-      const g = pg.geom[l.col] || pg.geom[-1];
+      const g = (l.col >= 0 && pg.groupGeom[l.group]) || pg.geom[l.col] || pg.geom[-1];
       l.colLeft = g.left; l.colRight = g.right;
       l.fill = g.right > g.left ? (l.x1 - l.x0) / (g.right - g.left) : 1;
       const prev = cur && cur.lines[cur.lines.length - 1];
@@ -1007,6 +1361,9 @@
 
   const capsLine = l => { const t = l.text.replace(/[^A-Za-z]/g, ''); return t.length >= 4 && t === t.toUpperCase(); };
 
+  // the font of most of a line's characters, and the one font a line is set in (null when mixed)
+  const mainFont = l => { if (l._mf === undefined) { const w = new Map(); for (const p of l.parts) w.set(p.font, (w.get(p.font) || 0) + nsLen(p.str)); let b = null, bw = -1; for (const [f, n] of w) if (n > bw) { b = f; bw = n; } l._mf = b; } return l._mf; };
+  const soleFont = l => { const f = mainFont(l); return l.parts.every(p => p.font === f || nsLen(p.str) <= 2) ? f : null; };
   function breakReason(prev, l, block, next) {
     if (!!prev.tab !== !!l.tab) return 'tab';
     if (!!prev.title !== !!l.title) return 'title';
@@ -1019,6 +1376,10 @@
     }
     if (pitch > 1.45 * typ || (!l.typKnown && pitch > 1.9 * l.size)) return 'pitch';
     if (l.bold !== prev.bold) return 'bold';
+    // a short line set wholly in another font than the line after it (a heading when weight is unknown)
+    if (prev.bold === undefined || prev.parts.every(p => !realFontName(p.font))) {
+      if (prev.chars <= 110 && !TERMINAL.test(prev.text) && (prev.fill < 0.85 || Math.abs(l.size - prev.size) >= 0.4) && soleFont(prev) && soleFont(prev) !== mainFont(l)) return 'font';
+    }
     const width = l.colRight - l.colLeft;
     const ex = q => (q.dropIndent ? q.colLeft : q.x0);
     const isIndented = x => x - l.colLeft > 0.9 * l.size && x - l.colLeft < 0.4 * width;
@@ -1037,7 +1398,9 @@
     const short = prev.colRight - prev.x1;
     if (short > 2.5 * prev.size && width > 0 && short > 0.1 * width && TERMINAL.test(prev.text)) return 'short-line';
     // numbered and known-name headings are blocks of their own, before and after
-    if (isNumberedHead(l) && (TERMINAL.test(prev.text) || prev.fill < 0.9)) return 'numbered-after';
+    // "... depicted in Fig." then "2 A were indeed ...": the number belongs to the reference before it
+    const refAbbrev = /\b(?:Figs?|Fig|Tables?|Eqs?|Refs?|No|Nos|Sect|Suppl)\.$/.test(prev.text);
+    if (isNumberedHead(l) && !refAbbrev && (TERMINAL.test(prev.text) || prev.fill < 0.9)) return 'numbered-after';
     if (isNumberedHead(prev) && prev.fill < 0.8) return 'numbered-before';
     if (headKind(prev.text) && prev.chars <= 60 && prev.fill < 0.6 && !TERMINAL.test(prev.text)) return 'name-after';
     if (headKind(l.text) && l.chars <= 60 && l.fill < 0.6 && !TERMINAL.test(l.text) && (capsLine(l) || l.bold || prev.fill < 0.98)) return 'name-before';
@@ -1077,7 +1440,7 @@
     };
   }
 
-  const CAPTION_RE = /^\s*((?:supplementary|supplemental|extended data|source data)\s+)?(fig(?:ure)?s?|table|scheme|chart|box|plate|graphic|video|movie)\.?\s*(S?\d+[A-Za-z]?(?:\s*[–\-]\s*\d+)?|[IVX]{1,4})\b\s*([.:|–—]|\s)/i;
+  const CAPTION_RE = /^\s*((?:supplementary|supplemental|extended data|source data)\s+)?(fig(?:ure)?s?|table|scheme|chart|box|plate|graphic|video|movie)\.?\s*(S?\d+[A-Za-z]?(?:\s*[–\-]\s*\d+)?|[IVX]{1,4})\b\s*([.:|–—]|\s|$)/i;
   const SHOWS = /\b(?:shows?|showed|illustrates?|depicts?|presents?|summari[sz]es?|compares?|indicates?|demonstrates?|reveals?|lists?|provides?|displays?|gives?)\b/i;
 
   /* A caption starts a block with its label; it is told from a body sentence
@@ -1088,10 +1451,12 @@
     const m = CAPTION_RE.exec(f.text);
     if (!m) return null;
     const firstPart = b.lines[0].parts.find(p => p.str.trim());
-    const labelBold = !!(firstPart && firstPart.bold);
+    // when fonts are known only by id, a label in another font than the legend after it stands for bold
+    const restPart = firstPart && b.lines[0].parts.find(q => q.str.trim() && q.font !== firstPart.font && nsLen(q.str) >= 4);
+    const labelBold = !!(firstPart && (firstPart.bold || (!realFontName(firstPart.font) && restPart && b.lines[0].parts.indexOf(restPart) > 0)));
     const sep = m[4] || ' ';
     const after = f.text.slice(m[0].length);
-    const strongSep = /[|:–—]/.test(sep) || (sep === '.' && /^\s*(?:\p{Lu}|\(\p{L}{1,2}\))/u.test(after));
+    const strongSep = /[|:–—]/.test(sep) || (sep === '.' && /^\s*(?:\p{Lu}|\(\p{L}{1,2}\)|\p{Ll}{1,4}\p{Lu})/u.test(after));
     const small = f.size < bodySize * 0.985;
     const cap = /^(?:supplementary|supplemental|extended data|source data|table|scheme)/i.test(f.text);
     // a label in capitals ("FIGURE 2", "TABLE 1") needs no bold to be one
@@ -1117,13 +1482,18 @@
     if (state === 'refs' || state === 'supp' || state === 'front') return null;
     if (/^[\d\s.,;:()\-–]+$/.test(t)) return null;
     // a bold sentence-style title that closes with a full stop ("Structural Modeling.") is a heading too
-    const boldTitle = f.bold && f.nWords <= 14 && f.nLines <= 2 && /^\p{Lu}/u.test(t) && !/\.\s+\p{Lu}/u.test(t.slice(0, -1));
+    const idStyled = !realFontName((b.lines[0].parts.find(q => q.str.trim()) || {}).font) && ctx && ctx.domFont && b.lines.every(l => soleFont(l) && soleFont(l) === soleFont(b.lines[0])) && fontKey(soleFont(b.lines[0])) !== fontKey(ctx.bodyFont || '')
+      && ctx.fontWidth && ctx.fontWidth.get(soleFont(b.lines[0])) >= 0.94 * (ctx.fontWidth.get(ctx.bodyFont) || 0);
+    const boldTitle = (f.bold || idStyled) && f.nWords <= 14 && f.nLines <= 2 && /^\p{Lu}/u.test(t) && !/\.\s+\p{Lu}/u.test(t.slice(0, -1));
     if (TERMINAL.test(t) && !/\)$/.test(t) && !boldTitle) return null;
     if (/[,;:]$/.test(t)) return null;
-    if (!/^[\p{Lu}\d]/u.test(t)) return null;
+    // a heading may open with a gene or molecule name in mixed case ("msDNA", "mRNA", "eIF4E")
+    if (!/^[\p{Lu}\d]/u.test(t) && !/^\p{Ll}{1,4}\p{Lu}[\p{L}\d]*\b/u.test(t)) return null;
     if (/^\s*[(\[]?[a-z]\)/.test(t)) return null;
     if (CAPTION_RE.test(t) && !f.allCaps) return null;
     if (t.replace(/[^\p{L}]/gu, '').length < 3) return null;
+    // panel letters and axis labels ("A B D", "E F") are not a heading
+    if (!/\p{L}{3}/u.test(t)) return null;
     const numbered = NUMBERED.test(t);
     const bigger = f.size >= bodySize * 1.12;
     const mk = extra => Object.assign({kind: null, text: t.replace(/[\s.]+$/, ''), name}, style, extra);
@@ -1137,6 +1507,12 @@
     // another typeface by name (SansSerif over Roman) when the names are real, else by pdf.js's generic family
     const byName = ctx && ctx.bodyFont && realFontName(lead.font) && realFontName(ctx.bodyFont) && fontBase(lead.font) !== fontBase(ctx.bodyFont);
     const byFamily = fam && ctx && ctx.bodyFamily && fam !== ctx.bodyFamily && !(realFontName(lead.font) && ctx.bodyFont && realFontName(ctx.bodyFont));
+    // when the fonts are known only by id (pdf.js before the page is rendered): a line wholly in another font
+    // than the body's at its size, not a narrower (italic) cut
+    const byId = !realFontName(lead.font) && ctx && ctx.domFont && b.lines.every(l => soleFont(l) === lead.font) && ctx.bodyFont && fontKey(lead.font) !== fontKey(ctx.bodyFont) && (!ctx.domFont.get(sizeKey(f.size)) || fontKey(lead.font) !== ctx.domFont.get(sizeKey(f.size)) || Math.abs(f.size - bodySize) > 0.3)
+      && ctx.fontWidth && ctx.fontWidth.get(lead.font) >= 0.94 * (ctx.fontWidth.get(ctx.bodyFont) || 0) && f.nWords <= 14 && f.nLines <= 2 && /^[\p{Lu}\d]/u.test(t)
+      && f.size >= bodySize * 0.95 && f.nChars >= 8 && /\p{Ll}{3}/u.test(t) && !/\d\s+\d/.test(t);
+    if (byId) return mk({typeface: true});
     if ((byName || byFamily) && f.nLines <= 3 && f.nWords <= 24 && f.size >= bodySize * 0.95 && f.nChars >= 8 && b.lines.every(l => l.parts.every(q => nsLen(q.str) <= 2 || fontKey(q.font) === fontKey(lead.font) || (!byName && q.family === fam)))) return mk({typeface: true});
     return null;
   }
@@ -1199,6 +1575,19 @@
     return entries;
   }
 
+  /* A "sentence" that is labels and numbers off a figure or a table: a sentence of a paper has
+     function words; "B. fragilis B. comes 50 100 P. dorei 1,877 Phocaeicola 270" does not. */
+  const FUNCTION_WORDS = new Set(['the', 'a', 'an', 'of', 'and', 'to', 'in', 'is', 'was', 'were', 'are', 'be', 'been', 'with', 'for', 'by', 'that', 'on', 'as', 'at',
+    'from', 'this', 'these', 'which', 'we', 'it', 'its', 'or', 'not', 'but', 'than', 'into', 'between', 'both', 'each', 'all', 'has', 'have', 'had', 'can', 'may', 'also', 'our', 'their', 'when', 'while', 'after', 'under', 'using', 'used', 'show', 'shows', 'shown']);
+  function figureSoup(text) {
+    const ws = words(text);
+    if (ws.length < 6) return null;
+    const fw = ws.filter(w => FUNCTION_WORDS.has(w.toLowerCase().replace(/[^\p{L}]/gu, ''))).length;
+    const shortOrNum = ws.filter(w => /\d/.test(w) || w.replace(/[^\p{L}]/gu, '').length <= 2).length;
+    if (fw / ws.length < 0.05 && shortOrNum / ws.length >= 0.35) return 'labels and numbers without a sentence (figure or table text)';
+    return null;
+  }
+
   /* ---------------------------------------------------------- assemble */
 
   const FRONT_PATTERNS = [
@@ -1207,6 +1596,27 @@
     [/(?:^|\s)(?:\*|∗)?\s*(?:corresponding author|correspondence|e-?mail|address correspondence|to whom correspondence|contributed equally|equal contribution|present address)/i, 'correspondence'],
     [/\b(?:university|université|universität|institute|department|laborator(?:y|ies)|school of|hospital|college|centre|center|faculty|academy|cnrs|inserm|max planck|national)\b/i, 'affiliations'],
   ];
+  /* Front matter that can stand anywhere on the first two pages (at a column foot, in a sidebar, in a
+     box under the text): what no paragraph of a paper says. In small type the weaker signs suffice. */
+  const FRONT_STRONG = [
+    [/^\s*(?:received|accepted|revised|published(?: online)?|editor|edited by|handling editor|reviewed by)\s*:?\s*(?:\d|\p{Lu}\p{Ll}+ \d|\d{1,2} \p{Lu})/u, 'dates'],
+    [/\b(?:received|revised|accepted)\s*:?\s*\p{Lu}?\p{Ll}* ?\d{1,2},? \d{4}.{0,80}\b(?:accepted|published|revised)\b/iu, 'dates'],
+    [/[\u00A9\u00AA]\s*(?:the author|\d{4})|\bcreative commons\b|this is an open access article|\bopen access article distributed\b|\bcc[- ]by(?:[- ]n[cd])*\b|licen[cs]ed under|all rights reserved|for (?:commercial re-?use|permissions),? please|reprints and (?:translation|permission)/i, 'licence or copyright'],
+    [/^\s*(?:check for updates|crossmark)\s*$/i, 'stamp'],
+    [/(?:^|\s)[*\u2020\u2021\u00A7]?\s*(?:these authors contributed equally|contributed equally to this work|equal contribution|corresponding authors?\b|to whom correspondence should be addressed|correspondence(?: and requests for materials)? (?:should be addressed|may also be addressed|to)|present address|lead contact)/i, 'correspondence'],
+    [/\bgrant\/award (?:number|no)|^\s*funding information\b/i, 'funding'],
+  ];
+  const FRONT_SMALL = [
+    [/(?:^|[\s\d\u00B9\u00B2\u00B3\u2070-\u2079*\u2020\u2021])(?:department|dept\.?|institute|school|faculty|division|laboratory|center|centre|college|university|hospital)\s+(?:of|for)\b.{0,160}\b(?:usa|uk|china|japan|germany|france|korea|india|canada|australia|israel|spain|italy|switzerland|netherlands|sweden|denmark|[A-Z]{2}\s+\d{5}|\d{4,6})\b/i, 'affiliations'],
+    [/\S+@\S+\.(?:edu|com|org|net|ac\.\w+|edu\.\w+|gov|de|fr|uk|cn|jp|kr|il|ch|nl|se|dk|it|es|ca|au)\b/i, 'correspondence'],
+    [/^\s*(?:\*\s*)?(?:correspondence|e-?mail|contact)\s*:/i, 'correspondence'],
+  ];
+  function frontBoilerplate(f, bodySize) {
+    for (const [re, why] of FRONT_STRONG) if (re.test(f.text)) return why;
+    if (f.size < bodySize * 0.95) for (const [re, why] of FRONT_SMALL) if (re.test(f.text)) return why;
+    return null;
+  }
+
   function frontReason(f) {
     for (const [re, why] of FRONT_PATTERNS) if (re.test(f.text)) return why;
     return 'authors or other front matter';
@@ -1226,9 +1636,15 @@
     // set apart from the body type: bold, or a different font from the one the paper uses
     // at this size (when the font names say nothing, a heading in another face still shows)
     const dom = ctx && ctx.domFont;
-    const styled = (p, k) => p.bold || (!p.italic && dom && dom.get(sizeKey(p.size)) && fontKey(p.font) !== dom.get(sizeKey(p.size)) && (k > 0 || nsLen(p.str) > 3));
+    // with fonts known only by id, a heading in another generic family (sans over serif) shows by that
+    const idOnly = !realFontName(ps[0].font);
+    const styled = (p, k) => p.bold || (!p.italic && dom && dom.get(sizeKey(p.size)) && fontKey(p.font) !== dom.get(sizeKey(p.size)) && (k > 0 || nsLen(p.str) > 3))
+      || (idOnly && ctx && ctx.domFamily && p.family && ctx.domFamily.get(sizeKey(p.size)) && p.family !== ctx.domFamily.get(sizeKey(p.size)) && (k > 0 || nsLen(p.str) > 3));
     let i = 0; while (i < ps.length && styled(ps[i], i)) i++;
     if (i === 0 || i === ps.length) return null;
+    // set apart by family alone, it must be closed like a run-in heading ("Phage strains. Genes ...")
+    if (idOnly && !ps.slice(0, i).some(p => p.bold || (dom && dom.get(sizeKey(p.size)) && fontKey(p.font) !== dom.get(sizeKey(p.size)) && p.family === (ctx.domFamily && ctx.domFamily.get(sizeKey(p.size)))))
+      && !/[.:]\s*$/.test(ps[i - 1].str) && !/^\s*[.:\u2014]/.test(ps[i].str)) return null;
     if (ps.slice(i).some((p, k) => styled(p, 1) && nsLen(p.str) > 12)) return null;
     const prefix = joinParts(ps.slice(0, i), false).text.replace(/\s+/g, ' ').trim();
     const known = HEAD_KIND.get(headingName(prefix)) || null;
@@ -1292,7 +1708,11 @@
       if (!pend) return;
       const para = pend; pend = null;
       if (!section) { section = {heading: '', level: 1, page: para.lines[0].page, paragraphs: [], kind: state === 'back' ? 'back' : 'body', info: {}}; sections.push(section); }
-      const sents = sentencesOf(para.lines, ctx.lex, ctx.notes.hyphenation, T.other);
+      const sents = sentencesOf(para.lines, ctx.lex, ctx.notes.hyphenation, T.other).filter(se => {
+        const why = figureSoup(se.text);
+        if (why) T.other.push({text: se.text, page: se.page, reason: why});
+        return !why;
+      });
       if (sents.length) section.paragraphs.push({sentences: sents});
     };
     const startSection = (heading, info, kind, page) => {
@@ -1314,11 +1734,30 @@
         // a block that starts in lower case or with a number cannot start a paragraph when the text before it
         // never closed its sentence, wherever the break between them came from
         const continues = open && /^[\p{Ll}\d]/u.test(f.text);
-        if ((crossing && !indented && (open || f.startsLower || (endsAbbrev && /^\d/.test(f.text)))) || continues) { pend.lines.push(...b.lines); interposed = 0; return; }
+        // a sentence carries on in its own type: a legend's tail in smaller print is not its continuation
+        const sameType = Math.abs(median(pend.lines.map(l => l.size)) - f.size) <= 1;
+        const refNumber = /\b(?:Figs?|Tables?|Eqs?|Refs?|No|Nos)\.$/.test(prevText) && /^\d/.test(f.text);
+        if (sameType && ((crossing && !indented && (open || f.startsLower || (endsAbbrev && /^\d/.test(f.text)))) || continues || refNumber)) { pend.lines.push(...b.lines); interposed = 0; return; }
       }
       flush();
       pend = {lines: b.lines.slice()};
       interposed = 0;
+    };
+    // front matter, filed line by line when its lines are of different kinds (authors, then affiliations, then dates)
+    const frontSkip = (b, f) => {
+      const groups = [];
+      for (const l of b.lines) {
+        const why = frontReason({text: l.text});
+        const g = groups[groups.length - 1];
+        if (g && (g.why === why || why === 'authors or other front matter')) g.lines.push(l); else groups.push({why, lines: [l]});
+      }
+      if (groups.length === 1) groups[0].why = frontReason(f);
+      for (const g of groups) {
+        const text = g.lines.map(l => l.text).join(' ');
+        T.other.push({text, page: b.page, reason: 'front matter: ' + g.why});
+        note(b.page, 'front', g.why, text, b);
+      }
+      interposed++;
     };
     const skipBlock = (b, f, bucket, kind, reason) => {
       T[bucket].push({text: f.text, page: b.page, reason});
@@ -1347,12 +1786,45 @@
       if (state === 'back') return !!h.kind || h.numbered || h.bigger;
       return true;
     };
+    /* Prose that the shape tests miss, decided in the paper's running type (a size the paper sets text
+       in, its typeface, not bold): a paragraph dense with concentrations and formulas ("11.64 g L-1
+       K2HPO4, 4.89 g L-1 NaH2PO4") that still opens like a sentence, and a paragraph's first line on
+       its own whose sentence carries on in a later block that starts in lower case. */
+    const inBodyType = (b, f) => {
+      if (f.bold || b.lines.some(l => l.tab) || !ctx.textSize(f.size)) return false;
+      const lead = b.lines[0].parts.find(q => q.str.trim()) || {};
+      return !(ctx.bodyFamily && lead.family && lead.family !== ctx.bodyFamily);
+    };
+    const opensLikeProse = t => { const w = words(t).slice(0, 8); return w.length >= 5 && w.filter(x => /^\p{L}[\p{Ll}'\u2019-]{1,}[,;:]?$/u.test(x)).length >= 4 && /^[\p{Lu}(]/u.test(t); };
+    const proseInBodyType = bi => {
+      const b = blocks[bi], f = feats[bi];
+      if (!inBodyType(b, f) || !opensLikeProse(f.text)) return false;
+      if (f.nLines >= 2 && f.fill >= 0.6) return true;
+      if (f.terminal || f.nWords < 6 || f.fill < 0.7) return false;
+      for (let j = bi + 1; j < Math.min(blocks.length, bi + 40); j++) {
+        if (blocks[j].page > b.page + 1) break;
+        if (!isProse(blocks[j], feats[j], bodySize) || !inBodyType(blocks[j], feats[j])) continue;
+        return /^\p{Ll}/u.test(feats[j].text);
+      }
+      return false;
+    };
     // a heading that is not a known section name needs prose beside it, or it is a figure label
-    const proseAt = j => j >= 0 && j < blocks.length && isProse(blocks[j], feats[j], bodySize);
-    const supported = bi => proseAt(bi + 1) || proseAt(bi - 1) || (bi + 1 < blocks.length && !!headingOf(blocks[bi + 1], feats[bi + 1], bodySize, 'body', ctx));
+    const proseAt = (j, page) => j >= 0 && j < blocks.length && blocks[j].page === page && isProse(blocks[j], feats[j], bodySize);
+    const supported = bi => proseAt(bi + 1, blocks[bi].page) || proseAt(bi - 1, blocks[bi].page) || (bi + 1 < blocks.length && blocks[bi + 1].page === blocks[bi].page && !!headingOf(blocks[bi + 1], feats[bi + 1], bodySize, 'body', ctx));
 
+    let inForm = false;
     for (let bi = 0; bi < blocks.length; bi++) {
       const b = blocks[bi], f = feats[bi];
+      if (ctx.formPage != null && b.page >= ctx.formPage && state !== 'refs') {
+        // a form is back matter: its subheadings ("Statistics", "Methodology") open back sections only
+        if (!inForm) { inForm = true; startSection('Reporting Summary', {name: 'reportingsummary'}, 'back', b.page); state = 'back'; }
+        const hf = headingOf(b, f, bodySize, 'back', ctx);
+        if (hf && hf.kind !== 'refs' && hf.kind !== 'supp' && f.nWords <= 12) { startSection(hf.text, hf, 'back', b.page); note(b.page, 'heading', 'reporting-summary heading', f.text, b); continue; }
+        if (!isProse(b, f, bodySize)) { skipBlock(b, f, 'other', 'other', 'reporting summary form'); continue; }
+        note(b.page, 'back', 'reporting summary', f.text, b);
+        addBody(b, f);
+        continue;
+      }
       if (b.lines.every(l => l.title)) { out.title = (out.title ? out.title + ' ' : '') + f.text; note(b.page, 'title', 'title block', f.text, b); continue; }
       if (b.lines.every(l => l.tab)) { skipBlock(b, f, 'tables', 'table', 'aligned short cells'); continue; }
 
@@ -1372,7 +1844,7 @@
         note(b.page, 'caption', 'text of ' + c.label, f.text, b);
         continue;
       }
-      if (capOpen && capOpen.page === b.page && f.size < bodySize * 0.97 && f.size <= capOpen.size + 0.3 && Math.abs(f.size - capOpen.size) <= 2 && !b.lines[0].bold) {
+      if (capOpen && capOpen.page === b.page && f.size < bodySize * 0.97 && f.size <= capOpen.size + 0.3 && Math.abs(f.size - capOpen.size) <= 2 && (!b.lines[0].bold || b.lines[0].parts.some(q => q.boldGuess))) {
         const l0 = b.lines[0];
         const pitch = l0.typPitch || 12;
         // under the caption, from the same left edge, set in the same small type (a title in bold, then its panels)
@@ -1385,6 +1857,13 @@
           note(b.page, 'caption', 'continuation of ' + c.label, f.text, b);
           continue;
         }
+      }
+      // a legend's panels set as blocks of their own ("(A) Schematic ...", "b, Close-up ...") in the legend's type
+      if (capOpen && capOpen.page === b.page && /^\s*(?:\(\s*[A-Ha-h](?:[–,-]\s*[A-Ha-h])?\s*\)|[A-Ha-h](?:[–-][A-Ha-h])?,)\s+\S/.test(f.text) && Math.abs(f.size - capOpen.size) <= 0.5 && f.size < bodySize * 0.97) {
+        const c = out.captions[out.captions.length - 1];
+        c.text += ' ' + f.text; capOpen.last = b.lines[b.lines.length - 1].baseline; capOpen.group = b.group; capOpen.col = b.lines[0].col;
+        note(b.page, 'caption', 'panel of ' + c.label, f.text, b);
+        continue;
       }
       if (capOpen && capOpen.page !== b.page) capOpen = null;
 
@@ -1435,6 +1914,11 @@
 
       if (state === 'frontskip') { skipBlock(b, f, 'other', 'other', 'front matter summary'); continue; }
       if (state === 'supp') { skipBlock(b, f, 'other', 'other', 'supplement file list or notes'); continue; }
+      if (state === 'refs' || (state === 'body' && f.small)) {
+        // the licence box and the dates repeated on a last page are not a reference or a sentence
+        const why = frontBoilerplate(f, bodySize);
+        if (why === 'licence or copyright' || why === 'dates' || why === 'stamp') { skipBlock(b, f, 'other', 'other', 'boilerplate: ' + why); continue; }
+      }
       if (state === 'refs') { refEntries(b, f, 'in the reference list'); continue; }
       if (refRun[bi] && state !== 'front') {
         flush(); state = 'refs'; section = null;
@@ -1452,16 +1936,27 @@
           state = 'abstract'; abstractExplicit = false; abstractStyle = null;
           ctx.abstractReason = matches ? 'matches the item abstract' : 'first long prose block after the title';
         } else {
-          const why = frontReason(f);
-          T.other.push({text: f.text, page: b.page, reason: 'front matter: ' + why});
-          note(b.page, 'front', why, f.text, b);
+          frontSkip(b, f);
           continue;
         }
       }
 
+      // front matter wherever it stands on the first two pages: in the body's way it would thread
+      // affiliations or a licence into a sentence that runs past it
+      if (b.page <= ctx.firstPage + 1 && (state === 'body' || state === 'abstract')) {
+        const why = frontBoilerplate(f, bodySize);
+        if (why) { T.other.push({text: f.text, page: b.page, reason: 'front matter: ' + why}); note(b.page, 'front', why, f.text, b); interposed++; continue; }
+      }
       // footnotes: small print low on the page that starts with a marker
       const first = b.lines[0];
       const pageH = byIndex[b.page] ? byIndex[b.page].height : 792;
+      // a table's footnote: its letter glued to the note ("bSlopes were derived ..."), in small type
+      if (f.size < bodySize * 0.97 && /^[a-h]\p{Lu}\p{Ll}{2,}/u.test(f.text) && (first.startsSup || b.lines[0].parts.find(q => q.str.trim()) && b.lines[0].parts.find(q => q.str.trim()).size < f.size - 0.5 || !/^[a-h]\p{Lu}{2}/u.test(f.text))) {
+        out.footnotes.push({text: f.text, page: b.page});
+        note(b.page, 'footnote', 'table footnote', f.text, b);
+        interposed++;
+        continue;
+      }
       if (f.small && first.top > pageH * 0.5 && (first.startsSup || /^(?:[*†‡§¶]|\d{1,2}\s?\p{Lu}|[a-d]\s\p{Lu})/u.test(f.text))) {
         // on the first page this is the affiliation or correspondence note, not a footnote of the text
         const why = frontReason(f);
@@ -1477,11 +1972,17 @@
         continue;
       }
 
-      if (!isProse(b, f, bodySize)) {
+      // a contents list (STAR Methods): a run of short titles with no sentence among them
+      if (b.lines.length >= 3 && !/[.!?]\s/.test(f.text) && b.lines.filter(l => l.chars <= 70 && !TERMINAL.test(l.text)).length >= 0.8 * b.lines.length && b.lines.filter(l => l.fill < 0.85).length >= 0.6 * b.lines.length && f.capWordRatio >= 0.12 && b.lines.every(l => /^\p{Lu}/u.test(l.text))) {
+        skipBlock(b, f, 'other', 'other', 'a list of titles (contents)'); continue;
+      }
+      if (!isProse(b, f, bodySize) && !proseInBodyType(bi)) {
         skipBlock(b, f, 'other', 'other', f.small ? 'small text outside a paragraph (figure or table text)' : f.nWords <= 4 ? 'short fragment (figure label)' : 'not paragraph text');
         continue;
       }
-      if (f.size < bodySize * 0.8 && f.nLines < 3) { skipBlock(b, f, 'other', 'other', 'small print'); continue; }
+      if (f.size < bodySize * 0.8 && f.nLines < 3 && !ctx.textSize(f.size)) { skipBlock(b, f, 'other', 'other', 'small print'); continue; }
+      // a few lines in small type that never finish a sentence are labels in a figure
+      if (f.small && !ctx.textSize(f.size) && f.nLines <= 3 && !f.terminal && !(pend && /^\p{Ll}/u.test(f.text) && Math.abs(median(pend.lines.map(l => l.size)) - f.size) <= 0.5)) { skipBlock(b, f, 'other', 'other', 'small text outside a paragraph (figure or table text)'); continue; }
 
       if (state === 'abstract') {
         if (/^(?:key\s*words?|keywords?|abbreviations|index terms)\b/i.test(f.text)) {
@@ -1656,6 +2157,9 @@
       }
       return {index, width: +pg.width || 612, height: +pg.height || 792, parts, rotated};
     });
+    dropBullets(P);
+    dropStaleLayer(P, skipped);
+    fixRunSizes(P);
     inferBold(P);
     for (const pg of P) {
       pg.segs = segmentsOf(pg.parts);
@@ -1668,7 +2172,17 @@
     detectMargins(P, skipped, meta);
     for (const pg of P) detectWideTables(pg, skipped);
     const bodySize = bodyFontSize(P);
-    for (const pg of P) layoutPage(pg, bodySize);
+    // gutters page by page, then the ones the document keeps using (odd and even pages differ)
+    for (const pg of P) { const g = []; findGutters(pg.segs.filter(s => !s.skip), pg.width, 0, pg.width, g, 0); pg.pageGutters = g.sort((a, b) => a - b); }
+    const docGutters = [];
+    {
+      const all = P.flatMap(pg => pg.pageGutters).sort((a, b) => a - b);
+      let run = [];
+      const close = () => { if (run.length >= 2) docGutters.push(median(run)); run = []; };
+      for (const g of all) { if (run.length && g - run[run.length - 1] > 4) close(); run.push(g); }
+      close();
+    }
+    for (const pg of P) layoutPage(pg, bodySize, docGutters);
     const lex = buildLexicon(P);
     const fontWeight = new Map();
     for (const pg of P) for (const p of pg.parts) { const k = sizeKey(p.size) + '|' + fontKey(p.font); fontWeight.set(k, (fontWeight.get(k) || 0) + nsLen(p.str)); }
@@ -1683,10 +2197,48 @@
       for (const [sz, v] of best) domFont.set(+sz, v.font);
     }
     const titleFound = detectTitle(P[0], bodySize, meta);
+    const docPitch = new Map();
+    {
+      const by = new Map();
+      for (const pg of P) {
+        const groups = new Map();
+        for (const l of pg.lines) { if (!groups.has(l.group)) groups.set(l.group, []); groups.get(l.group).push(l); }
+        for (const ls of groups.values()) for (const k of new Set(ls.map(l => sizeKey(l.size)))) { if (!by.has(k)) by.set(k, []); by.get(k).push(...pitchesOf(ls, k)); }
+      }
+      for (const [k, ps] of by) if (ps.length >= 5) docPitch.set(k, median(ps));
+    }
     const blocks = [];
-    for (const pg of P) for (const b of buildBlocks(pg, bodySize)) blocks.push(b);
+    for (const pg of P) for (const b of buildBlocks(pg, bodySize, docPitch)) blocks.push(b);
     const byIndex = []; P.forEach(pg => { byIndex[pg.index] = pg; });
-    const res = assemble(byIndex, blocks, {skipped, log, notes, bodySize, lex, titleFound, meta, domFont, bodyFamily, bodyFont: domFont.get(sizeKey(bodySize)) || '', firstPage: P.length ? P[0].index : 0});
+    // the sizes the paper sets running text in: the body, and a smaller one for Methods or legends set as text
+    const sizeWeight = new Map();
+    for (const pg of P) for (const sg of pg.segs) { if (sg.skip || sg.plain.length < 30) continue; const k = sizeKey(sg.size); sizeWeight.set(k, (sizeWeight.get(k) || 0) + sg.plain.replace(/[^\p{L}]/gu, '').length); }
+    const topWeight = Math.max(0, ...sizeWeight.values());
+    const textSize = size => Math.abs(size - bodySize) <= 0.5 || (sizeWeight.get(sizeKey(size)) || 0) >= 0.15 * topWeight;
+    // the journal's reporting-summary form at the end (Nature's "nature portfolio | reporting summary"):
+    // from its first page on everything is back matter, whatever its subheadings say
+    let formPage = null;
+    for (const pg of P) {
+      if (pg.index <= (P[0] ? P[0].index : 0) + 1) continue;
+      const formLine = t => /\|\s*reporting\s+summary\b/i.test(t);
+      if (pg.segs.some(sg => sg.size >= 1.3 * bodySize && /^\s*reporting\s+summary\s*$/i.test(sg.plain)) || pg.segs.some(sg => formLine(sg.plain)) || pg.rotated.some(p => formLine(p.str))) { formPage = pg.index; break; }
+    }
+    // average glyph width per font, to tell an italic cut (narrower) from a heading face
+    const fontWidth = new Map();
+    {
+      const acc = new Map();
+      for (const pg of P) for (const p of pg.parts) { const t = p.str.replace(/\s/g, ''); if (t.length >= 4 && /^[A-Za-z]+$/.test(t) && p.w > 0) { const a = acc.get(p.font) || {c: 0, w: 0}; a.c += t.length; a.w += p.w / p.size; acc.set(p.font, a); } }
+      for (const [f, a] of acc) if (a.c >= 20) fontWidth.set(f, a.w / a.c);
+    }
+    const domFamily = new Map();
+    {
+      const w = new Map();
+      for (const pg of P) for (const p of pg.parts) if (p.family) { const k = sizeKey(p.size) + '|' + p.family; w.set(k, (w.get(k) || 0) + nsLen(p.str)); }
+      const best = new Map();
+      for (const [k, n] of w) { const [sz, fam] = k.split('|'); const b = best.get(sz); if (!b || n > b.n) best.set(sz, {n, fam}); }
+      for (const [sz, b] of best) domFamily.set(+sz, b.fam);
+    }
+    const res = assemble(byIndex, blocks, {domFamily, fontWidth, formPage, textSize, skipped, log, notes, bodySize, lex, titleFound, meta, domFont, bodyFamily, bodyFont: domFont.get(sizeKey(bodySize)) || '', firstPage: P.length ? P[0].index : 0});
     assignLevels(res.sections);
 
     // "Abstract:" run in front of the first sentence is a label, not text
@@ -1730,16 +2282,23 @@
       }
     }
     const letterRatio = toks ? wordy / toks : 1;
+    const unreadable = toks > 300 && letterRatio < 0.45;
 
-    return {
+    const out = {
       title, abstract, sections,
       captions: res.captions, references: res.references, footnotes: res.footnotes,
       skipped,
       stats: {bodyChars, totalChars, pages: P.length, columns: modeCols, bodySize, pageColumns: P.map(pg => pg.columns), hyphenations: notes.hyphenation.length,
-        wordShare: Math.round(letterRatio * 100) / 100, unreadable: toks > 300 && letterRatio < 0.45},
-      notes, log,
+        wordShare: Math.round(letterRatio * 100) / 100, unreadable, useFallback: unreadable},
+      notes,
       layout: P.map(pg => ({index: pg.index, columns: pg.columns, gutters: pg.gutters, width: pg.width, height: pg.height})),
     };
+    // a text layer of glyph codes has no body worth reading: nothing is offered, and the flag tells the
+    // reader to use another source of text (the full-text index)
+    if (unreadable) { out.sections = []; out.abstract = meta.abstract ? clean(meta.abstract) : ''; out.stats.bodyChars = 0; }
+    // the per-block log of what was classified as what is for debug(); a reader caching the result does not need it
+    if (input && input.debug) { out.log = log; Object.defineProperty(out, '_pages', {value: P, enumerable: false}); }
+    return out;
   }
 
   /* ------------------------------------------------------ reading order */
@@ -1752,7 +2311,7 @@
       let n = 0;
       sec.paragraphs.forEach((p, pi) => {
         for (const s of p.sentences) {
-          out.push({text: s.text, page: s.page, rects: s.rects, sectionIndex: si, sentenceIndex: n++, paragraphIndex: pi, kind: sec.kind, level: sec.level});
+          out.push({text: s.text, spoken: s.spoken || s.text, page: s.page, rects: s.rects, sectionIndex: si, sentenceIndex: n++, paragraphIndex: pi, kind: sec.kind, level: sec.level});
         }
       });
     });
@@ -1783,7 +2342,7 @@
     return lines.join('\n');
   }
 
-  const api = {structure, readingOrder, pageFromPdfjs, fontsOf, debug, splitSentences, normalizeText, decideHyphen, headingName, isCiteSup, _: {segmentsOf, findGutters, joinParts, clusterRows, breakReason, lineify}};
+  const api = {structure, readingOrder, pageFromPdfjs, fontsOf, debug, splitSentences, normalizeText, decideHyphen, headingName, isCiteSup, spokenOf, _: {segmentsOf, findGutters, joinParts, clusterRows, breakReason, lineify}};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.StyleCustomPaperText = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

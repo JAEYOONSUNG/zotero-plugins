@@ -209,9 +209,9 @@ test('the say engine passes the text as one argument after --, kills on cancel, 
  const engine=RA.sayEngine({spawn});
  const events=[];
  engine.speak({text:'-rf; $(touch x) hello',lang:'ko-KR',voiceURI:'',rate:1,onstart:()=>events.push('start'),onend:()=>events.push('end'),onerror:e=>events.push('err:'+e)});
- assert.deepEqual(spawned[0].args,['-v','Yuna','-r','175','--','-rf; $(touch x) hello'],'one argv entry, no shell');
+ assert.deepEqual(spawned[0].args,['-v','Yuna','-r','200','--','-rf; $(touch x) hello'],'one argv entry, no shell');
  spawned[0].onexit(1);                                  // Yuna is not installed
- assert.deepEqual(spawned[1].args.slice(0,3),['-r','175','--'],'second attempt uses the system voice');
+ assert.deepEqual(spawned[1].args.slice(0,3),['-r','200','--'],'second attempt uses the system voice');
  spawned[1].onexit(0);assert.deepEqual(events.filter(e=>e==='end'),['end']);
  engine.speak({text:'next',lang:'en',rate:1.2,onend:()=>events.push('end2')});
  engine.cancel();assert.equal(spawned.at(-1).killed,true);
@@ -234,4 +234,76 @@ test('the player refuses to run without an engine and does nothing after destroy
  assert.throws(()=>RA.create({}),/engine/);
  const {p,engine,events}=player();p.play();p.destroy();engine.begin();
  assert.equal(events.filter(e=>e.startsWith('sentence')).length,0);
+});
+
+/* ---- sharing the speech queue with Zotero's own Read Aloud ---------------- */
+function fakeSynth(){
+ const s={queue:[],speaking:false,pending:false,voices:[{voiceURI:'v',name:'V',lang:'en-US'}],
+  getVoices(){return s.voices;},speak(u){s.queue.push(u);s.pending=true;},
+  // what Gecko does on cancel(): every queued utterance gets an error event
+  cancel(){const q=s.queue.splice(0);s.speaking=s.pending=false;for(const u of q)u.onerror&&u.onerror({error:'interrupted'});},
+  pause(){},resume(){}};
+ return s;
+}
+test('a cancel this engine did not make is reported as an interruption; its own cancel is not',()=>{
+ const synth=fakeSynth();class Utt{constructor(t){this.text=t;}}
+ const engine=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ const seen=[];
+ engine.speak({text:'A.',oninterrupt:r=>seen.push('foreign:'+r),onerror:e=>seen.push('error:'+e)});
+ engine.cancel();
+ assert.deepEqual(seen,[],'our own cancel is silent');
+ engine.speak({text:'B.',oninterrupt:r=>seen.push('foreign:'+r),onerror:e=>seen.push('error:'+e)});
+ synth.cancel();                                          // Zotero's Read Aloud starting
+ assert.deepEqual(seen,['foreign:interrupted']);
+});
+
+test('the player becomes paused, not silently "playing", when another speaker cancels it, and resume speaks the sentence again',()=>{
+ const synth=fakeSynth();class Utt{constructor(t){this.text=t;}}
+ const engine=RA.speechEngine({speechSynthesis:synth,SpeechSynthesisUtterance:Utt});
+ const events=[];const p=RA.create({engine,watchdogMs:0,onChange:e=>events.push(e.type)});p.load(body());
+ p.play();synth.queue[0].onstart();
+ assert.equal(p.state().status,'playing');
+ synth.cancel();
+ assert.equal(p.state().status,'paused');assert.equal(p.state().error,'interrupted');assert.ok(events.includes('interrupted'));
+ p.resume();assert.equal(p.state().status,'playing');assert.equal(synth.queue[0].text,'One.','the interrupted sentence again, from its start');
+});
+
+test('a queue that went quiet after speaking (someone cancelled without events) is a pause; no sound at all is still no-audio',()=>{
+ const timers=[];const engine=fakeEngine();let busy=true;engine.busy=()=>busy;
+ const {p}=player({engine,create:{watchdogMs:4000,timers:{set:(fn,ms)=>{timers.push(fn);return timers.length;},clear:()=>{}}}});
+ p.play();engine.begin();
+ busy=false;timers.at(-1)();
+ assert.equal(p.state().status,'paused');assert.equal(p.state().error,'interrupted');
+});
+
+test('say: a long sentence is queued whole before the next one, and the start is reported after queueing',async()=>{
+ const spawned=[];const spawn=(args,onexit)=>{const proc={args,onexit,kill(){}};spawned.push(proc);return proc;};
+ const engine=RA.sayEngine({spawn});
+ const long='alpha beta gamma delta, '.repeat(14)+'omega.';
+ const {p}=player({engine,units:[unit(long,1,0),unit('Next.',1,0)]});
+ p.play();await new Promise(r=>setImmediate(r));
+ const texts=[spawned[0].args.at(-1)];
+ for(let i=0;i<20&&spawned.length;i++){const last=spawned.at(-1);last.onexit(0);await new Promise(r=>setImmediate(r));if(spawned.at(-1)===last)break;texts.push(spawned.at(-1).args.at(-1));}
+ const pieces=RA.splitForEngine(long);
+ assert.deepEqual(texts.slice(0,pieces.length),pieces,'every piece of the long sentence, in order');
+ assert.equal(texts[pieces.length],'Next.','then the next sentence');
+});
+
+test('the citation-free spoken text is what is said; the shown text keeps the citations',()=>{
+ const engine=fakeEngine();
+ const {p}=player({engine,units:[unit('Growth doubled [12, 13].',1,0,{spoken:'Growth doubled.'}),unit('Plain.',1,0)]});
+ p.play();
+ assert.equal(engine.log.find(l=>l[0]==='speak')[1],'Growth doubled.');
+ assert.equal(p.state().unit.text,'Growth doubled [12, 13].');
+ const structured={sections:[{heading:'R',paragraphs:[{sentences:[{text:'Seen [3].',spoken:'Seen.',page:0,rects:[]}]}]}]};
+ const pt={readingOrder:s=>[{text:'Seen [3].',page:0,rects:[],sectionIndex:0,sentenceIndex:0,paragraphIndex:0}]};
+ assert.equal(RA.composeUnits(structured,{},pt)[0].spoken,'Seen.','looked up in the paragraph when the reading order dropped it');
+ assert.equal(RA.sayable({text:'Only [4].',spoken:'  '}),'Only [4].','an empty spoken text falls back to the text');
+});
+
+test('after destroy, play, seek and resume are refused and nothing is spoken',()=>{
+ const {p,engine}=player();p.destroy();
+ p.play(2);p.seek(1);p.resume();
+ assert.equal(engine.log.filter(l=>l[0]==='speak').length,0);
+ assert.equal(p.destroyed,true);
 });

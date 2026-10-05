@@ -487,6 +487,27 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // Off the start path: a library sweep must not delay a window opening.
     this.scheduleFlush(60000);
     Promise.resolve().then(() => this.pruneDeletedItems()).catch(error => this.Z.logError(error));
+    Promise.resolve().then(() => this.brightenStatusTagColors()).catch(error => this.Z.logError(error));
+  }
+  /* The coloured-tag dots Zotero draws before a title for /unread, /reading and
+     /done were set in muted tones that read as dull at that size (the user,
+     2026-10-05). Brighter ones replace exactly those muted values, once; a
+     colour the user picked themselves is left alone. */
+  async brightenStatusTagColors() {
+    const BRIGHT = {"/unread": {from: ["#6196bc"], to: "#2F8CFF"}, "/reading": {from: ["#c8963a"], to: "#FFB020"}, "/done": {from: ["#6d9b7e"], to: "#22C55E"}};
+    const Tags = this.Z.Tags;
+    if (typeof Tags?.getColors !== "function" || typeof Tags?.setColor !== "function") return 0;
+    let changed = 0;
+    for (const lib of this.Z.Libraries?.getAll?.() || []) {
+      const colors = Tags.getColors(lib.libraryID);
+      for (const [name, rule] of Object.entries(BRIGHT)) {
+        const now = colors?.get?.(name);
+        if (!now || !rule.from.includes(String(now.color || "").toLowerCase())) continue;
+        await Tags.setColor(lib.libraryID, name, rule.to, now.position);
+        changed++;
+      }
+    }
+    return changed;
   }
   metrics(item) {
     const old = this.entry(item);

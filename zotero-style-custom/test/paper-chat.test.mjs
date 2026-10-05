@@ -165,3 +165,62 @@ test('lines that are comments, other events or garbage are ignored',()=>{
  r.update(': keep-alive\n\nevent: ping\ndata: not json\n\ndata: {"choices":[{"delta":{"content":"ok"}}]}\n\n');
  assert.equal(r.end(),'ok');
 });
+
+/* ---- retrieval intents, Korean questions, figures, summary budget (real papers) ---- */
+import {createRequire as __cr} from 'node:module';
+import __fs from 'node:fs';
+const __PT=__cr(import.meta.url)('../src/paper-text.js');
+const realPaper=name=>{const url=new URL(`./fixtures/paper-text/${name}.json`,import.meta.url);if(!__fs.existsSync(url))return null;return __PT.structure({pages:JSON.parse(__fs.readFileSync(url,'utf8')).pages,meta:{}});};
+
+test('"방법 요약" retrieves the Methods sections of an English paper, not just the abstract and introduction',(t)=>{
+ const s=realPaper('nar2025');if(!s)return t.skip('fixture not present');
+ const chunks=PC.buildChunks(s,{pageBase:1});
+ const q=PC.quickPrompt('methods');
+ const picked=PC.rank(chunks,q.question,{k:6,intent:q.intent});
+ const parts=picked.map(c=>c.part);
+ assert.ok(parts.filter(p=>p==='methods').length>=3,`methods chunks picked: ${picked.map(c=>c.section).join(' | ')}`);
+});
+
+test('a free Korean question finds English sections through the bilingual research terms',(t)=>{
+ const s=realPaper('nar2025');if(!s)return t.skip('fixture not present');
+ const chunks=PC.buildChunks(s,{pageBase:1});
+ const picked=PC.rank(chunks,'이 논문의 한계는 뭐야?',{k:6});
+ assert.ok(picked.some(c=>c.part==='discussion'),picked.map(c=>c.section).join(' | '));
+ const methods=PC.rank(chunks,'실험 방법을 알려줘',{k:6});
+ assert.ok(methods.some(c=>c.part==='methods'),methods.map(c=>c.section).join(' | '));
+});
+
+test('a question that matches nothing still gets the section on screen, the abstract and the discussion, not two chunks',()=>{
+ const chunks=PC.buildChunks(paper(),{});
+ const picked=PC.rank(chunks,'zzzz qqqq',{k:6,sectionIndex:1});
+ assert.ok(picked.length>=3);
+ assert.ok(picked.some(c=>c.kind==='abstract'));assert.ok(picked.some(c=>c.sectionIndex===1));assert.ok(picked.some(c=>c.part==='discussion'));
+});
+
+test('"이 그림 설명" sends the captions and tables of the page on screen first, then the body there',()=>{
+ const doc=paper();
+ doc.sections[1].paragraphs=Array.from({length:6},(_,i)=>({sentences:[{text:'Long body text about methods number '+i+' '+'filler words here '.repeat(20),page:2}]}));
+ doc.captions=[{text:'Figure 2. Residual activity after heat challenge.',page:2},{text:'Figure 9. Elsewhere.',page:7}];
+ doc.tables=[{text:'Table 1. Strains used in this study.',page:2}];
+ const chunks=PC.buildChunks(doc,{pageBase:1});
+ const q=PC.quickPrompt('figure');
+ const picked=PC.rank(chunks,q.question,{k:6,page:3,forcePage:true,intent:q.intent});
+ const texts=picked.map(c=>c.text);
+ assert.ok(texts.some(t=>/^Figure 2\./.test(t)),'the caption on the page');assert.ok(texts.some(t=>/^Table 1\./.test(t)),'the table on the page');
+ assert.ok(!texts.some(t=>/Figure 9/.test(t)),'not a caption from another page');
+ const m=PC.chatMessages({question:q.question,chunks,viewing:{page:3},forcePage:true,intent:q.intent});
+ assert.ok(m.messages[0].content.indexOf('Figure 2.')<m.messages[0].content.indexOf('Long body text'),'captions come first');
+});
+
+test('the summary leaves out back matter and keeps the methods to a sixth of the budget; title, abstract and section list always fit',(t)=>{
+ const nature=realPaper('nature');if(!nature)return t.skip('fixture not present');
+ const input=PC.summaryInput(nature,{pageBase:1});
+ assert.ok(input.chars<=PC.SUMMARY_BUDGET);
+ assert.doesNotMatch(input.text,/Reporting summary|Online content|Data availability|Code availability|Peer review|Field-specific reporting|Life sciences study design/i);
+ const methodsChars=input.parts.filter(p=>p.part==='methods').reduce((n,p)=>n+p.text.length,0);
+ assert.ok(methodsChars<=PC.SUMMARY_BUDGET*0.15+200,`methods use ${methodsChars} characters`);
+ const natcomm=realPaper('natcomm');
+ if(natcomm){const n=PC.summaryInput(natcomm,{pageBase:1});assert.doesNotMatch(n.text,/Open Access|Creative Commons|Peer review information|Author contributions/i);}
+ const tiny=PC.summaryInput(nature,{pageBase:1,budget:3000});
+ assert.ok(tiny.chars<=3000);assert.match(tiny.text,/^TITLE: /);assert.match(tiny.text,/ABSTRACT: /);assert.match(tiny.text,/SECTIONS: /);
+});

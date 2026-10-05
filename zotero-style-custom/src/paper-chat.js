@@ -34,6 +34,51 @@
   return out;
  }
 
+ /* ---- bilingual research terms ------------------------------------------
+    A Korean question about an English paper shares no words with it. The common
+    research terms are added in English, so "방법" finds Methods and "한계" finds
+    the limitation in the Discussion. */
+ const TERMS=[
+  [/방법|방식|절차|프로토콜/,'method methods materials procedure protocol approach'],[/실험/,'experiment experimental assay'],
+  [/결과|성과/,'result results finding findings'],[/한계|제한|약점/,'limitation limitations limit caveat weakness'],
+  [/결론/,'conclusion conclusions'],[/논의|고찰|토의/,'discussion'],[/서론|도입|배경/,'introduction background'],
+  [/그림|도표|도식/,'figure fig'],[/표\b|테이블/,'table'],[/데이터|자료/,'data dataset'],[/통계|유의/,'statistical statistics significance'],
+  [/샘플|표본|시료/,'sample samples'],[/대조군|대조/,'control controls'],[/가설/,'hypothesis'],[/모델|모형/,'model'],
+  [/성능|정확도/,'performance accuracy'],[/오차|오류/,'error'],[/재현/,'reproducibility replicate'],[/기여|의의|시사/,'contribution implication significance'],
+  [/향후|후속|미래/,'future'],[/주장|핵심/,'claim main conclusion'],[/분석/,'analysis'],[/측정/,'measurement measured'],[/균주|세포주/,'strain strains cell line'],
+  [/서열|시퀀싱/,'sequencing sequence'],[/요약|초록/,'abstract summary']
+ ];
+ const expandQuery=text=>{const s=String(text||'');const extra=TERMS.filter(([re])=>re.test(s)).map(([,en])=>en);return extra.length?s+' '+extra.join(' '):s;};
+
+ /* ---- the part of the paper a section belongs to ----------------------- */
+ const PART_HEAD=[
+  ['methods',/^(?:(?:materials?|patients?|subjects?)\s+and\s+methods?|methods?(?:\s+(?:summary|details))?|online methods|experimental(?:\s+(?:procedures?|section|methods?|design))?|methodology|star\s*methods|방법|재료 및 방법|실험 방법)\b/i],
+  ['results',/^(?:results?(?:\s+and\s+discussion)?|findings|결과)\b/i],
+  ['discussion',/^(?:discussion|conclusions?|concluding remarks|summary and (?:outlook|conclusions?)|outlook|limitations?|perspectives?|논의|고찰|결론)\b/i],
+  ['intro',/^(?:introduction|background|서론|배경)\b/i]
+ ];
+ /* Everything after these is the journal's own back matter (Nature's reporting summary, licences). */
+ const BACK_HEAD=/^(?:acknowledge?ments?|references|bibliography|literature cited|funding|author contributions?|author information|competing interests?|conflicts? of interest|declarations?|data availability|code availability|data and code availability|online content|reporting summary|peer review(?: information)?|additional information|open access|ethics(?: declarations?)?|supplementary information|extended data|change history|rights and permissions|publisher.?s note|참고문헌|감사의 글|사사)\b/i;
+ const isBackSection=s=>!!s&&(s.kind==='back'||s.kind==='references'||s.level==='back'||s.back===true||s.part==='back');
+ function partsOf(structured){
+  const sections=(structured&&structured.sections)||[];const out=[];let current=null,afterReporting=false;
+  sections.forEach((s,i)=>{
+   const heading=clean(s.heading).replace(/^(?:\d+(?:\.\d+)*|[IVX]+)[.)]?\s+/,'');
+   if(/^reporting summary\b/i.test(heading))afterReporting=true;
+   if(afterReporting||isBackSection(s)||BACK_HEAD.test(heading)){out.push('back');if(!afterReporting&&current&&current.level!==undefined)current=null;return;}
+   // The extraction module's own part, where it is specific ("methods", "back"); "main" says only that it is body text.
+   if(s.part==='methods'||s.part==='back'){out.push(s.part);current={part:s.part,level:Number(s.level)||1};return;}
+   if(s.kind==='abstract'){out.push('abstract');current=null;return;}
+   const hit=PART_HEAD.find(([,re])=>re.test(heading));
+   const level=Number(s.level)||1;
+   if(hit){out.push(hit[0]);current={part:hit[0],level,empty:!(s.paragraphs||[]).length};return;}
+   // A subsection inherits its parent's part: deeper level, or the same level under an empty "Methods" header (Nature's layout).
+   if(current&&(level>current.level||current.empty&&level===current.level)){out.push(current.part);return;}
+   current=null;out.push('body');
+  });
+  return out;
+ }
+
  /* ---- chunks ----------------------------------------------------------- */
  const textOf=p=>clean((p&&p.sentences||[]).map(s=>s.text).join(' '));
  const pageOf=p=>{const s=(p&&p.sentences||[]).find(x=>Number.isFinite(Number(x.page)));return s?Number(s.page):null;};
@@ -47,15 +92,18 @@
  /* One chunk is a paragraph or a few short ones from the same section. */
  function buildChunks(structured,{target=CHUNK_TARGET,pageBase=0}={}){
   const chunks=[];if(!structured)return chunks;
-  const add=(section,sectionIndex,page,text,kind='body')=>{
+  const parts=partsOf(structured);
+  const add=(section,sectionIndex,page,text,kind='body',part='body')=>{
    const body=clean(text);if(!body)return;
    const tokens=tokenize(section+' '+body),tf=new Map();for(const t of tokens)tf.set(t,(tf.get(t)||0)+1);
-   chunks.push({id:chunks.length,section:clean(section),sectionIndex,page:Number.isFinite(Number(page))?Number(page)+pageBase:null,text:body,tf,length:tokens.length||1,kind});
+   chunks.push({id:chunks.length,section:clean(section),sectionIndex,page:Number.isFinite(Number(page))?Number(page)+pageBase:null,text:body,tf,length:tokens.length||1,kind,part});
   };
-  if(clean(structured.abstract))add('Abstract',-1,1-pageBase,structured.abstract,'abstract');
+  if(clean(structured.abstract))add('Abstract',-1,1-pageBase,structured.abstract,'abstract','abstract');
   (structured.sections||[]).forEach((section,sectionIndex)=>{
+   const part=parts[sectionIndex]||'body';
+   if(part==='abstract'&&clean(structured.abstract))return;      // already in, once
    let buffer='',bufferPage=null;
-   const flush=()=>{if(buffer){add(section.heading||'',sectionIndex,bufferPage??section.page,buffer);}buffer='';bufferPage=null;};
+   const flush=()=>{if(buffer){add(section.heading||'',sectionIndex,bufferPage??section.page,buffer,part==='abstract'?'abstract':'body',part);}buffer='';bufferPage=null;};
    for(const paragraph of section.paragraphs||[]){
     const text=textOf(paragraph);if(!text)continue;
     for(const piece of splitLong(text,target)){
@@ -67,7 +115,9 @@
    }
    flush();
   });
-  (structured.captions||[]).forEach(c=>{const text=clean(c&&c.text||(c&&c.sentences?textOf(c):c));if(text)add('Caption',-3,c&&c.page,text,'caption');});
+  (structured.captions||[]).forEach(c=>{const text=clean(c&&c.text||(c&&c.sentences?textOf(c):c));if(text)add(c&&c.kind==='table'?'Table':'Caption',-3,c&&c.page,text,c&&c.kind==='table'?'table':'caption','caption');});
+  const tables=Array.isArray(structured.tables)?structured.tables:(structured.skipped&&Array.isArray(structured.skipped.tables)?structured.skipped.tables:[]);
+  tables.forEach(tb=>{const text=clean(tb&&(tb.text||tb.caption)||'');if(text)add('Table',-4,tb&&tb.page,text.slice(0,2000),'table','caption');});
   return chunks;
  }
  /* The section a page belongs to: the last one that starts on or before it. */
@@ -78,9 +128,9 @@
  }
 
  /* ---- retrieval -------------------------------------------------------- */
- function rank(chunks,query,{k=TOP_CHUNKS,page=null,sectionIndex=-1,forcePage=false}={}){
+ function rank(chunks,query,{k=TOP_CHUNKS,page=null,sectionIndex=-1,forcePage=false,intent=null}={}){
   if(!chunks.length)return [];
-  const q=tokenize(query),N=chunks.length,avg=chunks.reduce((n,c)=>n+c.length,0)/N||1;
+  const q=tokenize(expandQuery(query)),N=chunks.length,avg=chunks.reduce((n,c)=>n+c.length,0)/N||1;
   const df=new Map();for(const t of new Set(q))df.set(t,chunks.filter(c=>c.tf.has(t)).length);
   const K1=1.5,B=0.75;
   const scored=chunks.map(c=>{
@@ -92,16 +142,36 @@
   });
   const picked=new Map();
   const take=c=>{if(c&&!picked.has(c.id))picked.set(c.id,c);};
+  const byScore=list=>list.slice().sort((a,b)=>b.score-a.score||a.chunk.id-b.chunk.id);
   take(chunks.find(c=>c.kind==='abstract'));
-  if(forcePage&&page)for(const c of chunks.filter(c=>c.page===page).slice(0,3))take(c);
+  // "This figure": the captions and tables of the page on screen first, then the body there.
+  if(forcePage&&page){
+   for(const c of chunks.filter(c=>c.page===page&&(c.kind==='caption'||c.kind==='table')).slice(0,4))take(c);
+   for(const c of chunks.filter(c=>c.page===page&&c.kind==='body').slice(0,2))take(c);
+  }
   if(sectionIndex>=0){
-   const here=scored.filter(s=>s.chunk.sectionIndex===sectionIndex).sort((a,b)=>b.score-a.score||a.chunk.id-b.chunk.id)[0];
+   const here=byScore(scored.filter(s=>s.chunk.sectionIndex===sectionIndex))[0];
    if(here)take(here.chunk);
   }
-  for(const s of scored.slice().sort((a,b)=>b.score-a.score||a.chunk.id-b.chunk.id)){
-   if(picked.size>=k)break;if(s.score<=0&&picked.size>=2)break;take(s.chunk);
+  // A quick prompt says which part of the paper it is about: the best chunks of that part, whatever language the question is in.
+  const wanted=intent&&Array.isArray(intent.parts)?intent.parts:[];
+  if(wanted.length){
+   const room=Math.max(2,k-picked.size);let n=0;
+   const near=c=>!(forcePage&&page)||c.page!==null&&Math.abs(c.page-page)<=1;   // "this figure" means a figure on or beside this page
+   for(const s of byScore(scored.filter(s=>wanted.includes(s.chunk.part)&&near(s.chunk)))){if(n>=room)break;if(!picked.has(s.chunk.id)){take(s.chunk);n++;}}
   }
-  return [...picked.values()].sort((a,b)=>a.id-b.id).slice(0,Math.max(k,picked.size));
+  const any=scored.some(s=>s.score>0);
+  for(const s of byScore(scored)){
+   if(picked.size>=k)break;if(s.score<=0)break;take(s.chunk);
+  }
+  // Nothing matched: the section on screen, the abstract (above) and the discussion, rather than two chunks.
+  if(!any||picked.size<Math.min(3,chunks.length)){
+   for(const c of chunks.filter(c=>sectionIndex>=0&&c.sectionIndex===sectionIndex).slice(0,2))if(picked.size<k)take(c);
+   for(const part of ['discussion','results','intro'])if(picked.size<k)take(chunks.find(c=>c.part===part));
+  }
+  // Captions first when the page was asked about; otherwise document order.
+  const out=[...picked.values()];
+  return forcePage&&page?out:out.sort((a,b)=>a.id-b.id);
  }
  const where=c=>(c.section||'')+(c.page?(c.section?', ':'')+'p. '+c.page:'');
  const excerpt=(c,i)=>`[E${i+1}] (${where(c)}) ${c.text.slice(0,EXCERPT_CHARS)}`;
@@ -109,27 +179,42 @@
  /* ---- summary input ---------------------------------------------------- */
  const WIDE=/^(conclusions?|discussion|conclusions? and (?:outlook|future)|summary|results? and discussion|outlook|limitations?|결론|논의|고찰)\b/i;
  const SKIP=/^(acknowledge?ments?|references|bibliography|funding|author contributions?|competing interests?|conflicts? of interest|참고문헌|감사)/i;
+ /* The budget goes to what a reader decides with: title, abstract and the list of sections always fit; back
+    matter (availability statements, reporting summaries, licences) is left out; the methods get at most 15%. */
  function summaryInput(structured,{budget=SUMMARY_BUDGET,meta={},pageBase=0}={}){
-  const title=clean(structured&&structured.title||meta.title),abstract=clean(structured&&structured.abstract||meta.abstract);
-  const sections=((structured&&structured.sections)||[]).map((s,i)=>({...s,i})).filter(s=>(s.paragraphs||[]).length&&!SKIP.test(clean(s.heading)));
+  const title=clean(structured&&structured.title||meta.title).slice(0,400);
+  const parts=partsOf(structured);
+  const sections=((structured&&structured.sections)||[]).map((s,i)=>({...s,i,part:parts[i]})).filter(s=>(s.paragraphs||[]).length&&s.part!=='back'&&s.part!=='abstract'&&!SKIP.test(clean(s.heading)));
   const headings=sections.map(s=>({heading:clean(s.heading)||'(untitled)',page:Number.isFinite(Number(s.page))?Number(s.page)+pageBase:null}));
-  const head=['TITLE: '+title,'ABSTRACT: '+(abstract||'(none)'),'SECTIONS: '+headings.map(h=>h.heading+(h.page?' (p. '+h.page+')':'')).join(' | ')].join('\n');
-  const parts=sections.map(s=>{
-   const wide=WIDE.test(clean(s.heading));
+  let abstract=clean(structured&&structured.abstract||meta.abstract);
+  if(abstract.length>budget*0.25)abstract=abstract.slice(0,Math.floor(budget*0.25))+'…';
+  let list=headings.map(h=>h.heading.slice(0,90)+(h.page?' (p. '+h.page+')':''));
+  const listRoom=Math.floor(budget*0.15);
+  while(list.length>1&&list.join(' | ').length>listRoom)list=list.slice(0,-1);
+  const listText=list.join(' | ')+(list.length<headings.length?' | …':'');
+  const head=['TITLE: '+title,'ABSTRACT: '+(abstract||'(none)'),'SECTIONS: '+listText].join('\n');
+  let pieces=sections.map(s=>{
+   const wide=WIDE.test(clean(s.heading))||s.part==='discussion';
    const take=wide?Math.min(3,s.paragraphs.length):1,limit=wide?2400:900;
    const text=clean(s.paragraphs.slice(0,take).map(textOf).join(' ')).slice(0,limit);
    const rawPage=pageOf(s.paragraphs[0])??s.page,page=Number.isFinite(Number(rawPage))?Number(rawPage)+pageBase:null;
-   return {label:`[${clean(s.heading)||'Text'}${page?', p. '+page:''}]`,text,wide};
+   return {label:`[${clean(s.heading)||'Text'}${page?', p. '+page:''}]`,text,wide,part:s.part};
   }).filter(p=>p.text);
-  let body=parts.map(p=>p.label+' '+p.text).join('\n');
   const lead='\n\nEXCERPTS (first paragraph of each section; more of the conclusion and discussion):\n';
-  let truncated=false,room=budget-head.length-lead.length;
-  if(body.length>room){
-   truncated=true;const scale=Math.max(0.2,room/body.length);
-   body=parts.map(p=>{const cut=Math.max(160,Math.floor(p.text.length*scale));return p.label+' '+p.text.slice(0,cut);}).join('\n').slice(0,Math.max(0,room));
+  let room=Math.max(0,budget-head.length-lead.length),truncated=false;
+  const size=list=>list.reduce((n,p)=>n+p.label.length+1+p.text.length+1,0);
+  // The methods share at most 15% of the budget, cut evenly.
+  const methods=pieces.filter(p=>p.part==='methods'),methodsRoom=Math.floor(budget*0.15);
+  if(size(methods)>methodsRoom){truncated=true;const per=Math.max(60,Math.floor(methodsRoom/Math.max(1,methods.length))-20);let used=0;
+   pieces=pieces.filter(p=>{if(p.part!=='methods')return true;if(used>=methodsRoom)return false;p.text=p.text.slice(0,Math.max(0,Math.min(per,methodsRoom-used-p.label.length-2)));used+=p.label.length+2+p.text.length;return p.text.length>0;});}
+  if(size(pieces)>room){
+   truncated=true;const scale=Math.max(0.2,room/size(pieces));
+   pieces=pieces.map(p=>({...p,text:p.text.slice(0,Math.max(120,Math.floor(p.text.length*scale)))}));
+   while(pieces.length&&size(pieces)>room){const last=pieces[pieces.length-1];if(last.text.length>160)last.text=last.text.slice(0,last.text.length-Math.max(40,size(pieces)-room));else pieces.pop();}
   }
-  const text=head+lead+body;
-  return {text,title,abstract,headings,chars:text.length,truncated,sectionCount:parts.length};
+  const body=pieces.map(p=>p.label+' '+p.text).join('\n');
+  const text=(head+lead+body).slice(0,budget);
+  return {text,title,abstract,headings,chars:text.length,truncated,sectionCount:pieces.length,parts:pieces.map(p=>({label:p.label,part:p.part,text:p.text}))};
  }
  const LANG_HEADINGS={Korean:['요약','핵심 결과','방법','한계','확인할 점'],English:['Summary','Key findings','Methods','Limitations','What to check']};
  function summaryPrompt(language='Korean'){
@@ -154,21 +239,22 @@ Do not invent numbers, results or citations. If the excerpts do not say somethin
  }
  /* The Korean text is the dictionary key (see i18n.js); `translate` turns it
     into the panel's language, so a button and the question it sends agree. */
+ /* Each quick prompt carries the part of the paper it is about (its retrieval intent). */
  const QUICK={
-  claim:{label:'핵심 주장',question:'이 논문의 핵심 주장은 무엇이고, 어떤 증거로 뒷받침하나요?'},
-  methods:{label:'방법 요약',question:'이 논문의 방법을 단계별로 요약해 주세요.'},
-  limits:{label:'한계',question:'이 논문의 한계와 결과를 그대로 믿기 전에 확인할 점은 무엇인가요?'},
-  figure:{label:'이 그림 설명해줘(현재 페이지)',question:'지금 보고 있는 쪽의 그림이나 표를 설명해 주세요. 무엇을 보여주고 어떻게 읽어야 하나요?',forcePage:true},
-  mine:{label:'내 연구와 관련?',question:'제 메모와 태그를 보면 이 논문이 제 연구와 어떻게 관련되나요?',mine:true}
+  claim:{label:'핵심 주장',question:'이 논문의 핵심 주장은 무엇이고, 어떤 증거로 뒷받침하나요?',intent:{parts:['results','discussion']}},
+  methods:{label:'방법 요약',question:'이 논문의 방법을 단계별로 요약해 주세요.',intent:{parts:['methods']}},
+  limits:{label:'한계',question:'이 논문의 한계와 결과를 그대로 믿기 전에 확인할 점은 무엇인가요?',intent:{parts:['discussion','methods']}},
+  figure:{label:'이 그림 설명해줘(현재 페이지)',question:'지금 보고 있는 쪽의 그림이나 표를 설명해 주세요. 무엇을 보여주고 어떻게 읽어야 하나요?',forcePage:true,intent:{parts:['caption']}},
+  mine:{label:'내 연구와 관련?',question:'제 메모와 태그를 보면 이 논문이 제 연구와 어떻게 관련되나요?',mine:true,intent:null}
  };
  function quickPrompt(id,translate=x=>x){
   const q=QUICK[id];if(!q)return null;
-  return {id,question:translate(q.question),forcePage:!!q.forcePage,mine:!!q.mine};
+  return {id,question:translate(q.question),forcePage:!!q.forcePage,mine:!!q.mine,intent:q.intent||null};
  }
  /* The messages for one question: system rules with the excerpts, the last few
     turns, and the question. The user's own notes go in only when asked for. */
- function chatMessages({question,history=[],chunks=[],summary='',language='Korean',viewing={},mine=null,forcePage=false,turns=HISTORY_TURNS,k=TOP_CHUNKS}){
-  const picked=rank(chunks,question+(mine?' '+(mine.tags||[]).join(' '):''),{k,page:viewing.page||null,sectionIndex:Number.isInteger(viewing.sectionIndex)?viewing.sectionIndex:-1,forcePage});
+ function chatMessages({question,history=[],chunks=[],summary='',language='Korean',viewing={},mine=null,forcePage=false,intent=null,turns=HISTORY_TURNS,k=TOP_CHUNKS}){
+  const picked=rank(chunks,question+(mine?' '+(mine.tags||[]).join(' '):''),{k,page:viewing.page||null,sectionIndex:Number.isInteger(viewing.sectionIndex)?viewing.sectionIndex:-1,forcePage,intent});
   const parts=[chatSystemPrompt(language)];
   if(viewing.page)parts.push(`The reader is looking at page ${viewing.page}${viewing.section?' ('+viewing.section+')':''}.`);
   if(clean(summary))parts.push('SUMMARY OF THE PAPER (generated earlier):\n'+String(summary).slice(0,3000));
@@ -235,6 +321,6 @@ Do not invent numbers, results or citations. If the excerpts do not say somethin
  }
  const isEventStream=contentType=>/text\/event-stream/i.test(String(contentType||''));
 
- const api={tokenize,stem,buildChunks,sectionAtPage,rank,summaryInput,summaryPrompt,chatSystemPrompt,quickPrompt,chatMessages,linkCitations,streamReader,isEventStream,QUICK,SUMMARY_BUDGET,TOP_CHUNKS,HISTORY_TURNS,excerpt};
+ const api={tokenize,stem,expandQuery,partsOf,buildChunks,sectionAtPage,rank,summaryInput,summaryPrompt,chatSystemPrompt,quickPrompt,chatMessages,linkCitations,streamReader,isEventStream,QUICK,SUMMARY_BUDGET,TOP_CHUNKS,HISTORY_TURNS,excerpt};
  root.CustomStylePaperChat=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
