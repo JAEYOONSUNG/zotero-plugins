@@ -1375,7 +1375,6 @@
  "선택한 팔레트 삭제": "Delete selected palette",
  "선택한 팔레트 적용": "Apply selected palette",
  "설정 {0} → {1} · 사전 {2}개 · 예: {3}": "setting {0} → {1} · {2} entries · e.g. {3}",
- "설정 → 번역·AI에서 AI 서버 주소와 모델을 넣으세요. 내 컴퓨터의 로컬 모델도 됩니다.": "Enter the AI server address and model under Settings → Translation and AI. A local model on your own computer works too.",
  "설정 다시 읽기": "Reload settings",
  "설정 분류": "Category",
  "설정 이름·설명 검색": "Search settings",
@@ -2744,7 +2743,21 @@
  "후보가 둘입니다 — 직접 고르세요: {0}": "There are two candidates — choose one: {0}",
  "후속 연구": "Follow-up work",
  "후속 저널 {0}의 IF입니다. 이 논문이 실린 시점의 저널과 같은 값이 아닐 수 있습니다.": "This is the IF of the successor journal {0}, not necessarily of the journal this paper appeared in.",
- "휴지통으로": "Move to trash"
+ "휴지통으로": "Move to trash",
+ "답변이 끝나면 보낼 수 있습니다. 질문은 그대로 두었습니다.": "You can send it once the answer has finished. Your question is still in the box.",
+ "Claude가 답하지 못해 ChatGPT 계정이 대신 답했습니다": "Claude could not answer, so the ChatGPT account answered instead",
+ "눌러야 보냅니다 · {0}. 본문 일부와 제목·초록만 전송합니다.": "Nothing is sent until you press it · {0}. Only part of the text, the title and the abstract are sent.",
+ "줄여 보기": "Show less",
+ "이 쪽부터는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.": "There is no body text from this page on. Go to a page with body text, or press ‘Translate all’.",
+ "본문 읽는 중… {0}/{1}쪽": "Reading the text… page {0}/{1}",
+ "준비하는 중…": "Getting ready…",
+ "들은 분량": "Listened so far",
+ "1분 안 남음": "under a minute left",
+ "약 {0}분 남음": "about {0} min left",
+ "단축키: {0} 재생·일시정지, {1} 이전 문장, {2} 다음 문장.": "Keys: {0} play or pause, {1} back a sentence, {2} forward a sentence.",
+ "하위 노트로 저장": "Save as a child note",
+ "하위 노트로 저장했습니다.": "Saved as a child note.",
+ "AI 브리지로 약 {0}토큰 · {1}의 사용 한도에서 씁니다": "Tokens through the AI bridge: about {0} · from the allowance of {1}"
 };
   const api = {en};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

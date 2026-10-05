@@ -154,3 +154,12 @@
 
 /* toolbar buttons beside Zotero's own */
 .sc-ra-toolbar[aria-pressed="true"]{background:var(--fill-quarternary,rgba(0,0,0,0.1))}
+
+/* long answers: an older answer is folded to a few lines, with a button to unfold it; the fade is the text's own, no bar */
+.sc-ra-messages{position:relative}
+.sc-ra-msg[data-folded="true"] .sc-ra-md{max-height:10.5em;overflow:hidden;mask-image:linear-gradient(to bottom,#000 65%,transparent)}
+.sc-ra-msg-by{margin:4px 0 0;font-size:11px;color:var(--sc-muted)}
+.sc-ra-msg-actions .sc-ra-fold{margin-inline-end:auto}
+/* listening progress: a quiet track inside the player card */
+.sc-ra-meter{height:4px;border-radius:999px;background:var(--sc-soft2);overflow:hidden;margin:-2px 0 0}
+.sc-ra-meter-fill{display:block;height:100%;width:0;border-radius:999px;background:var(--sc-ink)}

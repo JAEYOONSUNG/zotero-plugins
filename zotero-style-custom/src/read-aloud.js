@@ -379,6 +379,13 @@
   };
   return api;
  }
- const api={create,speechEngine,sayEngine,splitSentences,splitForEngine,detectLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
+ /* About how long the rest takes from sentence `from` on, at `rate`: words over the voices' 200 a minute at rate 1
+    (SAY_WPM). A Korean word (eojeol) is longer than an English one and is spoken at about the same pace. */
+ function remainingSeconds(units,from=0,rate=1){
+  const list=Array.isArray(units)?units:[];let words=0;
+  for(let i=Math.max(0,from);i<list.length;i++){const m=sayable(list[i]).match(/\S+/g);words+=m?m.length:0;}
+  return Math.round(words/(SAY_WPM*clamp(rate,RATE_MIN,RATE_MAX,1))*60);
+ }
+ const api={create,speechEngine,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
  root.CustomStyleReadAloud=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

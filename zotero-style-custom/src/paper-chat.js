@@ -348,6 +348,25 @@ Do not invent numbers, results or citations. If the excerpts do not say somethin
     is part of the summary cache key and of each answer's record. Changes whenever a prompt's text changes. */
  const PROMPT_REVISION=(()=>{const text=summaryPrompt('X')+'\u0001'+chatSystemPrompt('X');let h=0x811c9dc5;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(36);})();
 
- const api={PROMPT_REVISION,tokenize,stem,expandQuery,partsOf,buildChunks,captionPieces,sectionAtPage,rank,summaryInput,summaryPrompt,chatSystemPrompt,quickPrompt,chatMessages,linkCitations,streamReader,isEventStream,QUICK,SUMMARY_BUDGET,TOP_CHUNKS,HISTORY_TURNS,excerpt};
+ /* A summary or an answer as a child note: the same short Markdown the panel draws (headings, bullets, **bold**),
+    every piece of text escaped, and a line naming the paper's question, the account or model and the date. */
+ const escHTML=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+ function noteHTML({heading='',title='',question='',text='',source='',date=''}={}){
+  const inline=line=>String(line).split(/(\*\*[^*]+\*\*)/).map(part=>{const m=/^\*\*([^*]+)\*\*$/.exec(part);return m?'<strong>'+escHTML(m[1])+'</strong>':escHTML(part);}).join('');
+  const out=['<h1>'+escHTML(heading)+(title?' — '+escHTML(title):'')+'</h1>'];
+  if(clean(question))out.push('<p><strong>Q.</strong> '+escHTML(clean(question))+'</p>');
+  let list=false;const close=()=>{if(list){out.push('</ul>');list=false;}};
+  for(const raw of String(text==null?'':text).split(/\r?\n/)){
+   const line=raw.trimEnd();if(!line.trim()){close();continue;}
+   let m;
+   if((m=/^\s{0,3}#{1,4}\s+(.*)$/.exec(line))){close();out.push('<h2>'+escHTML(m[1].replace(/\*+/g,''))+'</h2>');}
+   else if((m=/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line))){if(!list){out.push('<ul>');list=true;}out.push('<li>'+inline(m[1])+'</li>');}
+   else{close();out.push('<p>'+inline(line.trim())+'</p>');}
+  }
+  close();
+  if(source||date)out.push('<p><em>'+escHTML([source,date].filter(Boolean).join(' · '))+'</em></p>');
+  return '<div>'+out.join('')+'</div>';
+ }
+ const api={PROMPT_REVISION,noteHTML,tokenize,stem,expandQuery,partsOf,buildChunks,captionPieces,sectionAtPage,rank,summaryInput,summaryPrompt,chatSystemPrompt,quickPrompt,chatMessages,linkCitations,streamReader,isEventStream,QUICK,SUMMARY_BUDGET,TOP_CHUNKS,HISTORY_TURNS,excerpt};
  root.CustomStylePaperChat=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -178,7 +178,7 @@ test('a summary failure is a sentence, not a stack; the button comes back',async
 
 test('without an AI server the card says how to set one up and presses nothing',async()=>{
  const f=fixture({prefs:{aiEndpoint:'',aiModel:''}});await f.open();
- assert.match(f.panel().textContent,/Enter the AI server address and model/);
+ assert.match(f.panel().textContent,/Enter an AI server address and model in the settings first\. To use the Claude or ChatGPT account on this Mac, install the AI bridge/);
  f.press(f.byText('Make summary'));await settle(20);
  assert.equal(f.requests.filter(r=>r.body).length,0);f.stop();
 });
@@ -370,7 +370,7 @@ test('listening: the toolbar ▶ speaks from the page on screen without opening 
  assert.equal(f.panel().hidden,true,'listening does not need the panel: the toolbar ▶ is play/pause');
  assert.deepEqual(f.synth.log.filter(l=>l[0]==='speak').map(l=>l[1]),['Libraries were screened by compartmentalised self-replication.'],'from the page on screen (page 3), body only');
  f.synth.begin();await settle();
- assert.match(f.panel().querySelector('.sc-ra-progress').textContent,/Sentence \d+\/\d+ · Methods/);
+ assert.match(f.panel().querySelector('.sc-ra-progress').textContent,/^Sentence \d+\/\d+ · under a minute left · Methods$/,'where, how long is left, and the section last (the part a narrow panel may cut)');
  const marks=f.viewDoc.querySelectorAll('[data-sc-ra-hl]');assert.equal(marks.length,1);
  assert.match(marks[0].parentNode.getAttribute('data-page-number'),/^3$/);
  assert.match(marks[0].getAttribute('style'),/left:11\.7\d*%/,'72 of 612 units, as a percentage of the page');
@@ -734,7 +734,7 @@ test('an unreadable text layer says so and reads, summarises and chats from Zote
  }finally{globalThis.StyleCustomPaperText=PTsaved;f.stop();}
 });
 
-test('the cache keeps at most N papers, least recently used first, and drops papers whose item is gone',async()=>{
+test('the cache keeps extracted text for at most N papers, least recently used first, keeps each paper\'s saved work, and drops papers whose item is gone',async()=>{
  const f=fixture();await f.sync();
  const io=f.fileIO;io.getChildren=async()=>[...io.files.keys()];
  const times={};io.stat=async p=>({size:10,lastModified:times[p]||1});
@@ -745,7 +745,11 @@ test('the cache keeps at most N papers, least recently used first, and drops pap
  const left=[...io.files.keys()].map(p=>p.replace(f.folder,''));
  assert.ok(!left.some(p=>p.startsWith('1-GONEGONE')),'deleted item');
  assert.ok(left.some(p=>p.startsWith('1-ATT')),'the open paper stays');
- assert.ok(left.some(p=>p.startsWith('1-BBBBBBBB')));assert.ok(!left.some(p=>p.startsWith('1-AAAAAAAA')),'the least recently used goes');
+ assert.ok(left.some(p=>p.startsWith('1-BBBBBBBB')));assert.ok(!left.includes('1-AAAAAAAA.struct.json'),'the least recently used extraction goes');
+ assert.ok(left.includes('1-AAAAAAAA.state.json'),'its summary, conversation, translations and listening position stay');
+ await f.service.pruneCache({maxPapers:2,maxStates:1});
+ assert.ok(![...io.files.keys()].includes(f.folder+'1-AAAAAAAA.state.json'),'saved work has its own (much larger) bound, least recently used first');
+ assert.ok([...io.files.keys()].includes(f.folder+'1-BBBBBBBB.state.json'));
  f.stop();
 });
 
@@ -1132,4 +1136,201 @@ test('every listener on the reader and viewer documents is removed on destroy, a
  assert.ok(view.size>=5&&readerDoc.size>=6&&sreg.size>=5,`${view.size}/${readerDoc.size}/${sreg.size} registered`);
  f.stop();
  assert.deepEqual([...view],[],'viewer document');assert.deepEqual([...readerDoc],[],'reader document');assert.deepEqual([...sreg],[],'second pane');
+});
+
+/* ---- round 1 (2026-10-06): everyday convenience ------------------------------------------------- */
+const keyDown=(f,target,code,props={})=>{
+ const win=target.ownerDocument&&target.ownerDocument.defaultView||f.win;
+ const e=new (win.Event||f.win.Event)('keydown',{bubbles:true,cancelable:true});
+ Object.assign(e,{code,key:props.key||'˚',altKey:true,shiftKey:true,ctrlKey:false,metaKey:false,repeat:false,isComposing:false,...props});
+ target.dispatchEvent(e);return e;
+};
+const spoken=f=>f.synth.log.filter(l=>l[0]==='speak').map(l=>l[1]);
+
+test('keys: Option+Shift+K plays and pauses from the PDF with the panel closed, J and L step a sentence once playing; nothing in a text box, and no key Zotero uses',async()=>{
+ const f=fixture();await f.sync();
+ const page=f.viewDoc.querySelector('.page[data-page-number="3"]');
+ let e=keyDown(f,page,'KeyL');await settle(10);
+ assert.deepEqual(spoken(f),[],'the sentence keys wait for the player');assert.equal(e.defaultPrevented,false);
+ e=keyDown(f,page,'KeyK');await settle(20);
+ assert.equal(e.defaultPrevented,true,'taken, so nothing else acts on it');
+ assert.deepEqual(spoken(f),['Libraries were screened by compartmentalised self-replication.'],'from the page on screen, like the toolbar ▶');
+ assert.equal(f.panel().hidden,true,'the panel stays closed');
+ f.synth.begin();await settle();
+ keyDown(f,page,'KeyL');await settle(10);assert.equal(spoken(f).at(-1),'Kinetics were measured at 72 C.');
+ keyDown(f,page,'KeyJ');await settle(10);assert.equal(spoken(f).at(-1),'Libraries were screened by compartmentalised self-replication.');
+ f.synth.begin();await settle();
+ keyDown(f,f.doc.body,'KeyK');await settle(10);
+ assert.equal(f.sessionOf().player.state().status,'paused','heard on the reader document too');
+ // The question box is typing, whatever the modifiers.
+ await f.open();const input=f.panel().querySelector('.sc-ra-input');
+ e=keyDown(f,input,'KeyK');await settle(10);assert.equal(e.defaultPrevented,false);assert.equal(f.sessionOf().player.state().status,'paused');
+ // Zotero's keys stay Zotero's: R/L, H, S, digits, Space and Alt+arrows, Cmd/Ctrl chords.
+ const target={nodeName:'DIV',getAttribute:()=>null};
+ const of=props=>ReaderAssist.shortcutOf({target,altKey:false,shiftKey:false,ctrlKey:false,metaKey:false,...props});
+ for(const props of [{code:'KeyR',key:'r'},{code:'KeyL',key:'l'},{code:'Space',key:' '},{code:'KeyK',altKey:true},{code:'KeyK',shiftKey:true},{code:'ArrowLeft',altKey:true},{code:'ArrowRight',altKey:true,shiftKey:true},{code:'KeyK',altKey:true,shiftKey:true,metaKey:true},{code:'KeyK',altKey:true,shiftKey:true,ctrlKey:true},{code:'KeyK',altKey:true,shiftKey:true,isComposing:true},{code:'KeyK',altKey:true,shiftKey:true,repeat:true}])assert.equal(of(props),null,JSON.stringify(props));
+ assert.equal(of({code:'KeyK',altKey:true,shiftKey:true}),'toggle');assert.equal(of({code:'KeyJ',altKey:true,shiftKey:true}),'prev');assert.equal(of({code:'KeyL',altKey:true,shiftKey:true}),'next');
+ assert.equal(ReaderAssist.shortcutOf({code:'KeyK',altKey:true,shiftKey:true,target:{nodeName:'INPUT',getAttribute:()=>null}}),null);
+ // Said where people look: the buttons' tooltips and the sentence list.
+ assert.match(f.byText('Next sentence').title,/\(⌥⇧L\)$/);assert.equal(f.byText('Next sentence').getAttribute('aria-keyshortcuts'),'Alt+Shift+L','the ARIA form of the same key');
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ assert.match(f.panel().querySelector('.sc-ra-listen .sc-ra-note').textContent,/Keys: ⌥⇧K play or pause, ⌥⇧J back a sentence, ⌥⇧L forward a sentence\./);
+ f.stop();
+ assert.equal(keyDown(f,page,'KeyK').defaultPrevented,false,'gone with the panel');
+});
+
+test('which account answered: the bridge\'s Claude or, when Claude could not, ChatGPT is named on the summary and on the answer',async()=>{
+ const f=fixture();
+ const real=f.runtime.assist;let provider='claude';
+ f.runtime.assist={...real,available:()=>true,status:()=>({available:true,source:'bridge',provider,label:'x'})};
+ await f.open();
+ assert.match(f.panel().querySelector('.sc-ra-summary .sc-ra-note').textContent,/^Nothing is sent until you press it · Claude account \(this Mac\)\./);
+ provider='codex';f.aiReplies.push('## Summary\nShort.');
+ f.press(f.byText('Make summary'));await settle(20);
+ const note=f.panel().querySelector('.sc-ra-summary .sc-ra-note').textContent;
+ assert.match(note,/^ChatGPT account \(this Mac\) · /);assert.match(note,/Claude could not answer, so the ChatGPT account answered instead/);
+ f.aiReplies.push('By ChatGPT.');f.panel().querySelector('.sc-ra-input').textContent='Who?';f.press(f.byText('Send'));await settle(20);
+ assert.match(f.panel().querySelector('.sc-ra-msg-assistant .sc-ra-msg-by').textContent,/ChatGPT account answered instead/);
+ provider='claude';f.aiReplies.push('By Claude.');f.panel().querySelector('.sc-ra-input').textContent='And now?';f.press(f.byText('Send'));await settle(20);
+ const answers=f.panel().querySelectorAll('.sc-ra-msg-assistant');
+ assert.equal(answers[1].querySelector('.sc-ra-msg-by'),null,'Claude answering is the ordinary case: nothing extra');
+ assert.equal(f.sessionOf().data.chat[1].by,'codex','kept with the answer');
+ f.stop();
+});
+
+test('long answers: an older one folds with "Show more", the newest stays open; an answer or the summary goes into a child note, escaped',async()=>{
+ const f=fixture();await f.open();
+ const long=n=>'## Point '+n+'\n- **'+n+'** <b>not markup</b>\n'+('word '.repeat(220));
+ for(const n of [1,2]){f.aiReplies.push(long(n));f.panel().querySelector('.sc-ra-input').textContent='Question '+n;f.press(f.byText('Send'));await settle(20);}
+ let answers=f.panel().querySelectorAll('.sc-ra-msg-assistant');
+ assert.equal(answers[0].getAttribute('data-folded'),'true');assert.equal(answers[1].getAttribute('data-folded'),'false');
+ const more=[...answers[0].querySelectorAll('button')].find(b=>b.textContent==='Show more');assert.ok(more);assert.equal(more.getAttribute('data-safe'),'view');
+ f.press(more);await settle();
+ assert.equal(answers[0].getAttribute('data-folded'),'false');assert.equal(more.textContent,'Show less');
+ f.aiReplies.push('Short.');f.panel().querySelector('.sc-ra-input').textContent='Question 3';f.press(f.byText('Send'));await settle(20);
+ answers=f.panel().querySelectorAll('.sc-ra-msg-assistant');
+ assert.equal(answers[0].getAttribute('data-folded'),'false','unfolded by hand stays unfolded');assert.equal(answers[1].getAttribute('data-folded'),'true','the one that is no longer newest folds');
+ assert.equal(answers[2].hasAttribute('data-folded'),false,'a short answer has nothing to fold');
+ const save=answers[1].querySelector('[data-writes="note"]');assert.ok(save);assert.equal(save.getAttribute('aria-label'),'Save as a child note');
+ f.press(save);await settle(10);
+ assert.equal(f.notes.length,1);assert.equal(f.notes[0].id,10,'a child of the paper');
+ const html=f.notes[0].html;
+ assert.match(html,/^<div><h1>AI answer — Thermostable polymerase evolution<\/h1><p><strong>Q\.<\/strong> Question 2<\/p><h2>Point 2<\/h2><ul><li><strong>2<\/strong> &lt;b&gt;not markup&lt;\/b&gt;<\/li><\/ul>/);
+ assert.match(html,/<p><em>m1 · \d{4}-\d\d-\d\d<\/em><\/p><\/div>$/,'the model it was asked of, and the date');
+ f.aiReplies.push('## Summary\nIt works.');f.press(f.byText('Make summary'));await settle(20);
+ f.press(f.panel().querySelector('.sc-ra-summary [data-writes="note"]'));await settle(10);
+ assert.match(f.notes[1].html,/^<div><h1>AI summary — Thermostable polymerase evolution<\/h1><h2>Summary<\/h2><p>It works\.<\/p>/);
+ assert.match(f.panel().querySelector('.sc-ra-status').textContent,/Saved as a child note/);
+ f.stop();
+});
+
+test('the conversation keeps the reader\'s place: a new question comes to the top, a streaming answer does not drag the list to its end',async()=>{
+ const f=fixture();await f.open();
+ const list=f.panel().querySelector('.sc-ra-messages');
+ Object.defineProperty(list,'scrollHeight',{get:()=>5000,configurable:true});
+ Object.defineProperty(f.win.HTMLElement.prototype,'offsetTop',{get(){return Number(this.getAttribute&&this.getAttribute('data-index'))*100||0;},configurable:true});
+ for(const n of [1,2]){f.aiReplies.push('Answer '+n);f.panel().querySelector('.sc-ra-input').textContent='Question '+n;f.press(f.byText('Send'));await settle(20);}
+ let deltas=null;
+ f.aiReplies.push(options=>new Promise(resolve=>{
+  const listeners={};const xhr={readyState:3,responseText:'',getResponseHeader:()=> 'text/event-stream',addEventListener:(n,fn)=>(listeners[n]||=[]).push(fn)};
+  options.requestObserver(xhr);
+  deltas={push(text){xhr.responseText+='data: '+JSON.stringify({choices:[{delta:{content:text}}]})+'\n\n';for(const fn of listeners.progress||[])fn();},
+   end(){xhr.responseText+='data: [DONE]\n\n';resolve({status:200,responseText:xhr.responseText,getResponseHeader:()=> 'text/event-stream'});}};
+ }));
+ f.panel().querySelector('.sc-ra-input').textContent='Question 3';f.press(f.byText('Send'));await settle(10);
+ assert.equal(list.scrollTop,400,'the question just sent (message 5) is at the top');
+ list.scrollTop=420;                       // reading the start of the answer
+ deltas.push('The first part. ');await new Promise(r=>setTimeout(r,120));
+ deltas.push('More and more. ');await new Promise(r=>setTimeout(r,120));
+ deltas.end();await settle(20);
+ assert.match(f.panel().querySelectorAll('.sc-ra-msg-assistant')[2].textContent,/The first part\. More and more\./);
+ assert.equal(list.scrollTop,420,'left where the reader is');
+ f.stop();
+ delete f.win.HTMLElement.prototype.offsetTop;
+});
+
+test('Enter while an answer is still coming keeps the next question in the box',async()=>{
+ const f=fixture();await f.open();
+ let release;f.aiReplies.push(()=>new Promise(r=>{release=()=>r({status:200,response:{choices:[{message:{content:'First answer.'}}]}});}));
+ const input=f.panel().querySelector('.sc-ra-input');
+ input.textContent='First?';f.press(f.byText('Send'));await settle(10);
+ input.textContent='A follow-up I typed meanwhile';
+ const e=new f.win.Event('keydown',{bubbles:true,cancelable:true});Object.assign(e,{key:'Enter'});input.dispatchEvent(e);await settle(10);
+ assert.equal(input.textContent,'A follow-up I typed meanwhile','not emptied and dropped');
+ assert.match(f.panel().querySelector('.sc-ra-status').textContent,/once the answer has finished/);
+ release();await settle(20);
+ assert.equal(f.requests.filter(r=>r.body).length,1);
+ f.stop();
+});
+
+test('"현재 페이지부터" on a page after the last body paragraph sends nothing and says why (it translated the whole paper)',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
+ f.reader._internalReader._state.primaryViewStats.pageIndex=9;
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ assert.match(f.panel().querySelector('.sc-ra-tr').textContent,/Characters from this page: about 0 ·/);
+ f.press(f.byText('From this page'));await settle(30);
+ assert.equal(f.requests.filter(r=>/deepl/.test(r.url)&&r.method==='POST').length,0);
+ assert.match(f.sessionOf().ui.trProgress.textContent,/no body text from this page on/i);
+ f.stop();
+});
+
+test('the first ▶ says what it is doing: reading the text page by page, then getting ready; a second press meanwhile is the same press',async()=>{
+ const f=fixture();await f.open();
+ const s=f.sessionOf(),progress=f.panel().querySelector('.sc-ra-progress');
+ s.extracting={i:3,n:12};s.onProgress();
+ assert.equal(progress.textContent,'Reading the text… page 3/12');
+ s.extracting=null;
+ const listen=f.container.querySelectorAll('button')[1];
+ f.press(listen);f.press(listen);await settle(20);
+ assert.deepEqual(spoken(f),['Libraries were screened by compartmentalised self-replication.'],'one start');
+ f.synth.begin();await settle();
+ const meter=f.panel().querySelector('.sc-ra-meter');
+ assert.equal(meter.hidden,false);assert.equal(meter.getAttribute('role'),'progressbar');assert.match(meter.getAttribute('aria-valuenow'),/^\d+$/);
+ assert.equal(meter.querySelector('.sc-ra-meter-fill').style.width,meter.getAttribute('aria-valuenow')+'%');
+ assert.equal(RA.remainingSeconds([{text:'one two three'},{text:'four five'}],0,1),Math.round(5/200*60));
+ assert.equal(RA.remainingSeconds([{text:'one two three'},{text:'four five'}],1,2),Math.round(2/400*60));
+ f.stop();
+});
+
+test('scrolling the sentence list stops it following for a while; pressing a sentence follows again',async()=>{
+ const f=fixture();await f.open();
+ const followed=[];f.win.HTMLElement.prototype.scrollIntoView=function(){if(this.classList&&this.classList.contains('sc-ra-sentence'))followed.push(this.textContent);};
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.byText('Read body only'));await settle(20);f.synth.begin();await settle();
+ assert.ok(followed.length>=1,'it follows');
+ f.synth.finish();f.synth.begin();await settle();
+ assert.equal(followed.at(-1),'Kinetics were measured at 72 C.');
+ const before=followed.length;
+ f.panel().querySelector('.sc-ra-body').dispatchEvent(new f.win.Event('wheel',{bubbles:true}));
+ f.synth.finish();f.synth.begin();await settle();
+ assert.equal(followed.length,before,'the reader is looking elsewhere in the list');
+ f.press(f.panel().querySelectorAll('.sc-ra-sentence')[0]);await settle(20);f.synth.begin();await settle();
+ assert.ok(followed.length>before,'a press on a sentence follows again');
+ f.stop();delete f.win.HTMLElement.prototype.scrollIntoView;
+});
+
+test('"이어서 듣기" brings back the range that was being heard, so a caption position resumes at that caption',async()=>{
+ const io=memoryIO();
+ const f=fixture({io});await f.open();
+ f.press(f.panel().querySelector('[data-filter="captions"]'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-play'));await settle(20);f.synth.begin();await settle();
+ const units=f.sessionOf().player.units(),at=units.findIndex(u=>u.kind==='caption');assert.ok(at>0);const caption=units[at].text;
+ f.press(f.panel().querySelector(`.sc-ra-sentence[data-index="${at}"]`));await settle(20);f.synth.begin();await settle();
+ await new Promise(r=>setTimeout(r,900));f.stop();
+ const g=fixture({io});await g.open();await settle(10);
+ g.press(g.panel().querySelector('.sc-ra-more .sc-ra-link'));await settle(20);
+ assert.equal(spoken(g).at(-1),caption);assert.equal(g.sessionOf().player.units()[g.sessionOf().player.state().index].kind,'caption');
+ assert.equal(g.panel().querySelector('[data-filter="captions"]').getAttribute('aria-pressed'),'true');
+ g.stop();
+});
+
+test('translating through the local bridge counts against the Mac\'s Claude/ChatGPT allowance, not a model bill',async()=>{
+ const f=fixture();
+ f.runtime.assist={...f.runtime.assist,available:()=>true,status:()=>({available:true,source:'bridge',provider:'claude',label:'x'})};
+ f.allPrefs.aiEndpoint='';
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ const text=f.panel().querySelector('.sc-ra-tr').textContent;
+ assert.doesNotMatch(text,/fees|charges|billed/i);
+ assert.match(text,/Tokens through the AI bridge: about \d+ · from the allowance of Claude account \(this Mac\)/);
+ f.stop();
 });

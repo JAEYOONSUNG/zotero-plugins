@@ -26,7 +26,7 @@
  // The panel's text buttons are pills; the button added to the reader's selection popup has the same corners.
  const BUTTON_RADIUS='999px';
  // The cached structure's own version: v2 is the extraction that reads the viewport itself (v1 often fell back to plain text).
- const STRUCT_VERSION=2,CACHE_PAPERS=200,CACHE_BYTES=100*1024*1024;
+ const STRUCT_VERSION=2,CACHE_PAPERS=200,CACHE_BYTES=100*1024*1024,STATE_PAPERS=5000,STATE_BYTES=300*1024*1024;
  const need=(name,file)=>root[name]||(typeof require==='function'?require(file):null);
  const clean=text=>String(text==null?'':text).replace(/\s+/g,' ').trim();
  // The extraction module (and the plain-text fallback) number pages from 0 and give rectangles as [x, y, w, h] from the top left of the page at scale 1.
@@ -111,7 +111,8 @@
   headphones:['M4 14v-2a8 8 0 0 1 16 0v2','M4 14h3v5H5a1 1 0 0 1-1-1z','M20 14h-3v5h2a1 1 0 0 0 1-1z'],
   translate:['M4 6h9','M8.5 4v2','M6 6c0 4 3 7 6 8','M12 6c-1 4-4 7-7 8','M13 20l4-9 4 9','M14.5 17h5'],
   message:['M5 5h14v10H10l-4 4v-4H5z'],list:['M5 7h14','M5 12h14','M5 17h9'],caret:['M7 10l5 5 5-5'],panel:['M4 5h16v14H4z','M15 5v14'],
-  collapse:['M13 6l6 6-6 6','M6 6l6 6-6 6'],expand:['M11 6l-6 6 6 6','M18 6l-6 6 6 6']
+  collapse:['M13 6l6 6-6 6','M6 6l6 6-6 6'],expand:['M11 6l-6 6 6 6','M18 6l-6 6 6 6'],
+  noteAdd:['M6 3h8l4 4v14H6z','M14 3v4h4','M12 11v6','M9 14h6']
  };
  function icon(doc,name,size=16){
   const svg=doc.createElementNS(SVG,'svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -131,6 +132,20 @@
  const MARKS=['data-safe','data-opens','data-writes'];
  const unmarkedButtons=container=>[...container.querySelectorAll('button')].filter(b=>!MARKS.some(m=>b.hasAttribute(m)));
  const pressable=container=>[...container.querySelectorAll('button')].filter(b=>b.hasAttribute('data-opens')||b.hasAttribute('data-writes'));
+
+ /* Keys for our player: Option(Alt)+Shift with K (play/pause; Space too), J (previous sentence) and L (next), the
+    layout video players use. Zotero has no binding there (reader.js KeyboardManager takes R/L, H, S, digits, and
+    Space and Alt(+Shift)+←/→ while its own Read Aloud runs; zoteroPane.js takes Cmd/Ctrl chords and Cmd+Option+←/→;
+    its configurable keys are Cmd/Ctrl+Shift+letter). Matched by event.code, since Option changes event.key on a Mac.
+    Never in a text box or a form control, and never while an input method is composing. */
+ function shortcutOf(event){
+  if(!event||event.repeat||event.isComposing||!event.altKey||!event.shiftKey||event.ctrlKey||event.metaKey)return null;
+  const target=event.target;let tag='',editable=false;
+  try{tag=String(target&&target.nodeName||'').toUpperCase();editable=!!(target&&typeof target.getAttribute==='function'&&target.getAttribute('contenteditable')==='true');}catch(_){}
+  if(editable||/^(INPUT|TEXTAREA|SELECT)$/.test(tag))return null;
+  return {KeyK:'toggle',Space:'toggle',KeyJ:'prev',KeyL:'next'}[String(event.code||'')]||null;
+ }
+ const KEY_HINTS={mac:{toggle:'⌥⇧K',prev:'⌥⇧J',next:'⌥⇧L'},other:{toggle:'Alt+Shift+K',prev:'Alt+Shift+J',next:'Alt+Shift+L'}};
 
  /* A short Markdown (headings, bullets, **bold**) as DOM nodes, never as HTML. A
     "(Results, p. 4)" becomes a button that calls onPage(4). */
@@ -186,6 +201,12 @@
   const endpointTag=()=>{const e=String(runtime.pref('aiEndpoint','')||'').trim();return e?TR.hash(e).slice(0,8):'bridge';};
   const aiSettings=()=>({model:String(runtime.pref('aiModel','')).trim(),language:language(),endpoint:endpointTag(),rev:String(PC.PROMPT_REVISION||'1')});
   const summaryKeyOf=a=>[a.model,a.language,a.endpoint,a.rev].join('|');
+  /* Which account of the local bridge answered (it says so in a header, assist.js keeps it): 'claude', 'codex' when
+     Claude could not (its limit, or an error) and ChatGPT stood in, or null for an address in the settings. */
+  const answeredBy=()=>{try{const s=runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;return s&&s.source==='bridge'&&(s.provider==='claude'||s.provider==='codex')?s.provider:null;}catch(_){return null;}};
+  const BRIDGE_LABEL=(need('CustomStyleAssist','./assist.js')||{}).BRIDGE_LABEL||{claude:'Claude 계정 (이 Mac)',codex:'ChatGPT 계정 (이 Mac)'};
+  const byLabel=by=>by&&BRIDGE_LABEL[by]?t(BRIDGE_LABEL[by]):'';
+  const FALLBACK_NOTE='Claude가 답하지 못해 ChatGPT 계정이 대신 답했습니다';
   const owner=(runtime.id||'style-custom')+'/reader-assist-'+Math.random().toString(36).slice(2);
 
   /* ---- the plugin's own cache folder ------------------------------------ */
@@ -330,6 +351,16 @@
    return {structured,fallback,unreadable,fromCache:false};
   }
   const structure=session=>session.structurePromise||(session.structurePromise=loadStructure(session).then(result=>{session.structured=result.structured;session.fallback=result.fallback;session.unreadable=!!result.unreadable;session.chunks=null;if(result.unreadable)noteUnreadable(session);return result;},error=>{session.structureError=error;session.structurePromise=null;throw error;}));
+  /* "본문 읽는 중… 12/30쪽" while the first extraction runs (once per paper; later it comes from the cache). */
+  const readingText=session=>{const x=session.extracting;return x&&x.n?T('본문 읽는 중… {0}/{1}쪽',x.i,x.n):'';};
+  function showReading(session){
+   const ui=session.ui;if(session.destroyed||!ui)return;
+   const text=readingText(session);
+   if(!session.player&&ui.progress&&(text||session.preparing))ui.progress.textContent=text||t('준비하는 중…');
+   if(ui.trEstimate&&session.tr&&!session.tr.paragraphs.length&&text)ui.trEstimate.textContent=text;
+   const loading=ui.summaryBody&&session.summaryState==='loading'&&ui.summaryBody.querySelector('.sc-ra-muted');
+   if(loading)loading.textContent=t('요약하는 중…')+(text?' '+text:'');
+  }
   function noteUnreadable(session){
    if(session.destroyed||!session.ui)return;
    say(session,t('이 PDF는 글자층이 깨져 본문을 구분할 수 없습니다'),true);
@@ -374,9 +405,9 @@
   }
 
   /* ---- the panel ------------------------------------------------------------ */
-  function button(session,parent,{label,title,iconName,cls='',mark,onClick,disabled=false}){
+  function button(session,parent,{label,title,iconName,cls='',mark,onClick,disabled=false,keys=''}){
    const doc=session.doc;
-   const b=el(doc,'button',{type:'button','class':'sc-ra-btn '+cls,title:title?t(title):(label?t(label):undefined),'aria-label':t(title||label||'')},parent);
+   const b=el(doc,'button',{type:'button','class':'sc-ra-btn '+cls,title:title?t(title)+(keys?' ('+keys+')':''):(label?t(label):undefined),'aria-label':t(title||label||''),'aria-keyshortcuts':keys?keys.replace('⌥⇧','Alt+Shift+'):undefined},parent);
    // The mark is one of: view | audio | ai | network | memo | note | cache
    if(['view'].includes(mark))b.setAttribute('data-safe','view');
    else if(['memo','note','cache'].includes(mark))b.setAttribute('data-writes',mark);
@@ -464,6 +495,8 @@
     b.addEventListener('click',event=>{event.stopPropagation();showTab(session,id);});
    }
    const body=el(doc,'div',{'class':'sc-ra-body'},main);ui.body=body;ui.panes={};
+   // Someone scrolling the panel is reading something: the sentence list does not pull them back for a while.
+   for(const name of ['wheel','touchmove'])body.addEventListener(name,()=>{session.scrolledAt=Date.now();});
    for(const[id]of TABS)ui.panes[id]=el(doc,'div',{'class':'sc-ra-pane',role:'tabpanel','data-pane':id,hidden:true},body);
    buildAsk(session,ui.panes.ask);buildTranslate(session,ui.panes.translate);buildListen(session,ui.panes.listen);
    // The remembered tab is drawn from the start, so an open panel is never an empty grey column.
@@ -490,12 +523,16 @@
    const doc=session.doc,ui=session.ui;
    const bar=group(el(doc,'section',{'class':'sc-ra-card sc-ra-player','aria-label':t('읽어주기')},parent));
    const row=el(doc,'div',{'class':'sc-ra-row sc-ra-transport'},bar);
+   const keys=keyHints();
    ui.sectionPrev=button(session,row,{title:'이전 섹션',iconName:'sectionPrev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prevSection())});
-   ui.prev=button(session,row,{title:'이전 문장',iconName:'prev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prev())});
-   ui.play=button(session,row,{label:'본문만 읽기',title:PLAY_TIP,iconName:'play',cls:'sc-ra-play',mark:'audio',onClick:()=>togglePlay(session)});
-   ui.next=button(session,row,{title:'다음 문장',iconName:'next',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.next())});
+   ui.prev=button(session,row,{title:'이전 문장',keys:keys.prev,iconName:'prev',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.prev())});
+   ui.play=button(session,row,{label:'본문만 읽기',title:PLAY_TIP,keys:keys.toggle,iconName:'play',cls:'sc-ra-play',mark:'audio',onClick:()=>togglePlay(session)});
+   ui.next=button(session,row,{title:'다음 문장',keys:keys.next,iconName:'next',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.next())});
    ui.sectionNext=button(session,row,{title:'다음 섹션',iconName:'sectionNext',cls:'sc-ra-icon',mark:'audio',onClick:()=>withPlayer(session,p=>p.nextSection())});
    ui.progress=el(doc,'p',{'class':'sc-ra-progress',text:''},bar);
+   // How far into the paper the listening is: a plain track and fill, inside the card (no edge bar).
+   ui.meter=el(doc,'div',{'class':'sc-ra-meter',role:'progressbar','aria-label':t('들은 분량'),'aria-valuemin':'0','aria-valuemax':'100','aria-valuenow':'0',hidden:true},bar);
+   ui.meterFill=el(doc,'span',{'class':'sc-ra-meter-fill'},ui.meter);
    const opts=el(doc,'div',{'class':'sc-ra-row sc-ra-opts'},bar);
    const rateWrap=el(doc,'label',{'class':'sc-ra-rate'},opts);el(doc,'span',{text:t('속도')},rateWrap);
    ui.rate=el(doc,'input',{type:'range',min:'80',max:'180',step:'10',value:String(setting('readAloudSpeed',100)),'aria-label':t('읽는 속도'),'data-opens':'audio'},rateWrap);
@@ -532,6 +569,7 @@
    ui.summaryActions=el(doc,'div',{'class':'sc-ra-actions'},head);
    ui.summaryCopy=button(session,ui.summaryActions,{title:'요약 복사',iconName:'copy',cls:'sc-ra-icon',mark:'view',onClick:()=>copyText(session,summaryEntry(session)?.text||'')});
    ui.summaryMemo=button(session,ui.summaryActions,{title:'메모에 넣기',iconName:'note',cls:'sc-ra-icon',mark:'memo',onClick:()=>toMemo(session,summaryEntry(session)?.text||'',t('AI 요약'))});
+   ui.summaryNoteSave=button(session,ui.summaryActions,{title:'하위 노트로 저장',iconName:'noteAdd',cls:'sc-ra-icon',mark:'note',onClick:()=>{const e=summaryEntry(session);return toNote(session,{heading:t('AI 요약'),text:e?.text||'',by:e?.by,model:e?.model});}});
    ui.summaryAgain=button(session,ui.summaryActions,{title:'다시 만들기',iconName:'refresh',cls:'sc-ra-icon',mark:'ai',onClick:()=>runSummary(session,{force:true})});
    ui.summaryBody=el(doc,'div',{'class':'sc-ra-md'},card);
    ui.summaryStart=button(session,card,{label:'요약 만들기',cls:'sc-ra-primary',mark:'ai',onClick:()=>runSummary(session,{})});
@@ -575,19 +613,22 @@
    const a=aiSettings(),legacy=all[a.model+'|'+a.language];
    return all[summaryKeyOf(a)]||(legacy&&!legacy.rev?legacy:null)||null;
   }
+  const NO_AI='설정에서 AI 서버 주소와 모델을 먼저 입력하세요. 이 Mac의 Claude·ChatGPT 계정을 쓰려면 bridge/install.sh로 AI 브리지를 설치하세요.';
+  /* Where a press sends the paper: the bridge's account, or the server's host. */
+  const aiPlace=()=>{try{const s=runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;if(!s||!s.available)return '';return s.source==='bridge'?byLabel(s.provider||'claude'):String(s.label||'');}catch(_){return '';}};
   function renderSummary(session){
    const ui=session.ui,entry=summaryEntry(session),state=session.summaryState||'idle';
    const configured=!!runtime.assist?.available?.();
    ui.summaryBody.replaceChildren();ui.summaryNote.textContent='';
    const has=!!entry&&state!=='loading';
-   for(const b of [ui.summaryCopy,ui.summaryMemo,ui.summaryAgain])b.hidden=!has;
+   for(const b of [ui.summaryCopy,ui.summaryMemo,ui.summaryNoteSave,ui.summaryAgain])b.hidden=!has;
    ui.summaryStart.hidden=has||state==='loading';
    if(state==='loading'){el(session.doc,'p',{'class':'sc-ra-muted',text:t('요약하는 중…')},ui.summaryBody);}
    else if(entry){
     renderMarkdown(session.doc,ui.summaryBody,entry.text,{pages:pageCount(session.reader),onPage:page=>goToPage(session,page)});
-    ui.summaryNote.textContent=T('{0} · {1}',entry.model||t('모델 미표기'),new Date(entry.at).toLocaleDateString())+(entry.truncated?' · '+t('긴 논문이라 일부만 읽혔습니다'):'');
+    ui.summaryNote.textContent=T('{0} · {1}',byLabel(entry.by)||entry.model||t('모델 미표기'),new Date(entry.at).toLocaleDateString())+(entry.by==='codex'?' · '+t(FALLBACK_NOTE):'')+(entry.truncated?' · '+t('긴 논문이라 일부만 읽혔습니다'):'');
    }else if(state==='error'){el(session.doc,'p',{'class':'sc-ra-error',text:session.summaryError||''},ui.summaryBody);}
-   else ui.summaryNote.textContent=configured?t('눌러야 AI 서버로 보냅니다. 본문 일부와 제목·초록만 전송합니다.'):t('설정 → 번역·AI에서 AI 서버 주소와 모델을 넣으세요. 내 컴퓨터의 로컬 모델도 됩니다.');
+   else ui.summaryNote.textContent=configured?(aiPlace()?T('눌러야 보냅니다 · {0}. 본문 일부와 제목·초록만 전송합니다.',aiPlace()):t('눌러야 AI 서버로 보냅니다. 본문 일부와 제목·초록만 전송합니다.')):t(NO_AI);
   }
   async function runSummary(session,{force=false,auto=false}={}){
    if(session.summaryState==='loading')return;
@@ -604,7 +645,7 @@
     const frozen=aiSettings(),key=summaryKeyOf(frozen);
     const text=await runtime.assist.paperSummary({title:input.title,abstract:input.abstract,text:input.text},{language:frozen.language,signal:token});
     if(session.destroyed)return;
-    session.data.summary[key]={text,at:Date.now(),model:frozen.model,language:frozen.language,endpoint:frozen.endpoint,rev:frozen.rev,truncated:input.truncated};
+    session.data.summary[key]={text,at:Date.now(),model:frozen.model,language:frozen.language,endpoint:frozen.endpoint,rev:frozen.rev,truncated:input.truncated,by:answeredBy()||undefined};
     const keys=Object.keys(session.data.summary);if(keys.length>6)delete session.data.summary[keys[0]];
     session.summaryState='done';saveSoon(session);
    }catch(error){session.summaryState='error';session.summaryError=describe(error);}
@@ -612,37 +653,62 @@
   }
 
   /* -- chat -- */
-  const MESSAGE_ROLE={user:'user',assistant:'assistant'};
-  function renderChat(session){
+  const MESSAGE_ROLE={user:'user',assistant:'assistant'},LONG_ANSWER=900;
+  /* scroll: 'keep' (the default) leaves the list where the reader put it, also while an answer streams in, so a long
+     answer is read from its start; 'question' brings a question just sent to the top; 'bottom' is for a conversation
+     shown again. An answer longer than LONG_ANSWER is folded unless it is the newest, with a button to unfold it. */
+  function renderChat(session,{scroll='keep'}={}){
    const ui=session.ui,doc=session.doc,list=ui.chatList;
+   let kept=0;try{kept=Number(list.scrollTop)||0;}catch(_){}
    list.replaceChildren();
    const messages=session.data.chat;
    if(!messages.length){el(doc,'p',{'class':'sc-ra-muted',text:t('아직 대화가 없습니다. 아래 버튼을 누르거나 질문을 입력하세요.')},list);}
+   let newest=-1;messages.forEach((m,i)=>{if(m.role==='assistant')newest=i;});
+   const open=session.unfolded||(session.unfolded=new Set());
    messages.forEach((m,index)=>{
     const bubble=el(doc,'article',{'class':'sc-ra-msg sc-ra-msg-'+(MESSAGE_ROLE[m.role]||'assistant'),'data-index':index},list);
+    const long=m.role==='assistant'&&!m.streaming&&String(m.content||'').length>LONG_ANSWER;
+    if(long)bubble.setAttribute('data-folded',String(index!==newest&&!open.has(m.at)));
     const body=el(doc,'div',{'class':'sc-ra-md'},bubble);
     if(m.role==='assistant')renderMarkdown(doc,body,m.content||(m.streaming?'…':''),{pages:pageCount(session.reader),onPage:page=>goToPage(session,page)});
     else body.textContent=m.content;
     if(m.error)el(doc,'p',{'class':'sc-ra-error',text:m.error},bubble);
+    if(m.role==='assistant'&&m.by==='codex'&&!m.streaming)el(doc,'p',{'class':'sc-ra-msg-by',text:t(FALLBACK_NOTE)},bubble);
     if(m.role==='assistant'&&!m.streaming&&m.content){
      const actions=el(doc,'div',{'class':'sc-ra-actions sc-ra-msg-actions'},bubble);
+     if(long){
+      const folded=()=>bubble.getAttribute('data-folded')==='true';
+      const fold=button(session,actions,{label:folded()?'더 보기':'줄여 보기',cls:'sc-ra-link sc-ra-fold',mark:'view',onClick:()=>{
+       const next=!folded();bubble.setAttribute('data-folded',String(next));if(next)open.delete(m.at);else open.add(m.at);
+       const text=fold.querySelector('.sc-ra-btn-text');if(text)text.textContent=t(next?'더 보기':'줄여 보기');fold.setAttribute('aria-label',t(next?'더 보기':'줄여 보기'));
+       fold.setAttribute('aria-expanded',String(!next));
+      }});
+      fold.setAttribute('aria-expanded',String(!folded()));
+     }
      button(session,actions,{title:'답변 복사',iconName:'copy',cls:'sc-ra-icon',mark:'view',onClick:()=>copyText(session,m.content)});
      button(session,actions,{title:'메모에 넣기',iconName:'note',cls:'sc-ra-icon',mark:'memo',onClick:()=>toMemo(session,m.content,t('AI 답변'))});
+     const asked=messages.slice(0,index).reverse().find(x=>x.role==='user');
+     button(session,actions,{title:'하위 노트로 저장',iconName:'noteAdd',cls:'sc-ra-icon',mark:'note',onClick:()=>toNote(session,{heading:t('AI 답변'),question:asked?asked.content:'',text:m.content,by:m.by,model:m.model})});
     }
    });
    const busy=!!session.chatBusy;
    ui.send.hidden=busy;ui.stop.hidden=!busy;
    setBadge(session,'ask',messages.length);tabstops(session);
-   if(list.scrollTo)try{list.scrollTop=list.scrollHeight;}catch(_){}
+   try{
+    if(scroll==='bottom')list.scrollTop=list.scrollHeight;
+    else if(scroll==='question'){const q=[...list.querySelectorAll('.sc-ra-msg-user')].at(-1);list.scrollTop=q?Math.max(0,Number(q.offsetTop)||0):list.scrollHeight;}
+    else list.scrollTop=kept;
+   }catch(_){}
   }
   function trimChat(session){
    const clean_=session.data.chat.filter(m=>!m.streaming);
-   session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined,model:m.model||undefined}));
+   session.data.chat=clean_.slice(-MAX_CHAT).map(m=>({role:m.role,content:String(m.content||'').slice(0,CHAT_LIMIT*3),at:m.at,error:m.error||undefined,model:m.model||undefined,by:m.by||undefined}));
   }
   /* The question box is an editable <div> (see buildAsk): its text, line breaks included. */
   const inputText=session=>{const n=session.ui.input;const v=typeof n.innerText==='string'?n.innerText:n.textContent;return String(v||'');};
   const setInputText=(session,text)=>{session.ui.input.textContent=text||'';};
-  const sendTyped=session=>{const q=clean(inputText(session));if(!q)return;setInputText(session,'');return sendQuestion(session,q,{});};
+  // While an answer is still coming, Enter keeps the typed question in the box (it was emptied and then dropped).
+  const sendTyped=session=>{const q=clean(inputText(session));if(!q)return;if(session.chatBusy){say(session,t('답변이 끝나면 보낼 수 있습니다. 질문은 그대로 두었습니다.'));return;}setInputText(session,'');return sendQuestion(session,q,{});};
   const sendQuick=(session,id)=>{const q=PC.quickPrompt(id,t);return sendQuestion(session,q.question,{forcePage:q.forcePage,mine:q.mine,intent:q.intent});};
   async function sendQuestion(session,question,{forcePage=false,mine=false,intent=null}={}){
    if(session.chatBusy)return;
@@ -654,10 +720,10 @@
    // The job and the busy state start at the click, so Stop works while the paper's text is still being read:
    // Stop cancels this question only, not a summary or a translation beside it.
    const chatToken=session.chatToken=TR.token();
-   thread.push(user,answer);session.chatBusy=true;renderChat(session);
+   thread.push(user,answer);session.chatBusy=true;renderChat(session,{scroll:'question'});
    let timer=null;const refresh=()=>{timer=null;if(!session.destroyed)renderChat(session);};
    try{
-    if(!runtime.assist?.available?.())throw new Error('설정에서 AI 서버 주소와 모델을 먼저 입력하세요.');
+    if(!runtime.assist?.available?.())throw Object.assign(new Error(NO_AI),{own:true});
     let structured=null,notice='';
     try{structured=(await untilCancelled(structure(session),chatToken)).structured;}catch(error){if(isCancel(error,chatToken))throw error;log(error);notice=t('본문을 읽지 못해 초록만 참고했습니다.');}
     if(chatToken.cancelled)throw cancelledError();
@@ -674,7 +740,7 @@
     session.ui.chatNote.textContent=notice;
     if(session.destroyed||chatToken.cancelled)throw cancelledError();
     const text=await runtime.assist.chat(messages,{signal:chatToken,onDelta:(piece,all)=>{answer.content=all;if(timer===null&&!session.destroyed&&session.doc.defaultView)timer=session.doc.defaultView.setTimeout(refresh,90);}});
-    answer.content=text;
+    answer.content=text;answer.by=answeredBy()||undefined;
    }catch(error){answer.error=describe(error);}
    answer.streaming=false;if(session.chatToken===chatToken){session.chatBusy=false;session.chatToken=null;}if(timer!==null){try{session.doc.defaultView.clearTimeout(timer);}catch(_){}}
    if(!answer.content&&answer.error){
@@ -701,6 +767,14 @@
    const result=await library.setRemark(item.id,next,{base});
    if(result&&result.stale){say(session,t('메모가 그 사이 바뀌었습니다. 연구 작업 패널에서 확인한 뒤 다시 눌러 주세요.'),true);return;}
    say(session,t('메모에 넣었습니다.'));
+  }
+  /* A summary or an answer as a child note of the paper (the memo is the other place, see toMemo). */
+  async function toNote(session,{heading,text,question='',by=null,model=''}){
+   const item=itemOf(session.reader),library=runtime.libraryService;if(!item||!clean(text))return;
+   if(!library?.createNoteHTML)throw new Error('Note creation is unavailable');
+   const html=PC.noteHTML({heading,title:fieldOf(item,'title'),question,text,source:byLabel(by)||model||'',date:new Date().toISOString().slice(0,10)});
+   await library.createNoteHTML(item.id,html);
+   say(session,t('하위 노트로 저장했습니다.'));
   }
   async function copyText(session,text){
    if(!text)return;
@@ -776,6 +850,8 @@
   function sourcesText(service,paragraphs,found){
    return TR.providerSpans(paragraphs,found).map(x=>T('{0} · 문단 {1}',service.providerLabel(x.provider),TR.rangeText(x.ranges))).join(', ');
   }
+  /* The first paragraph on or after the page on screen; -1 past the last one (the references, the back pages). */
+  const fromPage=(session,paragraphs)=>paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1));
   const trBusy=session=>!!session.trJob||!!(session.tr&&session.tr.service.busy);
   function renderTranslate(session){
    const ui=session.ui,tr=translator(session),doc=session.doc,service=tr.service;
@@ -783,14 +859,14 @@
    ui.trTarget.set({items:TR.TARGETS.map(x=>({value:x.code,label:x.label})),current:target.code,label:target.label});
    ui.trProvider.textContent=current?T('번역기: {0}',service.providerLabel(current))+(providers.length>1?' · '+T('대체: {0}',providers.slice(providers.indexOf(current)+1).map(service.providerLabel).join(', ')||'—'):''):t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요. DeepL 무료 키는 한 달 50만 자까지 쓸 수 있습니다.');
    const usage=service.usage();
-   const start=Math.max(0,tr.paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1)));
+   const start=fromPage(session,tr.paragraphs);
    const est=service.estimate(tr.paragraphs,current);
-   const pageEst=service.estimate(tr.paragraphs.slice(start),current);
+   const pageEst=service.estimate(start<0?[]:tr.paragraphs.slice(start),current);
    const limitText=usage.limit===null?t('한도 미확인'):usage.limit.toLocaleString();
-   ui.trEstimate.textContent=!tr.paragraphs.length?t('번역할 본문을 아직 읽지 못했습니다.'):
+   ui.trEstimate.textContent=!tr.paragraphs.length?(readingText(session)||t('번역할 본문을 아직 읽지 못했습니다.')):
     T('전체 약 {0}자 · 이미 번역한 {1}문단은 제외',est.chars.toLocaleString(),est.cached)+' · '+T('현재 페이지부터 약 {0}자',pageEst.chars.toLocaleString())
     +(current==='deepl'?' · '+T('이번 달 {0} / {1}자 사용',usage.chars.toLocaleString(),limitText)+(usage.free?'':' · '+t('유료 키')):'')
-    +(current==='ai'&&est.chars?' · '+(isLocalAI()?T('AI 서버로 약 {0}토큰 (이 Mac에서 실행)',est.tokens.toLocaleString()):T('AI 서버로 약 {0}토큰을 보내고 받습니다. 모델 요금이 붙습니다.',est.tokens.toLocaleString())):'')
+    +(current==='ai'&&est.chars?' · '+(isLocalAI()?T('AI 서버로 약 {0}토큰 (이 Mac에서 실행)',est.tokens.toLocaleString()):viaBridge()?T('AI 브리지로 약 {0}토큰 · {1}의 사용 한도에서 씁니다',est.tokens.toLocaleString(),aiPlace()):T('AI 서버로 약 {0}토큰을 보내고 받습니다. 모델 요금이 붙습니다.',est.tokens.toLocaleString())):'')
     +(current==='deepl'&&!est.fits?' · '+t('전체는 남은 한도를 넘습니다. 한도에 닿으면 거기서 멈추고 번역한 부분은 남습니다.'):'');
    for(const b of [ui.trPage,ui.trAll])b.disabled=!current||!tr.paragraphs.length||busy;
    ui.trStop.hidden=!busy;ui.trUsage.hidden=!service.providers().includes('deepl');ui.trNote.disabled=!tr.paragraphs.length;
@@ -821,6 +897,8 @@
    const row=session.ui.trRows.querySelector('[data-id="'+p.id+'"]');
    if(row){row.setAttribute('data-state','done');if(provider)row.setAttribute('data-provider',provider);const body=row.querySelector('.sc-ra-tr-text');if(body)body.textContent=text;}
   }
+  // The local bridge uses the Mac's own Claude/ChatGPT accounts: their allowance, not a per-token bill.
+  const viaBridge=()=>{try{const st=runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;return !!(st&&st.available&&st.source==='bridge');}catch(_){return false;}};
   const isLocalAI=()=>/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\//i.test(String(runtime.pref('aiEndpoint','')||'').trim());
   const usageLine=u=>T('이번 달 {0} / {1}자 사용',u.chars.toLocaleString(),u.limit===null?t('한도 미확인'):u.limit.toLocaleString());
   /* One translation job at a time, whole paragraphs or one paragraph again. The job's token and the busy state are
@@ -848,7 +926,8 @@
      // language, from where that run began. Nothing already translated is sent (or paid for) twice.
      list=TR.unfinished(tr.paragraphs.slice(session.trStart||0),found);
     }else{
-     const start=mode==='page'?Math.max(0,tr.paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1))):0;
+     const start=mode==='page'?fromPage(session,tr.paragraphs):0;
+     if(start<0){ui.trProgress.textContent=t('이 쪽부터는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.');return;}
      session.trStart=start;
      // A paragraph another translator already finished is left as it is ("다시 번역" redoes one on purpose).
      list=tr.paragraphs.slice(start).filter(p=>{const hit=found.get(p.id);return !hit||hit.provider===provider;});
@@ -930,21 +1009,23 @@
    ui.transcript.replaceChildren();
    if(!player){ui.listenNote.textContent=t('▶를 누르면 문장 목록이 여기에 나타납니다. 문장을 누르면 그 문장부터 읽습니다.');return;}
    const units=player.units();let label=null,group=null;
-   ui.listenNote.textContent=T('{0}문장 · 문장을 누르면 거기서부터 읽습니다.',units.length);
+   ui.listenNote.textContent=T('{0}문장 · 문장을 누르면 거기서부터 읽습니다.',units.length)+' '+keysLine();
    units.forEach((u,i)=>{
     const name=u.kind==='caption'?t('캡션'):u.kind==='reference'?t('참고문헌'):u.sectionLabel||t('본문');
     if(name!==label||!group){label=name;const h=el(doc,'h4',{'class':'sc-ra-h'},ui.transcript);h.textContent=name;group=el(doc,'div',{'class':'sc-ra-group'},ui.transcript);}
     const b=el(doc,'button',{type:'button','class':'sc-ra-sentence','data-opens':'audio','data-index':i},group);
-    b.textContent=u.text;b.addEventListener('click',()=>{playFrom(session,i,{jump:true});});
+    b.textContent=u.text;b.addEventListener('click',()=>{session.scrolledAt=0;playFrom(session,i,{jump:true});});
    });
    markCurrent(session);setBadge(session,'listen',units.length);
   }
+  const FOLLOW_PAUSE_MS=8000;
   function markCurrent(session){
    const list=session.ui.transcript;if(!list||!session.player)return;
    const state=session.player.state();
    const prev=list.querySelector('[aria-current="true"]');if(prev)prev.removeAttribute('aria-current');
    const now=list.querySelector('[data-index="'+state.index+'"]');
-   if(now&&state.status!=='idle'){now.setAttribute('aria-current','true');if(session.tab==='listen'&&now.scrollIntoView)try{now.scrollIntoView({block:'nearest'});}catch(_){}}
+   const resting=Date.now()-(session.scrolledAt||0)<FOLLOW_PAUSE_MS;
+   if(now&&state.status!=='idle'){now.setAttribute('aria-current','true');if(session.tab==='listen'&&!resting&&now.scrollIntoView)try{now.scrollIntoView({block:'nearest'});}catch(_){}}
   }
 
   /* ---- the player ------------------------------------------------------- */
@@ -1001,7 +1082,9 @@
     renderTranscript(session);renderPlayer(session);
     return player;
    })();
-   try{return await session.playerPromise;}finally{session.playerPromise=null;}
+   // The first ▶ on a paper reads its text and finds a voice: say so, instead of a still "not started yet".
+   session.preparing=true;showReading(session);
+   try{return await session.playerPromise;}finally{session.playerPromise=null;session.preparing=false;if(!session.destroyed&&session.ui)renderPlayer(session);}
   }
   function fillVoices(session,voices,lang,current){
    const same=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith(lang));
@@ -1009,6 +1092,22 @@
    session.ui.voice.set({items,current:setting('readAloudVoice','')&&items.some(i=>i.value===setting('readAloudVoice',''))?setting('readAloudVoice',''):'',label:current?current.name:t('목소리')});
   }
   async function withPlayer(session,fn){if(session.destroyed)return;const p=await ensurePlayer(session);if(!session.destroyed)fn(p);}
+  const isMacOS=()=>{try{if(typeof Z.isMac==='boolean')return Z.isMac;}catch(_){}try{return /Mac/i.test(String(root.navigator&&root.navigator.platform||''));}catch(_){return true;}};
+  const keyHints=()=>KEY_HINTS[isMacOS()?'mac':'other'];
+  const keysLine=()=>{const k=keyHints();return T('단축키: {0} 재생·일시정지, {1} 이전 문장, {2} 다음 문장.',k.toggle,k.prev,k.next);};
+  const playTip=()=>t(PLAY_TIP)+' '+keysLine();
+  /* The player's keys (see shortcutOf), heard on the reader's document and on each PDF view in the capture phase,
+     so they work with the panel closed. Play/pause starts from the page on screen like the toolbar ▶; the sentence
+     keys act once the player has started. A start while Zotero's own Read Aloud plays goes through the same question
+     as the ▶ button (startPlayback), never over it. */
+  function onShortcut(session,event){
+   if(session.destroyed||stopped)return;
+   const action=shortcutOf(event);if(!action)return;
+   if(action!=='toggle'&&(!session.player||session.player.state().status==='idle'))return;
+   try{event.preventDefault();event.stopPropagation();}catch(_){}
+   const run=action==='toggle'?togglePlay(session):withPlayer(session,p=>p[action]());
+   Promise.resolve(run).catch(error=>{log(error);say(session,describe(error),true);});
+  }
   /* Zotero 9's own Read Aloud (always on, the toolbar's #read-aloud) speaks through the same queue. */
   const builtInState=reader=>{try{return coreOf(reader)?._state?.readAloudState||null;}catch(_){return null;}};
   const builtInPlaying=reader=>{const st=builtInState(reader);return !!(st&&st.active&&!st.paused);};
@@ -1044,7 +1143,8 @@
    return startPlayback(session,p=>{p.play(index);if(jump){const u=p.units()[index];if(u)goToPage(session,pageNumberOf(u),u.rects);}});
   }
   async function togglePlay(session){
-   if(session.destroyed)return;
+   // A second press while the first is still reading the paper is the same press, not a second start.
+   if(session.destroyed||session.playerPromise)return;
    const current=session.player?session.player.state().status:'idle';
    if(current==='playing'){session.player.pause();return;}
    // From the top of the page being read when nothing is playing; "이어서 듣기" is the way back to the saved sentence.
@@ -1056,11 +1156,15 @@
    const at=player.units().findIndex(u=>pageNumberOf(u)>=page);
    return at>=0?at:0;
   }
+  const filterId=f=>f&&f.references?'references':f&&f.captions?'captions':'body';
   async function resumeListening(session){
    return startPlayback(session,p=>{
     const pos=session.data.position;
+    // The range that was being listened to comes back first: a caption or a reference is found only in its own range,
+    // and an index counts sentences of that range.
+    if(pos&&pos.filter&&pos.filter!==filterId(session.filters))setFilter(session,pos.filter);
     let index=pos&&pos.sig?p.units().findIndex(u=>RA.signature(u)===pos.sig):-1;
-    if(index<0&&pos&&Number.isInteger(pos.index)&&pos.index<p.units().length)index=pos.index;
+    if(index<0&&pos&&Number.isInteger(pos.index)&&pos.index<p.units().length&&(pos.filter||'body')===filterId(session.filters))index=pos.index;
     p.play(Math.max(0,index));
    });
   }
@@ -1096,7 +1200,7 @@
    if(type==='sentence'||type==='status'&&state.status==='playing'){
     if(state.unit)markCurrent(session);
     if(type==='sentence'){
-     if(state.unit)highlight(session,state.unit);session.data.position={index:state.index,sig:RA.signature(state.unit),page:pageNumberOf(state.unit),at:Date.now()};saveSoon(session);}
+     if(state.unit)highlight(session,state.unit);session.data.position={index:state.index,sig:RA.signature(state.unit),page:pageNumberOf(state.unit),filter:filterId(session.filters),at:Date.now()};saveSoon(session);}
    }
    if(state.status==='idle'||state.status==='done')clearHighlight(session);
    if(state.status==='error')say(session,state.error==='no-audio'?t('소리가 나지 않습니다. 시스템 음성 설정을 확인하세요.'):T('읽기를 멈췄습니다: {0}',state.error),true);
@@ -1106,17 +1210,21 @@
    const playBtn=ui.play,f0=session.filters||{captions:false,references:false};
    const label=playing?t('일시정지'):state&&state.status==='paused'?t('이어 읽기'):f0.captions?t('읽기 시작'):t('본문만 읽기');
    playBtn.replaceChildren(icon(session.doc,playing?'pause':'play'));el(session.doc,'span',{'class':'sc-ra-btn-text',text:label},playBtn);
-   playBtn.setAttribute('aria-label',label);playBtn.title=playing?label:label+' — '+t(PLAY_TIP);
+   playBtn.setAttribute('aria-label',label);playBtn.title=playing?label+' ('+keyHints().toggle+')':label+' — '+playTip();
    ui.railPlay.replaceChildren(icon(session.doc,playing?'pause':'play'));ui.railPlay.setAttribute('aria-label',label);ui.railPlay.title=label;
    // The toolbar ▷ doubles as play/pause, so listening does not need the panel open.
    const tb=session.toolbarState&&session.toolbarState.listen;
-   if(tb)try{tb.replaceChildren(icon(tb.ownerDocument,playing?'pause':'play'));tb.setAttribute('aria-label',playing?t('일시정지'):t('본문만 읽기'));tb.title=playing?t('일시정지'):t('본문만 읽기')+' — '+t(PLAY_TIP);}catch(_){}
+   if(tb)try{tb.replaceChildren(icon(tb.ownerDocument,playing?'pause':'play'));tb.setAttribute('aria-label',playing?t('일시정지'):t('본문만 읽기'));tb.title=playing?t('일시정지')+' ('+keyHints().toggle+')':t('본문만 읽기')+' — '+playTip();}catch(_){}
    const has=!!state&&state.total>0;
    for(const b of [ui.prev,ui.next,ui.sectionPrev,ui.sectionNext])b.disabled=!has;
    if(state&&state.unit){
     const where=state.unit.kind==='caption'?t('캡션'):state.unit.kind==='reference'?t('참고문헌'):state.unit.sectionLabel;
-    ui.progress.textContent=T('문장 {0}/{1}',state.index+1,state.total)+(where?' · '+where:'');
-   }else ui.progress.textContent=has?'':t('아직 시작하지 않았습니다');
+    const left=RA.remainingSeconds(p.units(),state.index,state.rate);
+    // The section name is last: it is the part that may be cut short in a narrow panel.
+    ui.progress.textContent=T('문장 {0}/{1}',state.index+1,state.total)+' · '+(left<60?t('1분 안 남음'):T('약 {0}분 남음',Math.round(left/60)))+(where?' · '+where:'');
+   }else ui.progress.textContent=has?'':session.preparing?(readingText(session)||t('준비하는 중…')):t('아직 시작하지 않았습니다');
+   const pct=has?Math.round((state.index+(state.status==='done'?1:0))/state.total*100):0;
+   ui.meter.hidden=!has;ui.meter.setAttribute('aria-valuenow',String(pct));ui.meterFill.style.width=pct+'%';
    const pos=session.data&&session.data.position;
    const idle=!state||state.status==='idle';
    ui.resume.hidden=!(pos&&pos.sig&&idle);ui.more.hidden=ui.resume.hidden;
@@ -1361,7 +1469,7 @@
    if(id==='translate')prepareTranslate(session);
    // The summary shown is the one for the settings now (another model or language may have been chosen meanwhile).
    if(id==='ask'&&session.loaded)renderSummary(session);
-   if(id==='listen')markCurrent(session);
+   if(id==='listen'){session.scrolledAt=0;markCurrent(session);}
   }
   async function ensureReady(session){
    if(session.ready||session.destroyed)return;
@@ -1370,7 +1478,7 @@
     await loadData(session);
     if(session.destroyed)return;
     session.loaded=true;
-    renderSummary(session);renderChat(session);renderPlayer(session);renderTranscript(session);
+    renderSummary(session);renderChat(session,{scroll:'bottom'});renderPlayer(session);renderTranscript(session);
     // Translations already made for this paper are shown without asking for anything.
     if(session.tab==='translate'&&session.open)prepareTranslate(session);
    }catch(error){log(error);}
@@ -1405,6 +1513,7 @@
      session.onDbl=session.onDbl||(event=>onDoubleClick(session,event,'primary'));
      on(session,vdoc,'dblclick',session.onDbl,true);
      for(const name of ACTIVITY)on(session,vdoc,name,session.onActivity,true);
+     if(session.onShortcut)on(session,vdoc,'keydown',session.onShortcut,true);
      session.vdoc=vdoc;session.marks=[];
      watchRendering(session);
     }
@@ -1416,6 +1525,7 @@
      session.onDbl2=session.onDbl2||(event=>onDoubleClick(session,event,'secondary'));
      on(session,second,'dblclick',session.onDbl2,true);
      for(const name of ACTIVITY)on(session,second,name,session.onActivity,true);
+     if(session.onShortcut)on(session,second,'keydown',session.onShortcut,true);
      session.vdoc2=second;
     }
    }
@@ -1441,11 +1551,14 @@
    // Let the panel know the reader's pointer activity, so listening is credited only when the person is not already being counted.
    session.onActivity=()=>{session.lastActivity=Date.now();};
    for(const name of ACTIVITY)on(session,doc,name,session.onActivity,true);
+   session.onShortcut=event=>onShortcut(session,event);
+   on(session,doc,'keydown',session.onShortcut,true);
    attachViewer(session);
    // A window resize keeps the panel within half the reader.
    session.onResize=()=>{if(session.open)applyLayout(session);};
    on(session,doc.defaultView,'resize',session.onResize);
    session.say=(m,e)=>say(session,m,e);
+   session.onProgress=()=>showReading(session);
    sessions.set(reader,session);
    ensureReady(session).then(()=>{
     if(session.destroyed||session.noSave)return;
@@ -1504,7 +1617,7 @@
    const state={};
    const panel=el(doc,'button',{type:'button','class':'toolbar-button sc-ra-toolbar','data-safe':'view',title:t('논문 도우미 (요약·대화·번역)'),'aria-label':t('논문 도우미 (요약·대화·번역)'),'aria-pressed':'false'},container);
    panel.appendChild(icon(doc,'panel'));
-   const listen=el(doc,'button',{type:'button','class':'toolbar-button sc-ra-toolbar','data-opens':'audio',title:t('본문만 읽기')+' — '+t(PLAY_TIP),'aria-label':t('본문만 읽기')},container);
+   const listen=el(doc,'button',{type:'button','class':'toolbar-button sc-ra-toolbar','data-opens':'audio',title:t('본문만 읽기')+' — '+playTip(),'aria-label':t('본문만 읽기')},container);
    listen.appendChild(icon(doc,'play'));
    state.panel=panel;state.listen=listen;
    const sessionOf=()=>sessions.get(reader)||createSession(reader);
@@ -1519,8 +1632,9 @@
   function releaseWindow(win){for(const[reader,session]of [...sessions])if(reader._window===win)destroySession(session);}
 
   /* ---- the cache folder stays bounded ------------------------------------
-     At most 200 papers or 100 MB in style-custom-reader/, least recently used first; a paper whose item is gone
-     is removed. Once per run, a minute after the first reader is seen. */
+     Extracted text for at most 200 papers or 100 MB in style-custom-reader/, least recently used first; the saved
+     work per paper (.state) for up to 5,000 papers or 300 MB; both go when the item is gone. Once per run, a
+     minute after the first reader is seen. */
   let pruneTimer=null,pruneWin=null,pruned=false;
   function pruneSoon(){
    if(stopped||pruned||pruneTimer!==null||quietStart)return;
@@ -1529,26 +1643,31 @@
    pruneTimer=win.setTimeout(()=>{pruneTimer=null;pruneWin=null;if(stopped)return;pruned=true;pruneCache().catch(log);},60000);
   }
   function cancelPrune(){if(pruneTimer===null)return;try{pruneWin.clearTimeout(pruneTimer);}catch(_){}pruneTimer=null;pruneWin=null;}
-  async function pruneCache({maxPapers=CACHE_PAPERS,maxBytes=CACHE_BYTES}={}){
+  async function pruneCache({maxPapers=CACHE_PAPERS,maxBytes=CACHE_BYTES,maxStates=STATE_PAPERS,maxStateBytes=STATE_BYTES}={}){
    const fs=io(),dir=folder();if(!fs||!fs.getChildren)return {removed:0};
    let children;try{children=await fs.getChildren(dir);}catch(_){return {removed:0};}
-   const papers=new Map();
+   /* Two kinds of file per paper. The .struct is the extracted text: it can be made again, so it goes first, least
+      recently used. The .state is the person's work (summary, conversation, translations, listening position): it
+      stays until the item is gone, or until far more papers than any reading list hold one. */
+   const kinds={struct:new Map(),state:new Map()};
    for(const file of children||[]){
     const m=/([^/\\]+?)\.(struct|state)\.json$/.exec(file);if(!m)continue;
     let st;try{st=await fs.stat(file);}catch(_){continue;}
-    const p=papers.get(m[1])||{name:m[1],files:[],bytes:0,used:0};
-    p.files.push(file);p.bytes+=Number(st.size)||0;p.used=Math.max(p.used,Number(st.lastModified||st.lastModifiedMs)||0);papers.set(m[1],p);
+    kinds[m[2]].set(m[1],{name:m[1],file,bytes:Number(st.size)||0,used:Number(st.lastModified||st.lastModifiedMs)||0});
    }
    const live=new Set([...sessions.values()].map(s=>s.name));
-   const gone=p=>{const m=/^(\d+)-([A-Z0-9]{8})$/.exec(p.name);if(!m||live.has(p.name))return false;try{return Z.Items.getByLibraryAndKey(Number(m[1]),m[2])===false;}catch(_){return false;}};
-   const drop=[],keep=[];
-   for(const p of papers.values())(gone(p)?drop:keep).push(p);
-   // Open papers first (always kept), then the most recently used.
-   keep.sort((a,b)=>(live.has(b.name)?1:0)-(live.has(a.name)?1:0)||b.used-a.used);
-   let bytes=0,count=0;
-   for(const p of keep){count++;bytes+=p.bytes;if(!live.has(p.name)&&(count>maxPapers||bytes>maxBytes))drop.push(p);}
-   for(const p of drop)for(const file of p.files)try{await fs.remove(file);}catch(error){log(error);}
-   return {removed:drop.length};
+   const gone=name=>{const m=/^(\d+)-([A-Z0-9]{8})$/.exec(name);if(!m||live.has(name))return false;try{return Z.Items.getByLibraryAndKey(Number(m[1]),m[2])===false;}catch(_){return false;}};
+   const drop=[];
+   const bounded=(map,limit,bytesLimit)=>{
+    const keep=[];for(const p of map.values())(gone(p.name)?drop:keep).push(p);
+    // Open papers first (always kept), then the most recently used.
+    keep.sort((a,b)=>(live.has(b.name)?1:0)-(live.has(a.name)?1:0)||b.used-a.used);
+    let bytes=0,count=0;
+    for(const p of keep){count++;bytes+=p.bytes;if(!live.has(p.name)&&(count>limit||bytes>bytesLimit))drop.push(p);}
+   };
+   bounded(kinds.struct,maxPapers,maxBytes);bounded(kinds.state,maxStates,maxStateBytes);
+   for(const p of drop)try{await fs.remove(p.file);}catch(error){log(error);}
+   return {removed:new Set(drop.map(p=>p.name)).size,files:drop.length};
   }
 
   /* ---- the self-check probe: measure, press nothing --------------------- */
@@ -1685,7 +1804,7 @@
    session.probing=true;probing++;
    const vdoc=()=>viewerDoc(reader)||session.vdoc;
    let released=false,handlerRefs=null;
-   const handlers=()=>handlerRefs||{doc:[session.onDocClick,session.onKey,session.onActivity].filter(Boolean),view:[session.onDbl,session.onActivity].filter(Boolean),win:[session.onResize].filter(Boolean),watch:session.renderWatch?session.renderWatch.fn:null};
+   const handlers=()=>handlerRefs||{doc:[session.onDocClick,session.onKey,session.onActivity,session.onShortcut].filter(Boolean),view:[session.onDbl,session.onActivity,session.onShortcut].filter(Boolean),win:[session.onResize].filter(Boolean),watch:session.renderWatch?session.renderWatch.fn:null};
    const handle={
     fresh,baseline,session,reader,doc:session.doc,
     get win(){return session.doc.defaultView;},
@@ -1810,5 +1929,5 @@
   }
   return Object.freeze({sync,mountToolbar,releaseWindow,selectionPopup,probe,probeAll,diagnose,reserve,setGuard,pruneCache,stop,sessions:()=>[...sessions.values()],owner});
  }
- return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,pointToPage});
+ return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,shortcutOf,KEY_HINTS,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,pointToPage});
 });
