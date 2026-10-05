@@ -48,6 +48,11 @@
 			<html:input id="zotpop-journal-folder" type="text" readonly="readonly" value="zotpop/journals" style="width: 240px"/>
 		</hbox>
 		<html:p style="color: gray" data-i18n="prefJournalFolderNote"></html:p>
+		<hbox align="center" id="zotpop-jcr-row">
+			<label id="zotpop-jcr-status" value=""/>
+			<html:input id="zotpop-jcr-year" type="number" min="1975" max="2100" style="width: 80px" hidden="hidden" data-i18n-aria="prefJcrYearLabel"/>
+			<button id="zotpop-jcr-year-save" data-writes="jcr-meta" data-i18n-label="prefJcrYearSet" hidden="true" oncommand="Zotero.ZotPoP.saveJcrYear(document);"/>
+		</hbox>
 		<checkbox id="zotpop-inst" data-i18n-label="prefInstitutions" preference="extensions.zotpop.institutionMetrics"/>
 	</groupbox>
 

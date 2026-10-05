@@ -166,7 +166,11 @@
 			if (!name || !await io.exists(dataPath("journals", name))) return;
 			let data = JSON.parse(await io.readText(dataPath("journals", name)));
 			let rows = Array.isArray(data) ? data : data?.rows;
-			if (Array.isArray(rows) && rows.length) ZotPoPJCR.load(data, { fileName: name });
+			// A bare list's year, when the reader set one in Preferences, is in jcr.meta.json beside it (the export itself is never edited).
+			let meta = null;
+			try { if (ZotPoPJCR.META_FILE && await io.exists(dataPath("journals", ZotPoPJCR.META_FILE))) meta = JSON.parse(await io.readText(dataPath("journals", ZotPoPJCR.META_FILE))); }
+			catch (e) { Zotero.debug("ZotPoP: " + ZotPoPJCR.META_FILE + " not read: " + (e && e.message)); }
+			if (Array.isArray(rows) && rows.length) ZotPoPJCR.load(data, { fileName: name, meta });
 		}
 		catch (e) { Zotero.debug("ZotPoP: local journal figures not loaded: " + (e && e.message)); }
 	}
@@ -1001,6 +1005,52 @@
 			more.textContent = folded ? t("authorMoreProfiles", weak.length) : t("authorFewerProfiles");
 			more.addEventListener("click", () => { authorView.showAll = !authorView.showAll; renderAuthorProfiles(); }); host.appendChild(more);
 		}
+		/* The services hold more people under this name than the first page: the next page is fetched only when
+		   this is pressed (OpenAlex is metered), and says how many each service still has. */
+		if (session.profiles.length && typeof ZotPoPAuthors !== "undefined" && ZotPoPAuthors.hasMorePeople?.(session.paging)) {
+			let next = document.createElement("button"); next.type = "button"; next.className = "author-more author-next";
+			next.setAttribute("data-opens", "network");
+			let loading = Boolean(authorView.moreController);
+			next.textContent = loading ? t("authorNextLoading") : t("authorNextPeople", session.profiles.length, peopleTotals(session.paging));
+			tip(next, t("authorNextTip"));
+			next.disabled = loading || state.searching || state.importing;
+			next.addEventListener("click", () => loadMoreProfiles());
+			host.appendChild(next);
+		}
+	}
+	// What each service still holds under the name: "OpenAlex 230 · ORCID 41".
+	function peopleTotals(paging) {
+		return [["OpenAlex", paging?.openalex], ["ORCID", paging?.orcid]].filter(([, p]) => p?.next && p.total != null)
+			.map(([name, p]) => name + " " + Number(p.total).toLocaleString(t.locale || undefined)).join(" \u00b7 ");
+	}
+	async function loadMoreProfiles() {
+		let provider = activeAuthorProvider, session = authorSessions[provider];
+		if (authorView.moreController || state.searching || state.importing || !ZotPoPAuthors.hasMorePeople?.(session.paging)) return;
+		// The name the first page was asked with, not whatever the box holds now.
+		let input = session.paging.input || $("author-input").value, controller = authorView.moreController = new AbortController();
+		let active = () => authorView.moreController === controller && !controller.signal.aborted && activeAuthorProvider === provider && authorSessions[provider] === session;
+		let ctx = { signal: controller.signal, isCancelled: () => controller.signal.aborted, errors: [], email: String(PREF("email") || ""),
+			openAlexApiKey: String(PREF("openAlexApiKey") || ""), openAlexSpent: openAlexHeld(), log };
+		renderAuthorProfiles(); setStatus(t("authorNextLoading"));
+		try {
+			let out = await ZotPoPAuthors.moreProfiles(provider, input, session.profiles, session.paging, http, ctx);
+			if (!active()) return;
+			session.profiles = [...session.profiles, ...out.added]; session.paging = out.paging ? { ...out.paging, input } : null;
+			// New cards are shown as they are: a weak one is not hidden behind "more" after the user asked for more.
+			if (out.added.some(c => c.weak)) authorView.showAll = true;
+			setStatus(t("authorNextLoaded", out.added.length, session.profiles.length));
+			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
+			// The saved people list grows with it, so reopening this search from history shows them all.
+			if (session.action === "profiles" && $("author-input").value === input) await history?.save({ source: "author:" + provider, query: { ...authorQuery("profiles"), authorProfile: session.profile, authorProfiles: session.profiles, authorPaging: session.paging }, records: [], partial: false });
+		}
+		catch (error) {
+			if (active() && error?.name !== "AbortError") { setStatus(t("searchFailed", error.message || error), "err"); }
+		}
+		finally {
+			noteOpenAlexSpent(ctx); saveCaches();
+			if (authorView.moreController === controller) authorView.moreController = null;
+			if (activeAuthorProvider === provider) renderAuthorProfiles();
+		}
 	}
 	function authorQuery(action = authorAction, profile = authorSessions[activeAuthorProvider].profile) {
 		return { mode: "author", authorProvider: activeAuthorProvider, authorInput: $("author-input").value,
@@ -1031,6 +1081,7 @@
 		session.inputKind = query.authorInputKind || "auto";
 		session.profile = query.authorProfile || entry.records?.[0]?.authorProfile || null;
 		session.profiles = Array.isArray(query.authorProfiles) && query.authorProfiles.length ? query.authorProfiles : session.profile ? [session.profile] : [];
+		session.paging = query.authorPaging || null;
 		session.action = authorAction = query.authorAction || "profiles"; session.pick = validPick(query.authorPick); state.metricsBasisUser = false;
 		state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		// A person's papers come back newest first, as they were shown when first loaded.
@@ -1063,7 +1114,8 @@
 		let session = authorSessions[activeAuthorProvider];
 		session.action = action;
 		state.metricsBasisUser = false; session.pick = null;
-		if (action !== "publications") { session.profiles = []; session.profile = null; authorView.showAll = false; } else { session.profile = profile; authorView.open.clear(); }
+		authorView.moreController?.abort(); authorView.moreController = null;
+		if (action !== "publications") { session.profiles = []; session.profile = null; session.paging = null; authorView.showAll = false; } else { session.profile = profile; authorView.open.clear(); }
 		saveAuthorPreferences();
 		state.records = []; state.selected.clear(); state.focusKey = null; state.detailKey = null; resetFilters();
 		state.searching = true; state.cancelled = false;
@@ -1095,7 +1147,7 @@
 				: action === "name-papers" ? ZotPoPAuthors.loadNamePublications(input, options, http, ctx, q.authorProvider) : ZotPoPAuthors.loadPublications(profile, options, http, ctx);
 			let result = await abortableAuthorTask(task, controller.signal);
 			if (!active()) throw abortError();
-			if (action === "profiles") { profiles = result; session.profiles = result; setStatus(result.length ? t("authorProfilesFound", result.length) : t("authorNoProfiles")); if (q.authorProvider === "combined" && result.length === 1 && result[0].direct) autoPick = result[0]; }
+			if (action === "profiles") { profiles = result; session.profiles = result; session.paging = result.paging ? { ...result.paging, input } : null; setStatus(result.length ? t("authorProfilesFound", result.length) : t("authorNoProfiles")); if (q.authorProvider === "combined" && result.length === 1 && result[0].direct) autoPick = result[0]; }
 			else {
 				received = result; session.profile = { ...(profile || {}), ...(result.authorProfile || result.profile || profile || {}) };
 				if (session.profile.provider) {
@@ -1112,7 +1164,7 @@
 					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""), null, popNotice ? { tip: t("popModeNotice") } : {});
 			}
 			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
-			await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles },
+			await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles, authorPaging: session.paging || null },
 				records: stripDisplayFields(received), partial: Boolean(received.partial || ctx.errors.length) });
 			saveAuthorPreferences();
 		} catch (error) {
@@ -1442,7 +1494,7 @@
 	// ------------------------------------------------------------ recent searches
 	function stripDisplayFields(records) {
 		// What the library said about a row is asked again on restore, never read back from the snapshot.
-		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, isNew, collections, libraryItemID, readState, localPDFPath, related, ...rest }) => {
+		return records.map(({ rank, authorString, status, statusClass, statusTitle, inLibrary, isNew, collections, libraryItemID, readState, localPDFPath, localPDFFor, related, ...rest }) => {
 			if (rest.popOriginal) rest.rank = rank;
 			return rest;
 		});
@@ -2306,6 +2358,8 @@
 				flags.selected ||= state.selected.has(r.key);
 				flags.focused ||= state.focusKey === r.key;
 				flags.detailed ||= state.detailKey === r.key;
+				// A row's library ranking stays with it when a later batch redraws the list (load more, the next journal).
+				if (r.related && !flags.related) flags.related = r.related;
 				previous.set(id, flags);
 			}
 		}
@@ -2323,6 +2377,7 @@
 				if (flags?.selected) selected.add(r.key);
 				if (flags?.focused) focusKey = r.key;
 				if (flags?.detailed) detailKey = r.key;
+				if (flags?.related && !r.related) r.related = flags.related;
 			}
 			return r;
 		});
@@ -2653,8 +2708,9 @@
 		if (k === "country") return (affiliationOf(r)?.countries || []).join("/");
 		if (k === "tier") return affiliationOf(r)?.hIndex ?? -1;
 		if (k === "inLibrary") return r.inLibrary ? 1 : 0;
-		// "Rank by my library": the score, then held papers, then those that could not be compared.
-		if (k === "related") return r.related?.score != null ? r.related.score : r.related?.held ? -1 : -2;
+		/* "Rank by my library": strong links, then some, each by score; weak and none tie, so the search's own
+		   order (rank) decides among them; then held papers, rows not yet ranked, and those that cannot be. */
+		if (k === "related") { let t = ZotPoPRelated.rankOf(r.related); return (6 - t) * 1e6 + (t < 2 ? r.related.score : 0); }
 		if (k === "pdf") return hasPDF(r) ? 1 : 0;
 		let v = r[k];
 		if (v == null) return ["citations", "year", "rank", "journalIF", "journalOA2y"].includes(k) ? -1 : "";
@@ -4358,7 +4414,12 @@
 		citePop = null; citeToken++;
 		off();
 		el.remove ? el.remove() : el.parentNode?.removeChild(el);
-		if (returnFocus && opener?.focus && opener.tagName === "BUTTON") opener.focus();
+		// The opener may have been redrawn while the card was open (a row repainted, the detail re-rendered):
+		// focus goes to it only while it is still in the window, else to the results table.
+		if (returnFocus) {
+			if (opener?.focus && opener.tagName === "BUTTON" && opener.isConnected !== false) opener.focus();
+			else $("table-wrap")?.focus?.({ preventScroll: true });
+		}
 	}
 	function citeCardBody(r, st) {
 		let fig = citeFigures(r), tr = fig.trend, box = fel("div", "cite-card");
@@ -4540,8 +4601,8 @@
 		$("d-tr-title").checked = trTitleOn();
 		let busy = state.trBusy === r.key + "|" + lang.code;
 		$("d-tr-run").disabled = busy;
-		let text = r.abstract ? translator.cached(r.key, lang.code, "abstract") : null;
-		let title = trTitleOn() ? translator.cached(r.key, lang.code, "title") : null;
+		let text = r.abstract ? translator.cached(r.key, lang.code, "abstract", r.abstract) : null;
+		let title = trTitleOn() && r.title ? translator.cached(r.key, lang.code, "title", r.title) : null;
 		let shown = Boolean(text || title);
 		$("d-tr-run-label").textContent = busy ? t("trRunning") : t(shown ? "trRetry" : "trButton");
 		$("d-tr-copy").hidden = !shown;
@@ -4578,9 +4639,10 @@
 		state.trBusy = id; trNote = null;
 		renderTranslate(r);
 		try {
-			// One after the other: the free services refuse a burst.
-			if (r.abstract) await translator.translateCached({ key: r.key, lang, field: "abstract", text: r.abstract });
-			if (wantTitle && r.title) await translator.translateCached({ key: r.key, lang, field: "title", text: r.title });
+			// One after the other: the free services refuse a burst. "Translate again" (a translation already shown) asks anew.
+			let again = Boolean((r.abstract && translator.cached(r.key, lang, "abstract", r.abstract)) || (wantTitle && r.title && translator.cached(r.key, lang, "title", r.title)));
+			if (r.abstract) await translator.translateCached({ key: r.key, lang, field: "abstract", text: r.abstract, fresh: again });
+			if (wantTitle && r.title) await translator.translateCached({ key: r.key, lang, field: "title", text: r.title, fresh: again });
 			trNote = null;
 		}
 		catch (e) { trNote = { key: r.key, text: e.code === "none" ? t("trNone") : t("trFailed", scrubURLs(e.message || String(e))), err: true }; }
@@ -4594,7 +4656,7 @@
 		let r = detailRecord();
 		if (!r || !translator) return;
 		let lang = trLang();
-		let parts = [trTitleOn() ? translator.cached(r.key, lang, "title") : null, translator.cached(r.key, lang, "abstract")].filter(Boolean).map(x => x.text);
+		let parts = [trTitleOn() && r.title ? translator.cached(r.key, lang, "title", r.title) : null, r.abstract ? translator.cached(r.key, lang, "abstract", r.abstract) : null].filter(Boolean).map(x => x.text);
 		if (parts.length) copyText(parts.join("\n\n"), t("trCopied"));
 	}
 	function setTrLang(code) {
@@ -4672,14 +4734,19 @@
 		state.preview.key = r.key;
 		paintPreview({ status: "loading", page: 1, pageCount: 0, title: r.title, originalURL: ZotPoPPreview.originalURL(r) });
 		let start = () => { previewPending = null; if (state.preview.on && state.preview.key === r.key) viewerOfPreview().showRecord(r); };
-		// A held paper's own PDF is read before any remote one: its path is looked up once, then the viewer starts.
+		/* A held paper's own PDF is read before any remote one: its path is looked up once per library and item,
+		   then the viewer starts. A path found in another library (or for another copy) is dropped, never shown,
+		   and a lookup that answers after the library changed is not kept. */
+		let owner = () => (state.libraryID ?? currentTarget().libraryID) + "|" + (r.inLibrary ? heldItemID(r) ?? "" : "-");
+		let mine = owner();
+		if (r.localPDFFor !== mine) { delete r.localPDFPath; delete r.localPDFFor; }
 		if (r.inLibrary && r.localPDFPath === undefined && typeof ZotPoPImporter?.localPDF === "function") {
 			let go = start;
 			start = () => {
 				previewPending = null;
 				Promise.resolve(ZotPoPImporter.localPDF(state.libraryID ?? currentTarget().libraryID, r, heldItemID(r)))
-					.then(found => { r.localPDFPath = found?.path || null; }, () => { r.localPDFPath = null; })
-					.then(() => go());
+					.then(found => found?.path || null, () => null)
+					.then(path => { if (owner() !== mine) return; r.localPDFPath = path; r.localPDFFor = mine; go(); });
 			};
 		}
 		if (follow) { previewPending = start; previewTimer = setTimeout(start, PREVIEW_FOLLOW_DELAY); } else start();
@@ -4820,6 +4887,7 @@
 		statusLine.hidden = !r.status;
 		renderVersions(r);
 		renderSignals(r);
+		renderWhy(r);
 
 		// The main action: an owned paper shows its library copy, any other is added.
 		syncQueueButton(r);
@@ -4885,22 +4953,86 @@
 			tip(chip, t(rel.held ? "relHeldTip" : "relUnrankableTip"));
 			return chip;
 		}
-		chip.textContent = rel.score === 0 ? t("relNoLink") : t("relChip", rel.c1, rel.c2, rel.c3);
-		if (rel.score === 0) chip.classList.add("muted");
+		let band = rel.band || ZotPoPRelated.bandOf(rel);
+		chip.textContent = rel.score === 0 ? t("relNoLink") : band === "weak" ? t("relWeakChip", rel.c3) : t("relChip", rel.c1, rel.c2, rel.c3);
+		chip.dataset.band = band;
+		if (band === "none" || band === "weak") chip.classList.add("muted");
+		if (band === "strong") chip.classList.add("strong");
 		// The five papers behind the score are worked out when the card opens (tipContent, kind "related"), not for every row drawn.
 		chip.dataset.tipKind = "related";
 		chip.setAttribute("aria-label", t("relTip", rel.score, rel.c1, rel.c2, rel.c3w));
 		return chip;
 	}
 	function relatedTipText(rel) {
-		return [t("relTip", rel.score, rel.c1, rel.c2, rel.c3w), ...(rel.top || []).map(heldLine), ...(rel.lowConf ? [t("relLowConf", rel.lowConf)] : [])].join("\n");
+		let band = rel.band || ZotPoPRelated.bandOf(rel);
+		let cover = state.related.coverage, partial = cover && cover.known < cover.total ? [t("relCoverage", cover.known, cover.total)] : [];
+		return [t("relBand", band), t("relTip", rel.score, rel.c1, rel.c2, rel.c3w), ...(rel.top || []).map(heldLine), ...(rel.lowConf ? [t("relLowConf", rel.lowConf)] : []), ...partial, ...(rel.score > 0 ? [t("relTipOpen")] : [])].join("\n");
+	}
+	// A held paper brought into view in Zotero's main window (selection only: no window opens).
+	function selectHeld(itemID) {
+		try {
+			let pane = mainWindow?.ZoteroPane;
+			if (itemID != null && pane?.selectItem) { pane.selectItem(itemID); setStatus(t("shownInLibrary"), "", { transient: true }); }
+		}
+		catch (e) { log("selectItem failed: " + e.message); }
+	}
+	/* The detail's "why this paper": every held paper the ranking linked it to, each a button that selects
+	   that paper in Zotero, with what links them. A held result names the library copy instead. */
+	const WHY_SHOWN = 8;
+	function renderWhy(r) {
+		let box = $("d-why");
+		if (!box) return;
+		box.textContent = "";
+		let rel = r.related;
+		let item = (it, why) => {
+			let row = document.createElement("div"); row.className = "why-item";
+			let go = document.createElement("button"); go.type = "button"; go.className = "ghost why-title";
+			go.setAttribute("data-opens", "library");
+			go.textContent = it.title || t("relUntitled");
+			tip(go, t("relWhyOpen"));
+			go.addEventListener("click", () => selectHeld(it.itemID));
+			row.appendChild(go);
+			if (why) { let note = document.createElement("span"); note.className = "why-note"; note.textContent = why; row.appendChild(note); }
+			return row;
+		};
+		if (rel?.held && rel.heldItemID != null) {
+			let head = document.createElement("div"); head.className = "why-head"; head.textContent = t("relWhyHeld");
+			box.appendChild(head);
+			box.appendChild(item({ itemID: rel.heldItemID, title: rel.heldTitle }, ""));
+		}
+		else if (rel && rel.score > 0) {
+			let band = rel.band || ZotPoPRelated.bandOf(rel);
+			let all = typeof rel.linked === "function" ? rel.linked() : rel.top || [];
+			let head = document.createElement("div"); head.className = "why-head";
+			head.textContent = t("relWhyHead", band, all.length);
+			tip(head, t("relTip", rel.score, rel.c1, rel.c2, rel.c3w));
+			box.appendChild(head);
+			let list = document.createElement("div"); list.className = "why-list";
+			for (let it of all.slice(0, WHY_SHOWN)) list.appendChild(item(it, t("relTipWhy", it.why)));
+			box.appendChild(list);
+			if (all.length > WHY_SHOWN) { let more = document.createElement("div"); more.className = "why-more"; more.textContent = t("relWhyMore", all.length - WHY_SHOWN); box.appendChild(more); }
+		}
+		box.hidden = !box.firstChild;
 	}
 	function syncRelatedBtn() {
 		let btn = $("related-btn"), rel = state.related, on = state.sortKey === "related";
 		btn.disabled = !rel.running && (state.searching || !state.records.length);
 		btn.setAttribute("aria-pressed", String(on && !rel.running));
-		$("related-label").textContent = t(rel.running ? "relCancel" : on ? "relBack" : "relButton");
+		// Rows that arrived after the ranking (load more, a later batch) have no score: the button offers to rank them.
+		let fresh = on && !rel.running ? unrankedCount() : 0, stale = on && !rel.running && relatedStale();
+		$("related-label").textContent = rel.running ? t("relCancel") : fresh ? t("relRankNew", fresh) : stale ? t("relRerank") : t(on ? "relBack" : "relButton");
 	}
+	const unrankedCount = () => state.records.filter(r => !r.related).length;
+	// The library grew (a paper added here or elsewhere) since the ranking: the other scores may have moved.
+	const relatedStale = () => Boolean(state.related.basis && state.related.basis !== relatedBasis());
+	// A ranked paper just added is held now: its chip and "why" say so at once, the rest wait for a re-rank.
+	function relatedNowHeld(r, itemID) {
+		if (!r.related) return;
+		r.related = { held: true, score: null, heldItemID: itemID ?? null, heldTitle: r.title };
+	}
+	/* What a finished ranking was worked out against: the library and how many of its papers were known.
+	   The same list against the same library is sorted again without a second pass over 1,200 papers. */
+	const relatedBasis = () => currentTarget().libraryID + "|" + (state.doiMap?.size || 0);
 	/* One ranking job at a time, tied to a library and a generation. A library switch, the window closing or
 	   a cancel bumps the generation; whatever an older job still delivers is dropped. */
 	function cancelRelated({ clear = false } = {}) {
@@ -4914,7 +5046,7 @@
 		let rel = state.related, had = state.records.some(r => r.related);
 		for (let r of state.records) r.related = null;
 		if (state.sortKey === "related") { let prev = rel.prev || { key: "rank", dir: "asc" }; state.sortKey = prev.key; state.sortDir = prev.dir; }
-		rel.prev = null; rel.libraryID = null;
+		rel.prev = null; rel.libraryID = null; rel.basis = null;
 		return had;
 	}
 	// A different library is a different set of held papers: nothing scored against the old one may stay.
@@ -4929,13 +5061,19 @@
 	async function toggleRelated() {
 		let rel = state.related;
 		if (rel.running) { rel.controller?.abort(); return; }
-		if (state.sortKey === "related") {
+		if (state.sortKey === "related" && !unrankedCount() && !relatedStale()) {
 			let prev = rel.prev || { key: "rank", dir: "asc" };
 			state.sortKey = prev.key; state.sortDir = prev.dir; rel.prev = null;
 			render();
 			return;
 		}
 		if (state.searching || !state.records.length) return;
+		if (state.sortKey !== "related" && rel.basis === relatedBasis() && !unrankedCount()) {
+			rel.prev = { key: state.sortKey, dir: state.sortDir };
+			state.sortKey = "related"; state.sortDir = "desc";
+			syncRelatedBtn(); render();
+			return;
+		}
 		let held = relatedHeld();
 		if (!held.length) { showBanner(t(state.doiMap?.failed ? "relLibraryFailed" : "relNeedsLibrary"), null, { warn: true }); return; }
 		let records = state.records.slice(), controller = new AbortController();
@@ -4971,14 +5109,21 @@
 				else setStatus(t(reason === "budget" ? "relBudget" : "relFailed"), "err");
 			}
 			else {
-				let live = new Set(state.records), same = records.every(r => live.has(r));
+				// By key onto the rows shown now: a batch that redrew the list while this ran still gets its scores.
 				// Shared, not copied: `top` is worked out on first read.
 				for (let r of records) r.related = out.scores.get(r.key) || null;
+				let same = false;
+				for (let r of state.records) if (out.scores.has(r.key)) { r.related = out.scores.get(r.key); same = true; }
+				rel.basis = relatedBasis();
 				if (same) {
-					rel.prev = { key: state.sortKey, dir: state.sortDir };
+					if (state.sortKey !== "related") rel.prev = { key: state.sortKey, dir: state.sortDir };
 					state.sortKey = "related"; state.sortDir = "desc";
 					let ranked = records.filter(r => r.related?.score != null).length;
-					setStatus(out.partial ? t("relPartial", ranked, records.length) : out.requests ? t("relDone", ranked, records.length, out.requests) : t("relDoneCached", ranked, records.length), out.partial && reason === "budget" ? "err" : "");
+					// How much of the library could be compared at all: a paper OpenAlex does not know links to nothing.
+					let total = (out.heldKnown || 0) + (out.heldUnknown || 0);
+					rel.coverage = total ? { known: out.heldKnown, total } : null;
+					let cover = rel.coverage && rel.coverage.known < total ? " " + t("relCoverage", rel.coverage.known, total) : "";
+					setStatus((out.partial ? t("relPartial", ranked, records.length) : out.requests ? t("relDone", ranked, records.length, out.requests) : t("relDoneCached", ranked, records.length)) + cover, out.partial && reason === "budget" ? "err" : "");
 				}
 			}
 		}
@@ -5110,14 +5255,28 @@
 		let bits = [to.venue, to.year, target ? t(target.inLibrary ? "verOwned" : "verNotOwned") : t(held ? "verOwned" : "verGone")].filter(Boolean);
 		tip(box, t(link.tip, to.doi || "") + "\n" + t(estimated ? "verEstimateTip" : "verExplicitTip"));
 		box.appendChild(document.createTextNode(t(link.kind, estimated) + ": " + bits.join(" · ")));
-		if (target) {
+		let action = (label, run, mark) => {
 			box.appendChild(document.createTextNode(" · "));
 			let go = document.createElement("button");
 			go.type = "button"; go.className = "ghost";
-			go.textContent = t("verShow");
-			go.addEventListener("click", () => revealRecord(target.key));
+			go.textContent = label;
+			for (let [k, v] of Object.entries(mark || {})) go.setAttribute(k, v);
+			go.addEventListener("click", run);
 			box.appendChild(go);
-		}
+		};
+		if (target) { action(t("verShow"), () => revealRecord(target.key), { "data-safe": "view" }); return; }
+		// Not among these results: the library's copy is selected in Zotero, and the version itself is a DOI away.
+		let itemID = held ? heldVersionItem(to) : null;
+		if (itemID != null) action(t("verShowLibrary"), () => selectHeld(itemID), { "data-opens": "library" });
+		let doi = to.doi ? ZotPoPSources.normalizeDOI(to.doi) : null;
+		if (doi) action(t("verOpenDoi"), () => Zotero.launchURL("https://doi.org/" + doi), { "data-opens": "browser" });
+	}
+	// The Zotero item that holds the other version, when it is known: by DOI at once, by title once asked.
+	function heldVersionItem(to) {
+		let doi = to.doi ? ZotPoPSources.normalizeDOI(to.doi) : null;
+		if (doi && state.doiMap.has(doi)) return state.doiMap.get(doi);
+		let found = state.heldVersions.get(doi || ("t:" + to.title + "|" + to.year));
+		return typeof found === "number" ? found : null;
 	}
 	/* Whether the user's library holds the other version of a paper: true by DOI map at once; by title and
 	   year (the import's own rule) asked once and remembered, calling again() when the answer arrives. */
@@ -5126,11 +5285,11 @@
 		let doi = to.doi ? ZotPoPSources.normalizeDOI(to.doi) : null;
 		if (doi && state.doiMap.has(doi)) return true;
 		let id = doi || ("t:" + to.title + "|" + to.year);
-		if (state.heldVersions.has(id)) return state.heldVersions.get(id) === true;
+		if (state.heldVersions.has(id)) { let v = state.heldVersions.get(id); return v === true || typeof v === "number"; }
 		if (!to.title || typeof ZotPoPImporter.findByTitle !== "function") return false;
 		state.heldVersions.set(id, null);
 		Promise.resolve(ZotPoPImporter.findByTitle(state.libraryID ?? currentTarget().libraryID, to.title, to.year, { doi: to.doi }))
-			.then(found => { state.heldVersions.set(id, Boolean(found)); if (found) again(); })
+			.then(found => { state.heldVersions.set(id, typeof found === "number" ? found : Boolean(found)); if (found) again(); })
 			.catch(() => state.heldVersions.set(id, false));
 		return false;
 	}
@@ -5272,6 +5431,11 @@
 		if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
 		// Enter and Space on a focused button press that button (the statistics basis, say), not the focused result row.
 		if (/^button$/i.test(document.activeElement?.tagName || "") && (e.key === "Enter" || e.key === " ")) return;
+		/* Row keys belong to the table. Focus in the paper's detail (its buttons, the folded metadata) or on a
+		   link or disclosure: Space, arrows, Page keys, Home/End, Enter and Delete do what they do there, they
+		   do not pick, switch or untick result rows. */
+		let active = document.activeElement, detail = $("detail");
+		if (!mod && active && active !== detail && (detail?.contains?.(active) || /^(summary|a)$/i.test(active.tagName || ""))) return;
 		if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); selectVisible(true); return; }
 		if (mod && e.key.toLowerCase() === "c") {
 			// Text the reader selected (a sentence of the abstract) is copied as text, by the platform.
@@ -5528,7 +5692,7 @@
 			// The abstract the user translated here, kept as a child note when asked.
 			let translatedNote = null;
 			if ($("opt-trnote").checked && translator && r.abstract) {
-				let lang = ZotPoPTranslate.byCode(trLang()), done = lang && translator.cached(r.key, lang.code, "abstract");
+				let lang = ZotPoPTranslate.byCode(trLang()), done = lang && translator.cached(r.key, lang.code, "abstract", r.abstract);
 				if (done) translatedNote = { heading: t("noteTranslatedTitle", lang.name), text: done.text, service: done.service };
 			}
 			let res = await ZotPoPImporter.importRecord(r, translatedNote ? Object.assign({}, opts, { translatedNote }) : opts);
@@ -5538,6 +5702,7 @@
 				r.inLibrary = true;
 				r.libraryItemID = res.item?.id;
 				if (r.doi) state.doiMap.set(r.doi, res.item.id);
+				relatedNowHeld(r, res.item?.id);
 				let gotPDF = res.pdf.startsWith("pdf");
 				if (res.proxyLoginNeeded) proxyLoginNeeded = true;
 				if (gotPDF) pdfs++;
@@ -5560,6 +5725,7 @@
 				let filled = String(res.pdf || "").startsWith("pdf");
 				if (filled) pdfs++;
 				if (r.doi && res.item?.id != null) state.doiMap.set(r.doi, res.item.id);
+				relatedNowHeld(r, res.item?.id);
 				// Held already: filed where asked (or its PDF filled) is what the add was for; nothing to warn about either way.
 				setRowStatus(r, (res.addedToCollection ? t("statusExistsFiled") : t("statusExists")) + (filled ? " · " + t("statusPdfFilled") : ""), filled || res.addedToCollection ? "ok" : "");
 			}

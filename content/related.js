@@ -15,10 +15,22 @@
    ever fetched per result. Co-citation (c4) would need the result's citing list, one request per
    result, and is deliberately not computed. A result the library already holds, or the other
    version (preprint/article) of a held paper, is flagged and left out of the ranking: its
-   references are the library's own and would only echo it. */
+   references are the library's own and would only echo it.
+
+   What counts as related (`band`): one weight unit is about one rare shared reference (a reference
+   cited by a single held paper weighs 1; one cited by a tenth of a 1,200-paper library about 0.35).
+     strong  a direct link (c1 or c2), or c3w >= 3
+     some    c3w >= 1: at least one specific shared reference, or several common ones
+     weak    c3w > 0 and < 1: only references much of the library cites (a methods classic)
+     none    score 0
+   The order combines the score with the search's own relevance: strong, then some, each by score;
+   weak and none together keep the order the search gave them, since a fraction of a common reference
+   says less about a paper than the search's own match does. */
 var ZotPoPRelated = (() => {
 	const DAY = 86400000, TTL = 30 * DAY, BATCH = 50, KEEP = 6000, TOP = 5;
 	const FORMULA = "score = 3*(c1+c2) + c3w";
+	const STRONG = 3, SOME = 1;
+	const bandOf = s => !s || s.score == null ? null : s.c1 + s.c2 > 0 || s.c3w >= STRONG ? "strong" : s.c3w >= SOME ? "some" : s.score > 0 ? "weak" : "none";
 	const shortId = v => String(v == null ? "" : v).replace(/^https?:\/\/openalex\.org\//i, "").trim().toUpperCase();
 	const isWork = v => /^W\d+$/.test(v);
 	const flat = v => String(v == null ? "" : v).normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -115,7 +127,8 @@ var ZotPoPRelated = (() => {
 	/* One result's score, without the explanation: c1, c2, c3, c3w and a lazy `top` (the five held papers
 	   that explain it), worked out only when something reads it. */
 	function scoreOne(ix, r) {
-		if (twinOf(ix, r)) return { held: true, score: null };
+		let twin = twinOf(ix, r);
+		if (twin) return { held: true, score: null, heldItemID: twin.itemID, heldTitle: twin.title };
 		let id = shortId(r.id);
 		if (!Array.isArray(r.refs) || !isWork(id)) return { unrankable: true, score: null };
 		let own = new Set(r.refs.map(shortId)), cites = new Set(), shared = 0, c3w = 0;
@@ -128,6 +141,7 @@ var ZotPoPRelated = (() => {
 		for (let c of ix.refToClusters.get(id) || []) if (c.complete) citedBy.add(c);
 		c3w = round(c3w);
 		let score = { score: round(3 * (cites.size + citedBy.size) + c3w), c1: cites.size, c2: citedBy.size, c3: shared, c3w, lowConf: ix.incomplete };
+		score.band = bandOf(score);
 		let explain = () => {
 			let per = new Map(), note = c => { if (!per.has(c)) per.set(c, { c, cites: false, citedBy: false, w: 0 }); return per.get(c); };
 			for (let ref of own) {
@@ -137,9 +151,14 @@ var ZotPoPRelated = (() => {
 			}
 			for (let c of citedBy) note(c).citedBy = true;
 			return [...per.values()].map(p => ({ itemID: p.c.itemID, title: p.c.title, why: [p.cites && "cites", p.citedBy && "citedBy", p.w > 0 && "shared"].filter(Boolean), shared: round(p.w), direct: (p.cites ? 1 : 0) + (p.citedBy ? 1 : 0) }))
-				.sort((a, b) => b.direct - a.direct || b.shared - a.shared).slice(0, TOP).map(({ direct, ...rest }) => rest);
+				.sort((a, b) => b.direct - a.direct || b.shared - a.shared).map(({ direct, ...rest }) => rest);
 		};
-		Object.defineProperty(score, "top", { enumerable: true, configurable: true, get() { let v = explain(); Object.defineProperty(score, "top", { value: v, enumerable: true, writable: true, configurable: true }); return v; } });
+		/* `top`: the five held papers behind the score (the tooltip). `linked()`: every held paper it connects
+		   to, in the same order (the detail's "why this paper" list). Both worked out on first read. */
+		let all = null;
+		const linked = () => all || (all = explain());
+		Object.defineProperty(score, "linked", { value: linked, enumerable: false, configurable: true });
+		Object.defineProperty(score, "top", { enumerable: true, configurable: true, get() { let v = linked().slice(0, TOP); Object.defineProperty(score, "top", { value: v, enumerable: true, writable: true, configurable: true }); return v; } });
 		return score;
 	}
 
@@ -167,10 +186,16 @@ var ZotPoPRelated = (() => {
 		return scores;
 	}
 
-	/* Highest score first (ties keep the list's own order), then held, then not rankable. */
+	/* Strong links first, then some, each by score (ties keep the list's own order); then weak and none
+	   in the search's own order; then held, then not yet scored, then not rankable. */
+	const BAND_RANK = { strong: 0, some: 1, weak: 2, none: 2 };
+	function rankOf(s) { return !s ? 4 : s.unrankable ? 5 : s.held ? 3 : BAND_RANK[s.band || bandOf(s)] ?? 2; }
 	function orderOf(results, scores) {
-		let tier = k => { let s = scores.get(k); return !s ? 2 : s.unrankable ? 3 : s.held ? 1 : 0; };
-		return results.map((r, i) => [r.key, i]).sort((a, b) => tier(a[0]) - tier(b[0]) || (scores.get(b[0])?.score ?? 0) - (scores.get(a[0])?.score ?? 0) || a[1] - b[1]).map(x => x[0]);
+		let byScore = t => t < 2;
+		return results.map((r, i) => [r.key, i]).sort((a, b) => {
+			let sa = scores.get(a[0]), sb = scores.get(b[0]), ta = rankOf(sa), tb = rankOf(sb);
+			return ta - tb || (byScore(ta) ? (sb?.score ?? 0) - (sa?.score ?? 0) : 0) || a[1] - b[1];
+		}).map(x => x[0]);
 	}
 
 	/* Resolves reference lists (cache first, then batched OpenAlex filters) and scores. Never fetches
@@ -251,7 +276,7 @@ var ZotPoPRelated = (() => {
 		return out;
 	}
 
-	return { FORMULA, TTL, BATCH, shortId, flat, createStore, scoreAll, scoreAllAsync, buildIndex, orderOf, rank };
+	return { FORMULA, TTL, BATCH, STRONG, SOME, bandOf, rankOf, shortId, flat, createStore, scoreAll, scoreAllAsync, buildIndex, orderOf, rank };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPRelated;

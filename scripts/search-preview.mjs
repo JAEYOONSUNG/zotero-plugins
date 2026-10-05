@@ -794,7 +794,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	document.getElementById("detail").style.cssText = "--detail-max: 560px";
 	const translatedPage = page();
 	document.getElementById("detail").style.cssText = "";
-	// again: served from memory; the original folds away and comes back
+	// again: "Translate again" asks anew (the abstract and the title, one call each); the original folds away and comes back
 	fire(document.getElementById("d-tr-run"));
 	await wait(40);
 	trace.translate.again = { calls: stubbed.translate.length };
@@ -847,7 +847,7 @@ export function checkPreview(out) {
 		if (!/\+34/.test(c.pop.delta || "") || !/→/.test(c.pop.delta || "")) problems.push("the card should say +34 since the last look; got " + c.pop.delta);
 		if (!c.closedByEscape) problems.push("Escape should close the citation card");
 		if (!c.metricsTrend) problems.push("the side card should chart the whole result set's citations per year");
-		if (out.stubbed.translate.length !== 2 || tr.again.calls !== 2) problems.push("translation should make one call for the abstract and one for the title, then none from memory; got " + out.stubbed.translate.length + "/" + tr.again.calls);
+		if (out.stubbed.translate.length !== 4 || tr.again.calls !== 4) problems.push("translation should make one call for the abstract and one for the title, and Translate again one more each; got " + out.stubbed.translate.length + "/" + tr.again.calls);
 		if (tr.call.langto !== "ko-KR" || !tr.call.hasPluginID || tr.call.keys.join() !== "langto,pluginID") problems.push("Translate for Zotero should be called with langto and pluginID only; got " + JSON.stringify(tr.call));
 		if (!/DeepL Free/.test(tr.done.via) || !/한국어/.test(tr.done.via) || !/가상 초록/.test(tr.done.body) || !tr.done.title || tr.done.originalHidden || !/Fictional abstract/.test(tr.done.original)) problems.push("the translation should sit under the original with the service named; got " + JSON.stringify(tr.done));
 		if (!tr.folded.originalHidden || tr.unfolded.originalHidden) problems.push("the original should fold and unfold");

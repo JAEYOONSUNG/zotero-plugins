@@ -12,13 +12,13 @@ Zotero.ZotPoP = {
 	_loginWindow: null,
 	_prefPaneID: null,
 
-	t(key) {
+	t(key, ...args) {
 		try {
 			let locale = Zotero.ZotPoPI18N.resolveLocale(
 				Zotero.Prefs.get("extensions.zotpop.language", true) || "en",
 				Zotero.locale
 			);
-			return Zotero.ZotPoPI18N.make(locale)(key);
+			return Zotero.ZotPoPI18N.make(locale)(key, ...args);
 		}
 		catch (e) {
 			return key;
@@ -109,11 +109,12 @@ Zotero.ZotPoP = {
 	updateStatusText(result) {
 		if (!result) return this.t("updateStatusNever");
 		let when = result.at ? " · " + new Date(result.at).toLocaleString() : "";
+		// A string that takes a value is called by t itself: t(key, value), not t(key)(value).
 		let t = this.t.bind(this);
-		let text = result.status === "current" ? t("updateStatusCurrent")(result.version)
-			: result.status === "installed" ? t("updateStatusInstalled")(result.latest)
-			: result.status === "deferred" ? t("updateStatusDeferred")(result.latest)
-			: result.status === "error" ? t("updateStatusError")(result.message || "")
+		let text = result.status === "current" ? t("updateStatusCurrent", result.version)
+			: result.status === "installed" ? t("updateStatusInstalled", result.latest)
+			: result.status === "deferred" ? t("updateStatusDeferred", result.latest)
+			: result.status === "error" ? t("updateStatusError", result.message || "")
 			: result.status === "off" ? t("updateStatusOff")
 			: t("updateStatusNever");
 		return text + when;
@@ -135,6 +136,8 @@ Zotero.ZotPoP = {
 			for (let el of doc.querySelectorAll("[data-i18n-label]")) el.setAttribute("label", this.t(el.getAttribute("data-i18n-label")));
 			let status = doc.getElementById("zotpop-update-status");
 			if (status) status.value = this.updateStatusText(this.updater ? this.updater.lastResult() : null);
+			for (let el of doc.querySelectorAll("[data-i18n-aria]")) el.setAttribute("aria-label", this.t(el.getAttribute("data-i18n-aria")));
+			this.showJcrStatus(doc);
 		}
 		catch (e) {
 			Zotero.logError(e);
@@ -170,6 +173,52 @@ Zotero.ZotPoP = {
 			{ Zotero, plugin: this }
 		);
 		return this._loginWindow;
+	},
+
+	/* The JCR export in <data dir>/zotpop/journals: which file, how many journals, which edition. A bare list
+	   cannot say its year, so the pane offers to set it; the year is written to jcr.meta.json beside the
+	   export, never into the reader's own file. */
+	_jcrModule() {
+		if (!this._jcr) { let scope = {}; Services.scriptloader.loadSubScript(this.rootURI + "content/jcr.js", scope); this._jcr = scope.ZotPoPJCR; }
+		return this._jcr;
+	},
+	_journalsDir() {
+		return typeof PathUtils !== "undefined" && Zotero.DataDirectory?.dir ? PathUtils.join(Zotero.DataDirectory.dir, "zotpop", "journals") : null;
+	},
+	async readJcr() {
+		let J = this._jcrModule(), dir = this._journalsDir();
+		if (!dir || typeof IOUtils === "undefined" || !await IOUtils.exists(dir)) return { J, dir, fileName: null };
+		let fileName = J.pickFile(await IOUtils.getChildren(dir));
+		if (!fileName) return { J, dir, fileName: null };
+		let data = null, meta = null;
+		try { data = JSON.parse(await IOUtils.readUTF8(PathUtils.join(dir, fileName))); } catch (e) { return { J, dir, fileName, broken: true }; }
+		try { let m = PathUtils.join(dir, J.META_FILE); if (await IOUtils.exists(m)) meta = JSON.parse(await IOUtils.readUTF8(m)); } catch (e) { meta = null; }
+		return { J, dir, fileName, data, meta };
+	},
+	async showJcrStatus(doc, note = "") {
+		let label = doc.getElementById("zotpop-jcr-status"), input = doc.getElementById("zotpop-jcr-year"), button = doc.getElementById("zotpop-jcr-year-save");
+		if (!label) return;
+		try {
+			let read = await this.readJcr(), t = (key, ...args) => this.t(key, ...args);
+			if (!read.fileName || read.broken) {
+				label.value = read.broken ? t("prefJcrBroken", read.fileName) : t("prefJcrNone");
+				if (input) input.hidden = true; if (button) button.hidden = true;
+				return;
+			}
+			let st = read.J.statusOf({ fileName: read.fileName, data: read.data, meta: read.meta });
+			label.value = t("prefJcrStatus", st.file, st.rows, st.edition.jcrYear ? st.edition.label : "", st.edition.from, st.staleMeta) + (note ? " " + note : "");
+			if (input) { input.hidden = !st.canSetYear; if (!input.value) input.value = String(st.edition.jcrYear || st.suggest); }
+			if (button) button.hidden = !st.canSetYear;
+		}
+		catch (e) { Zotero.logError(e); label.value = ""; }
+	},
+	async saveJcrYear(doc) {
+		let input = doc.getElementById("zotpop-jcr-year");
+		let read = await this.readJcr(), J = read.J;
+		let record = read.fileName && !read.broken ? J.metaRecord(input && input.value, read.fileName, read.data) : null;
+		if (!record) { await this.showJcrStatus(doc, this.t("prefJcrYearInvalid")); return; }
+		await IOUtils.writeUTF8(PathUtils.join(read.dir, J.META_FILE), JSON.stringify(record, null, 1));
+		await this.showJcrStatus(doc, this.t("prefJcrYearSaved"));
 	},
 
 	setProxyPrefix(doc, value) {

@@ -22,16 +22,46 @@ var ZotPoPJCR = (function () {
 	   { jcrYear: 2026, rows: [...] } (or jifYear, the year before the release), or in its name,
 	   jcr-2026.json; a bare list of rows is labelled "JCR" with no year. */
 	const YEAR = value => { let n = Number(String(value ?? "").match(/^\s*(?:JCR\s*)?(\d{4})\s*$/i)?.[1]); return Number.isInteger(n) && n >= 1975 && n <= 2100 ? n : null; };
-	function editionOf(data, fileName) {
-		let jcrYear = null, jifYear = null;
+	/* A bare list cannot carry its year, and the reader's export is theirs: it is never rewritten. The year
+	   goes into a small file beside it instead, jcr.meta.json { jcrYear, file, rows }, which counts only for
+	   the file it names and only while that file still has the same number of rows (a new export under the
+	   old name is not given last year's label). The file's own year, then its name, outrank it. */
+	const META_FILE = "jcr.meta.json";
+	const rowsOf = data => Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
+	function metaApplies(meta, data, fileName) {
+		if (!meta || typeof meta !== "object" || !YEAR(meta.jcrYear)) return false;
+		let name = String(fileName || "").split(/[\\/]/).pop();
+		return String(meta.file || "") === name && (meta.rows == null || Number(meta.rows) === rowsOf(data).length);
+	}
+	function editionOf(data, fileName, meta = null) {
+		let jcrYear = null, jifYear = null, from = null;
 		if (data && !Array.isArray(data) && typeof data === "object") {
 			jcrYear = YEAR(data.jcrYear ?? data.edition);
 			jifYear = YEAR(data.jifYear);
+			if (jcrYear || jifYear) from = "file";
 		}
-		if (!jcrYear && !jifYear) jcrYear = YEAR(String(fileName || "").match(/jcr[\s_-]*(\d{4})/i)?.[1]);
+		if (!jcrYear && !jifYear) { jcrYear = YEAR(String(fileName || "").match(/jcr[\s_-]*(\d{4})/i)?.[1]); if (jcrYear) from = "name"; }
+		if (!jcrYear && !jifYear && metaApplies(meta, data, fileName)) { jcrYear = YEAR(meta.jcrYear); from = "meta"; }
 		if (jcrYear && !jifYear) jifYear = jcrYear - 1;
 		if (jifYear && !jcrYear) jcrYear = jifYear + 1;
-		return { jcrYear, jifYear, label: jcrYear ? "JCR " + jcrYear + " (JIF " + jifYear + ")" : "JCR" };
+		return { jcrYear, jifYear, from, label: jcrYear ? "JCR " + jcrYear + " (JIF " + jifYear + ")" : "JCR" };
+	}
+	// What the sidecar holds for a year the reader sets: the year, the file it is about and its row count.
+	function metaRecord(year, fileName, data) {
+		let jcrYear = YEAR(year);
+		if (!jcrYear) return null;
+		return { jcrYear, file: String(fileName || "").split(/[\\/]/).pop(), rows: rowsOf(data).length, savedAt: new Date().toISOString() };
+	}
+	/* The status line under the journals folder: which file, how many journals, which edition and where that
+	   year came from; `canSetYear` when the file and its name say nothing, `staleMeta` when a sidecar names
+	   this file but no longer matches it. `suggest` is the newest edition likely out (JCR is released in June). */
+	function statusOf({ fileName = null, data = null, meta = null, now = new Date() } = {}) {
+		if (!fileName) return { file: null, rows: 0, edition: editionOf(null), canSetYear: false };
+		let edition = editionOf(data, fileName, meta), rows = rowsOf(data).length;
+		let named = meta && String(meta.file || "") === String(fileName).split(/[\\/]/).pop();
+		return { file: fileName, rows, edition, canSetYear: edition.from === null || edition.from === "meta",
+			staleMeta: Boolean(named && edition.from !== "meta" && edition.from === null),
+			suggest: now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1 };
 	}
 	let edition = editionOf(null);
 	// The export to read from the journals folder: the newest jcr-YYYY.json, else jcr.json; null for none.
@@ -100,9 +130,9 @@ var ZotPoPJCR = (function () {
 
 	let table = null, held = null;
 	// Rows as the export gives them: [title, abbreviation, issn, eIssn, jif], as a bare list or { jcrYear, rows }.
-	function load(data, { fileName = "" } = {}) {
-		let rows = Array.isArray(data) ? data : Array.isArray(data?.rows) ? data.rows : [];
-		edition = editionOf(data, fileName);
+	function load(data, { fileName = "", meta = null } = {}) {
+		let rows = rowsOf(data);
+		edition = editionOf(data, fileName, meta);
 		held = rows; table = build(held); return table;
 	}
 	// The rows the table was built from: the journal box finds journals by their JCR names and abbreviations too.
@@ -127,7 +157,7 @@ var ZotPoPJCR = (function () {
 		return n;
 	}
 
-	return { get EDITION() { return edition.label; }, edition: () => ({ ...edition }), pickFile, build, load, rows, shared, apply, flat, issnKey };
+	return { get EDITION() { return edition.label; }, edition: () => ({ ...edition }), META_FILE, YEAR, editionOf, metaRecord, statusOf, pickFile, build, load, rows, shared, apply, flat, issnKey };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPJCR;

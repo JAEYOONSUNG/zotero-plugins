@@ -166,6 +166,8 @@ var ZotPoPAuthors = (function () {
 		const q = unique.join(" OR ");
 		return { parsed, q, url: ORCID_SEARCH + "?q=" + encodeURIComponent(q) + "&rows=" + ORCID_ROWS };
 	}
+	// The next page of the same name query: ORCID pages by `start`.
+	const orcidPageURL = (url, start) => start > 0 ? url + "&start=" + start : url;
 
 	function orcidCandidate(row) {
 		const id = parseOrcid(row?.["orcid-id"]);
@@ -275,27 +277,32 @@ var ZotPoPAuthors = (function () {
 		}
 	}
 
-	async function orcidNameCandidates(value, http, ctx) {
+	async function orcidNameCandidates(value, http, ctx, start = 0) {
 		const built = orcidNameQuery(value);
 		if (!built) throw new Error("Enter an ORCID iD or an author name");
 		if (typeof http?.getJSON !== "function") throw new Error("ORCID requires a JSON HTTP transport");
-		const data = await orcidFetch(built.url, http, ctx);
+		const data = await orcidFetch(orcidPageURL(built.url, start), http, ctx);
 		const rows = data["expanded-result"] ?? [];
 		if (!Array.isArray(rows)) throw new Error("ORCID returned an invalid search response");
 		const seen = new Set(), candidates = [];
 		for (const row of rows) { const c = orcidCandidate(row); if (c && !seen.has(c.id)) { seen.add(c.id); candidates.push(c); } }
-		const provenance = { provider: "orcid", endpoint: "expanded-search", query: built.q, numFound: Number(data["num-found"]) || candidates.length, capturedAt: new Date().toISOString(), complete: true, publicOnly: true };
+		const numFound = Number(data["num-found"]) || start + candidates.length;
+		const provenance = { provider: "orcid", endpoint: "expanded-search", query: built.q, numFound, capturedAt: new Date().toISOString(), complete: true, publicOnly: true };
 		for (const c of candidates) c.provenance = { provider: "orcid", endpoint: "expanded-search", capturedAt: provenance.capturedAt };
 		candidates.authorProvenance = provenance;
-		return { candidates, parsed: built.parsed, provenance };
+		// Where the next page starts, and how many ORCID holds in all; null when this was the last page.
+		const next = start + rows.length;
+		const page = { next: rows.length >= ORCID_ROWS && next < numFound ? next : null, total: numFound };
+		return { candidates, parsed: built.parsed, provenance, page };
 	}
 
 	async function searchOrcidNames(value, http, ctx) {
-		const { candidates, parsed, provenance } = await orcidNameCandidates(value, http, ctx);
+		const { candidates, parsed, provenance, page } = await orcidNameCandidates(value, http, ctx);
 		await enrichCandidates(candidates, http, ctx);
 		await institutionTiers(candidates, http, ctx);
 		rankOrcidCandidates(candidates, parsed);
 		candidates.authorProvenance = provenance;
+		candidates.paging = { orcid: page };
 		return candidates;
 	}
 
@@ -343,10 +350,68 @@ var ZotPoPAuthors = (function () {
 		return { ...c, provider: "combined", sources: ["orcid"], orcid: c.id, openalexId: c.openalexId || null };
 	}
 
-	async function openAlexAuthorSearch(value, http, ctx) {
-		const url = "https://api.openalex.org/authors?search=" + encodeURIComponent(value) + "&per-page=" + OA_AUTHOR_ROWS + "&select=" + OA_AUTHOR_SELECT + Sources.openAlexAuth(ctx);
+	async function openAlexAuthorSearch(value, http, ctx, pageNo = 1) {
+		const url = "https://api.openalex.org/authors?search=" + encodeURIComponent(value) + "&per-page=" + OA_AUTHOR_ROWS + (pageNo > 1 ? "&page=" + pageNo : "") + "&select=" + OA_AUTHOR_SELECT + Sources.openAlexAuth(ctx);
 		const data = await cancellable(() => Sources.withRetry(() => http.getJSON(url, {}, ctx.signal), {}, ctx), ctx);
-		return (Array.isArray(data?.results) ? data.results : []).map(openAlexCandidate).filter(Boolean);
+		const rows = Array.isArray(data?.results) ? data.results : [];
+		const total = Number(data?.meta?.count);
+		const list = rows.map(openAlexCandidate).filter(Boolean);
+		// The next page number, null after the last one (or when OpenAlex did not say how many there are).
+		list.page = { next: rows.length >= OA_AUTHOR_ROWS && Number.isFinite(total) && pageNo * OA_AUTHOR_ROWS < total ? pageNo + 1 : null, total: Number.isFinite(total) ? total : null };
+		return list;
+	}
+
+	/* OpenAlex cards and ORCID rows into one card per person. `prior` are the cards already shown (a "more"
+	   page): a person among them is merged into that card, never listed twice. Returns the new cards only. */
+	async function combineCandidates(oaRows, orcidRows, http, ctx, prior = []) {
+		const list = [], byOrcid = new Map(), byOa = new Map();
+		for (const c of prior) {
+			if (c.orcid) byOrcid.set(c.orcid, c);
+			for (const id of [c.openalexId, ...(c.alsoIds || [])]) if (id) byOa.set(id, c);
+		}
+		// OpenAlex sometimes holds one person as several author records that carry the same ORCID iD (the live
+		// "Sheila Ingemann" search returns two): one card, the figures added up, the works read through the iD.
+		for (const c of oaRows.slice().sort((a, b) => b.worksCount - a.worksCount)) {
+			if (byOa.has(c.openalexId)) continue;
+			const same = c.orcid && byOrcid.get(c.orcid);
+			if (same) {
+				same.alsoIds = [...(same.alsoIds || []), c.openalexId]; same.worksCount += c.worksCount; same.citations += c.citations;
+				same.hIndexes = [...(same.hIndexes || [{ openalexId: same.openalexId, hIndex: same.hIndex }]), { openalexId: c.openalexId, hIndex: c.hIndex }];
+				same.hIndex = null; // the h of a union of works is not the max of the parts; computed from the loaded works instead
+				same.otherNames = [...new Set([...(same.otherNames || []), c.name, ...c.otherNames])];
+				byOa.set(c.openalexId, same); continue;
+			}
+			list.push(c); byOa.set(c.openalexId, c); if (c.orcid) byOrcid.set(c.orcid, c);
+		}
+		const orcidOnly = [];
+		for (const row of orcidRows) {
+			const hit = byOrcid.get(row.id);
+			if (hit) mergeCandidate(hit, row); else orcidOnly.push(orcidAsCombined(row));
+		}
+		// One batched OpenAlex request for the ORCID profiles the search did not already return.
+		if (orcidOnly.length) await enrichCandidates(orcidOnly, http, ctx);
+		for (const c of orcidOnly) {
+			const known = [c.openalexId, ...(c.alsoIds || [])].map(id => id && byOa.get(id)).find(hit => hit && prior.includes(hit));
+			if (known) { if (!known.orcid) { known.orcid = c.orcid; mergeCandidate(known, c); } continue; }
+			// One iD on several OpenAlex records: the ORCID card holds them all (ids, summed figures), and any of
+			// those records the name search listed on its own, without the iD, is that same person, not a second card.
+			if (c.alsoIds?.length) {
+				const dupes = [...new Set([c.openalexId, ...c.alsoIds].map(id => byOa.get(id)).filter(hit => hit && !hit.orcid && list.includes(hit)))];
+				if (dupes.length) {
+					for (const dupe of dupes) list.splice(list.indexOf(dupe), 1);
+					c.sources = ["openalex", "orcid"];
+					c.otherNames = [...new Set([...(c.otherNames || []), ...dupes.flatMap(d => [d.name, ...(d.otherNames || [])])])].filter(name => name && name !== c.name);
+					if (!c.topic) c.topic = dupes[0].topic;
+				}
+				c.id = c.openalexId || c.orcid; list.push(c);
+				for (const id of [c.openalexId, ...c.alsoIds]) byOa.set(id, c);
+				continue;
+			}
+			const hit = c.openalexId ? byOa.get(c.openalexId) : null;
+			if (hit && !hit.orcid) { hit.orcid = c.orcid; mergeCandidate(hit, c); }
+			else { c.id = c.openalexId || c.orcid; list.push(c); }
+		}
+		return list;
 	}
 
 	async function searchCombined(value, http, ctx) {
@@ -379,49 +444,54 @@ var ZotPoPAuthors = (function () {
 		if (!ctx.errors) ctx.errors = [];
 		if (oa.status === "rejected") ctx.errors.push("OpenAlex: " + oa.reason.message);
 		if (or.status === "rejected") ctx.errors.push("ORCID: " + or.reason.message);
-		// OpenAlex sometimes holds one person as several author records that carry the same ORCID iD (the live
-		// "Sheila Ingemann" search returns two): one card, the figures added up, the works read through the iD.
-		const list = [], byOrcid = new Map(), byOa = new Map();
-		for (const c of (oa.status === "fulfilled" ? oa.value : []).slice().sort((a, b) => b.worksCount - a.worksCount)) {
-			const same = c.orcid && byOrcid.get(c.orcid);
-			if (same) {
-				same.alsoIds = [...(same.alsoIds || []), c.openalexId]; same.worksCount += c.worksCount; same.citations += c.citations;
-				same.hIndexes = [...(same.hIndexes || [{ openalexId: same.openalexId, hIndex: same.hIndex }]), { openalexId: c.openalexId, hIndex: c.hIndex }];
-				same.hIndex = null; // the h of a union of works is not the max of the parts; computed from the loaded works instead
-				same.otherNames = [...new Set([...same.otherNames, c.name, ...c.otherNames])];
-				byOa.set(c.openalexId, same); continue;
-			}
-			list.push(c); byOa.set(c.openalexId, c); if (c.orcid) byOrcid.set(c.orcid, c);
-		}
-		const orcidOnly = [];
-		for (const row of or.status === "fulfilled" ? or.value.candidates : []) {
-			const hit = byOrcid.get(row.id);
-			if (hit) mergeCandidate(hit, row); else orcidOnly.push(orcidAsCombined(row));
-		}
-		// One batched OpenAlex request for the ORCID profiles the search did not already return.
-		if (orcidOnly.length) await enrichCandidates(orcidOnly, http, ctx);
-		for (const c of orcidOnly) {
-			// One iD on several OpenAlex records: the ORCID card holds them all (ids, summed figures), and any of
-			// those records the name search listed on its own, without the iD, is that same person, not a second card.
-			if (c.alsoIds?.length) {
-				const dupes = [...new Set([c.openalexId, ...c.alsoIds].map(id => byOa.get(id)).filter(hit => hit && !hit.orcid))];
-				if (dupes.length) {
-					for (const dupe of dupes) list.splice(list.indexOf(dupe), 1);
-					c.sources = ["openalex", "orcid"];
-					c.otherNames = [...new Set([...(c.otherNames || []), ...dupes.flatMap(d => [d.name, ...(d.otherNames || [])])])].filter(name => name && name !== c.name);
-					if (!c.topic) c.topic = dupes[0].topic;
-				}
-				c.id = c.openalexId || c.orcid; list.push(c);
-				for (const id of [c.openalexId, ...c.alsoIds]) byOa.set(id, c);
-				continue;
-			}
-			const hit = c.openalexId ? byOa.get(c.openalexId) : null;
-			if (hit && !hit.orcid) { hit.orcid = c.orcid; mergeCandidate(hit, c); }
-			else { c.id = c.openalexId || c.orcid; list.push(c); }
-		}
+		const list = await combineCandidates(oa.status === "fulfilled" ? oa.value : [], or.status === "fulfilled" ? or.value.candidates : [], http, ctx);
 		const parsed = or.status === "fulfilled" ? or.value.parsed : parseNameInput(value);
 		await institutionTiers(list, http, ctx);
-		return finish(rankCombinedCandidates(list, parsed));
+		const out = finish(rankCombinedCandidates(list, parsed));
+		// Where each service's next page starts. A service that failed is not offered again from here.
+		out.paging = { openalex: oa.status === "fulfilled" ? oa.value.page : null, orcid: or.status === "fulfilled" ? or.value.page : null };
+		return out;
+	}
+
+	/* The next page of a name search, only when asked ("more people"): OpenAlex's next 15 and ORCID's next 20,
+	   each only while that service has more. New cards are enriched in one batched OpenAlex request, their labs'
+	   tiers in one more; cards already shown are merged into, never repeated. Resolves { added, paging }. */
+	const hasMorePeople = paging => Boolean(paging && (paging.openalex?.next || paging.orcid?.next));
+	async function moreProfiles(provider, input, prior, paging, http, ctx = {}) {
+		checkCancelled(ctx);
+		const value = String(input ?? "").trim();
+		if (!value || !hasMorePeople(paging)) return { added: [], paging: paging || null };
+		if (!ctx.errors) ctx.errors = [];
+		const parsed = parseNameInput(value);
+		if (provider === "orcid") {
+			const { candidates, page } = await orcidNameCandidates(value, http, ctx, paging.orcid.next);
+			const shown = new Set((prior || []).map(c => c.id));
+			const added = candidates.filter(c => !shown.has(c.id));
+			await enrichCandidates(added, http, ctx);
+			await institutionTiers(added, http, ctx);
+			rankOrcidCandidates(added, parsed);
+			return { added, paging: { orcid: page } };
+		}
+		if (provider !== "combined") return { added: [], paging: null };
+		const askOa = paging.openalex?.next && !ctx.openAlexSpent, askOr = paging.orcid?.next;
+		if (paging.openalex?.next && ctx.openAlexSpent) ctx.errors.push("OpenAlex: budget spent for today");
+		if (!askOa && !askOr) return { added: [], paging };
+		const [oa, or] = await Promise.allSettled([askOa ? openAlexAuthorSearch(value, http, ctx, paging.openalex.next) : Promise.resolve(null),
+			askOr ? orcidNameCandidates(value, http, ctx, paging.orcid.next) : Promise.resolve(null)]);
+		for (const r of [oa, or]) if (r.status === "rejected" && r.reason?.name === "AbortError") throw r.reason;
+		if (oa.status === "rejected") ctx.errors.push("OpenAlex: " + oa.reason.message);
+		if (or.status === "rejected") ctx.errors.push("ORCID: " + or.reason.message);
+		if (oa.status === "rejected" && or.status === "rejected") throw or.reason;
+		const oaRows = oa.status === "fulfilled" && oa.value ? oa.value : [], orRows = or.status === "fulfilled" && or.value ? or.value.candidates : [];
+		const added = await combineCandidates(oaRows, orRows, http, ctx, prior || []);
+		await institutionTiers(added, http, ctx);
+		const capturedAt = new Date().toISOString();
+		for (const c of added) c.provenance = { provider: "combined", capturedAt };
+		rankCombinedCandidates(added, parsed);
+		// A page that failed keeps its place, so pressing again retries it.
+		return { added, paging: {
+			openalex: oa.status === "fulfilled" && oa.value ? oa.value.page : paging.openalex,
+			orcid: or.status === "fulfilled" && or.value ? or.value.page : paging.orcid } };
 	}
 
 	// ---------------------------------------------------------------- who is this paper's author: local clustering
@@ -933,7 +1003,7 @@ var ZotPoPAuthors = (function () {
 		return attach(records, profile, { ...clone(result.provenance), provider: "scholar", mode: "name-search", identityConfirmed: false }, ctx);
 	}
 
-	return { searchProfiles, loadPublications, rankCombinedCandidates, clusterPeople, nameParts, formsCompatible, explainMetrics, defaultMetricsBasis, loadNamePublications, parseScholarProfile, parseOrcid, parseNameInput, orcidNameQuery, rankOrcidCandidates,
+	return { searchProfiles, moreProfiles, hasMorePeople, OA_AUTHOR_ROWS, ORCID_ROWS, loadPublications, rankCombinedCandidates, clusterPeople, nameParts, formsCompatible, explainMetrics, defaultMetricsBasis, loadNamePublications, parseScholarProfile, parseOrcid, parseNameInput, orcidNameQuery, rankOrcidCandidates,
 		linkedInProfileURL, linkedInSearchURL, linkedInTarget, orcidLinkedIn, summarizeOrcidRecord, orcidSummary };
 })();
 

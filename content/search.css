@@ -519,6 +519,14 @@ button.watch-btn[aria-pressed="true"] { background: var(--seg-on); color: var(--
 .rel-chip { background: var(--chip); color: var(--text); font-weight: 600; }
 .rel-chip.muted { color: var(--muted); font-weight: 500; }
 #results-table td.title .rel-chip { margin-right: 8px; }
+.rel-chip.strong { background: var(--pos-bg); color: var(--pos-ink); }
+/* "Why this paper": the held papers the ranking linked it to, in a soft tinted box; each title selects that paper in Zotero. */
+.d-why { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: var(--r-box); background: var(--bg-tint); font-size: 11px; line-height: 16px; color: var(--muted); }
+.d-why .why-head { font-weight: 600; color: var(--text); }
+.d-why .why-list { display: flex; flex-direction: column; gap: 2px; }
+.d-why .why-item { display: flex; align-items: center; gap: 8px; min-height: 26px; min-width: 0; }
+.d-why button.why-title { display: block; flex: 0 1 auto; min-width: 0; height: 26px; padding: 0 8px; margin-left: -8px; font-size: 12px; line-height: 16px; color: var(--text); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline; text-decoration-color: var(--border-strong); }
+.d-why .why-note { flex: none; white-space: nowrap; }
 .related-btn[aria-pressed="true"] { background: var(--seg-on); color: var(--seg-on-ink); border-color: transparent; }
 #results-table td.title .new-mark { margin-right: 8px; background: var(--pos-bg); color: var(--pos-ink); font-weight: 600; }
 .tier { font-weight: 600; }
@@ -877,7 +885,10 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 
 /* PDF preview inside the detail card: the title and actions stay, the rest of the card makes room. */
 #detail[data-preview] { max-height: min(82vh, 760px); }
-#detail[data-preview] #detail-body > :not(.detail-head):not(.d-preview) { display: none; }
+#detail[data-preview] #detail-body > :not(.detail-head):not(.d-preview):not(#d-badges):not(.d-versions) { display: none; }
+/* While the PDF is open, what must not be missed stays above it: a retraction, "in library", the other version. */
+#detail[data-preview] .detail-head { order: -2; }
+#detail[data-preview] #d-badges, #detail[data-preview] .d-versions { order: -1; }
 .d-preview { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .d-preview[hidden] { display: none; }
 .dp-bar { display: flex; align-items: center; gap: 8px; }

@@ -133,16 +133,22 @@ var ZotPoPTranslate = (function () {
 		}
 
 		const cacheKey = (key, lang, field) => [key, lang, field].join("\u0001");
-		const cached = (key, lang, field) => cache.get(cacheKey(key, lang, field)) || null;
-		/* The same, remembered per (paper, language, field) for the session; a second ask while the first is on
-		   its way waits for it, so a double click costs one request. */
-		function translateCached({ key, lang, field = "abstract", text }) {
-			let id = cacheKey(key, lang, field), hit = cache.get(id);
-			if (hit) return Promise.resolve(Object.assign({ cached: true }, hit));
+		const norm = text => String(text == null ? "" : text).trim();
+		/* A remembered translation is of one text: when the paper's abstract or title changed since (a fuller
+		   abstract arrived), it is not shown or reused for the new text. */
+		const cached = (key, lang, field, text) => { let hit = cache.get(cacheKey(key, lang, field)) || null; return hit && (text === undefined || hit.source === norm(text)) ? hit : null; };
+		/* The same, remembered per (paper, language, field, text) for the session; a second ask while the first is
+		   on its way waits for it, so a double click costs one request. `fresh` ("Translate again") asks anew; the
+		   earlier translation stays until the new one arrives, and stays if it fails. */
+		function translateCached({ key, lang, field = "abstract", text, fresh = false }) {
+			let id = cacheKey(key, lang, field), hit = cached(key, lang, field, text);
+			if (hit && !fresh) return Promise.resolve(Object.assign({ cached: true }, hit));
 			if (inflight.has(id)) return inflight.get(id);
+			let source = norm(text);
 			let run = translate(text, lang).then(out => {
+				cache.delete(id);
 				if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
-				cache.set(id, out);
+				cache.set(id, Object.assign({}, out, { source }));
 				return out;
 			}).finally(() => inflight.delete(id));
 			inflight.set(id, run);
