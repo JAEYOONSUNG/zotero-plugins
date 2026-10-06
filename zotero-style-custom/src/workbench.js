@@ -376,6 +376,7 @@
      collections, relations, the trash) is named here by its source label and
      carries data-writes. The self-check sweep skips by this attribute, so it
      holds in every language; a test scans the source for writers not listed. */
+  const annotationNotes=new Map();/* libraryID:parent → {id, signature} of the note 이 문헌 주석에서 노트 만들기 made this session */
   let sweepJob=null;/* the running 모두 찾기, if any: {controller} */
   const worksFetches=new Set();/* AbortControllers of person-page Papers fetches; destroy() aborts them */
   const WRITES_CACHE_HANDLER=/\b(saveUI|setSeen|setSeenMany|setReadingQueue|saveWatchOptions|importHere|save|setRulesFor|putQuick|dropQuick|switchBrowser)\(|runtime\.(dirty\s*=[^=]|flush\(|cache\.\w+(\.\w+|\[[^\]]*\])*\s*=[^=]|set[A-Z]\w*\()|\breader\.(apply|reset|set|save|select|close|move|restore|rename|update|delete|undelete)\w*\(|\bmodel\.(create|delete|restore|add|remove|link|unlink|rename|update|set)\w*\(/;
@@ -1673,6 +1674,13 @@
     if(!disposed&&!runtime.cache.workbenchUI?.welcomed&&!welcome.childNodes.length){
      // One line, once, on the first open: where the features are and how a paper gets in.
      node('span','처음 여셨네요. 왼쪽 탭이 기능이고 ⌘/Ctrl K로 기능을 찾습니다. 보유 문헌 맨 위 요약과 읽기 진행에서 읽을 것을 고르고, 저자 추적의 새 논문 목록은 ↑↓와 e로 넘기며 확인합니다.',welcome);
+     // Keys and connections (OpenAlex, AI, DeepL) are listed where they are set; a Korean Zotero is offered the Korean panel here, once.
+     node('span','OpenAlex 키·AI·번역 연결은 Zotero 설정 → Style Custom 맨 위 ‘먼저 할 것’에서 확인합니다.',welcome,{class:'sc-muted'});
+     let hint={};try{hint=runtime.setupHints?.()||{};}catch(_){}
+     if(hint.suggestLanguage==='ko-KR'&&!runtime.i18n?.isKorean?.()){
+      const ko=button('한국어로 보기',async()=>{if(typeof runtime.setSetting!=='function')return;await runtime.setSetting('language','ko-KR');ko.remove();retranslate();await render();message('언어를 한국어로 바꿨습니다.');},welcome,{'data-writes':'setting'});
+      ko.textContent='한국어로 보기';CHROME.delete(ko);
+     }
      button('알겠어요',()=>{welcome.hidden=true;welcome.replaceChildren();saveUI({welcomed:true});},welcome);welcome.hidden=false;
     }if(!disposed&&!panel.hidden)(controls.hidden?body:search).focus?.();}else{navigationEpoch++;closeCommands(false);epoch++;loadEpoch++;aiEpoch++;clear();if(returnFocus?.isConnected&&!win.closed)returnFocus.focus?.();returnFocus=null;}}
   /* 읽기 대기, one store for every place that adds to it: kept per library
@@ -3444,7 +3452,9 @@
    // Zoom keeps the point under the pointer (or the middle, from the buttons) and never goes out past the fitted drawing.
    /* 출판 연도 bars, inside the card over the drawing: a span pressed keeps its papers (and the topics holding any) on the map. */
    const inYears=y=>{const r=state.graphYears;return !r||(Number(y)>=r.from&&Number(y)<=r.to);};
-   const keepYear=n=>!state.graphYears||(n.kind==='cluster'?n.years.some(inYears):inYears(n.year));
+   /* The span works only where its bars are drawn (the scope map, with two or more years): around one paper, or
+      in a scope of one year, a span left from before would hide papers with nothing on screen to clear it. */
+   const keepYear=n=>neighbourMode||!state.graphYears||(n.kind==='cluster'?n.years.some(inYears):inYears(n.year));
    // A folded topic under a year span says how many of its papers are in it.
    const countBubbles=()=>{for(const n of bubbles){const m=marks.get(n.id);if(!m)continue;const k=state.graphYears?n.years.filter(inYears).length:n.size;
     m.label.textContent=state.graphYears?`${plain(n.label)||T('이름 없는 주제')} · ${fmtN(k)}/${fmtN(n.size)}`:n.labelText;seatLabel(m,labelled.get(n.id));}};
@@ -3455,7 +3465,7 @@
     const drawYears=()=>{
      const old=mapFrame.querySelector('.sc-year-hist');
      const hist=yearHistogram(mapFrame,yearNodes,{range:state.graphYears||null,onChange:range=>{state.graphYears=range;kit.refilter();drawYears();}});
-     if(hist){if(old)old.replaceWith(hist);else mapFrame.insertBefore(hist,svg);}else old?.remove();
+     if(hist){if(old)old.replaceWith(hist);else mapFrame.insertBefore(hist,svg);}else{old?.remove();if(state.graphYears){state.graphYears=null;kit.refilter();}}
     };
     drawYears();
    }
@@ -3814,14 +3824,22 @@
     node('p',F('{0}에 새 노트',D(target[0].title)),host,{class:'sc-muted'});
     const draft=node('textarea',null,host,{'aria-label':'새 노트 내용',placeholder:'선택한 문헌에 새 노트 작성'}),actions=bar(host);const saveNote=button('새 노트 저장',async()=>{if(!draft.value.trim())throw new Error('빈 노트는 만들지 않으니 노트 내용을 먼저 입력하세요.');const submitted=draft.value,parent=one().id,libraryID=state.libraryID;const id=await library.createNote(parent,submitted);noteCache=null;finishDraft(draft,submitted,true);state.lastSavedNote={id,parent,libraryID};state.noteComposeOpen=null;await render();message('노트를 저장했습니다. 필요하면 저장한 노트를 열어 편집하세요.');},actions,{'data-variant':'primary','data-action-key':'create-note:'+state.libraryID+':'+[...state.selected].sort().join(',')});
     // 이 문헌의 주석만으로 노트를 만든다. 주석이 없으면 아무것도 만들지 않는다.
+    /* A second press made a second, identical note. The key keeps a redrawn copy of the button busy while
+       the first press runs; afterwards the same annotations with their note still there make no new one. */
     button('이 문헌 주석에서 노트 만들기',async()=>{
      const paper=target[0],parent=paper.id,libraryID=state.libraryID;
      const marks=await library.annotations([parent]);
      if(!marks.length){message('이 문헌에는 주석이 없어 노트를 만들지 않았습니다.');return;}
+     const signature=marks.map(a=>String(a.id)).sort().join(','),made=annotationNotes.get(libraryID+':'+parent);
+     if(made&&made.signature===signature){
+      const still=(await library.notes([String(parent)])).some(n=>String(n.id)===String(made.id));
+      if(still){state.lastSavedNote={id:made.id,parent,libraryID};await render();message('이 주석들로 만든 노트가 이미 있습니다. 주석이 늘면 다시 만들 수 있습니다.');return;}
+     }
      const id=await library.noteFromAnnotations(marks.map(a=>a.id));noteCache=null;
+     annotationNotes.set(libraryID+':'+parent,{id,signature});
      state.lastSavedNote={id,parent,libraryID};await render();
      message(`주석 ${marks.length}개로 노트를 만들었습니다.`);
-    },actions);
+    },actions,{'data-writes':'library','data-action-key':'note-from-annotations:'+state.libraryID+':'+target[0].id});
     if(state.lastSavedNote?.libraryID===state.libraryID&&state.selected.has(state.lastSavedNote.parent)){const id=state.lastSavedNote.id;button('저장한 노트 열기',()=>library.openItem(id),actions,{'data-opens':'window'});}
    }
    // The notes: the chosen paper's own when it sits in the scope and nothing
@@ -9308,7 +9326,7 @@
       the result box used to run together under the paper's title, and the
       note saying the service was not set up sat below the box it explained. */
    const askHead=sectionHead('요청',null,body);body.insertBefore(askHead,b);
-   if(!aiReady)body.insertBefore(node('p','Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소·모델·API 키를 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',null,{class:'sc-muted sc-settings-note'}),b);
+   if(!aiReady)body.insertBefore(node('p','이 Mac에 AI 브리지(플러그인 폴더의 bridge/install.sh)를 설치하거나 Zotero 설정 → Style Custom → 번역·AI에 AI 서버 주소와 모델을 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.',null,{class:'sc-muted sc-settings-note'}),b);
    b.insertBefore(node('span',T('출력 언어'),null,{class:'sc-settings-label'}),language);
    body.insertBefore(sectionHead('결과',null,body),output);
    // Nothing to stop until something is running.

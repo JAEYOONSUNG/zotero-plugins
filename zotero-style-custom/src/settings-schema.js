@@ -51,22 +51,46 @@
     {
       "id": "ai",
       "label": "번역·AI",
-      "description": "사용할 모델과 요청 문구를 직접 설정합니다. 요청은 사용자가 실행할 때만 전송됩니다."
+      "description": "AI는 이 Mac의 AI 브리지를 자동으로 찾아 쓰고, 다른 서버·모델·번역기와 요청 문구는 여기서 정합니다. 요청은 버튼을 누를 때만 보냅니다. ‘논문을 열면 AI 요약을 자동으로 만들기’를 켜면 논문을 열 때도 보냅니다."
     },
     {
       "id": "updates",
       "label": "업데이트",
-      "description": "GitHub에 올라온 새 버전을 확인하고 설치합니다. Zotero를 켜 둔 동안 하루 한 번 확인합니다."
+      "description": "GitHub에 올라온 새 버전을 확인하고 설치합니다. Zotero를 켜 둔 동안 하루 한 번, 그리고 Zotero를 켠 뒤 마지막 확인에서 6시간이 지났으면 곧 확인합니다."
     }
   ],
   "settings": [
+    {
+      "key": "language",
+      "keepOnReset": true,
+      "category": "menus",
+      "label": "Language / 언어",
+      "help": "기본값은 영어입니다. 한국어를 고르면 패널이 한국어로 바뀝니다. Zotero 언어 따르기는 Zotero가 한국어일 때만 한국어를 씁니다. 패널은 바로 바뀌고, 문헌 목록의 열 이름은 Zotero를 다시 시작하면 바뀝니다.",
+      "type": "select",
+      "literal": true,
+      "default": "en-US",
+      "options": [
+        {
+          "value": "en-US",
+          "label": "English"
+        },
+        {
+          "value": "ko-KR",
+          "label": "한국어"
+        },
+        {
+          "value": "auto",
+          "label": "Zotero 언어 따르기 / Follow Zotero"
+        }
+      ]
+    },
     {
       "key": "feature.AIGenerateRemark",
       "category": "ai",
       "label": "AI 읽기 메모 제안 사용",
       "type": "boolean",
       "default": true,
-      "description": "번역·AI 분류의 AI 서버 주소·모델·API 키가 있어야 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
+      "description": "이 Mac의 AI 브리지를 찾았거나 번역·AI 분류에 AI 서버 주소와 모델을 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -75,7 +99,7 @@
       "label": "AI 태그 제안 사용",
       "type": "boolean",
       "default": true,
-      "description": "번역·AI 분류의 AI 서버 주소·모델·API 키가 있어야 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
+      "description": "이 Mac의 AI 브리지를 찾았거나 번역·AI 분류에 AI 서버 주소와 모델을 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -238,7 +262,7 @@
       "label": "문헌 상세·노트·주석·필터·정렬·페이지 탐색 사용",
       "type": "boolean",
       "default": true,
-      "description": "연구 작업 패널 → 보유 문헌 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 화면100개씩 페이지 이동",
+      "description": "연구 작업 패널 → 보유 문헌 · 상태·별점·연도 필터 및 현재 컬렉션 범위; 한 페이지 문헌 수(기본 100)씩 페이지 이동",
       "consumer": "featureEnabled"
     },
     {
@@ -256,7 +280,7 @@
       "label": "관계·태그·저자 그래프 사용",
       "type": "boolean",
       "default": true,
-      "description": "연구 작업 패널 → 관계 그래프 · 화면 최대180노드, 검색으로 범위를 좁힘",
+      "description": "연구 작업 패널 → 관계 그래프 · ‘그래프 최대 문헌 수’를 넘는 범위는 주제 묶음으로 접어 보임(최대 2,000편); 검색으로 범위를 좁힘",
       "consumer": "featureEnabled"
     },
     {
@@ -330,7 +354,7 @@
       "label": "읽기 시간·상태 연동 사용",
       "type": "boolean",
       "default": true,
-      "description": "문헌 목록에 읽음 상태 열을 추가하고 읽기 시간과 연동합니다.",
+      "description": "기록된 읽기 시간으로 상태를 정합니다. 30초 넘게 읽은 문헌은 ‘읽는 중’으로 보입니다(‘읽기를 시작하면 읽는 중으로 자동 표시’도 켜져 있어야 함). 목록의 상태 열은 ‘읽기 상태 열 표시’가 정합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -447,7 +471,7 @@
       "label": "텍스트 태그·태그 수 사용",
       "type": "boolean",
       "default": true,
-      "description": "문헌 목록에 텍스트 태그와 태그 수 열을 추가합니다.",
+      "description": "문헌 목록에 태그 수 열을 추가합니다. 태그 열에 무엇을 보일지는 ‘색상 태그 표시 사용’과 ‘태그 열 표시 대상’이 정합니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -465,7 +489,7 @@
       "label": "초록 요약 사용",
       "type": "boolean",
       "default": true,
-      "description": "번역·AI 분류의 AI 서버 주소·모델·API 키가 있어야 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
+      "description": "이 Mac의 AI 브리지를 찾았거나 번역·AI 분류에 AI 서버 주소와 모델을 넣으면 켜집니다. 요청은 버튼을 누를 때만 보냅니다.",
       "consumer": "featureEnabled"
     },
     {
@@ -555,7 +579,7 @@
       "options": [
         {
           "value": "compact",
-          "label": "1h 20m 05s"
+          "label": "1h 20m 5s"
         },
         {
           "value": "clock",
@@ -717,6 +741,7 @@
       "key": "graphNodeLimit",
       "category": "views",
       "label": "그래프 최대 문헌 수",
+      "description": "그래프 한 장에 낱낱이 그리고 인용 정보를 가져오는 최대 문헌 수입니다. 이보다 많은 범위는 주제 묶음으로 접어 보여 주고(최대 2,000편), 묶음을 누르면 그 논문들이 펼쳐집니다.",
       "type": "number",
       "default": 180,
       "min": 20,
@@ -960,30 +985,6 @@
       "default": false
     },
     {
-      "key": "language",
-      "keepOnReset": true,
-      "category": "menus",
-      "label": "Language / 언어",
-      "help": "기본값은 영어입니다. 한국어를 고르면 패널이 한국어로 바뀝니다. Zotero 언어 따르기는 Zotero가 한국어일 때만 한국어를 씁니다. 패널은 바로 바뀌고, 문헌 목록의 열 이름은 Zotero를 다시 시작하면 바뀝니다.",
-      "type": "select",
-      "literal": true,
-      "default": "en-US",
-      "options": [
-        {
-          "value": "en-US",
-          "label": "English"
-        },
-        {
-          "value": "ko-KR",
-          "label": "한국어"
-        },
-        {
-          "value": "auto",
-          "label": "Zotero 언어 따르기 / Follow Zotero"
-        }
-      ]
-    },
-    {
       "key": "tagDisplayMode",
       "category": "tags",
       "label": "태그 열 표시 대상",
@@ -1149,7 +1150,7 @@
       "type": "password",
       "default": "",
       "secret": true,
-      "description": "api.openalex.org에만 보냅니다. openalex.org 계정에서 무료로 받습니다. 비워 두면 자동 인용 수 조회가 멈추고, 우클릭 → 선택한 문헌 인용 수 새로고침만 하루 약 10건 됩니다."
+      "description": "api.openalex.org에만 보냅니다. openalex.org 계정에서 무료로 받습니다. 비워 두고 ZotPoP에 넣은 키가 있으면 그 키를 씁니다. 둘 다 없으면 목록의 자동 인용 수 조회가 멈추고, 우클릭 → 선택한 문헌 인용 수 새로고침과 논문 추가·수정 때의 조회만 하루 약 10건 됩니다."
     },
     {
       "key": "authorPortraits",
@@ -1157,7 +1158,7 @@
       "label": "저자 사진 찾기",
       "type": "boolean",
       "default": true,
-      "description": "ORCID에 등록된 개인 홈페이지에서 사진을 찾습니다. 저자를 열 때만 요청합니다."
+      "description": "관심 저자의 사진을 Wikidata(ORCID로, Wikimedia Commons의 사진), Google Scholar, ORCID에 적힌 개인 홈페이지 순서로 찾습니다. 저자를 열 때, ‘사진 찾기’를 누를 때, 새 논문 확인이 끝난 뒤 아직 찾지 않은 사람만 찾습니다. 찾은 것과 못 찾은 것은 두 달 동안 다시 묻지 않습니다."
     },
     {
       "key": "usptoApiKey",
@@ -1215,7 +1216,7 @@
     },
     {
       "key": "aiLanguage",
-      "description": "요약·번역 결과를 쓸 언어입니다. 기본값은 패널 언어를 따르며, 전문 용어는 논문에 쓰인 영어 그대로 둡니다.",
+      "description": "AI 요약·대화·제목 번역·함께 읽기 결과를 쓸 언어입니다. 기본값은 패널 언어를 따르며, 전문 용어는 논문에 쓰인 영어 그대로 둡니다. 리더 패널의 문단 번역 언어는 ‘논문 번역 언어’가 따로 정합니다.",
       "category": "ai",
       "label": "출력 언어",
       "type": "select",
@@ -1232,7 +1233,7 @@
       "label": "논문을 열면 AI 요약을 자동으로 만들기",
       "type": "boolean",
       "default": false,
-      "description": "켜면 논문을 열 때(논문마다 한 번) 제목·초록·본문 일부를 위에 입력한 AI 서버로 보내 요약을 만듭니다. 서버가 요금을 받는 서비스라면 열 때마다 비용이 듭니다. 그래서 기본은 꺼짐이고, 꺼져 있으면 리더 패널의 ‘요약 만들기’ 버튼을 눌러야만 보냅니다. 이 Mac에서 실행하는 로컬 모델(Ollama 등, http://localhost:11434/v1/chat/completions)을 연결하면 요청이 이 Mac 밖으로 나가지 않습니다. 한 번 만든 요약은 저장해 두고 다시 보냅니다."
+      "description": "켜면 논문을 열 때(논문마다 한 번) 제목·초록·본문 일부를 AI로 보내 요약을 만듭니다. 주소를 비워 두면 이 Mac의 AI 브리지(Claude·ChatGPT 계정의 사용 한도를 씀)로, 주소를 넣으면 그 서버로 보냅니다. 서버가 요금을 받는 서비스라면 열 때마다 비용이 듭니다. 그래서 기본은 꺼짐이고, 꺼져 있으면 리더 패널의 ‘요약 만들기’ 버튼을 눌러야만 보냅니다. 이 Mac에서 실행하는 로컬 모델(Ollama 등, http://localhost:11434/v1/chat/completions)을 연결하면 요청이 이 Mac 밖으로 나가지 않습니다. 한 번 만든 요약은 저장해 두고 다시 보내지 않습니다."
     },
     {
       "key": "deeplApiKey",
@@ -1241,7 +1242,7 @@
       "type": "password",
       "default": "",
       "secret": true,
-      "description": "리더 패널의 ‘번역’에서 문단별 번역에만 씁니다. deepl.com에서 무료 키(:fx로 끝남, 한 달 50만 자)를 받을 수 있고, 키 끝으로 무료/유료 서버를 알아서 고릅니다. 키는 DeepL 서버의 인증 헤더에만 보내며 번역 버튼을 눌렀을 때만 사용합니다. 번역기는 DeepL → Translate for Zotero(설치되어 있으면) → 위의 AI 서버 순서로 고르며, 한 번역기가 멈추면 패널에서 다음 번역기로 남은 문단만 이어서 번역할 수 있습니다."
+      "description": "리더 패널의 ‘번역’에서 문단별 번역에만 씁니다. deepl.com에서 무료 키(:fx로 끝남, 한 달 50만 자)를 받을 수 있고, 키 끝으로 무료/유료 서버를 알아서 고릅니다. 키는 DeepL 서버의 인증 헤더에만 보내며 번역 버튼을 눌렀을 때(번역 전에 이번 달 남은 양을 묻는 요청 포함)만 사용합니다. 번역기는 DeepL → Translate for Zotero(설치되어 있으면) → AI 순서로 고르며, 한 번역기가 멈추면 패널에서 다음 번역기로 그 실행이 맡았던 문단 중 남은 것만 이어서 번역할 수 있습니다."
     },
     {
       "key": "translateTarget",
@@ -1335,7 +1336,7 @@
       "category": "ai",
       "label": "읽기 메모 지시문",
       "type": "textarea",
-      "default": "Write a concise research reading remark. Separate findings from limitations."
+      "default": "Write a concise research reading remark based solely on the provided title and abstract. Separate findings from limitations."
     },
     {
       "key": "open-workbench",

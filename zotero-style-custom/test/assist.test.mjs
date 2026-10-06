@@ -117,6 +117,14 @@ test('translateParagraphs sends a JSON batch and reads it back; a batch that doe
  assert.deepEqual(await g.api.translateParagraphs(['A.','B.']),['Single 2','Single 3']);
  assert.deepEqual(await g.api.translateParagraphs([]),[]);
 });
+test('R19 translateParagraphs names the reader\'s protected terms in both the batch and the single prompt',async()=>{
+ const h=harness();
+ h.respond(options=>{const user=JSON.parse(options.body).messages[1].content;return {status:200,response:{choices:[{message:{content:/^\[/.test(user)?JSON.stringify(JSON.parse(user).map(p=>'KO '+p.text)):'KO'}}]}};});
+ await h.api.translateParagraphs(['Notch one.','Two.'],{language:'Korean',protect:['Notch','sonic hedgehog']});
+ await h.api.translateParagraphs(['Only one.'],{language:'Korean',protect:['Notch']});
+ assert.match(JSON.parse(h.requests[0].options.body).messages[0].content,/"Notch", "sonic hedgehog"/);
+ assert.match(JSON.parse(h.requests[1].options.body).messages[0].content,/untranslated: "Notch"/);
+});
 test('available() says whether an endpoint and model are set, without calling anything',()=>{
  assert.equal(harness().api.available(),true);assert.equal(harness({aiModel:''}).api.available(),false);
 });

@@ -95,3 +95,26 @@ test('resetting the reader section with white text on black is not stopped halfw
  assert.notEqual(f.runtime.getSetting('readerCustomBackground'),'#000000','the whole set went back');
  await f.runtime.stop();
 });
+test('setupHints: 한국어 offered only to a Korean Zotero that never chose a language; Translate for Zotero and a DeepL key named as the translator',async()=>{
+ const f=fixture();await f.start();
+ assert.equal(f.runtime.setupHints().suggestLanguage,null,'a chosen language (ko-KR here) is never second-guessed');
+ f.prefs.delete('extensions.style-custom.language');
+ assert.equal(f.runtime.setupHints().suggestLanguage,'ko-KR','never chosen, Zotero in Korean');
+ // The shipped default (prefs.js) is a value but not a choice.
+ f.prefs.set('extensions.style-custom.language','en-US');f.runtime.Services={prefs:{prefHasUserValue:()=>false}};
+ assert.equal(f.runtime.setupHints().suggestLanguage,'ko-KR','the default en-US from prefs.js is not a choice');
+ f.runtime.Services={prefs:{prefHasUserValue:()=>true}};
+ assert.equal(f.runtime.setupHints().suggestLanguage,null,'a user value is');
+ f.runtime.Services={prefs:{prefHasUserValue:()=>false}};
+ f.Z.locale='en-US';assert.equal(f.runtime.setupHints().suggestLanguage,null,'an English Zotero keeps the English default quietly');
+ assert.equal(f.runtime.setupHints().openalexInherited,false);
+ f.prefs.set('extensions.zotpop.openAlexApiKey','zp-key');
+ assert.equal(f.runtime.setupHints().openalexInherited,true,'the key typed into ZotPoP is used here too');
+ assert.equal(f.runtime.setupHints().translator,null);
+ f.Z.PDFTranslate={api:{translate:async()=>({})}};
+ assert.equal(f.runtime.setupHints().translator,'pdftranslate');
+ f.prefs.set('extensions.style-custom.deeplApiKey','abc:fx');
+ assert.equal(f.runtime.setupHints().translator,'deepl','a key of its own comes first, as the panel picks it');
+ assert.equal(typeof f.runtime.setupHints().ai.available,'boolean');
+ await f.runtime.stop();
+});

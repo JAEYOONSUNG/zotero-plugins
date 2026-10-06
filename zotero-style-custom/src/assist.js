@@ -58,7 +58,7 @@
   async function run(task,item,{language='Korean'}={}){
    if(!active)throw new Error('플러그인이 꺼져 있습니다. 도구 → 부가 기능에서 Style Custom을 켜세요.');
    if(task==='paperSummary')return paperSummary(item,{language});
-   const prompts={translate:`Translate the supplied title into ${language}. Preserve scientific names, identifiers, negation and numbers. Return only the translation.`,summary:`Summarize only the supplied abstract in ${language}, up to 5 short bullet points. Preserve uncertainty and do not invent findings.`,tags:'Suggest 3-6 concise topical tags for this abstract. Return only a JSON array of strings.',remark:`Write a concise research reading remark in ${language}, based solely on the provided title and abstract. Separate findings from limitations.`};
+   const prompts={translate:`Translate the supplied title into ${language}. Preserve scientific names, identifiers, negation and numbers. Return only the translation.`,summary:`Summarize only the supplied abstract in ${language}, up to 5 short bullet points. Preserve uncertainty and do not invent findings.`,tags:'Suggest 3 to 8 concise topical tags for this abstract. Return only a JSON array of strings.',remark:`Write a concise research reading remark in ${language}, based solely on the provided title and abstract. Separate findings from limitations.`};
    /* Several papers side by side: what each one claims, how it gets there,
       and where they pull against each other. The model is asked to keep to
       the abstracts given, to mark what it is unsure of, and to name the
@@ -259,17 +259,20 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
    const texts=parsed.map(x=>typeof x==='string'?x:x&&typeof x.text==='string'?x.text:null);
    return texts.some(x=>x===null||!x.trim())?null:texts.map(x=>x.trim());
   }
-  async function translateParagraphs(texts,{language='Korean',signal=null}={}){
+  async function translateParagraphs(texts,{language='Korean',signal=null,protect=[]}={}){
    const stopped=()=>{if(signal&&signal.cancelled)throw new Error('요청이 중지되었습니다.');};
    if(!Array.isArray(texts)||!texts.length)return [];
    const out=[];let group=[],size=0;const groups=[];
    for(const t of texts){if(group.length&&(size+t.length>6000||group.length>=8)){groups.push(group);group=[];size=0;}group.push(t);size+=t.length;}
    if(group.length)groups.push(group);
-   const single=`Translate the supplied paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written. Return only the translation.`;
+   // The reader's own list (설정 → 번역하지 않을 용어) is kept as written, as DeepL and Translate for Zotero keep it.
+   const own=(Array.isArray(protect)?protect:[]).map(x=>String(x||'').trim()).filter(Boolean).slice(0,200);
+   const keep=own.length?` Also keep these terms exactly as written, untranslated: ${own.map(x=>JSON.stringify(x)).join(', ')}.`:'';
+   const single=`Translate the supplied paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written.${keep} Return only the translation.`;
    for(const g of groups){
     stopped();
     if(g.length>1){
-     const reply=await transport([{role:'system',content:`Translate each numbered paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written. Return ONLY a JSON array of ${g.length} strings, in the same order, nothing else.`},{role:'user',content:JSON.stringify(g.map((text,i)=>({n:i+1,text})))}],{signal});
+     const reply=await transport([{role:'system',content:`Translate each numbered paragraph into ${language}. Keep numbers, units, DOIs, gene, species and chemical names and abbreviations as written.${keep} Return ONLY a JSON array of ${g.length} strings, in the same order, nothing else.`},{role:'user',content:JSON.stringify(g.map((text,i)=>({n:i+1,text})))}],{signal});
      const parsed=parseTranslations(reply,g.length);if(parsed){out.push(...parsed);continue;}
     }
     for(const text of g){stopped();out.push(await transport([{role:'system',content:single},{role:'user',content:text}],{signal}));}

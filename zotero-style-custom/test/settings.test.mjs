@@ -85,7 +85,7 @@ test('the start-here block lists only the blank keys and sends each to its field
  const block=f.doc.querySelector('.scs-first');
  assert.ok(block&&!block.hidden,'a fresh profile is told what to fill first');
  const shown=()=>[...f.doc.querySelectorAll('.scs-first-list button')].filter(b=>!b.hidden).map(b=>b.dataset.first);
- assert.deepEqual(shown(),['openalexApiKey','aiEndpoint','citationEmail'],'the key that turns the citation column on comes first; the email, which costs privacy, last');
+ assert.deepEqual(shown(),['openalexApiKey','aiEndpoint','deeplApiKey','citationEmail'],'the key that turns the citation column on comes first; the email, which costs privacy, last');
  assert.ok(block.textContent.includes('없으면 인용 수 열이 비어 있습니다'),'each one says what it unlocks');
  const row=f.doc.querySelector('[data-first="aiEndpoint"]');
  row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
@@ -93,6 +93,33 @@ test('the start-here block lists only the blank keys and sends each to its field
  assert.equal(f.doc.activeElement,f.input('aiEndpoint'),'and lands in the field');
  f.edit('citationEmail','someone@example.org');await f.click('연락 이메일 (선택) 적용');await settle();
  assert.ok(!shown().includes('citationEmail'),'a filled key leaves the block');
+ pane.destroy();
+});
+test('start here: a Korean Zotero with the language never chosen is offered 한국어 first; a detected bridge and Translate for Zotero are named, not asked for',async()=>{
+ const f=fixture(Schema.schema);
+ f.runtime.setupHints=()=>({suggestLanguage:'ko-KR',openalexInherited:true,translator:'pdftranslate',translatorLabel:'Translate for Zotero',ai:{available:true,source:'bridge',label:'Claude 계정 (이 Mac)'}});
+ const pane=f.mount();await pane.ready;
+ const shown=()=>[...f.doc.querySelectorAll('.scs-first-list button')].filter(b=>!b.hidden).map(b=>b.dataset.first);
+ assert.deepEqual(shown(),['language','citationEmail'],'language first; the AI, translation and OpenAlex rows are not asked for when found (the OpenAlex key typed into ZotPoP counts)');
+ const found=f.doc.querySelector('.scs-first-found');
+ assert.ok(found&&!found.hidden,'what was found is said');
+ assert.match(found.textContent,/Claude 계정 \(이 Mac\)/);assert.match(found.textContent,/Translate for Zotero/);assert.match(found.textContent,/ZotPoP/);
+ const row=f.doc.querySelector('[data-first="language"]');
+ assert.match(row.textContent,/Zotero/);
+ row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.doc.activeElement,f.input('language'),'the press lands on the language menu');
+ // Choosing a language (either one) takes the row away.
+ f.edit('language','ko-KR','change');await settle();
+ assert.ok(!shown().includes('language'));
+ pane.destroy();
+});
+test('start here without a bridge says how to get one, and a DeepL key row says Translate for Zotero would do instead',async()=>{
+ const f=fixture(Schema.schema);
+ f.runtime.setupHints=()=>({suggestLanguage:null,translator:null,ai:{available:false,source:'none'}});
+ const pane=f.mount();await pane.ready;
+ assert.match(f.doc.querySelector('[data-first="aiEndpoint"]').textContent,/install\.sh/);
+ assert.match(f.doc.querySelector('[data-first="deeplApiKey"]').textContent,/Translate for Zotero/);
+ assert.ok(f.doc.querySelector('.scs-first-found').hidden,'nothing found, nothing said');
  pane.destroy();
 });
 test('an action that failed once shows its later success as a success, and number fields always say their range',async()=>{

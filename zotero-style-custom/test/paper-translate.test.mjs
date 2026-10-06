@@ -499,3 +499,35 @@ test('a paragraph that runs over a page break is found from either page; its anc
  assert.deepEqual(T.onPage([first,second],1).map(p=>p.text),['A. B.']);
  assert.equal(T.firstOnOrAfter([first,second],3),-1);
 });
+
+/* Round 19. */
+test('R19 AI translation: batches small enough that the AI client never splits them again, so a failure keeps the finished paragraphs',async()=>{
+ const sent=[];let n=0;
+ const ai={available:()=>true,translate:async(texts)=>{n++;if(n===3)throw Object.assign(new Error('down'),{code:'server'});sent.push(texts.reduce((a,t)=>a+t.length,0));return texts.map(t=>'AI:'+t);}};
+ const h=harness({prefs:{translateTarget:'KO'},ai});
+ const paras=Array.from({length:16},(_,i)=>({id:'p'+i,text:('Sentence number '+i+' about polymerase kinetics. ').repeat(40)}));
+ const summary=await h.service.translateAll(paras,{provider:'ai'});
+ assert.ok(sent.every(size=>size<=6000),'each request fits one AI call: '+sent.join(','));
+ assert.equal(summary.stopped,'server');
+ assert.ok(summary.done>0,'what came back before the failure is kept');
+ assert.equal([...h.store.keys()].length,summary.done,'and cached');
+});
+test('R19 AI translation gets the user\'s protected terms, and a new list is a new translation',async()=>{
+ const seen=[];
+ const ai={available:()=>true,translate:async(texts,options)=>{seen.push(options.protect);return texts.map(t=>'AI:'+t);}};
+ const h=harness({prefs:{translateTarget:'KO',translateProtect:'Notch, sonic hedgehog'},ai});
+ await h.service.translateAll([{id:'a',text:'Notch signalling needs sonic hedgehog.'}],{provider:'ai'});
+ assert.deepEqual(seen[0],['Notch','sonic hedgehog']);
+ const before=[...h.store.keys()][0];
+ h.prefs.translateProtect='Notch';
+ await h.service.translateAll([{id:'a',text:'Notch signalling needs sonic hedgehog.'}],{provider:'ai'});
+ assert.equal(seen.length,2,'not served from the old cache');
+ assert.notEqual([...h.store.keys()][1],before);
+});
+test('R19 the automatic target follows the panel language as it is now, not as it was when the reader opened',()=>{
+ let korean=true;
+ const h=harness({prefs:{translateTarget:'auto'},uiKorean:()=>korean});
+ assert.equal(h.service.target().code,'KO');
+ korean=false;
+ assert.notEqual(h.service.target().code,'KO','switching the panel to English switches the automatic target');
+});

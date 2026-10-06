@@ -1916,7 +1916,7 @@
         },
         {
           "file": "src/settings.js",
-          "marker": "const FIRST=['openalexApiKey','aiEndpoint','citationEmail']"
+          "marker": "const FIRST=['language','openalexApiKey','aiEndpoint','deeplApiKey','citationEmail']"
         }
       ],
       "tests": [
@@ -4061,6 +4061,86 @@
       ],
       "status": "verified",
       "review": "서재 1,205편이 주제 묶음(예: Escherichia coli 162편, CRISPR · RNA-guided 123편)으로 접혀 보이고, 묶음을 누르면 그 논문들이 펼쳐진다. 지도 위 출판 연도 막대를 누르면 그 해의 논문만 남는다. 배치는 조금씩 나눠 계산해 창이 멈추지 않는다."
+    },
+    {
+      "round": "R158",
+      "title": "마지막 점검: 처음 쓰는 사람의 설정 안내, 설명과 코드의 일치, 라운드 사이 회귀",
+      "gap": "Start here asked for keys the plugin already had (the AI bridge, Translate for Zotero, the OpenAlex key typed into ZotPoP) and never offered the Korean panel to a Korean Zotero; several setting descriptions said what the code no longer does. Between rounds: a Cmd-click meant to drop a row rated every selected paper, folding a second OpenAlex record cut unread news to 50 and lost confirmations, the next translator after 'This page only' translated the rest of the paper, AI translation lost finished paragraphs on a later failure and ignored the user's protected terms, a year span hid papers in the view around one paper, and a second press of 'note from this paper's annotations' made a duplicate note.",
+      "entryPoint": "Zotero 설정 → Style Custom · 첫 열기 · 문헌 목록 · 저자 추적 · 리더 패널 번역 · 관계 그래프 · 노트",
+      "sources": [
+        {
+          "file": "src/settings.js",
+          "marker": "const FIRST=['language','openalexApiKey','aiEndpoint','deeplApiKey','citationEmail']"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "setupHints() {"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "event.metaKey || event.ctrlKey || event.shiftKey ? 'false'"
+        },
+        {
+          "file": "src/runtime.js",
+          "marker": "this.keepNews(news, undefined, this.NEWS_STORE_LIMIT || 200)"
+        },
+        {
+          "file": "src/reader-assist.js",
+          "marker": "session.trScope=scope.map(p=>p.id);session.trCode=code;"
+        },
+        {
+          "file": "src/paper-translate.js",
+          "marker": "maxBytes=chosen==='ai'?AI_BATCH_CHARS:MAX_BATCH_BYTES"
+        },
+        {
+          "file": "src/assist.js",
+          "marker": "Also keep these terms exactly as written, untranslated"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const keepYear=n=>neighbourMode||!state.graphYears"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const annotationNotes=new Map();"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/settings.test.mjs",
+          "name": "start here: a Korean Zotero with the language never chosen is offered 한국어 first; a detected bridge and Translate for Zotero are named, not asked for"
+        },
+        {
+          "file": "test/settings-runtime.test.mjs",
+          "name": "setupHints: 한국어 offered only to a Korean Zotero that never chose a language; Translate for Zotero and a DeepL key named as the translator"
+        },
+        {
+          "file": "test/runtime.test.mjs",
+          "name": "R19 a Cmd/Ctrl/Shift press on a star of a selected row is the selection gesture of Zotero: it rates nothing and reaches the tree"
+        },
+        {
+          "file": "test/author-watch.test.mjs",
+          "name": "R19 folding a followed row into a merged person keeps all its unread news (store limit, not the 50 shown) and its earlier decisions"
+        },
+        {
+          "file": "test/reader-assist.test.mjs",
+          "name": "R19 \"다른 번역기로 이어서\" after \"이 쪽만 번역\" carries on with that page only, in the language that run was in"
+        },
+        {
+          "file": "test/paper-translate.test.mjs",
+          "name": "R19 AI translation: batches small enough that the AI client never splits them again, so a failure keeps the finished paragraphs"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "R19 a year span set on the library map never hides papers where its bars are not shown (around one paper)"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "이 문헌 주석에서 노트 만들기: data-writes, and a second press with the same annotations opens no duplicate note (a double press while it runs is ignored)"
+        }
+      ],
+      "status": "implemented",
+      "review": "설정 맨 위 ‘먼저 할 것’이 이미 찾은 것(이 Mac의 AI 브리지, Translate for Zotero, ZotPoP에 넣은 OpenAlex 키)은 묻지 않고 ‘자동으로 찾음’으로 알려 주며, Zotero가 한국어인데 언어를 고른 적이 없으면 한국어를 먼저 권한다. 설정 설명 열여 곳을 코드에 맞게 고쳤다. 라운드 사이 회귀 일곱 가지(⌘클릭 별점, 저자 합치기, 이 쪽만 번역의 이어 번역, AI 번역 저장·보호 용어, 연도 필터, 노트 중복)를 테스트로 고정했다. 실제 Zotero에서는 아직 확인하지 않았다."
     }
   ],
   "introducedInVersion": "0.6.0"

@@ -953,6 +953,22 @@ test('"다른 번역기로 이어서" sends only the unfinished paragraphs of th
  f.stop();
 });
 
+test('R19 "다른 번역기로 이어서" after "이 쪽만 번역" carries on with that page only, in the language that run was in',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});
+ await f.open();f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.http.deepl=req=>req.method==='POST'?{status:456,response:{}}:null;
+ f.press(f.byText('This page only'));await settle(30);
+ assert.equal(f.byText('Continue with another translator').hidden,false);
+ f.aiReplies.push(options=>{const user=JSON.parse(options.body).messages[1].content;const content=user.trim().startsWith('[')?JSON.stringify(JSON.parse(user).map(p=>'AI:'+p.text)):'AI:'+user;return {status:200,response:{choices:[{message:{content}}]}};});
+ f.press(f.byText('Continue with another translator'));await settle(30);
+ const ai=f.requests.filter(r=>r.body&&r.body.messages);
+ assert.equal(ai.length,1);
+ const body=ai[0].body.messages[1].content;
+ const sent=body.trim().startsWith('[')?JSON.parse(body).map(p=>p.text):[body];
+ assert.deepEqual(sent,['Libraries were screened by compartmentalised self-replication. Kinetics were measured at 72 C.'],'the page asked for, not the rest of the paper');
+ f.stop();
+});
+
 test('a summary is filed under the model, server, language and prompt it was asked with, even if the model changes before it returns',async()=>{
  const f=fixture();await f.open();let finish;
  f.aiReplies.push(()=>new Promise(r=>{finish=()=>r({status:200,response:{choices:[{message:{content:'## Summary\nMade by m1.'}}]}});}));

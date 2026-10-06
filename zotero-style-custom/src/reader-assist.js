@@ -925,7 +925,7 @@
     pdfTranslatePref:key=>{try{return Z.Prefs&&Z.Prefs.get('extensions.zotero.ZoteroPDFTranslate.'+key,true);}catch(_){return '';}},
     pdftUsageStore:{get:()=>runtime.cache.pdftUsage,set:v=>{runtime.cache.pdftUsage=v;persistUI();}},
     ai:{available:()=>!!runtime.assist?.available?.(),translate:(texts,o)=>runtime.assist.translateParagraphs(texts,o)},
-    uiKorean:runtime.i18n?.isKorean?.()!==false});
+    uiKorean:()=>runtime.i18n?.isKorean?.()!==false});
    // What is shown comes from the cache under the current settings (service.resolved): switching the language, the
    // formality or the AI model shows that setting's translations, never another's.
    return session.tr={service,paragraphs:[]};
@@ -1020,18 +1020,21 @@
     if(next)provider=service.nextProvider(session.trProvider||provider)||provider;
     if(!provider){ui.trProgress.textContent=t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요.');return;}
     session.trProvider=provider;ui.trNext.hidden=true;
-    // Fixed for this run: the language the menu shows now.
-    const code=service.target().code,found=service.resolved(tr.paragraphs,code);
+    // Fixed for this run: the language the menu shows now (a carry-on keeps the language of the run it continues).
+    const code=next&&session.trCode?session.trCode:service.target().code,found=service.resolved(tr.paragraphs,code);
     let list;
     if(next){
      // Another translator carries on where the last one stopped: only what no translator has finished in this
-     // language, from where that run began. Nothing already translated is sent (or paid for) twice.
-     list=TR.unfinished(tr.paragraphs.slice(session.trStart||0),found);
+     // language, within what that run was asked to do ('이 쪽만 번역' stays on its page). Nothing already
+     // translated is sent (or paid for) twice.
+     const scopeIDs=session.trScope?new Set(session.trScope):null;
+     list=TR.unfinished(scopeIDs?tr.paragraphs.filter(p=>scopeIDs.has(p.id)):tr.paragraphs.slice(session.trStart||0),found);
     }else{
      const start=mode==='page'?fromPage(session,tr.paragraphs):mode==='here'?tr.paragraphs.indexOf(TR.onPage(tr.paragraphs,currentPage(session.reader)||1)[0]):0;
      if(start<0){ui.trProgress.textContent=mode==='here'?t('이 쪽에는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.'):t('이 쪽부터는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.');return;}
      session.trStart=start;
      const scope=mode==='here'?TR.onPage(tr.paragraphs,currentPage(session.reader)||1):tr.paragraphs.slice(start);
+     session.trScope=scope.map(p=>p.id);session.trCode=code;
      // A paragraph another translator already finished is left as it is ("다시 번역" redoes one on purpose).
      list=scope.filter(p=>{const hit=found.get(p.id);return !hit||hit.provider===provider;});
     }

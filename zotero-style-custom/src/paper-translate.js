@@ -18,7 +18,7 @@
 (function(root){
  'use strict';
  const FREE_URL='https://api-free.deepl.com/v2/translate',PRO_URL='https://api.deepl.com/v2/translate';
- const MAX_PARAGRAPH=3000,MAX_BATCH_COUNT=50,MAX_BATCH_BYTES=100*1024,FREE_LIMIT=500000;
+ const AI_BATCH_CHARS=6000,MAX_PARAGRAPH=3000,MAX_BATCH_COUNT=50,MAX_BATCH_BYTES=100*1024,FREE_LIMIT=500000;
  const clean=text=>String(text==null?'':text).replace(/\s+/g,' ').trim();
  const bytes=text=>{let n=0;for(const ch of String(text)){const c=ch.codePointAt(0);n+=c<0x80?1:c<0x800?2:c<0x10000?3:4;}return n;};
 
@@ -60,7 +60,7 @@
   const parts=[provider,target,formality&&formality!=='default'?formality:''];
   if(provider==='ai')parts.push(String(model||'').trim(),String(endpoint||'').trim());
   if(provider==='pdftranslate'&&service)parts.push('service:'+service);
-  if(provider!=='ai'&&protect)parts.push('protect:'+protect);
+  if(protect)parts.push('protect:'+protect);
   return hash(parts.join('\u0001')).slice(0,10);
  }
  /* A cancel token: cancel() runs every registered canceller once; a sleep or a request that sees it cancelled stops. */
@@ -216,8 +216,10 @@
   // The service Translate for Zotero is set to ("deeplfree"): it answers our requests, so it names the translator.
   const pdftService=()=>hasPdfTranslate()?pdftPref('translateSource'):'';
   const pdftTarget=()=>hasPdfTranslate()?pdftPref('targetLanguage'):'';
-  const target=()=>targetOf(pref('translateTarget'),uiKorean,pdftTarget());
-  const autoTarget=()=>targetOf('auto',uiKorean,pdftTarget());
+  // Asked each time: a panel switched to another language moves the automatic target with it.
+  const korean=()=>typeof uiKorean==='function'?uiKorean()!==false:!!uiKorean;
+  const target=()=>targetOf(pref('translateTarget'),korean(),pdftTarget());
+  const autoTarget=()=>targetOf('auto',korean(),pdftTarget());
   /* Where the language came from: the setting, Translate for Zotero's own target, or the panel language. */
   const targetOrigin=()=>{
    const wanted=String(pref('translateTarget')||'auto').toUpperCase();
@@ -348,7 +350,8 @@
    if(/\b40[13]\b|secret|key/i.test(text))return make('pdft','Translate for Zotero의 번역 서비스 키가 맞지 않습니다. Translate for Zotero 설정에서 서비스와 키를 확인하세요.');
    return make('pdft','Translate for Zotero가 번역하지 못했습니다. Translate for Zotero 설정에서 번역 서비스를 확인하세요.');
   }
-  async function viaAI(texts,settings,signal){check(signal);const out=await ai.translate(texts,{language:settings.target.ai,signal});check(signal);return out;}
+  // The AI gets the user's own list as an instruction (placeholders would confuse it); genes, species and units it keeps by its prompt.
+  async function viaAI(texts,settings,signal){check(signal);const out=await ai.translate(texts,{language:settings.target.ai,signal,protect:settings.own||[]});check(signal);return out;}
   async function runBatch(settings,texts,signal){
    const provider=settings.provider;
    if(provider==='deepl')return deeplBatch(texts,settings,signal);
@@ -416,8 +419,10 @@
     if(job.cancelled&&todo.length)summary.stopped='cancelled';
     // Translate for Zotero answers one text at a time and the AI eight per request: batches that size keep every
     // finished paragraph (shown and cached) when a later one fails or is stopped.
-    const maxCount=chosen==='pdftranslate'?1:chosen==='ai'?8:MAX_BATCH_COUNT;
-    for(const batch of planBatches(parts.map((part,index)=>({...part,index})),{maxCount})){
+    // The AI client also groups at 6,000 characters; a batch larger than that came back only when every group had, so
+    // one failed group lost the groups before it. Kept under that size, a batch here is one request there.
+    const maxCount=chosen==='pdftranslate'?1:chosen==='ai'?8:MAX_BATCH_COUNT,maxBytes=chosen==='ai'?AI_BATCH_CHARS:MAX_BATCH_BYTES;
+    for(const batch of planBatches(parts.map((part,index)=>({...part,index})),{maxCount,maxBytes})){
      if(job.cancelled){summary.stopped='cancelled';break;}
      let out;
      try{out=await sendTexts(settings,batch.map(b=>b.text),job);}

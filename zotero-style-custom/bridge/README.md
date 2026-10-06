@@ -27,7 +27,7 @@ In Zotero, leave **Settings → Translate·AI → AI server address** empty: the
 | Browsers | A request carrying a web `Origin` (http/https/file) is refused, CORS preflights are refused, and the `Host` must be `127.0.0.1` or `localhost` (DNS rebinding). |
 | Load | At most two CLI processes at once; up to 16 more wait in line. A process is killed when the client disconnects or after 300 s without output. |
 | Response header | `x-bridge-provider: claude` or `codex`, so the plugin can say which account answered. |
-| Log | `~/Library/Logs/StyleCustomBridge.log`: one line per request with time, provider, durations, status and character counts. **Prompts and answers are never written anywhere.** |
+| Log | `~/Library/Logs/StyleCustomBridge.log`: one line per request with time, provider, durations, status and character counts. **Prompts and answers are never written to the log.** The system prompt (Claude) and Codex's answer pass through a temporary file (mode 600) in the system temp folder that is deleted when the request ends. |
 
 The two command lines (the prompt goes on stdin, never on the command line):
 

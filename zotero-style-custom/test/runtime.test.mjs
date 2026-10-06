@@ -5244,6 +5244,26 @@ test('R9 a star on a selected row rates every selected paper, and clears them on
   window.ZoteroPane = undefined;
 });
 
+test('R19 a Cmd/Ctrl/Shift press on a star of a selected row is the selection gesture of Zotero: it rates nothing and reaches the tree', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const a = item(1), b = item(2);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref: a}), selection: {isSelected: () => true}}, getSelectedItems: () => [a, b]};
+  plugin.isRegular = () => true; plugin.canEdit = () => true;
+  plugin.value = () => '2'; plugin.state = () => ({status: 'unread', rating: 2, seconds: 0});
+  const edits = [];plugin.edit = async (items, patch) => { edits.push([items.map(i => i.id), patch]); };plugin.say = async () => {};
+  const row = document.createElement('div');document.body.appendChild(row);let reached = 0;row.addEventListener('mousedown', () => reached++);
+  const stars = [...plugin.renderCell('rating', 0, '2', {}, document).children];row.appendChild(stars[0].parentNode||stars[0]);
+  for (const mod of ['metaKey', 'ctrlKey', 'shiftKey']) {
+    for (const type of ['mousedown', 'mouseup', 'click']) { const e = new window.Event(type, {bubbles: true}); Object.defineProperty(e, mod, {value: true}); stars[4].dispatchEvent(e); }
+    await new Promise(r => setTimeout(r, 0));
+  }
+  assert.deepEqual(edits, [], 'no rating written');
+  assert.equal(reached, 3, 'each modified press reached the row, so Zotero can change the selection');
+  window.ZoteroPane = undefined;
+});
+
 test('R9 on a row that is not selected, the first click on a file badge, an annotation mark or a link chip only selects the row', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body></body></html>');

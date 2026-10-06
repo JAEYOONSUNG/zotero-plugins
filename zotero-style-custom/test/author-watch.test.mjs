@@ -909,6 +909,19 @@ test("following a merged person keeps every OpenAlex id, and an earlier row of o
   assert.deepEqual(h.cache.watchedAuthors.map(r => r.id), ["A9"], "unfollowing by any id lets the whole person go");
 });
 
+test("R19 folding a followed row into a merged person keeps all its unread news (store limit, not the 50 shown) and its earlier decisions", async () => {
+  const news = Array.from({length: 80}, (_, n) => ({id: "W" + (100 + n), title: "Paper " + n, date: RECENT}));
+  const rows = [person("A2", {news, confirmed: ["W7"], rejected: ["W8"], unverified: [{id: "W9", title: "Held", date: RECENT}], previousInstitution: "Old Place", sweptAt: "2026-09-30T00:00:00Z", checkedAt: "2026-09-30T00:00:00Z"})];
+  const h = host({rows, pages: []});
+  await h.watchAuthor({id: "A1", alsoIds: ["A2"], name: "Merged Person"});
+  const merged = h.cache.watchedAuthors.find(r => r.id === "A1");
+  assert.equal(merged.news.length, 80, "80 unread papers stay 80");
+  assert.deepEqual(merged.confirmed, ["W7"]);assert.deepEqual(merged.rejected, ["W8"]);
+  assert.deepEqual(merged.unverified.map(w => w.id), ["W9"]);
+  assert.equal(merged.previousInstitution, "Old Place");
+  assert.equal(merged.checkedAt, "2026-09-30T00:00:00Z", "the person was checked then; folding is not a new check");
+});
+
 test("the sweep asks for every id of a merged person in one batch and files the news under the person", async () => {
   const rows = [person("A1", {alsoIds: ["A2"]}), person("A3")];
   const h = host({rows, pages: [{results: [work("W1", ["A2"]), work("W2", ["A1"]), work("W3", ["A1", "A2", "B7"])], meta: {}}]});

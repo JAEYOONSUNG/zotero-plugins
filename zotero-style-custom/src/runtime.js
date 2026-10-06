@@ -297,6 +297,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const said = {installed: this.t(`${last.latest || ''} 설치함`), current: this.t('최신'), available: this.t(`${last.latest || ''} 있음`), off: this.t('자동 설치 꺼짐'), deferred: this.t('사용 중이라 다음에 설치'), error: this.t(`실패 · ${last.message || ''}`)}[last.status] || String(last.status || '');
     return `${at} · ${said}`;
   }
+  /* What the settings pane's start-here list needs to know beyond the fields themselves: whether a
+     Korean Zotero should be offered the Korean panel (only while no language was ever chosen), which
+     translator the reader panel would use (its own DeepL key first, then Translate for Zotero), and the
+     AI the panel would reach (the bridge found on this Mac, or an address in settings). */
+  setupHints() {
+    let suggestLanguage = null;
+    try {
+      // prefs.js gives every profile 'en-US' as a default, so "never chosen" is "no user value", not "no value".
+      const S = this.Services || globalThis.Services, name = 'extensions.style-custom.language';
+      const chosen = typeof S?.prefs?.prefHasUserValue === 'function' ? S.prefs.prefHasUserValue(name) : this.Z.Prefs.get(name, true) != null;
+      if (!chosen && this.i18n?.detect?.(this.Z) === 'ko-KR') suggestLanguage = 'ko-KR';
+    } catch (_) { }
+    // The OpenAlex key typed into ZotPoP is used here too (openAlexKey()): the field is blank but nothing is missing.
+    let openalexInherited = false; try { openalexInherited = !String(this.pref('openalexApiKey', '') || '').trim() && !!this.openAlexKey(); } catch (_) { }
+    let pdftranslate = false; try { pdftranslate = !!this.Z.PDFTranslate?.api; } catch (_) { }
+    const deepl = !!String(this.pref('deeplApiKey', '') || '').trim();
+    let ai = {available: false, source: 'none'}; try { ai = this.assist?.status?.() || ai; } catch (_) { }
+    return {suggestLanguage, openalexInherited, translator: deepl ? 'deepl' : pdftranslate ? 'pdftranslate' : null, translatorLabel: pdftranslate && !deepl ? 'Translate for Zotero' : null, ai};
+  }
   getSettingsStatus() {
     const win=this.Z.getMainWindow?.(),selected=win?this.selected(win):[];const reader=win?.Zotero_Tabs&&this.Z.Reader?.getByTabID?.(win.Zotero_Tabs.selectedID),attachment=reader&&this.Z.Items.get(reader.itemID),item=(attachment?.parentID&&this.Z.Items.get(attachment.parentID))||selected[0];
     return {version:this.version||'',recordReading:this.getSetting('recordReading'),selectedTitle:item?String(item.getField('title')||''):'선택한 문헌 없음',readSeconds:item?this.state(item).seconds:0,citationStatus:this.citationJob?'조회 중':'대기',storagePath:this.Z.DataDirectory?.dir?this.Z.DataDirectory.dir+'/style-custom.json':'Zotero 데이터 폴더/style-custom.json'};
@@ -3554,13 +3573,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const folded = ofPerson;
     const seen = [...new Set([...(Array.isArray(person.seen) ? person.seen : []), ...folded.flatMap(row => row.seen || [])])];
     const news = folded.flatMap(row => Array.isArray(row.news) ? row.news : []);
+    /* A folded row is the same person: what it holds besides seen and news (confirmed and
+       rejected papers, papers waiting for a check, where they moved from, when they were last
+       swept) is carried over, the row of the chosen id first. News is kept to the store's
+       limit; the 50 shown is a display limit and cut 80 unread papers to 50. */
+    const base = Object.assign({}, ...[...folded].sort((m, n) => (m.id === id) - (n.id === id)));
+    const union = key => [...new Set(folded.flatMap(row => Array.isArray(row[key]) ? row[key] : []))];
+    const unverified = [...new Map(folded.flatMap(row => Array.isArray(row.unverified) ? row.unverified : []).map(w => [w.id, w])).values()];
+    const checked = folded.map(row => String(row.checkedAt || '')).filter(Boolean).sort().pop();
+    const {news: _n, seen: _s, alsoIds: _a, confirmed: _c, rejected: _r, unverified: _u, ...kept} = base;
+    const confirmed = union('confirmed'), rejected = union('rejected');
     this.cache.watchedAuthors = [...rest, {
-      id, name: String(person.name || id), institution: String(person.institution || ''),
+      ...kept,
+      id, name: String(person.name || kept.name || id), institution: String(person.institution || kept.institution || ''),
       ...(alsoIds.length ? {alsoIds} : {}),
       // What was already known when the author was added, so "new" means new to the user.
       seen: seen.slice(0, this.SEEN_LIMIT),
-      ...(news.length ? {news: this.keepNews ? this.keepNews(news) : news} : {}),
-      checkedAt: new Date().toISOString()
+      ...(news.length ? {news: this.keepNews ? this.keepNews(news, undefined, this.NEWS_STORE_LIMIT || 200) : news} : {}),
+      ...(confirmed.length ? {confirmed} : {}), ...(rejected.length ? {rejected} : {}), ...(unverified.length ? {unverified} : {}),
+      checkedAt: checked || new Date().toISOString()
     }];
     this.dirty = true;
     await this.flush();
@@ -4471,9 +4502,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
      not enough: mousedown and mouseup are kept from the row too, as Zotero's own
      `.cell.clickable` cells do. On an unselected row the press goes through, and the
      row selects as it always does. */
+  /* A press with Cmd, Ctrl or Shift is Zotero's own selection gesture (add, remove, extend):
+     it goes to the tree and the control does nothing, so a Cmd-click meant to drop one row
+     from the selection never rates or re-tags every selected paper. */
   guardClick(cell, doc, index) {
     const keep = event => { if (cell.dataset.wasSelected === 'true') event.stopPropagation(); };
-    cell.addEventListener('mousedown', event => { cell.dataset.wasSelected = String(this.rowSelected(doc, index)); keep(event); });
+    cell.addEventListener('mousedown', event => { cell.dataset.wasSelected = event.metaKey || event.ctrlKey || event.shiftKey ? 'false' : String(this.rowSelected(doc, index)); keep(event); });
     cell.addEventListener('mouseup', keep);
     return () => cell.dataset.wasSelected !== 'false';
   }

@@ -3294,6 +3294,25 @@ test('the first open explains the panel once and never again',async()=>{
  seen.bench.destroy();
 });
 
+test('R19 the first open offers the Korean panel to a Korean Zotero that never chose a language, in one press, and points to Start here',async()=>{
+ const f=fixture();const set=[];
+ f.runtime.setupHints=()=>({suggestLanguage:'ko-KR',ai:{available:false}});
+ f.runtime.setSetting=async(key,value)=>{set.push([key,value]);};
+ await f.bench.toggle(true);
+ const welcome=f.bench.panel.querySelector('.sc-welcome');
+ assert.match(welcome.textContent,/먼저 할 것/,'where the keys are set is named');
+ const ko=[...welcome.querySelectorAll('button')].find(b=>b.textContent==='한국어로 보기');
+ assert.ok(ko,'a Korean Zotero is offered the Korean panel');
+ assert.equal(ko.getAttribute('data-writes'),'setting','the sweep leaves it alone');
+ ko.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(set,[['language','ko-KR']]);
+ assert.ok(![...welcome.querySelectorAll('button')].some(b=>b.textContent==='한국어로 보기'),'asked once');
+ f.bench.destroy();
+ const g=fixture();g.runtime.setupHints=()=>({suggestLanguage:null,ai:{available:true}});await g.bench.toggle(true);
+ assert.ok(![...g.bench.panel.querySelectorAll('.sc-welcome button')].some(b=>b.textContent==='한국어로 보기'),'not offered otherwise');
+ g.bench.destroy();
+});
+
 test('every button that opens a Zotero window is marked so a sweep can leave it alone',async()=>{
  const f=fixture();
  const marked=[];
@@ -4687,6 +4706,32 @@ test('노트 탭의 "이 문헌 주석에서 노트 만들기"는 고른 문헌�
  await f.click('이 문헌 주석에서 노트 만들기');
  assert.ok(!f.calls.find(c=>c[0]==='extract'),'주석이 없으면 노트를 만들지 않는다');
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/주석이 없어 노트를 만들지 않았습니다/);
+ f.bench.destroy();
+});
+
+test('이 문헌 주석에서 노트 만들기: data-writes, and a second press with the same annotations opens no duplicate note (a double press while it runs is ignored)',async()=>{
+ const f=fixture();
+ f.setSelection([1]);
+ await f.bench.show('notes');f.bench.state.selected=new Set(['1']);await f.bench.render();
+ const find=()=>[...f.bench.panel.querySelectorAll('button')].find(b=>b.textContent==='이 문헌 주석에서 노트 만들기');
+ assert.equal(find().getAttribute('data-writes'),'library');
+ assert.ok(find().getAttribute('data-action-key'),'a key keeps a redrawn copy busy while the first press runs');
+ let made=0,release;const gate=new Promise(r=>{release=r;});
+ f.library.noteFromAnnotations=async()=>{made++;await gate;return '9';};
+ const press=b=>b.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ const first=find();press(first);press(first);
+ await settle();
+ await f.bench.render();const redrawn=find();if(redrawn)press(redrawn);
+ release();await settle();await settle();
+ assert.equal(made,1,'one press, one note');
+ // The note it made is still there (notes() lists id 9): pressing again says so instead of making a copy.
+ await f.click('이 문헌 주석에서 노트 만들기');
+ assert.equal(made,1,'the same annotations do not make a second note');
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/이미/);
+ // A new annotation since then: a new note is wanted.
+ f.library.annotations=async()=>[{id:'3',parentID:'1',attachmentID:'99',text:'Highlight'},{id:'4',parentID:'1',attachmentID:'99',text:'New one'}];
+ await f.click('이 문헌 주석에서 노트 만들기');
+ assert.equal(made,2);
  f.bench.destroy();
 });
 
@@ -8923,7 +8968,7 @@ test('audit10 saving a panel font size sets the base the whole type scale derive
   await f.click('스타일 저장');
   assert.equal(f.bench.panel.style.getPropertyValue('--sc-fs-base'),'20px');
   assert.equal(f.bench.panel.style.fontSize,'20px');
- }finally{f.bench.destroy();}
+ }catch(e){console.error('ERR',e.message);throw e;}finally{console.error('S4');f.bench.destroy();console.error('S5');}
 });
 
 /* ---- Item 11: every followed author has a relationship graph of their own ---- */
@@ -9806,6 +9851,20 @@ test('library map past 150 papers: folded into named topic bubbles, a bubble ope
  // Nothing was asked of OpenAlex, nothing written.
  assert.equal(f.calls.filter(c=>/openalex|fetch|sweep/i.test(String(c[0]))).length,0);
  f.bench.destroy();
+});
+
+test('R19 a year span set on the library map never hides papers where its bars are not shown (around one paper)',async()=>{
+ const f=topicFixture(60);
+ f.bench.state.graphYears={from:1900,to:1900};f.bench.state.graphScope='neighbours';
+ f.setSelection([1000]);
+ try{
+  await f.bench.show('graph');await settle();await drawn(f);
+  assert.equal(f.bench.state.selected.size,1,'one paper chosen');
+  assert.equal(!!f.body().querySelector('.sc-year-hist'),false,'no bars around one paper');
+  const nodes=[...f.body().querySelectorAll('svg.sc-graph g[data-id]')];
+  assert.ok(nodes.length>1,'its neighbours are drawn');
+  assert.equal(nodes.filter(g=>g.getAttribute('display')==='none').length,0,'so no paper is hidden by a span the reader cannot see or clear');
+ }finally{f.bench.destroy();}
 });
 
 test('library map under 150 papers: drawn paper by paper, topics named in chips; a chip lights its topic and zooms to it',async()=>{

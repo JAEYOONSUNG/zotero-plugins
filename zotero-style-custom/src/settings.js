@@ -25,9 +25,12 @@
   const empty=node('p','검색에 맞는 설정이 없습니다. 검색어를 바꾸거나 지우세요.',content,{class:'scs-empty'});empty.hidden=true;
   const notify=(text,error=false)=>{if(destroyed)return;message.textContent=t(text);message.dataset.error=String(error);};
   const secret=spec=>!!spec.secret||spec.type==='password';
-  // Three fields decide what the plugin can reach; a new user should see them
-  // before the category list, and only while they are still blank.
-  const FIRST=['openalexApiKey','aiEndpoint','citationEmail'];let refreshFirst=()=>{};
+  // A few fields decide what the plugin can reach; a new user should see them
+  // before the category list, and only while they are still blank. What the
+  // runtime found by itself (the AI bridge, Translate for Zotero) is named
+  // instead of asked for, and a Korean Zotero is offered the Korean panel.
+  const FIRST=['language','openalexApiKey','aiEndpoint','deeplApiKey','citationEmail'];let refreshFirst=()=>{};
+  const hints=()=>{try{return runtime.setupHints?.()||{};}catch(_){return {};}};
   const valueOf=state=>state.spec.type==='boolean'?state.input.checked:state.input.value;
   function display(state,value){if(state.spec.type==='boolean')state.input.checked=!!value;else if(state.spec.type==='note')state.input.textContent=String(value??'');else state.input.value=String(value??'');}
   function sync(state){
@@ -97,6 +100,7 @@
     state.dirty=state.spec.type==='boolean'?state.input.checked!==committed:String(state.input.value)!==String(committed??'');state.error=false;
     state.feedback.textContent=t(state.revision===revision||!state.dirty?'적용했습니다.':'이전 값을 적용했습니다. 새 입력은 아직 적용하지 않았습니다.');
     // Zotero takes a column's name when it is registered: the list keeps the old language until the next start, and says so.
+    if(state.spec.key==='language'){state.chosen=true;refreshFirst();}
     if(state.spec.key==='language')state.feedback.textContent+=' '+t('문헌 목록의 열 이름은 Zotero를 다시 시작하면 바뀝니다.')+' '+t('이 설정창은 다시 열면 새 언어로 보입니다.');
     await refreshStatus();
    }catch(error){if(!destroyed){state.error=true;state.dirty=true;state.feedback.textContent=t('적용하지 못했습니다: {0}').replace('{0}',t(String(error.message||error)));}}
@@ -188,15 +192,29 @@
     const parts=[value.version?t('버전 {0}').replace('{0}',value.version):null,t('읽기 기록 {0}').replace('{0}',t(value.recordReading?'켜짐':'꺼짐')),value.selectedTitle?t('선택: {0}').replace('{0}',value.selectedTitle):t('선택한 문헌 없음'),value.citationStatus?t('인용 조회: {0}').replace('{0}',t(value.citationStatus)):null,value.storagePath?t('저장 위치: {0}').replace('{0}',value.storagePath):null];
     liveText.replaceChildren();for(const part of parts.filter(Boolean))node('span',null,liveText,{class:'scs-live-part'}).textContent=part;
    }catch(error){if(!destroyed){readTime.textContent='—';liveText.textContent=t('현재 동작을 확인하지 못했습니다.');}}
-   finally{statusPending=false;}
+   finally{statusPending=false;if(!destroyed)refreshFirst();}
   }
   search.addEventListener('input',filter);clearSearch.addEventListener('click',()=>{search.value='';filter();search.focus();});
   {
-   const heading=node('strong','먼저 할 것',first);node('p','비우면 아래 기능이 꺼져 있습니다.',first,{class:'scs-help'});
+   const heading=node('strong','먼저 할 것',first);const blankNote=node('p','비우면 아래 기능이 꺼져 있습니다.',first,{class:'scs-help'});
    const list=node('div',null,first,{class:'scs-first-list'}),rows=new Map();
-   for(const key of FIRST){const state=states.get(key);if(!state)continue;const row=node('button',null,list,{type:'button','data-first':key});node('span',state.spec.label,row);node('span',state.spec.category==='ai'?'AI 요약·비교':key==='citationEmail'?'(선택) 빠른 대기열 · 주소가 서버에 남습니다':'없으면 인용 수 열이 비어 있습니다',row,{class:'scs-first-why'});row.addEventListener('click',()=>{selectCategory(state.spec.category);state.input.focus();});rows.set(key,row);}
+   const WHY={language:'Zotero가 한국어입니다 · 한국어를 고르면 패널이 한국어로 바뀝니다',openalexApiKey:'없으면 인용 수 열이 비어 있습니다',aiEndpoint:'AI 요약·대화 · 이 Mac에 AI 브리지(bridge/install.sh)를 설치하면 비워 둬도 됩니다',deeplApiKey:'논문 번역 · Translate for Zotero가 설치되어 있으면 비워 둬도 됩니다',citationEmail:'(선택) 빠른 대기열 · 주소가 서버에 남습니다'};
+   for(const key of FIRST){const state=states.get(key);if(!state)continue;const row=node('button',null,list,{type:'button','data-first':key});node('span',state.spec.label,row);node('span',WHY[key],row,{class:'scs-first-why'});row.addEventListener('click',()=>{selectCategory(state.spec.category);state.input.focus();});rows.set(key,row);}
+   const found=node('p','',first,{class:'scs-help scs-first-found'});found.hidden=true;
    // aiEndpoint's row stays open until aiModel is filled too: AI stays off with either blank.
-   refreshFirst=()=>{if(destroyed)return;let open=0;for(const [key,row]of rows){const state=states.get(key);const partner=key==='aiEndpoint'?states.get('aiModel'):null;const bridged=key==='aiEndpoint'&&!!runtime?.assist?.status?.()?.available;const blank=!bridged&&(!String(valueOf(state)??'').trim()||(partner&&!String(valueOf(partner)??'').trim()));row.hidden=!blank;if(blank)open++;}first.hidden=!open;heading.textContent=t(open>1?'먼저 할 것':'아직 비어 있는 것');};
+   refreshFirst=()=>{if(destroyed)return;const hint=hints();const ai=hint.ai||runtime?.assist?.status?.()||{};let open=0,keyOpen=0;
+    for(const [key,row]of rows){const state=states.get(key);const partner=key==='aiEndpoint'?states.get('aiModel'):null;
+     let blank;
+     // Offered only while the language was never chosen and Zotero itself is Korean; any choice ends it.
+     if(key==='language')blank=hint.suggestLanguage==='ko-KR'&&!state.dirty&&String(state.original??'')==='en-US'&&String(valueOf(state))==='en-US'&&!state.chosen;
+     else if(key==='aiEndpoint')blank=!ai.available&&(!String(valueOf(state)??'').trim()||(partner&&!String(valueOf(partner)??'').trim()));
+     else if(key==='deeplApiKey')blank=hint.translator!=='pdftranslate'&&!String(valueOf(state)??'').trim();
+     else if(key==='openalexApiKey')blank=!hint.openalexInherited&&!String(valueOf(state)??'').trim();
+     else blank=!String(valueOf(state)??'').trim();
+     row.hidden=!blank;if(blank){open++;if(['openalexApiKey','aiEndpoint','deeplApiKey'].includes(key))keyOpen++;}}
+    const named=[ai.available&&ai.source==='bridge'?t('AI 브리지 ({0})').replace('{0}',t(ai.label||'')):null,hint.translator==='pdftranslate'?t(hint.translatorLabel||'Translate for Zotero'):null,hint.openalexInherited&&!String(valueOf(states.get('openalexApiKey'))??'').trim()?t('ZotPoP의 OpenAlex 키'):null].filter(Boolean);
+    found.textContent=named.length?t('자동으로 찾음: {0}').replace('{0}',named.join(' · ')):'';found.hidden=!named.length;
+    first.hidden=!open&&!named.length;blankNote.hidden=!keyOpen;heading.textContent=t(open>1?'먼저 할 것':open?'아직 비어 있는 것':'준비됨');};
    refreshFirst();
   }
   nav.addEventListener('keydown',event=>{if(!['ArrowUp','ArrowDown','Home','End'].includes(event.key))return;const buttons=[...nav.querySelectorAll('button')],index=buttons.indexOf(doc.activeElement);if(index<0)return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowDown'?1:-1)));buttons[next].focus();selectCategory(buttons[next].dataset.category);});
