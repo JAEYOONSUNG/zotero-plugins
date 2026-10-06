@@ -330,8 +330,14 @@ var ZotPoPSources = (function () {
 	}
 	// A bare affiliation string, when the source has one at all. Null otherwise, so a
 	// merge never trades OpenAlex's lab and country for a list of names alone.
+	/* Europe PMC and Crossref copy the affiliation line as printed, with the author's e-mail at its end
+	   ("...Tsinghua University, Beijing, China. pengjiang@tsinghua.edu.cn."): shown in the institution
+	   column and written to the CSV as the lab's name. The address is not part of the institution. */
+	const affiliationText = value => String(value == null ? "" : value)
+		.replace(/\s*(?:Electronic address:\s*)?[^\s@,;()]+@[^\s@,;()]+?\.?(?=[\s,;)]|$)/gi, "")
+		.replace(/\(\s*\)/g, "").replace(/\s*[,;]\s*$/, "").replace(/\s+\./g, ".").replace(/\s{2,}/g, " ").trim();
 	function affiliatedPeople(entries) {
-		let people = entries.filter(p => p.name);
+		let people = entries.filter(p => p.name).map(p => p.institution ? Object.assign(p, { institution: affiliationText(p.institution) }) : p);
 		return people.some(p => p.institution) ? people : null;
 	}
 
@@ -707,14 +713,23 @@ var ZotPoPSources = (function () {
 		return out.slice(0, max);
 	}
 
-	// Batch-lookup citation counts (and OA PDFs) by DOI from OpenAlex. Mutates records.
-	async function enrichFromOpenAlex(records, http, ctx) {
+	/* Batch-lookup citation counts (and OA PDFs) by DOI from OpenAlex. Mutates records.
+	   By default only records without a count are asked about. `complete` asks about every record OpenAlex did
+	   not itself return, too: a Crossref or Europe PMC row came with that index's count and nothing else, so
+	   it had no yearly citations, no OpenAlex retraction check and no institutions or tier -- nine of the
+	   twenty rows of a Nature Microbiology 2025 search. Their own count is kept beside OpenAlex's
+	   (citationsBy), and the higher one is the headline, as when the two indexes' records merge. */
+	const ASKED = new WeakSet();
+	const placedPeople = people => (people || []).some(p => p.institutionId || p.country);
+	async function enrichFromOpenAlex(records, http, ctx, { complete = false } = {}) {
 		// Several records can legitimately share a DOI: compatibleIdentity keeps copies apart
 		// when their other identifiers conflict. Keyed one-per-DOI, all but the last lost
 		// their citation count and OA links.
 		let byDoi = new Map();
 		for (let r of records) {
-			if (!r.doi || r.citations != null) continue;
+			if (!r.doi || ASKED.has(r)) continue;
+			let fromOpenAlex = (r.sources || [r.source]).includes("openalex");
+			if (r.citations != null && !(complete && !fromOpenAlex)) continue;
 			if (!byDoi.has(r.doi)) byDoi.set(r.doi, []);
 			byDoi.get(r.doi).push(r);
 		}
@@ -723,15 +738,28 @@ var ZotPoPSources = (function () {
 			throwIfCancelled(ctx);
 			if (ctx.openAlexSpent) break;
 			let chunk = dois.slice(i, i + 50);
-			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,counts_by_year,best_oa_location,open_access,locations,is_retracted,type" + openAlexAuth(ctx);
+			let url = "https://api.openalex.org/works?filter=doi:" + chunk.map(enc).join("|") + "&per-page=50&select=doi,ids,cited_by_count,counts_by_year,best_oa_location,open_access,locations,is_retracted,type,authorships" + openAlexAuth(ctx);
 			try {
 				let data = await withRetry(() => http.getJSON(url), {}, ctx);
+				for (let doi of chunk) for (let r of byDoi.get(doi) || []) ASKED.add(r);
 				for (let w of data.results || []) {
 					for (let r of byDoi.get(normalizeDOI(w.doi)) || []) {
-						r.citations = toInt(w.cited_by_count);
+						let count = toInt(w.cited_by_count);
+						if (r.citations == null) {
+							r.citations = count;
+							if (r.citations != null) r.citationSource = "openalex";
+						}
+						else if (count != null) {
+							let by = r.citationsBy || (r.citationsBy = {}), own = r.citationSource || r.source;
+							if (own && by[own] == null) by[own] = Number(r.citations);
+							if (by.openalex == null || count > by.openalex) by.openalex = count;
+							if (count > r.citations) { r.citations = count; r.citationSource = "openalex"; }
+						}
 						if (w.is_retracted === true && (w.type || r.workType) !== "retraction") r.retracted = true;
-						if (r.citations != null) r.citationSource = "openalex";
+						if (!r.workType && w.type) r.workType = w.type;
 						if (!r.citesByYear) { r.citesByYear = parseCountsByYear(w.counts_by_year); if (r.citesByYear) r.citesByYearSeen = seriesSeen(); }
+						// The labs and countries, where the record's own source named none.
+						if (!placedPeople(r.people)) { let people = openAlexPeople(w.authorships); if (placedPeople(people)) r.people = people; }
 						if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
 						for (let l of w.locations || []) if (l.is_oa && l.pdf_url && !r.pdfUrls.includes(l.pdf_url)) r.pdfUrls.push(l.pdf_url);
 						if (r.pdfUrl && !r.pdfUrls.includes(r.pdfUrl)) r.pdfUrls.unshift(r.pdfUrl);
@@ -812,6 +840,8 @@ var ZotPoPSources = (function () {
 			   an average of nothing cited. Shown as 0.0 it ranked those journals as the least cited of all. */
 			if2y: Number.isFinite(ss["2yr_mean_citedness"]) && ss["2yr_mean_citedness"] > 0 ? ss["2yr_mean_citedness"] : null,
 			abbrev: s.abbreviated_title || null,
+			// "journal", "conference", "book series" -- or "repository" and "ebook platform", which are not journals.
+			kind: s.type || null,
 			h: toInt(ss.h_index),
 			works: toInt(s.works_count),
 			oa: Boolean(s.is_oa),
@@ -819,8 +849,19 @@ var ZotPoPSources = (function () {
 		};
 	}
 
+	/* OpenAlex keeps a 2-year mean and an h-index for every source, including preprint servers, institutional
+	   repositories and ebook platforms: bioRxiv read "~0.93", The University of Queensland's repository "~0.09"
+	   and "Springer eBooks" "~0.45" in the journal column, as if they were journals' figures. A posting, and
+	   anything hosted on a source that is not a journal, gets none. */
+	const NOT_JOURNALS = new Set(["repository", "ebook platform"]);
+	const journalFigureFor = (r, st) => !(r.itemType === "preprint" || r.preprintServer || NOT_JOURNALS.has(st.kind));
 	function applyJournal(r, st) {
 		if (!st) return;
+		if (!journalFigureFor(r, st)) {
+			r.journalOA2y = null; r.journalH = null;
+			if (!r.journalId) r.journalId = st.id;
+			return;
+		}
 		// OpenAlex's 2-year mean citedness is its own figure, kept apart from the JCR's Journal Impact Factor
 		// (journalIF), which only the JCR table fills. The two are never mixed in one field.
 		r.journalOA2y = st.if2y;
@@ -844,7 +885,7 @@ var ZotPoPSources = (function () {
 	// Fill journalIF (JCR) / journalOA2y / journalH on records from their OpenAlex source id, ISSN or, failing
 	// both, the journal's name. Mutates records.
 	async function enrichJournalMetrics(records, http, ctx = {}) {
-		const SELECT = "select=id,display_name,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj,abbreviated_title,alternate_titles";
+		const SELECT = "select=id,display_name,type,issn_l,issn,summary_stats,works_count,is_oa,is_in_doaj,abbreviated_title,alternate_titles";
 		let mailto = openAlexAuth(ctx);
 		// The Journal Impact Factor itself first, from the JCR table shipped with the
 		// plugin. OpenAlex is then asked only for the journal's h-index and for an
@@ -1021,6 +1062,8 @@ var ZotPoPSources = (function () {
 			for (let entry of Array.isArray(entries) ? entries : []) {
 				if (!Array.isArray(entry) || typeof entry[0] !== "string" || map.has(entry[0])) continue;
 				if (entry[1] !== null && (typeof entry[1] !== "object" || Array.isArray(entry[1]))) continue;
+				// A journal answer saved before the source's type was kept cannot tell bioRxiv from a journal: asked again once.
+				if (map === JOURNAL_CACHE && entry[1] !== null && !("kind" in entry[1])) continue;
 				// An answer past its age is asked again; "not found" ages faster than a figure.
 				let at = Number.isFinite(entry[2]) ? entry[2] : saved;
 				if (now - at > (entry[1] === null ? CACHE_TTL.missing : CACHE_TTL.found)) continue;
@@ -1135,6 +1178,7 @@ var ZotPoPSources = (function () {
 		"journal-article": "journalArticle", "proceedings-article": "conferencePaper", "posted-content": "preprint",
 		book: "book", monograph: "book", "edited-book": "book", "book-chapter": "bookSection", dissertation: "thesis", report: "report"
 	};
+	const CROSSREF_NOT_PAPERS = new Set(["standard", "dataset", "peer-review", "grant", "reference-entry"]);
 	const CROSSREF_JOURNALS = new Map();
 	async function crossrefJournal(venue, http, ctx) {
 		if (/^\d{4}-?\d{3}[\dx]$/i.test(venue)) return { issn: venue.replace(/^(\d{4})(\d{3}[\dx])$/i, "$1-$2"), title: null };
@@ -1231,7 +1275,10 @@ var ZotPoPSources = (function () {
 			throwIfCancelled(ctx);
 			// Crossref serves 1000 rows a page. Asking for 100 made a large search ten
 			// times as many requests, and ten times as likely to be rate-limited.
-			let rows = Math.min(1000, max - out.length);
+			// A fixed page: asking only for the rows still missing shrank the page each time the local
+			// check dropped some ("Pablo I. Nikel": 90, 20, 12, 7, 4, 2 rows), one request per handful of rows
+			// until Crossref answered 429.
+			let rows = Math.min(1000, max);
 			let url = endpoint + "?" + params.join("&") + "&rows=" + rows + "&offset=" + offset;
 			let data = await withRetry(() => http.getJSON(url), {}, ctx);
 			let items = data.message?.items || [];
@@ -1242,6 +1289,11 @@ var ZotPoPSources = (function () {
 				// conference-abstract aggregators, a preprint-highlights blog and a news
 				// site, none of which is a paper anyone asked a preprint search for.
 				if (preprintsOnly && w.subtype && w.subtype !== "preprint") continue;
+				/* A "component" is a part of another work with a DOI of its own: a supplementary file
+				   (10.1021/acs.jafc.1c03240.s001) or a figure (10.7717/peerj.6046/fig-1). Ten of sixty Crossref
+				   answers for "Pseudomonas putida metabolic engineering" were these, undated, under the paper's
+				   own title, and one reached the top 20 as a journal article. */
+				if (w.type === "component") continue;
 				let isPreprint = w.type === "posted-content";
 				// A preprint is dated by when it went up, which Crossref keeps in `posted`.
 				// `issued` can carry the journal version's date and would misdate the posting.
@@ -1278,7 +1330,9 @@ var ZotPoPSources = (function () {
 					issue: w.issue || "",
 					pages: w.page || "",
 					abstract: stripTags(w.abstract || ""),
-					itemType: CROSSREF_TYPES[w.type] || "journalArticle"
+					itemType: CROSSREF_TYPES[w.type] || "journalArticle",
+					// A BSI standard, a dataset or a referee report is not a paper: kept, but not counted as an article.
+					workType: CROSSREF_NOT_PAPERS.has(w.type) ? w.type : null
 				}));
 			}
 			let total = data.message?.["total-results"] ?? 0;
@@ -1385,7 +1439,7 @@ var ZotPoPSources = (function () {
 		let offset = 0;
 		while (out.length < max) {
 			throwIfCancelled(ctx);
-			let limit = Math.min(100, max - out.length, 1000 - offset);
+			let limit = Math.min(100, max, 1000 - offset);
 			if (limit <= 0) break;
 			let url = "https://api.semanticscholar.org/graph/v1/paper/search?" + params.join("&") + "&limit=" + limit + "&offset=" + offset;
 			let data = await withRetry(() => http.getJSON(url, headers), { tries: 6, delay: 4000 }, ctx);
@@ -1462,10 +1516,16 @@ var ZotPoPSources = (function () {
 	}
 
 	// PubMed's publication types, reduced to the words the type filter and the retraction logic use.
+	/* The kind of item PubMed's and Europe PMC's publication types name, in OpenAlex's words. A correction
+	   notice is "Published Erratum" there (Europe PMC adds "correction"): untyped, Nature Microbiology's
+	   "Author Correction: Metabolic remodelling produces fumarate..." (10.1038/s41564-025-02188-0) counted as
+	   an article with the journal's JIF beside it. Editorials likewise. */
 	function pubmedWorkType(types) {
 		let list = (Array.isArray(types) ? types : []).map(t => String(t).trim().toLowerCase());
-		if (list.includes("retraction of publication")) return "retraction";
-		if (list.some(t => t === "review" || t === "systematic review" || t === "meta-analysis")) return "review";
+		if (list.includes("retraction of publication") || list.includes("retraction")) return "retraction";
+		if (list.includes("published erratum") || list.includes("correction")) return "erratum";
+		if (list.includes("editorial")) return "editorial";
+		if (list.some(t => t === "review" || t === "systematic review" || t === "meta-analysis" || t === "review-article")) return "review";
 		return null;
 	}
 
@@ -1811,7 +1871,7 @@ var ZotPoPSources = (function () {
 			// arXiv asks for three seconds between requests, so a page of 100 spent 36
 			// seconds asleep on a 1000-row search. It serves up to 2000 at once but
 			// returns short pages on large asks, which would read as exhausted here.
-			let n = Math.min(500, max - out.length);
+			let n = Math.min(500, max);
 			let url = "https://export.arxiv.org/api/query?" + (idList ? "id_list=" + enc(idList) : "search_query=" + enc(query))
 				+ "&start=" + start + "&max_results=" + n + (q.sort === "date" ? "&sortBy=submittedDate&sortOrder=descending" : "&sortBy=relevance");
 			// arXiv answered twice with nothing at all where the same query had papers.
@@ -1977,7 +2037,7 @@ var ZotPoPSources = (function () {
 			// {source:"MED", id:"38289242", type:"Preprint of"} -- so that is what is kept.
 			publishedPmid: isPreprint ? epmcPublishedPmid(r) : null,
 			itemType: isPreprint ? "preprint" : "journalArticle",
-			workType: (r.pubTypeList?.pubType || []).some(t => /review/i.test(t)) ? "review" : null,
+			workType: pubmedWorkType(r.pubTypeList?.pubType) || ((r.pubTypeList?.pubType || []).some(t => /review/i.test(t)) ? "review" : null),
 			// The paper itself, not the notice ("Retraction of Publication").
 			retracted: (r.pubTypeList?.pubType || []).some(t => /^retracted publication$/i.test(String(t).trim()))
 		});
@@ -1993,7 +2053,8 @@ var ZotPoPSources = (function () {
 		let cursor = "*", seen = 0;
 		while (out.length < max) {
 			throwIfCancelled(ctx);
-			let pageSize = Math.min(1000, max - out.length);
+			// Fixed, as on Crossref: the remainder alone walked Europe PMC in pages of 17, 3 and 1.
+			let pageSize = Math.min(1000, max);
 			let url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?format=json&resultType=core"
 				+ "&pageSize=" + pageSize + "&cursorMark=" + enc(cursor) + sort + "&query=" + enc(query);
 			// Europe PMC answered a valid query with HTTP 200 and a 17-byte body; the
@@ -2847,6 +2908,12 @@ var ZotPoPSources = (function () {
 	// Google Scholar and OSF have no identifier index, so a pasted DOI stays text there.
 	const ID_CAPABLE = new Set(["openalex", "crossref", "pubmed", "europepmc", "arxiv", "semanticscholar"]);
 	const IDENTIFIER_SOURCES = new Set([...ID_CAPABLE, "multi", "preprint"]);
+	/* The identifier kinds a source can look up, where it cannot look up every kind. In a combined search a
+	   source that cannot is not asked: every DOI pasted into the default search said "arXiv can only be
+	   searched by an arXiv identifier" and the run was reported as incomplete, with OpenAlex, Crossref and
+	   Europe PMC all having found the paper. Asked on its own, such a source still says why it has nothing. */
+	const ID_KINDS = { crossref: ["doi", "arxiv"], arxiv: ["arxiv"], pubmed: ["doi", "pmid", "pmcid"] };
+	const canLookUp = (key, kind) => !ID_KINDS[key] || ID_KINDS[key].includes(kind);
 
 	// A wider pool lets reciprocal-rank fusion reward agreement below each
 	// source's displayed top N. Small searches overfetch threefold; large ones
@@ -2860,6 +2927,10 @@ var ZotPoPSources = (function () {
 			if (!sources.some(source => source.key === "openalex")) throw new Error("Author identifiers require OpenAlex or Combined search");
 			if (sources.length > 1) warn(ctx, "multi", "Author identifier search uses OpenAlex only; the other sources cannot verify this identity.");
 			sources = sources.filter(source => source.key === "openalex");
+		}
+		if (q.identifier) {
+			let able = sources.filter(source => !ID_CAPABLE.has(source.key) || canLookUp(source.key, q.identifier.kind));
+			if (able.length) sources = able;
 		}
 		if (!ctx.sourceStatus) ctx.sourceStatus = {};
 		let lists = sources.map(() => []), errors = ctx.errors || (ctx.errors = []), done = 0, succeeded = 0;
@@ -2950,7 +3021,12 @@ var ZotPoPSources = (function () {
 		// Citation enrichment can change which records belong in the top N.
 		// For relevance/date it cannot, so enrich only the chosen results there.
 		if (q.sort !== "citations") merged = sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
-		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx);
+		else if (ctx.enrichCitations !== false) {
+			await enrichFromOpenAlex(merged, http, ctx);
+			merged = sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
+		}
+		// The rows shown, and only those, are completed from OpenAlex where another index found them.
+		if (ctx.enrichCitations !== false) await enrichFromOpenAlex(merged, http, ctx, { complete: true });
 		return linkPreprintVersions(sortSearchResults(merged, q, true).slice(0, q.maxResults || 200));
 	}
 

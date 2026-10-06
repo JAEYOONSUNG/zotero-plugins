@@ -127,6 +127,9 @@ var ZotPoPRelated = (() => {
 	/* One result's score, without the explanation: c1, c2, c3, c3w and a lazy `top` (the five held papers
 	   that explain it), worked out only when something reads it. */
 	function scoreOne(ix, r) {
+		/* The search already knows this result is held (by its DOI, or by title and year for a copy without one):
+		   it is flagged, never ranked against the library it belongs to. */
+		if (r.heldItemID != null) return { held: true, score: null, heldItemID: r.heldItemID, heldTitle: r.title };
 		let twin = twinOf(ix, r);
 		if (twin) return { held: true, score: null, heldItemID: twin.itemID, heldTitle: twin.title };
 		let id = shortId(r.id);
@@ -220,6 +223,7 @@ var ZotPoPRelated = (() => {
 		for (let h of held) { let d = heldDoi(h); if (!have(h) && d && !store.getDoi(d)) heldNeedsDoi.push(d); }
 		let resNeedsId = [], resNeedsDoi = [];
 		for (let r of results) {
+			if (r.heldItemID != null) continue;
 			let id = shortId(r.sourceId && r.source === "openalex" ? r.sourceId : r.id), d = normDOI(sources, r.doi);
 			if (isWork(id)) { if (!store.getId(id)) resNeedsId.push(id); }
 			else if (d && !store.getDoi(d)) resNeedsDoi.push(d);
@@ -266,7 +270,7 @@ var ZotPoPRelated = (() => {
 			if (isWork(id)) e = store.getId(id);
 			else if (d) { let w = store.getDoi(d); if (w?.id) { id = w.id; e = w; } }
 			let versionDois = [r.publishedAs?.doi, r.preprintOf?.doi].filter(Boolean).map(x => normDOI(sources, x));
-			return { key: r.key, id: isWork(id) ? id : null, doi: d, title: r.title, year: r.year, family: r.family, refs: e?.refs || null, versionDois };
+			return { key: r.key, id: isWork(id) ? id : null, doi: d, title: r.title, year: r.year, family: r.family, refs: e?.refs || null, versionDois, heldItemID: r.heldItemID ?? null };
 		});
 		cancelled();
 		out.scores = await scoreAllAsync(heldList, rows, { cancelled, pause: ctx.pause });

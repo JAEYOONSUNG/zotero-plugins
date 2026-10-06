@@ -5278,7 +5278,9 @@
 		try {
 			rel.store = rel.store || await loadRelatedStore();
 			out = await ZotPoPRelated.rank({ held, http, ctx: cctx, store: rel.store, sources: ZotPoPSources,
-				results: records.map(r => ({ key: r.key, source: r.source, sourceId: r.sourceId, doi: r.doi, title: r.title, year: r.year, family: r.authors?.[0]?.lastName || "", publishedAs: r.publishedAs, preprintOf: r.preprintOf })),
+				results: records.map(r => ({ key: r.key, source: r.source, sourceId: r.sourceId, doi: r.doi, title: r.title, year: r.year, family: r.authors?.[0]?.lastName || "", publishedAs: r.publishedAs, preprintOf: r.preprintOf,
+					// Held as the row says (a copy without a DOI is found by title and year): flagged, not ranked.
+					heldItemID: r.inLibrary && r.libraryItemID != null ? r.libraryItemID : null })),
 				onProgress: p => { if (!cancelled()) { setStatus(t("relProgress", p.done, p.total)); setProgress(p.done, p.total); } } });
 		}
 		catch (e) {
@@ -5817,13 +5819,17 @@
 		};
 		let lines = [t("csvHead").join(",")];
 		for (let r of state.visible) {
-			let cpy = ZotPoPMetrics.citesPerYear(r);
+			let cpy = ZotPoPMetrics.citesPerYear(r), where = affiliationOf(r);
+			/* Which index the count is (the cell's tooltip says it; the file did not), the tier the Tier column
+			   shows, and whether the paper is retracted: an exported list lost the retraction mark. */
 			lines.push([
 				r.citations ?? "", cpy == null || !Number.isFinite(cpy) ? "" : fmt(cpy), r.popOriginal ? r.popRank : r.rank, r.authorString, r.title,
 				r.year ?? "", r.venue, r.journalIF == null ? "" : fmt(r.journalIF, 2), r.journalIF == null ? "" : (r.journalIFSource || "JCR"), r.journalOA2y == null ? "" : fmt(r.journalOA2y, 2),
-				...personCells(affiliationOf(r)?.first), ...correspondingCells(affiliationOf(r)),
+				...personCells(where?.first), ...correspondingCells(where),
 				r.publisher, r.doi ?? "", r.url ?? "",
-				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo")
+				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo"),
+				// Added at the end, so a sheet built on the earlier columns still reads them where they were.
+				r.citations == null ? "" : sourceLabel(r.citationSource || r.source), tierLabel(where?.tier), r.retracted ? t("csvYes") : ""
 			].map(esc).join(","));
 		}
 		return lines.join("\n");

@@ -166,8 +166,8 @@ test("a cached journal figure is used for six months and a 'not found' for one; 
 	const T = freshSources();
 	const day = 86400000, now = Date.parse("2026-09-28T00:00:00Z");
 	const snapshot = { version: 1, savedAt: new Date(now).toISOString(), journals: [
-		["S-fresh", { id: "S-fresh", if2y: 3 }, now - 10 * day],
-		["S-old", { id: "S-old", if2y: 3 }, now - 400 * day],
+		["S-fresh", { id: "S-fresh", if2y: 3, kind: "journal" }, now - 10 * day],
+		["S-old", { id: "S-old", if2y: 3, kind: "journal" }, now - 400 * day],
 		["S-miss-new", null, now - 5 * day],
 		["S-miss-old", null, now - 60 * day]], institutions: [] };
 	assert.equal(T.importCaches(snapshot, now), 2, "the fresh figure and the recent miss");
