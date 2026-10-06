@@ -5453,9 +5453,11 @@ test('R9 the Files cell names what is attached: a spreadsheet is not a PDF, and 
 test('R9 the hover fill never paints a selected cell; only its outline changes', () => {
   const Cells = require('../src/item-cells.js');
   const css = Cells.hoverCSS(['title']);
-  assert.match(css, /\.row:not\(\.selected\) \.cell\[data-sc-hover-cell\]\{border-radius:7px;background-color:#E3EDFF/);
-  assert.doesNotMatch(css, /\.virtualized-table-body \.row \.cell\[data-sc-hover-cell\]\{[^}]*background-color/, 'no fill rule that also reaches a selected row');
-  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]\{border-radius:7px;box-shadow/);
+  // The hovered cell's box is drawn by ::before so it can be as tall as the row (2026-10-06).
+  assert.match(css, /\.row:not\(\.selected\) \.cell\[data-sc-hover-cell\]::before\{[^}]*background-color:#E3EDFF/);
+  assert.doesNotMatch(css, /\.virtualized-table-body \.row \.cell\[data-sc-hover-cell\](::before)?\{[^}]*background-color/, 'no fill rule that also reaches a selected row');
+  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]::before\{[^}]*box-shadow/);
+  assert.doesNotMatch(css.match(/\.row\.selected \.cell\[data-sc-hover-cell\]::before\{[^}]*\}/)[0], /background-color/);
 });
 
 test('R9 a zero or legacy citation count is drawn in readable ink, not placeholder grey', async () => {

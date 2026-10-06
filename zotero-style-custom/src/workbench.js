@@ -64,7 +64,9 @@
   // which page's evidence a click last asked 쪽별 기록 to show under the strip.
   const pageAnnotations=new Map(),pageAnnotationLoads=new Map(),pageChosen=new Map();
   const ui=runtime.cache.workbenchUI&&typeof runtime.cache.workbenchUI==='object'?runtime.cache.workbenchUI:{};
-  let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;const pendingActions=new Set();
+  let returnFocus=null,commandFocus=null,commandIndex=0,commandMatches=[],navigationEpoch=0;
+  // The tab last drawn, and whether the next redraw starts at the top (a navigation) or keeps the reader's place (see capturePlace).
+  let drawnTab=null,scrollFromTop=false,heldPlace=null;const pendingActions=new Set();
   const state={tab:TABS.some(([id])=>id===ui.lastTab)?ui.lastTab:'explore',query:'',type:'',tag:'',status:'',ratingMin:'',yearFrom:'',yearTo:'',sort:'library',scope:'library',items:[],selected:new Set(),annotationIDs:new Set(),graphMode:'citations',boardID:null,cardIDs:new Set(),color:'',transpose:null,aiOutput:null,aiTask:null,aiItemID:null,libraryID:null,paletteID:null,focus:'',searchRecords:!!ui.searchRecords,rulesByTab:model.cleanRulesByTab?model.cleanRulesByTab(ui.filterRules):{}};
   /* Single-value filters saved before the rule builder become include rules on 보유 문헌. */
   if(ui.filters&&typeof ui.filters==='object'&&model.legacyRules){
@@ -1252,6 +1254,8 @@
    // in 중첩 태그, say. updateChrome shows it beside the selection count.
    state.selectionLabel=label||'';
    state.scope='selected';scope.value='selected';
+   // A new list: it opens at its top, even on the same tab.
+   scrollFromTop=true;
    return navigate(tab);
   }
   const commands=node('div',null,panel,{class:'sc-command-palette',role:'dialog','aria-modal':'true','aria-label':'기능 바로 찾기'});commands.hidden=true;
@@ -1775,13 +1779,14 @@
    state.query='';search.value='';for(const key of ['status','ratingMin','yearFrom','yearTo','type','tag'])state[key]='';state.rulesByTab={};
    for(const [key,input] of filterInputs)input.value='';type.value='';
    state.selected=new Set([String(id)]);state.scope='selected';scope.value='selected';
-   return state.tab==='explore'?render():navigate('explore');
+   // A different list: it opens at its top.
+   scrollFromTop=true;return state.tab==='explore'?render():navigate('explore');
   }
   function openInList(it){
    rememberListOrigin();
    const id=String(it.id);
-   if(body.querySelector(`[data-item-id="${id}"]`)){state.expandedPaperID=id;state.focusPaper=id;return render();}
-   state.selected=new Set([id]);state.scope='selected';scope.value='selected';return render();
+   if(body.querySelector(`[data-item-id="${id}"]`)){state.expandedPaperID=id;state.focusPaper=id;return render().then(()=>{if(!disposed&&state.tab==='explore')body.querySelector(`[data-item-id="${id}"]`)?.scrollIntoView?.({block:'nearest'});});}
+   state.selected=new Set([id]);state.scope='selected';scope.value='selected';scrollFromTop=true;return render();
   }
   // The memo line on a row follows a save made under it, or goes when the memo is emptied.
   function syncRemark(card,value){
@@ -2158,7 +2163,7 @@
    })());
   }
    // Back to the 자세히 that was pressed, so the keyboard does not lose its place.
-   if(state.focusPaper){body.querySelector(`[data-detail-for="${state.focusPaper}"]`)?.focus?.();state.focusPaper='';}
+   if(state.focusPaper){body.querySelector(`[data-detail-for="${state.focusPaper}"]`)?.focus?.({preventScroll:true});state.focusPaper='';}
    await Promise.all(details);}
   async function drawRecent(){
    // Zotero's dates are UTC without a zone, the reading record's carry one: both are read as UTC, or a paper read this morning ranked below one added last night.
@@ -3484,7 +3489,7 @@
     const yearNodes=topics.fold?built.nodes:graph.nodes;
     const drawYears=()=>{
      const old=mapFrame.querySelector('.sc-year-hist');
-     const hist=yearHistogram(mapFrame,yearNodes,{range:state.graphYears||null,onChange:range=>{state.graphYears=range;kit.refilter();drawYears();}});
+     const hist=yearHistogram(mapFrame,yearNodes,{range:state.graphYears||null,onChange:range=>keepPlace(()=>{state.graphYears=range;kit.refilter();drawYears();})});
      if(hist){if(old)old.replaceWith(hist);else mapFrame.insertBefore(hist,svg);}else{old?.remove();if(state.graphYears){state.graphYears=null;kit.refilter();}}
     };
     drawYears();
@@ -3764,20 +3769,20 @@
      node('td',row.seconds>0&&runtime.formatReadTime?runtime.formatReadTime(row.seconds,{compact:true}):'—',tr,{class:'sc-figure-cell'});
     }
    };
-   const redraw=()=>{treeBox.replaceChildren();branch(sorted(tree),treeBox);if(!treeBox.childNodes.length){const none=emptyCard(treeBox,{title:tree.length?'검색에 맞는 태그가 없습니다.':'태그가 없습니다.',hint:tree.length?'':'문헌을 선택하고 태그를 추가하세요.',icon:'tags'});if(tree.length&&state.tagQuery)button('검색 지우기',()=>{state.tagQuery='';find.value='';redraw();},emptyActions(none));}};
+   const redraw=()=>keepPlace(()=>{treeBox.replaceChildren();branch(sorted(tree),treeBox);if(!treeBox.childNodes.length){const none=emptyCard(treeBox,{title:tree.length?'검색에 맞는 태그가 없습니다.':'태그가 없습니다.',hint:tree.length?'':'문헌을 선택하고 태그를 추가하세요.',icon:'tags'});if(tree.length&&state.tagQuery)button('검색 지우기',()=>{state.tagQuery='';find.value='';redraw();},emptyActions(none));}});
    let typing=null;find.addEventListener('input',()=>{state.tagQuery=find.value;win.clearTimeout(typing);typing=win.setTimeout(redraw,120);});
    order.addEventListener('change',()=>{state.tagSort=order.value;redraw();});
    function branch(nodes,parent,depth=0){for(const n of nodes){
     // A leaf has nothing to disclose, so it skips <details> and the triangle
     // that promised children it does not have.
     const hasKids=!!(n.children&&n.children.length);
-    const container=hasKids?node('details',null,parent):node('div',null,parent,{class:'sc-tag-leaf'});
+    const container=hasKids?node('details',null,parent,{'data-key':'tag:'+n.path}):node('div',null,parent,{class:'sc-tag-leaf','data-key':'tag:'+n.path});
     container.style.setProperty('--sc-tag-depth',String(depth));
     if(hasKids&&(state.tagQuery||openPaths.has(n.path)))container.open=true;
     if(hasKids)container.addEventListener('toggle',()=>{if(container.open)openPaths.add(n.path);else openPaths.delete(n.path);});
     const row=hasKids?node('summary',null,container):node('div',null,container,{class:'sc-tag-row'});
     // The name itself chooses the tag for 함께 붙은 태그, below the tree.
-    const nameBtn=button('',()=>{state.tagFocus=state.tagFocus===n.path?'':n.path;redraw();redrawCross();},row,{class:'sc-tag-name','aria-pressed':String(state.tagFocus===n.path),title:D(n.path||n.name)});
+    const nameBtn=button('',()=>keepPlace(()=>{state.tagFocus=state.tagFocus===n.path?'':n.path;redraw();redrawCross();}),row,{class:'sc-tag-name','aria-pressed':String(state.tagFocus===n.path),title:D(n.path||n.name)});
     // The name in its own box so a long tag ends in an ellipsis instead of being cut (arXiv category tags run long).
     node('span',D(n.name),nameBtn,{class:'sc-tag-label'});
     // The count is a badge, not a parenthesis: "#methods 2".
@@ -5214,7 +5219,10 @@
     drawFindingsBox(found,body);
    }
   }
-  function refreshReading(){
+  // A reading tick or a switch redraws the list under the reader: their place is kept (keepPlace).
+  // groupSections again: the redrawn list's headings get their soft containers back, as after a full render.
+  function refreshReading(){return keepPlace(()=>{const out=drawReadingList();if(!disposed&&state.tab==='reading')groupSections();return out;});}
+  function drawReadingList(){
    if(disposed||panel.hidden||state.tab!=='reading')return;
    // A48: this rebuilds the whole list; a memo mid-edit -- typing, unsaved --
    // must not be torn out from under the reader by some other row's async
@@ -9297,7 +9305,7 @@
    // Overall order is a local catalog position, never an official JCR category rank.
    const order={if:(a,b)=>(a.globalRank&&b.globalRank)?a.globalRank-b.globalRank:(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue),name:(a,b)=>a.venue.localeCompare(b.venue),papers:(a,b)=>b.papers-a.papers||(b.impact??-1)-(a.impact??-1),fieldrank:(a,b)=>{const x=selectedJournalRanks(a)[0],y=selectedJournalRanks(b)[0];return (x?x.rank/x.of:9)-(y?y.rank/y.of:9)||(b.impact??-1)-(a.impact??-1)||a.venue.localeCompare(b.venue);},quartile:(a,b)=>(a.quartile??9)-(b.quartile??9)||(b.impact??-1)-(a.impact??-1)}[journalView.sort]||((a,b)=>0);
    const listArea=node('div',null,body,{class:'sc-journal-list'});
-   journalView.redraw=()=>{
+   journalView.redraw=()=>keepPlace(()=>{
    listArea.replaceChildren();
    /* "Nat. Commun." and "2041-1723" are how a reader writes a journal down,
       so the dots come out of both sides and the ISSNs go in, with and
@@ -9345,7 +9353,7 @@
    }else{
     shown.forEach(j=>journalRow(j,tbody,j.globalRank));
    }
-   };
+   });
    function redrawJournalList(){if(disposed||state.tab!=='journals'||!listArea.isConnected)return;journalView.redraw();}
    journalView.redraw();
    if(!String(runtime.pref?.('journalRankKey','')||'').trim()){
@@ -9567,13 +9575,152 @@
     button('패널 CSS 적용',()=>{runtime.setPanelCSS(css.value);message(css.value.trim()?'패널 CSS를 적용했습니다.':'패널 CSS를 비웠습니다.');},bar(edit));
    }
   }
+  /* ---- The reader's place across a redraw (2026-10-06, "화면이 자꾸 맨 위로 튄다") ----
+     render() empties the scroll area (.sc-body) and draws the tab again, often after an await
+     (a layout slice, a cache read). The moment the area is empty the browser clamps its
+     scrollTop to 0, and the refilled page opened at the top: every chip, zoom, scope switch,
+     sort or fold on a long page threw the reader back up. Now a redraw of the same tab:
+     - notes the element at the top of the view by a stable key (a paper, node, author, note
+       or annotation id, or a heading's text) and how far down the view it sat;
+     - holds the area's height while it is redrawn (block-end padding), so nothing clamps;
+     - puts that element back at the same offset -- content that grew above it does not
+       push it away -- or, when it is gone, the old scrollTop;
+     - gives back the inner scrollers their own positions (lists in cards, the matrix, the
+       canvas) and the focus to the same control, so focus never falls to the document.
+     A different tab, or a navigation that asks for it (scrollFromTop), starts at the top. Code
+     that scrolls on purpose during the draw (a person's page, 이전 목록으로) wins: if the
+     position moved while it was held, it is left where that code put it. */
+  const ANCHOR_ATTRS=['data-anchor','data-item-id','data-node-id','data-author-id','data-annotation-id','data-group-key','data-rule-id','data-work','data-topic','data-pick','data-draft-key','data-key','id'];
+  const ANCHOR_SELECTOR=ANCHOR_ATTRS.map(name=>`[${name}]`).join(',')+',h2,h3,h4,.sc-section-head,.sc-path-head,.sc-hit-group';
+  const cssValue=value=>String(value).replace(/["\\]/g,'\\$&');
+  function anchorKey(el){
+   for(const name of ANCHOR_ATTRS){const value=el.getAttribute?.(name);if(value)return {attr:name,value};}
+   if(el.matches?.('h2,h3,h4,.sc-section-head,.sc-path-head,.sc-hit-group')){const text=String(el.textContent||'').trim().slice(0,80);if(text)return {heading:text};}
+   return null;
+  }
+  function keyed(key){
+   if(key.attr)return [...body.querySelectorAll(`[${key.attr}="${cssValue(key.value)}"]`)];
+   return [...body.querySelectorAll('h2,h3,h4,.sc-section-head,.sc-path-head,.sc-hit-group')].filter(el=>String(el.textContent||'').trim().slice(0,80)===key.heading);
+  }
+  const sameKey=(a,b)=>!!a&&!!b&&a.attr===b.attr&&a.value===b.value&&a.heading===b.heading;
+  // A control with no key of its own: its kind, its name and its order among the same.
+  function controlKey(el){
+   const own=anchorKey(el);
+   const sig=e=>[e.localName,e.getAttribute?.('type')||'',e.getAttribute?.('aria-label')||'',e.getAttribute?.('title')||'',e.getAttribute?.('data-safe')||'',e.localName==='input'||e.localName==='textarea'||e.localName==='select'?'':String(e.textContent||'').trim().slice(0,60)].join('|');
+   const signature=sig(el);
+   const nth=[...body.querySelectorAll(el.localName)].filter(e=>sig(e)===signature).indexOf(el);
+   return {own,signature,nth,tag:el.localName,sig};
+  }
+  function findControl(saved){
+   if(saved.own){const hits=keyed(saved.own).filter(e=>e.localName===saved.tag);if(hits.length)return hits[0];}
+   const hits=[...body.querySelectorAll(saved.tag)].filter(e=>saved.sig(e)===saved.signature);
+   return hits[saved.nth]||hits[0]||null;
+  }
+  function scrollerKey(el){
+   const own=anchorKey(el);if(own)return {own};
+   const cls=el.classList?.[0];const all=cls?[...body.querySelectorAll('.'+cls)]:[...body.querySelectorAll(el.localName)];
+   return {cls,tag:el.localName,nth:all.indexOf(el)};
+  }
+  function findScroller(key){
+   if(key.own)return keyed(key.own)[0]||null;
+   const all=key.cls?[...body.querySelectorAll('.'+key.cls)]:[...body.querySelectorAll(key.tag)];
+   return all[key.nth]||null;
+  }
+  // The inner scrollers the reader has moved: scroll events do not bubble, but they can be caught on the way down.
+  const scrolledInside=new Set();
+  body.addEventListener('scroll',event=>{const target=event.target;if(target&&target!==body&&target.nodeType===1)scrolledInside.add(target);},{capture:true,passive:true});
+  function capturePlace(){
+   const place={top:body.scrollTop||0,anchor:null,inner:[],focus:null,held:0};
+   if(place.top>0){
+    const frame=body.getBoundingClientRect?.();
+    if(frame&&(frame.height||body.clientHeight)){
+     const viewTop=frame.top,viewBottom=frame.top+(body.clientHeight||frame.height);
+     let straddling=null;
+     for(const el of body.querySelectorAll(ANCHOR_SELECTOR)){
+      const rect=el.getBoundingClientRect?.();if(!rect||!(rect.height||rect.width))continue;
+      // Only something the reader can see is a landmark: past the bottom of the view, the old position is the better guess.
+      if(rect.top>=viewBottom)break;
+      if(rect.top>=viewTop-1){const key=anchorKey(el);if(key){place.anchor={key,nth:keyed(key).indexOf(el),offset:rect.top-viewTop};break;}}
+      else if(rect.bottom>viewTop){const key=anchorKey(el);if(key)straddling={key,nth:keyed(key).indexOf(el),offset:rect.top-viewTop};}
+     }
+     if(!place.anchor&&straddling)place.anchor=straddling;
+    }
+   }
+   for(const el of [...scrolledInside]){
+    if(!el.isConnected||!body.contains(el)){scrolledInside.delete(el);continue;}
+    if(el.scrollTop||el.scrollLeft)place.inner.push({key:scrollerKey(el),top:el.scrollTop||0,left:el.scrollLeft||0});
+   }
+   const active=doc.activeElement;
+   if(active&&active!==body&&body.contains(active)){
+    place.focus=controlKey(active);
+    if(typeof active.selectionStart==='number')place.focus.selection=[active.selectionStart,active.selectionEnd];
+   }
+   return place;
+  }
+  /* Keeps the area as tall as it was while it is emptied and drawn again, so the position cannot clamp:
+     a float of no width as tall as the old place, first in the area. Not padding: a flex item cannot shrink
+     below its padding, so a padded .sc-body grew instead of scrolling (Chrome, 2026-10-06). The float takes
+     no room beside the content and only sets how far the area can scroll; it is gone once the place is back. */
+  function holdPlace(place){
+   place.hold?.remove();place.hold=null;
+   const height=Math.max(0,Math.ceil(place.top+(body.clientHeight||0)));
+   if(height){
+    const hold=doc.createElementNS(HTML,'div');hold.className='sc-scroll-hold';hold.setAttribute('aria-hidden','true');
+    hold.style.cssText=`float:left;width:0;height:${height}px;margin:0;padding:0;border:0;overflow:hidden;pointer-events:none`;
+    body.insertBefore(hold,body.firstChild);place.hold=hold;
+    if(Math.abs((body.scrollTop||0)-place.top)>1)body.scrollTop=place.top;
+   }
+   place.heldTop=body.scrollTop||0;
+  }
+  function restorePlace(place){
+   if(!place)return;
+   place.hold?.remove();place.hold=null;
+   // Something scrolled on purpose while the page was drawn (a person's page, a reveal): leave it.
+   const moved=place.heldTop!==undefined&&Math.abs((body.scrollTop||0)-place.heldTop)>2;
+   if(!moved){
+    let done=false;
+    if(place.anchor){
+     const hits=keyed(place.anchor.key),el=hits[place.anchor.nth]||hits[0];
+     const frame=body.getBoundingClientRect?.(),rect=el?.getBoundingClientRect?.();
+     if(el&&frame&&rect&&(rect.height||rect.width)){body.scrollTop=(body.scrollTop||0)+(rect.top-frame.top)-place.anchor.offset;done=true;}
+    }
+    if(!done)body.scrollTop=place.top;
+   }
+   for(const row of place.inner){const el=findScroller(row.key);if(!el)continue;if(row.top)el.scrollTop=row.top;if(row.left)el.scrollLeft=row.left;}
+   if(place.focus){
+    const active=doc.activeElement;
+    if(!active||active===doc.body||active===doc.documentElement||!active.isConnected||active===body){
+     const el=findControl(place.focus)||body;
+     try{el.focus?.({preventScroll:true});}catch(_){}
+     if(place.focus.selection&&el!==body&&typeof el.setSelectionRange==='function')try{el.setSelectionRange(...place.focus.selection);}catch(_){}
+    }
+   }
+  }
+  /* The same for a part of a page redrawn on its own (the tag tree, the reading list, the journal
+     table): the place and the focus are noted, the part redrawn, and both put back. Inside a full
+     redraw, which keeps the place itself, it only runs the part. */
+  let keeping=false;
+  function keepPlace(draw){
+   if(heldPlace||keeping||disposed)return draw();
+   const place=capturePlace();holdPlace(place);keeping=true;
+   const done=()=>{keeping=false;if(!disposed&&!heldPlace)restorePlace(place);};
+   let out;
+   try{out=draw();}catch(error){done();throw error;}
+   if(out&&typeof out.then==='function')return out.finally(done);
+   done();return out;
+  }
   async function render(){if(disposed||panel.hidden)return;if(hiddenTabs().has(state.tab))state.tab='appearance';
    if(needsRuleData()){try{await ensureRuleData();}catch(error){runtime.Z?.logError?.(error);}if(disposed||panel.hidden)return;}
+   // The place is noted before the first redraw empties the page; one already being drawn keeps the place it noted.
+   const sameTab=drawnTab===state.tab&&!scrollFromTop;scrollFromTop=false;
+   if(!sameTab){heldPlace?.hold?.remove();heldPlace=null;}
+   else if(!heldPlace)heldPlace=capturePlace();
+   const drawing=state.tab;
    /* "선택한 문헌" with nothing selected showed an empty list that read as
       broken: after 자세히 the scope stayed on the selection, and the
       selection went away with the next click in the tree. With nothing to
       show, the scope falls back to the library. */
-   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;state.exploreCount=null;state.exploreIDs=null;state.tabCount=null;clear();reloadDeferSince=0;for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
+   if(state.scope==='selected'&&!state.selected.size){state.scope='library';scope.value='library';state.selectionLabel='';restoreKept();}const token=++epoch;state.exploreCount=null;state.exploreIDs=null;state.tabCount=null;clear();if(!sameTab)body.scrollTop=0;else if(heldPlace)holdPlace(heldPlace);reloadDeferSince=0;for(const b of kindChips.querySelectorAll('button'))b.setAttribute('aria-pressed',String(state.type===b.dataset.kind));memoFields=[];draftContext=JSON.stringify([state.tab,state.libraryID,[...state.selected].sort()]);draftCounters=new Map();for(const[id,b]of navButtons){b.hidden=hiddenTabs().has(id);b.setAttribute('aria-current',id===state.tab?'page':'false');b.classList.toggle('active',id===state.tab);b.setAttribute('tabindex',id===state.tab?'0':'-1');}updateChrome();refreshNotice().catch(()=>{});
    // Said in the panel, never in a modal: the first background write into Extra.
    if(runtime.cache?.citationExtraNoticePending){win.setTimeout(()=>{if(disposed||panel.hidden||!runtime.cache.citationExtraNoticePending)return;message("인용 수를 Extra 필드에 'Citations: N (출처, 날짜)' 한 줄로 기록합니다. 원하지 않으면 설정 → Style Custom → 인용 수·IF → '논문 추가·수정 시 인용 수 조회 후 Extra 저장'을 끄세요.");delete runtime.cache.citationExtraNoticePending;runtime.dirty=true;},0);}try{
    switch(state.tab){case'explore':{
@@ -9595,7 +9742,11 @@
     break;
    }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':await drawGraph(token);break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed){groupSections();restoreDrafts();revealNav(navButtons.get(state.tab),false);}
-  }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
+  }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}
+   finally{
+    // Only the last redraw puts the place back; an earlier one overtaken by it leaves the hold to it.
+    if(token===epoch&&!disposed){const place=heldPlace;heldPlace=null;drawnTab=drawing;if(place)restorePlace(place);}
+   }}
   /* A reading tick changes one paper. It used to run runtime.state() over the
      whole library (1,200 computeState calls a second with the panel open); it
      now names the paper that changed, finds it through an id index, and

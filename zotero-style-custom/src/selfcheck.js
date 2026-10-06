@@ -676,6 +676,18 @@
       return `${pressed} buttons pressed across ${tabs.length} tabs, none threw`;
     }));
 
+    results.push(await attempt('a view-only redraw keeps the reader\'s place on long tabs', async () => {
+      /* The user reported the page jumping to the top (graph tab, 2026-10-06). On the graph tab and two other
+         long tabs the scroll area is put at its middle, an already pressed data-safe="view" control is pressed
+         again (the same view, drawn again: nothing is written, opened or fetched), and the place must hold. */
+      const state = runtime.windows.get(win);
+      const bench = state && state.workbench;
+      if (!bench) throw new Error('workbench not attached');
+      const {checked, lost} = await scrollKeepCheck({bench, runtime, wait: ms => new Promise(resolve => win.setTimeout(resolve, ms))});
+      if (lost.length) throw new Error(lost.join(' | '));
+      return checked.join(' · ') || 'no tab long enough to scroll';
+    }));
+
     results.push(await attempt('a double-click on a column edge fits the column to its content', async () => {
       /* The user reported the fit not happening. The handler is real code on
          the real header: dispatch the double-click it listens for and read
@@ -1503,7 +1515,53 @@
     return {pressed, broken};
   }
 
-  const api = {run, readerCheck, safeButtons, sweepSafeButtons, journalLayerReport, jcrPrecedence, statusContradictions, orphanRatingTags, newsWithoutClassification, rowsWithDuplicateNews, worksWithDuplicatePeople, requireNoDuplicatePeople, staleRows, planCoverage, moreButtonProblems, missingMembers};
+  /* The press for scrollKeepCheck: a data-safe="view" control already pressed (aria-pressed="true"), so pressing it
+     again redraws the same view. Chosen from safeButtons, the allowlist, and nothing else. */
+  function samePressButton(panel) {
+    return safeButtons(panel).find(b => b.getAttribute('aria-pressed') === 'true' && b.getClientRects?.().length) || null;
+  }
+  async function scrollKeepCheck({bench, runtime, tabs = ['graph', 'explore', 'journals'], wait}) {
+    const checked = [], lost = [];
+    const savedUI = JSON.parse(JSON.stringify(runtime.cache.workbenchUI || {}));
+    const keyed = '[data-item-id],[data-node-id],[data-author-id],[data-annotation-id],[data-key],[data-venue],h2,h3,h4';
+    const keyOf = el => el.getAttribute('data-item-id') || el.getAttribute('data-node-id') || el.getAttribute('data-author-id') || el.getAttribute('data-annotation-id') || el.getAttribute('data-key') || el.getAttribute('data-venue') || ('h:' + String(el.textContent || '').trim().slice(0, 80));
+    const marks = body => {
+      const top = body.getBoundingClientRect().top, out = [];
+      for (const el of body.querySelectorAll(keyed)) {
+        const r = el.getBoundingClientRect(); if (!r.height) continue;
+        if (r.top >= top + body.clientHeight) break; if (r.top < top) continue;
+        out.push([keyOf(el), r.top - top]); if (out.length >= 8) break;
+      }
+      return out;
+    };
+    try {
+      for (const tab of tabs) {
+        try { await bench.show(tab); } catch (error) { lost.push(tab + ' · show → ' + (error.message || error)); continue; }
+        await wait(400);
+        const body = bench.panel.querySelector('.sc-body');
+        const max = body ? body.scrollHeight - body.clientHeight : 0;
+        if (!body || max < 120) { checked.push(`${tab}: too short (${Math.max(0, max)}px)`); continue; }
+        body.scrollTop = Math.round(max / 2); await wait(80);
+        const before = body.scrollTop, seen = marks(body);
+        const press = samePressButton(bench.panel);
+        const how = press ? (press.getAttribute('aria-label') || press.textContent.trim()).slice(0, 30) : 'render()';
+        if (press) press.click(); else await bench.render();
+        await wait(700);
+        if (bench.state.tab !== tab) { checked.push(`${tab}: ${how} changed tab, skipped`); continue; }
+        const after = body.scrollTop, now = body.scrollHeight - body.clientHeight;
+        const top = body.getBoundingClientRect().top;
+        const held = seen.some(([key, offset]) => { const el = [...body.querySelectorAll(keyed)].find(e => keyOf(e) === key); return el && Math.abs(el.getBoundingClientRect().top - top - offset) <= 4; });
+        if (Math.abs(after - before) <= 4 || held || (after < before && after >= now - 4)) checked.push(`${tab}: ${how} kept ${before}→${after}`);
+        else lost.push(`${tab}: ${how} moved ${before}→${after}`);
+      }
+    } finally {
+      try { await bench.toggle(false); } catch (ignored) {}
+      if (JSON.stringify(savedUI) !== JSON.stringify(runtime.cache.workbenchUI || {})) { runtime.cache.workbenchUI = savedUI; runtime.dirty = true; }
+    }
+    return {checked, lost};
+  }
+
+  const api = {run, readerCheck, safeButtons, sweepSafeButtons, samePressButton, scrollKeepCheck, journalLayerReport, jcrPrecedence, statusContradictions, orphanRatingTags, newsWithoutClassification, rowsWithDuplicateNews, worksWithDuplicatePeople, requireNoDuplicatePeople, staleRows, planCoverage, moreButtonProblems, missingMembers};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleSelfCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
