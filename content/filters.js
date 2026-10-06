@@ -114,12 +114,16 @@ var ZotPoPFilters = (function () {
 		return out;
 	}
 	const REVIEW_TITLE = /(?:^|[:\-–—]\s*)(?:a |an |the )?(?:systematic |narrative |scoping |critical |brief |mini-?|literature |comprehensive )*(?:review|meta-analysis|umbrella review)\b|\b(?:systematic review|meta-analysis|literature review|a review of|an overview of)\b/i;
+	const NOT_ARTICLES = new Set(["paratext", "erratum", "editorial", "peer-review", "dataset", "retraction", "other", "grant", "standard", "reference-entry", "supplementary-materials", "libguides"]);
 	// The record's kind, in the five words a reader filters by.
 	function typeOf(r) {
 		let t = r.itemType || "journalArticle";
 		if (t === "preprint" || r.preprintServer) return "preprint";
 		if (String(r.workType || "").toLowerCase() === "review" || (["journalArticle", "conferencePaper"].includes(t) && REVIEW_TITLE.test(r.title || ""))) return "review";
 		if (t === "book" || t === "bookSection") return "book";
+		// OpenAlex files errata, editorials, front matter, peer-review reports and datasets as journal items: they are not
+		// articles, and counted as such they joined the article-only h-index and paper count.
+		if (NOT_ARTICLES.has(String(r.workType || "").toLowerCase())) return "other";
 		if (t === "journalArticle" || t === "conferencePaper") return "article";
 		return "other";
 	}

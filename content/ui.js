@@ -1240,7 +1240,7 @@
 		box.textContent = "";
 		state.venueChips.forEach((chip, i) => {
 			let el = fel("span", "jchip");
-			tip(el, [chip.name, chip.abbrev].filter(Boolean).join(" · "));
+			tip(el, [chip.name, chip.abbrev, chip.publisher].filter(Boolean).join(" · "));
 			// the journal's full name in its publisher's ink, like everywhere else
 			let nameEl = fel("span", "jchip-name", chip.name); paintVenue(nameEl, { venue: chip.name, journalAbbrev: chip.abbrev || undefined });
 			el.appendChild(nameEl);
@@ -1257,6 +1257,9 @@
 	// The same journal can arrive under two spellings (PNAS's short and official names), so a chip
 	// also matches by ISSN, OpenAlex id or abbreviation, not only by its name.
 	function sameJournal(a, b) {
+		// One title on two journals (the Society's and Pleiades' "Microbiology"): ISSNs that share nothing are two journals.
+		let ia = a.issns || [], ib = b.issns || [];
+		if (ia.length && ib.length && !ia.some(i => ib.includes(i))) return Boolean(a.openalexId && a.openalexId === b.openalexId);
 		if (J.flat(a.name) === J.flat(b.name)) return true;
 		if ((a.issns || []).some(i => (b.issns || []).includes(i))) return true;
 		if (a.openalexId && a.openalexId === b.openalexId) return true;
@@ -1264,7 +1267,7 @@
 	}
 	function addVenueChip(item) {
 		if (!item || !item.name) return;
-		if (!state.venueChips.some(c => sameJournal(c, item))) state.venueChips.push({ name: item.name, abbrev: item.abbrev || "", issns: (item.issns || []).slice(), openalexId: item.openalexId || null });
+		if (!state.venueChips.some(c => sameJournal(c, item))) state.venueChips.push({ name: item.name, abbrev: item.abbrev || "", issns: (item.issns || []).slice(), openalexId: item.openalexId || null, ...(item.homonym && item.publisher ? { publisher: item.publisher } : {}) });
 		$("venue").value = "";
 		closeVenueList();
 		renderVenueChips();
@@ -1297,6 +1300,8 @@
 			let row = fel("div", "jopt" + (i === s.active ? " hot" : "")); row.id = "venue-opt-" + i;
 			row.setAttribute("role", "option"); row.setAttribute("aria-selected", String(i === s.active));
 			row.appendChild(fel("span", "jopt-name", item.name));
+			// Two journals of one title are told apart by their publisher.
+			if (item.homonym) row.appendChild(fel("span", "jopt-abbr", item.publisher || (item.issns || [])[0] || ""));
 			let mark = journalMark({ venue: item.name, journalAbbrev: item.abbrev || undefined });
 			// A publisher's mark (the abbreviation in its colour) when the journal is known, the plain abbreviation otherwise.
 			if (mark && item.abbrev) row.appendChild(mark); else if (item.abbrev) row.appendChild(fel("span", "jopt-abbr", item.abbrev));
@@ -3063,7 +3068,7 @@
 			for (let [label, value] of facts) { let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", label)); line.appendChild(fel("span", label === "IF" ? "tip-strong" : "tip-name", value)); sect.appendChild(line); }
 			box.appendChild(sect);
 		}
-		if (r.journalIF != null) box.appendChild(fel("div", "tip-hint", t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH)));
+		if (r.journalIF != null) box.appendChild(fel("div", "tip-hint", t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH, r.journalIFAs)));
 		if (r.journalOA2y != null) box.appendChild(fel("div", "tip-hint", t("oaTip", fmt(r.journalOA2y, 1), r.journalIF == null ? r.journalH : null)));
 		return box;
 	}
@@ -3506,9 +3511,13 @@
 	const authorKeys = r => ZotPoPFilters.authorKeys(r);
 	// What the detail says about a paper from this search's own records alone: no request is made.
 	function buildResultContext(r) {
-		let evidence = [], src = r.citationSource ? sourceLabel(r.citationSource) : "";
-		evidence.push(r.citations == null ? t("evCitesUnknown", src) : t("evCites", src, r.citations));
-		let cpy = ZotPoPMetrics.citesPerYear(r);
+		/* The count, its yearly mean and the index named beside them are the citation strip's own figures: the strip
+		   shows OpenAlex's count when OpenAlex gave the yearly series, and naming the headline index here put
+		   "per Semantic Scholar" beside OpenAlex's 90. */
+		let fig = citeFigures(r), shown = fig.source ? fig.total : r.citations;
+		let evidence = [], src = fig.source ? sourceLabel(fig.source) : r.citationSource ? sourceLabel(r.citationSource) : "";
+		evidence.push(shown == null ? t("evCitesUnknown", src) : t("evCites", src, shown));
+		let cpy = fig.source ? fig.perYear : ZotPoPMetrics.citesPerYear(r);
 		if (cpy != null) evidence.push(t("evPerYear", fmt(cpy, 1)));
 		if (r.journalIF != null) evidence.push(t("evIF", fmt(r.journalIF, 1)));
 		if (r.journalOA2y != null) evidence.push(t("evOA2y", fmt(r.journalOA2y, 1)));
@@ -3522,7 +3531,7 @@
 		let authors = authorKeys(r).map(a => ({ ...a, ...counts.get(a.key) })).filter(a => a.total > 1);
 		// What the citation strip above the evidence does not already say: where the count comes from, the journal's IF, a PDF.
 		let rest = [];
-		if (src && r.citations != null) rest.push(t("evSource", src));
+		if (src && shown != null) rest.push(t("evSource", src));
 		if (r.journalIF != null) rest.push(t("evIF", fmt(r.journalIF, 1)));
 		if (r.journalOA2y != null) rest.push(t("evOA2y", fmt(r.journalOA2y, 1)));
 		if (hasPDF(r)) rest.push(t("evPdf"));
@@ -3848,7 +3857,7 @@
 		venueCell.dataset.marquee = "venue";
 		paintVenue(venueCell, r);
 		td("journalIF", "num if", r.journalIF == null ? "" : fmt(r.journalIF, 1),
-			r.journalIF == null ? "" : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH));
+			r.journalIF == null ? "" : t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH, r.journalIFAs));
 		td("journalOA2y", "num if oa", r.journalOA2y == null ? "" : fmt(r.journalOA2y, 1),
 			r.journalOA2y == null ? "" : t("oaTip", fmt(r.journalOA2y, 1), r.journalH));
 		let where = affiliationOf(r);
@@ -4289,11 +4298,11 @@
 		set("m-cpa", perAuthor(m.citesPerAuthor));
 		set("m-ppa", perAuthor(m.papersPerAuthor));
 		set("m-app", perAuthor(m.authorsPerPaper));
-		set("m-h", String(m.hIndex));
-		set("m-g", String(m.gIndex));
+		set("m-h", m.hIndex == null ? "–" : String(m.hIndex));
+		set("m-g", m.gIndex == null ? "–" : String(m.gIndex));
 		set("m-hinorm", m.hiNorm == null ? t("metricsNotComputable") : String(m.hiNorm));
 		set("m-hiannual", m.hiAnnual == null ? (m.hiNorm == null && m.papers ? t("metricsNotComputable") : "–") : fmt(m.hiAnnual));
-		set("m-ha", String(m.hA));
+		set("m-ha", m.hA == null ? "–" : String(m.hA));
 		if (authors && list.length && typeof ZotPoPAuthors !== "undefined") {
 			let info = authorMetricsInfo(list, m, state.metricsBasis, sources);
 			drawScholarStats(info.stats, info.source); drawMetricsAccount(info);
@@ -4827,7 +4836,7 @@
 		let context = buildResultContext(r);
 		let evidence = $("d-evidence");
 		evidence.textContent = (cite.hidden ? context.evidence : context.rest).join(" · ");
-		tip(evidence, r.journalIF != null ? t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH) : r.journalOA2y != null ? t("oaTip", fmt(r.journalOA2y, 1), r.journalH) : "");
+		tip(evidence, r.journalIF != null ? t("jifTip", fmt(r.journalIF, 1), r.journalIFSource, r.journalH, r.journalIFAs) : r.journalOA2y != null ? t("oaTip", fmt(r.journalOA2y, 1), r.journalH) : "");
 
 		renderAuthors(r);
 		// Other papers of these authors in this search's results only, never the whole library.

@@ -79,8 +79,10 @@ var ZotPoPMetrics = (function () {
 			citations,
 			minYear, maxYear,
 			citationYears,
-			citesPerYear: n ? citations / citationYears : 0,
-			citesPerPaper: known.length ? citations / known.length : 0,
+			/* No count known at all, or no year to measure from: the figure is not computable, not 0 (a list whose
+			   counts never arrived read h 0, and an undated paper's 100 citations read as 100 a year). */
+			citesPerYear: known.length && minYear ? citations / citationYears : null,
+			citesPerPaper: known.length ? citations / known.length : null,
 			unknownCitations,
 			// Counts from more than one citation index are not one network: the h-index over them is a reference figure.
 			citationSources: [...new Set(known.flatMap(r => Object.keys(r.citationsBy || {}).length ? Object.keys(r.citationsBy) : [r.citationSource || r.source]).filter(Boolean))],
@@ -91,11 +93,11 @@ var ZotPoPMetrics = (function () {
 			perAuthorPapers: whole.length,
 			authorsTruncated,
 			authorsUnknown,
-			hIndex: hi,
-			gIndex: gIndex(cites),
+			hIndex: known.length ? hi : null,
+			gIndex: known.length ? gIndex(cites) : null,
 			hiNorm: computable ? hiNorm : null,
 			hiAnnual: minYear && computable ? hiNorm / citationYears : null,
-			hA: hIndex(annual)
+			hA: known.length && years.length ? hIndex(annual) : null
 		};
 	}
 

@@ -44,11 +44,19 @@ var ZotPoPJournals = (function () {
 		// Spelled-out ways of saying a name that are not journals of their own ("PNAS" for the Proceedings).
 		let aliases = new Set(Object.entries(curated || {}).filter(([full, short]) => flat(full) !== flat(short)).map(([, short]) => flat(short)));
 		let byName = new Map(), list = [];
-		let entryFor = (name, pretty) => {
+		/* Two journals can carry one title: "Microbiology" is the Microbiology Society's (1350-0872) and Pleiades'
+		   (0026-2617). Merged into one choice, picking it searched both. A row whose ISSNs share nothing with a held
+		   entry of that title is a journal of its own; the two are told apart by publisher in the list. */
+		let entryFor = (name, pretty, ids = []) => {
 			let key = flat(name);
 			if (!key) return null;
-			let e = byName.get(key);
-			if (!e) { e = { name: pretty ? prettify(name) : String(name).trim(), n: key, abbrevs: [], a: [], k: acronymOf(name), issns: [], pop: 0, curated: false, publisher: "" }; byName.set(key, e); list.push(e); }
+			let mine = ids.map(issnOf).filter(Boolean), held = byName.get(key) || [];
+			let e = held.find(x => !mine.length || !x.issns.length || x.issns.some(i => mine.includes(i)));
+			if (!e) {
+				e = { name: pretty ? prettify(name) : String(name).trim(), n: key, abbrevs: [], a: [], k: acronymOf(name), issns: [], pop: 0, curated: false, publisher: "" };
+				held.push(e); byName.set(key, held); list.push(e);
+				if (held.length > 1) for (let x of held) x.homonym = true;
+			}
 			return e;
 		};
 		let addAbbrev = (e, text) => {
@@ -64,7 +72,7 @@ var ZotPoPJournals = (function () {
 			addAbbrev(e, short);
 		}
 		for (let row of registry || []) {
-			let e = entryFor(row.title, false); if (!e) continue;
+			let e = entryFor(row.title, false, row.issns || []); if (!e) continue;
 			addIssn(e, ...(row.issns || []));
 			if (row.abbreviation) addAbbrev(e, row.abbreviation);
 			if (!e.publisher && row.publisher) e.publisher = row.publisher;
@@ -72,7 +80,7 @@ var ZotPoPJournals = (function () {
 		}
 		for (let row of jcr || []) {
 			let [name, abbrev, issn, eissn, jif] = row;
-			let e = entryFor(name, true); if (!e) continue;
+			let e = entryFor(name, true, [issn, eissn]); if (!e) continue;
 			addIssn(e, issn, eissn);
 			// The JCR's own abbreviations are shouted in capitals; they are found by, not shown.
 			if (abbrev) { let key = flat(abbrev); if (key && key !== e.n && !e.a.includes(key)) e.a.push(key); }
@@ -107,7 +115,8 @@ var ZotPoPJournals = (function () {
 		let tokens = q.split(" "), compact = q.replace(/ /g, ""), found = [];
 		for (let e of catalog.entries) { let tier = tierOf(e, q, tokens, compact); if (tier >= 0) found.push({ e, tier }); }
 		found.sort((x, y) => x.tier - y.tier || y.e.pop - x.e.pop || x.e.name.length - y.e.name.length || x.e.name.localeCompare(y.e.name));
-		return found.slice(0, limit).map(({ e, tier }) => ({ name: e.name, abbrev: e.abbrevs[0] || "", issns: e.issns.slice(), tier, source: "local" }));
+		return found.slice(0, limit).map(({ e, tier }) => ({ name: e.name, abbrev: e.abbrevs[0] || "", issns: e.issns.slice(), tier, source: "local",
+			...(e.homonym ? { homonym: true, publisher: e.publisher || "" } : {}) }));
 	}
 
 	// Remote answers (OpenAlex's autocomplete) follow the local ones; a journal already listed, by name or ISSN, is not listed twice.

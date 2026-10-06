@@ -95,13 +95,22 @@ var ZotPoPJCR = (function () {
 		"proceedings of the national academy of sciences": "proceedings of the national academy of sciences of the united states of america",
 		"pnas": "proceedings of the national academy of sciences of the united states of america"
 	};
+	// Of those, the ones that are only another spelling of the same journal; every other entry is a renamed or
+	// successor journal, whose figure is labelled as that journal's.
+	const SPELLINGS = new Set(["proceedings of the national academy of sciences", "pnas"]);
 	const issnKey = value => {
 		let s = String(value || "").toUpperCase().replace(/[^0-9X]/g, "");
 		return /^\d{7}[\dX]$/.test(s) ? s : "";
 	};
 
+	/* Plain titles the JCR gives to one journal while another is the one usually meant by them: "MICROBIOLOGY"
+	   in the JCR is the Russian journal (JIF 1.0), but a reference list's "Microbiology" is far more often the
+	   Microbiology Society's (MICROBIOLOGY-SGM, 4.3). Only an ISSN may decide these. */
+	const AMBIGUOUS_TITLES = new Set(["microbiology"]);
+	// "Biochimica et Biophysica Acta (BBA) - Bioenergetics": the bracketed initials are not part of the JCR title.
+	const unbracketed = value => String(value == null ? "" : value).replace(/\([^)]*\)/g, " ");
 	function build(rows) {
-		let byIssn = new Map(), byName = new Map(), ambiguous = new Set();
+		let byIssn = new Map(), byName = new Map(), ambiguous = new Set(AMBIGUOUS_TITLES), byHead = new Map();
 		for (let row of rows || []) {
 			let [name, abbrev, issn, eissn, jif] = row;
 			let entry = { name, abbrev, issn, eissn, jif: Number(jif) };
@@ -112,22 +121,46 @@ var ZotPoPJCR = (function () {
 				// The same title on two different journals (a Russian and a Society one both called "Microbiology"): only an ISSN may decide it.
 				else if (held !== entry && issnKey(held.issn) !== issnKey(entry.issn) && issnKey(held.eissn) !== issnKey(entry.eissn)) ambiguous.add(k);
 			}
+			/* The JCR joins a title to its qualifier with a hyphen ("Life-Basel", "NITRIC OXIDE-BIOLOGY AND CHEMISTRY",
+			   "Jove-Journal of Visualized Experiments"), where the journal itself and every other index say "Life",
+			   "Nitric Oxide", "Journal of Visualized Experiments". Each side is a way to find it, but only where no
+			   journal carries that title outright and no other JCR title shares it. */
+			let raw = String(name || ""), cut = raw.indexOf("-");
+			if (cut > 0) for (let part of [raw.slice(0, cut), raw.slice(cut + 1)]) {
+				let k = flat(part);
+				if (!k || k.length < 4 || (part === raw.slice(cut + 1) && k.split(" ").length < 3)) continue;
+				byHead.set(k, byHead.has(k) && byHead.get(k) !== entry ? null : entry);
+			}
 		}
+		const byTitle = (key, heads = true) => ambiguous.has(key) ? null : byName.get(key) || (heads && !byName.has(key) ? byHead.get(key) : null) || null;
 		return {
 			size: byIssn.size,
 			// A record's ISSN settles it; a title only when no ISSN is known or matches.
 			find(record) {
 				if (!record) return null;
 				for (let id of [record.issn, ...(record.issns || [])]) { let hit = byIssn.get(issnKey(id)); if (hit) return hit; }
-				for (let title of [record.venue, record.journalAbbrev, ...(record.venueAliases || [])]) {
-					let key = flat(title), k2 = ALIASES[key] || key, hit = ambiguous.has(k2) ? null : byName.get(k2);
-					if (hit) return hit;
+				for (let title of [record.venue, record.journalAbbrev, record.journalAbbreviation, ...(record.venueAliases || [])]) {
+					for (let key of new Set([flat(title), flat(unbracketed(title))])) {
+						if (!key) continue;
+						// The title as written first: an export that still lists the old title (or the German Angewandte) has its own figure.
+						let hit = byTitle(key, false);
+						if (hit) return hit;
+						let renamed = ALIASES[key];
+						hit = renamed ? byTitle(renamed) : null;
+						// A title the JCR lists under another (its successor's) name says so: that figure is the other title's.
+						if (hit) return SPELLINGS.has(key) ? hit : Object.assign({}, hit, { via: title });
+						hit = byTitle(key);
+						if (hit) return hit;
+					}
 				}
 				return null;
 			}
 		};
 	}
 
+	// The JCR shouts its titles ("BIOTECHNOLOGY LETTERS"); shown to a reader they are set in title case.
+	const titleCase = name => { let s = String(name || "").trim(); return s !== s.toUpperCase() ? s
+		: s.toLowerCase().replace(/(^|[\s(\-/])(\p{L})/gu, (_, pre, c) => pre + c.toUpperCase()).replace(/\b(Of|The|And|In|For|On|A|An|At|To)\b(?!$)/g, w => w.toLowerCase()).replace(/^./, c => c.toUpperCase()); };
 	let table = null, held = null;
 	// Rows as the export gives them: [title, abbreviation, issn, eIssn, jif], as a bare list or { jcrYear, rows }.
 	function load(data, { fileName = "", meta = null } = {}) {
@@ -150,6 +183,8 @@ var ZotPoPJCR = (function () {
 			if (!hit) continue;
 			r.journalIF = hit.jif;
 			r.journalIFSource = edition.label;
+			// Matched through a renamed title: the figure is the journal the JCR lists now, and the tooltip names it.
+			if (hit.via) r.journalIFAs = titleCase(hit.name); else delete r.journalIFAs;
 			// The JCR's own abbreviations are shouted in capitals ("NAT COMMUN"); the
 			// reference-list form comes from elsewhere, so they are not copied over.
 			n++;

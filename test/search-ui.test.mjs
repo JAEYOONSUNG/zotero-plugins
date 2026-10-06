@@ -1368,6 +1368,18 @@ test("the detail says its figures once, in one sentence, and never hides an unkn
 	assert.match(ctx("c").evidence[0], /^evCites\|\|3$/, "and a real count as a number");
 });
 
+test("the detail names the index whose count the citation strip shows, not the headline one", async () => {
+	const { default: Cite } = await import("../content/cite.js");
+	const now = new Date().getFullYear();
+	const ui = uiHarness({ cite: Cite, metrics: { citesPerYear: r => r.citations / Math.max(1, now - r.year) } });
+	const rec = paper("x", { year: now - 5, citations: 150, citationSource: "semanticscholar", citationsBy: { openalex: 90, semanticscholar: 150 },
+		citesByYear: [{ year: now - 1, n: 40 }, { year: now, n: 10 }] });
+	const ctx = ui.buildResultContext(rec);
+	assert.match(ctx.evidence[0], /^evCites\|OpenAlex\|90$/, "OpenAlex's 90, named as OpenAlex's");
+	assert.equal(ctx.evidence[1], "evPerYear|18.0");
+	assert.deepEqual(Array.from(ctx.rest).filter(x => x.startsWith("evSource")), ["evSource|OpenAlex"]);
+});
+
 test("same-name authors are counted over this search only, by ID when there is one, and narrow the table", async () => {
 	const ui = await loaded();
 	const a = ui.state.records.find(r => r.key === "a");

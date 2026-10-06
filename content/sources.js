@@ -423,11 +423,13 @@ var ZotPoPSources = (function () {
 	const OPENALEX_SOURCE_IDS = new Map();
 	// Journal -> OpenAlex source ids. A picked journal that carries its id costs nothing; one with ISSNs is
 	// looked up in a single request for all of them; one with a name alone is searched as a single venue is.
+	const sourceKey = v => normalizedText(v.name) + "|" + (v.issns || []).join(",");
 	async function openAlexSourceIds(venues, http, ctx) {
 		let ids = new Set(), byIssn = [], byName = [];
 		for (let v of venues) {
 			if (v.openalexId) { ids.add(v.openalexId); continue; }
-			let held = OPENALEX_SOURCE_IDS.get(normalizedText(v.name));
+			// Keyed by the ISSNs too: the Society's and Pleiades' "Microbiology" are one name and two journals.
+			let held = OPENALEX_SOURCE_IDS.get(sourceKey(v));
 			if (held) { for (let id of held) ids.add(id); continue; }
 			(v.issns.length ? byIssn : byName).push(v);
 		}
@@ -438,7 +440,7 @@ var ZotPoPSources = (function () {
 			for (let v of byIssn) {
 				let mine = found.filter(x => x.issns.some(i => v.issns.includes(i))).map(x => x.id);
 				if (!mine.length) { byName.push(v); continue; }
-				OPENALEX_SOURCE_IDS.set(normalizedText(v.name), mine);
+				OPENALEX_SOURCE_IDS.set(sourceKey(v), mine);
 				for (let id of mine) ids.add(id);
 			}
 		}
@@ -447,7 +449,7 @@ var ZotPoPSources = (function () {
 			let candidates = data.results || [], name = normalizedText(v.name);
 			let exact = candidates.filter(x => [x.display_name, x.abbreviated_title, ...(x.alternate_titles || [])].some(n => n && normalizedText(n) === name));
 			let mine = (exact.length ? exact : candidates).map(x => openAlexId(x.id)).filter(Boolean);
-			if (mine.length) OPENALEX_SOURCE_IDS.set(name, mine);
+			if (mine.length) OPENALEX_SOURCE_IDS.set(sourceKey(v), mine);
 			for (let id of mine) ids.add(id);
 		}
 		return [...ids];
@@ -463,7 +465,7 @@ var ZotPoPSources = (function () {
 				   journal's first page replaced the first journal's rows on screen, and a paper checked
 				   there lost its checkmark. What is streamed is every journal so far plus this one. */
 				if (report) ctx.onResults = (rows, info) => report(sortSearchResults(dedupe([...out, ...rows]), q).slice(0, q.maxResults || 200), info);
-				try { out.push(...await fn(Object.assign({}, q, { venue: v.name, venues: undefined }), http, ctx)); }
+				try { out.push(...await fn(Object.assign({}, q, { venue: v.name, venues: [v] }), http, ctx)); }
 				catch (e) { if (e.name === "AbortError") throw e; failed = failed || e; }
 				finally { if (report) ctx.onResults = report; }
 			}
@@ -576,7 +578,9 @@ var ZotPoPSources = (function () {
 		}
 		if (q.yearFrom) filters.push("from_publication_date:" + q.yearFrom + "-01-01");
 		if (q.yearTo) filters.push("to_publication_date:" + q.yearTo + "-12-31");
-		if (q.venues?.length > 1) {
+		// One journal picked from the list carries its ISSNs (or OpenAlex id): they name it exactly, where a name
+		// search took every journal of that title.
+		if (q.venues?.length > 1 || q.venues?.[0]?.issns?.length || q.venues?.[0]?.openalexId) {
 			let ids = await openAlexSourceIds(q.venues, http, ctx);
 			if (!ids.length) return [];
 			filters.push("primary_location.source.id:" + ids.join("|"));
@@ -632,6 +636,8 @@ var ZotPoPSources = (function () {
 					publisher: src.host_organization_name || "",
 					journalId: src.id ? src.id.replace("https://openalex.org/", "") : null,
 					issn: src.issn_l || (src.issn || [])[0] || null,
+					// Every ISSN the journal has: the ISSN-L is often the print number, and the JCR may list only the other one.
+					issns: [...new Set([src.issn_l, ...(src.issn || [])].filter(Boolean))],
 					doi: w.doi,
 					pmid: ids.pmid ? String(ids.pmid).replace(/.*\//, "") : null,
 					pmcid: pmcidFromOpenAlex(w),
@@ -763,7 +769,10 @@ var ZotPoPSources = (function () {
 			id: (s.id || "").replace("https://openalex.org/", ""),
 			name: s.display_name || "",
 			issn: s.issn_l || (s.issn || [])[0] || null,
-			if2y: Number.isFinite(ss["2yr_mean_citedness"]) ? ss["2yr_mean_citedness"] : null,
+			/* Exactly 0 is what OpenAlex gives a title that published nothing in the last two years (Biotechnology
+			   for Biofuels, renamed in 2022; Biotechnology Techniques, closed in 1999): no articles to average, not
+			   an average of nothing cited. Shown as 0.0 it ranked those journals as the least cited of all. */
+			if2y: Number.isFinite(ss["2yr_mean_citedness"]) && ss["2yr_mean_citedness"] > 0 ? ss["2yr_mean_citedness"] : null,
 			abbrev: s.abbreviated_title || null,
 			h: toInt(ss.h_index),
 			works: toInt(s.works_count),
@@ -1152,7 +1161,9 @@ var ZotPoPSources = (function () {
 		// return nothing for one. On this route the venue names the archive instead, which
 		// is held in the record and matched locally below.
 		if (q.venue?.trim() && !preprintsOnly) {
-			journal = await crossrefJournal(q.venue.trim(), http, ctx);
+			// A journal picked from the list is named by its ISSN; only a typed name is looked up.
+			let picked = q.venues?.length === 1 && q.venues[0].issns?.length ? q.venues[0] : null;
+			journal = picked ? { issn: picked.issns[0], title: picked.name } : await crossrefJournal(q.venue.trim(), http, ctx);
 			if (journal) endpoint = "https://api.crossref.org/journals/" + enc(journal.issn) + "/works";
 			else filters.push("container-title:" + enc(q.venue.trim()));
 		}
@@ -1636,6 +1647,7 @@ var ZotPoPSources = (function () {
 						// what a venue query has to be checked against as well.
 						journalAbbreviation: d.source || "",
 						issn: d.issn || d.essn || null,
+						issns: [d.issn, d.essn].filter(Boolean),
 						doi,
 						pmid: uid,
 						pmcid: pmc,
@@ -2658,7 +2670,7 @@ var ZotPoPSources = (function () {
 		if (!a.issn && b.issn) a.issn = b.issn;
 		if (!a.citesByYear && b.citesByYear) a.citesByYear = b.citesByYear;
 		// The JIF and OpenAlex's mean are separate figures, each filled from whichever record has it.
-		if (a.journalIF == null && b.journalIF != null) { a.journalIF = b.journalIF; a.journalIFSource = b.journalIFSource; }
+		if (a.journalIF == null && b.journalIF != null) { a.journalIF = b.journalIF; a.journalIFSource = b.journalIFSource; if (b.journalIFAs) a.journalIFAs = b.journalIFAs; }
 		if (a.journalOA2y == null && b.journalOA2y != null) a.journalOA2y = b.journalOA2y;
 		if (a.journalH == null && b.journalH != null) a.journalH = b.journalH;
 		if (!a.volume && b.volume) a.volume = b.volume;
