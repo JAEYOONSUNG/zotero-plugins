@@ -339,7 +339,7 @@
        different ids are two people; one id under two spellings is one. */
     const records = [];              // [paper key, [{id, name, folded}]]
     const idsByName = new Map();     // folded name -> Set of ids
-    const collect = (key, list) => {
+    const collect = (key, list, own = false) => {
       const entries = [];
       for (const person of list) {
         const name = text(person.name), folded = fold(name);
@@ -348,20 +348,32 @@
         if (id) { if (!idsByName.has(folded)) idsByName.set(folded, new Set()); idsByName.get(folded).add(id); }
         entries.push({id, name, folded});
       }
-      records.push([key, entries]);
+      records.push([key, entries, own]);
     };
     for (const work of Array.isArray(works) ? works : [])
       collect(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(p => ({id: p.id, name: p.name})));
-    for (const work of Array.isArray(news) ? news : [])
-      collect(bareDoi(work.doi) || 'w:' + text(work.id), (work.people || []).map(name => ({id: '', name: typeof name === 'string' ? name : name?.name})));
+    /* Stored news is the centre's paper by construction (the sweep filed it
+       under them), so it counts even when they sign past the names kept. It
+       carries every co-author with ids (`coauthors`) since round 17; older
+       records only the first six names. Unclassified news counts too: on the
+       real library every one of the 55 stored papers was unclassified (no
+       places stored yet), and the list shows them as this author's. A crowd
+       is not a circle. */
+    for (const work of Array.isArray(news) ? news : []) {
+      if (!work || Number(work.authorCount) > CROWD) continue;
+      const withIDs = Array.isArray(work.coauthors) && work.coauthors.length;
+      collect(bareDoi(work.doi) || 'w:' + text(work.id), withIDs
+        ? work.coauthors.map(p => ({id: p?.id, name: p?.name}))
+        : (work.people || []).map(name => ({id: '', name: typeof name === 'string' ? name : name?.name})), true);
+    }
     for (const item of Array.isArray(items) ? items : [])
       collect(bareDoi(item.doi) || 'l:' + text(item.id), text(item.authors).split(';').map(name => ({id: '', name})));
 
     const people = new Map();        // identity -> {name, id, folded}
     const papers = new Map();        // paper key -> Set of identities (never the centre)
-    for (const [key, entries] of records) {
+    for (const [key, entries, own] of records) {
       const names = new Set();
-      let mine = false;
+      let mine = own;
       for (const person of entries) {
         let identity;
         if (person.id) {

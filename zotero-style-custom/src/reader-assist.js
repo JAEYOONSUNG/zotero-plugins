@@ -1408,7 +1408,15 @@
   function credit(session,unit,seconds){
    if(session.destroyed||setting('readAloudCredit',true)===false||!(seconds>0))return;
    // The reading clock already counts a person who is touching the reader; this counts only the listening in between.
-   if(Date.now()-(session.lastActivity||0)<4000)return;
+   /* The clock keeps counting for idleSeconds after the last touch (60 s by default); only the part of
+      this sentence past that reach is listening the clock missed. With the clock off, all of it is. */
+   // The clock also stops the moment Zotero loses focus (reading.js): listening from another app is all credit.
+   const top=session.reader&&session.reader._window,focused=!(top&&top.document&&typeof top.document.hasFocus==='function')||top.document.hasFocus();
+   if(setting('recordReading',true)!==false&&focused){
+    const idle=Math.max(5,Number(setting('idleSeconds',60))||60)*1000,end=Date.now();
+    seconds=Math.min(seconds,(end-((session.lastActivity||0)+idle))/1000);
+    if(!(seconds>0))return;
+   }
    const reader=session.reader,item=itemOf(reader);if(!item||typeof runtime.addReading!=='function')return;
    const page=pageNumberOf(unit),total=pageCount(reader);
    if(!page||!total||page>total)return;

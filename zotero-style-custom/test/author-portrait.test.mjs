@@ -314,3 +314,12 @@ test("a merged person's second OpenAlex id is the centre, not a co-author of the
   const circle = portrait.coauthors(works, ["A1", "A2"]);
   assert.deepEqual(circle.map(c => c.id).sort(), ["B1", "B2"]);
 });
+
+test("stored news written before co-author ids were kept is still the followed author's paper when they sign past the sixth name", () => {
+  const g = portrait.egoGraph({me: {id: "A1", name: "Jennifer A. Doudna"},
+    news: [{id: "W1", doi: "10.1/x", people: ["Peter H. Yoon", "Trevor Docter", "Zeyuan Zhang", "Kenneth J. Loi", "Santiago C. Lopez", "Luis E. Valentin-Alvarado"]},
+      {id: "W2", doi: "10.1/y", unclassified: true, people: ["Peter H. Yoon", "Somebody Else"]}]});
+  assert.deepEqual(g.nodes.map(n => n.name).sort(), ["Kenneth J. Loi", "Luis E. Valentin-Alvarado", "Peter H. Yoon", "Santiago C. Lopez", "Somebody Else", "Trevor Docter", "Zeyuan Zhang"],
+    "news is stored under this author, so it is theirs, unclassified (no places stored yet) included, as the list shows it");
+  assert.equal(g.nodes.find(n => n.name === "Peter H. Yoon").weight, 2);
+});

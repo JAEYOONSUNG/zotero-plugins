@@ -1021,3 +1021,28 @@ test("an unseen paper is kept 180 days from when it was announced, not from its 
   assert.ok(news.find(n => n.id === "W5").foundAt, "a paper says when it was first announced");
   assert.equal(news.find(n => n.id === "W1").foundAt, swept, "an older one counts from the sweep that stored it");
 });
+
+/* Round 15 leftover (Astra #4): stored news kept only the first six names and
+   no ids, so a followed PI signing last vanished from their own paper and the
+   per-author graph lost it (33 of 55 stored news items on the real cache). */
+test("stored news keeps the co-author list with ids, so a last-author PI's paper still draws their graph", async () => {
+  const portrait = require("../src/author-portrait.js");
+  const team = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "A1"];
+  const h = host({rows: [person("A1")], pages: [{results: [work("W1", team)], meta: {}}]});
+  await h.sweepWatchedAuthors();
+  const news = h.cache.watchedAuthors[0].news[0];
+  assert.equal(news.people.length, 6, "the short name list for the namesake check is unchanged");
+  assert.equal(news.coauthors.length, 8, "everyone, with ids");
+  assert.deepEqual(news.coauthors.at(-1), {id: "A1", name: "A1"});
+  assert.equal(news.authorCount, 8);
+  const g = portrait.egoGraph({me: {id: "A1", name: "A1 Name"}, works: [], news: h.cache.watchedAuthors[0].news});
+  assert.equal(g.nodes.length, 7, "the seven co-authors, though the followed author signs eighth");
+  // A consortium paper is too crowded to say who works with whom; only the count rides along.
+  const crowd = Array.from({length: 40}, (_, i) => "C" + i).concat("A1");
+  const h2 = host({rows: [person("A1")], pages: [{results: [work("W2", crowd)], meta: {}}]});
+  await h2.sweepWatchedAuthors();
+  const big = h2.cache.watchedAuthors[0].news[0];
+  assert.deepEqual(big.coauthors, []);
+  assert.equal(big.authorCount, 41);
+  assert.equal(portrait.egoGraph({me: {id: "A1", name: "A1 Name"}, news: [big]}).nodes.length, 0, "a crowd is not a co-author circle, even when the followed author is among the first six");
+});

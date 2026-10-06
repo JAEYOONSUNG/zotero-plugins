@@ -3398,6 +3398,17 @@ test('r21 evidence is kept per item under libraryID:key and empty fields are dro
   assert.equal(plugin.cache.evidence['1:1'], undefined, 'all empty: the row goes');
 });
 
+// Astra round 17 #4: a 4,500-character methods note lost its last 500 characters on save, silently.
+test('an evidence cell keeps a long entry whole; the limit is the box\'s own, so nothing is cut after typing', async () => {
+  const { plugin, item } = fixture();
+  plugin.cache = { schema: 1, items: {} };
+  plugin.flush = async () => {};
+  const a = item(1), long = 'm'.repeat(4500);
+  await plugin.setEvidence(a, { result: long });
+  assert.equal(plugin.evidenceOf(a).result.length, 4500);
+  assert.equal(plugin.constructor.EVIDENCE_LIMIT, 20000);
+});
+
 test('r21 connectPublished imports the published version, relates both, carries tags/status/memo, and deletes nothing', async () => {
   const { plugin, item, Z } = fixture();
   plugin.cache = { schema: 1, items: {} };

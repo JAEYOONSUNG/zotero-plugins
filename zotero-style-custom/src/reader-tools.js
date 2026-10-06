@@ -597,5 +597,27 @@
     if(typeof Z.Reader?.registerEventListener==='function'){for(const[type,handler]of hookEntries)Z.Reader.registerEventListener(type,handler,toolbarOwner);toolbarRegistered=true;}
     return Object.freeze({contrast,attach,applyPreferences,applyTheme,resetAppearance,marginOptions,setMarginOptions,setMarginAnnotations,setColorLabel,setSidebar,setVerticalTabs,mergeSelectedAnnotations,attachmentVersions,switchAttachmentVersion,annotationPalettes,saveAnnotationPalette,applyAnnotationPalette,deleteAnnotationPalette,setAnnotationColor,tabs,selectTab,closeTab,moveTab,closeOtherTabs,tabGroups,saveTabGroup,renameTabGroup,updateTabGroup,restoreTabGroup,deleteTabGroup,undeleteTabGroup,viewGroups,saveView,renameView,updateView,applyView,deleteView,undeleteView,stop});
   }
-  return Object.freeze({create});
+  /* A colour without a meaning the reader gave it is still named: Zotero's own
+     name for its eight, else the nearest of those with 계열 ("빨간색 계열" for
+     #ec2814). Returns {name, near} in Korean; the caller translates. On the
+     real library every colour read "이름 없는 색" and only the dot told
+     twelve chips apart. */
+  function colorName(value){
+    const hex=color(value);if(!hex)return null;
+    if(COLORS[hex])return {name:COLORS[hex],near:false};
+    const rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+    const [r,g,b]=rgb(hex),grey=Math.max(r,g,b)-Math.min(r,g,b)<24;
+    if(grey)return {name:COLORS['#aaaaaa'],near:true};
+    // By hue, the way people tell colours apart: #facd5a is a yellow, though nearer orange by RGB distance.
+    const hue=([R,G,B])=>{const max=Math.max(R,G,B),min=Math.min(R,G,B),d=max-min||1;
+      const h=max===R?((G-B)/d)%6:max===G?(B-R)/d+2:(R-G)/d+4;return (h*60+360)%360;};
+    const mine=hue([r,g,b]);let best=null,dist=Infinity;
+    for(const [k,name] of Object.entries(COLORS)){
+      if(k==='#aaaaaa')continue;
+      const a=Math.abs(hue(rgb(k))-mine),d=Math.min(a,360-a);
+      if(d<dist){dist=d;best=name;}
+    }
+    return best?{name:best,near:true}:null;
+  }
+  return Object.freeze({create,colorName});
 });

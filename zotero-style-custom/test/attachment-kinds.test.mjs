@@ -385,3 +385,35 @@ test("the download is counted before it is started, and closed articles are not 
   assert.equal(requests, 6);
   assert.equal(report.errors, 0);
 });
+
+// Astra round 17 #1: a stub with the reader's own note on it is not empty.
+test("rehoming a supplement keeps a stub that still carries a note", async () => {
+  const { createRequire } = await import("node:module");
+  const Runtime = createRequire(import.meta.url)("../src/runtime.js");
+  const stub = {id: 10, deleted: false, getAttachments: () => [11], getNotes: () => [12], async saveTx() {}};
+  const file = {id: 11, parentItemID: 10, async saveTx() {}};
+  const note = {id: 12, deleted: false};
+  const paper = {id: 20, deleted: false, getAttachments: () => []};
+  const items = new Map([[10, stub], [11, file], [12, note], [20, paper]]);
+  const host = {cache: {}, dirty: false, Z: {Items: {get: id => items.get(id)}},
+    isRegular: item => item !== file && item !== note, rehomeSupplement: Runtime.prototype.rehomeSupplement,
+    async flush() {}, async refreshWindows() {}};
+  const result = await host.rehomeSupplement(11, 20);
+  assert.equal(result.moved, 1);
+  assert.equal(result.trashed, 0, "the note is the reader's work; the entry holding it stays");
+  assert.equal(stub.deleted, false);
+  note.deleted = true;
+  stub.getAttachments = () => [13]; items.set(13, {id: 13, parentItemID: 10, async saveTx() {}});
+  assert.equal((await host.rehomeSupplement(13, 20)).trashed, 1, "a note already in the trash does not hold it");
+});
+
+// Astra round 17 #2: two supplements of one paper share their title block; only the first 600 characters were compared.
+test("two files with the same cover page but different contents are not duplicates", () => {
+  const cover = "Supplementary Information for Directed evolution of a thermostable polymerase by compartmentalised self-replication. Jane Doe, John Roe and Ada Poe. Department of Bioengineering, Example University. ".repeat(3);
+  const words = seed => Array.from({length: 900}, (_, i) => "w" + seed + "x" + (i * 7919 % 1000)).join(" ");
+  const methods = cover + " Supplementary Methods " + words("m");
+  const tables = cover + " Supplementary Tables " + words("t");
+  assert.equal(kinds.sameDocument(methods, tables), false, "same opening, different body");
+  assert.equal(kinds.sameDocument(methods, methods.replace(/ /g, "  ")), true, "the same text reflowed is still one document");
+  assert.equal(kinds.sameDocument(methods, cover + " Supplementary Methods " + words("m").slice(0, 2000)), false, "a much shorter file is not the same document");
+});

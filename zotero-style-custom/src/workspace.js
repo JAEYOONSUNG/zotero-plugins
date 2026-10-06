@@ -124,6 +124,16 @@
   const h=f==='annotation'?(extra&&extra.annotation)||'':f==='note'&&extra&&extra.note?norm(fieldText(item,f))+' '+extra.note:norm(fieldText(item,f));
   return term.phrase?h.includes(term.value):hit(h,term.value,INITIAL.test(term.value)?wordsOf(h):null);
  }
+ /* The notes and annotations boxes: the library box's own syntax (OR, -word,
+    ( ), "phrase", field:) over one text. note: and annotation: are that text;
+    title:, author:, journal:, year:, tag: ask the paper it belongs to, when
+    one is given. Plain words stay in the text alone, as before. */
+ function matchesQuery(value,query,paper){
+  if(!text(query).trim())return true;
+  const tree=parseTree(query),hay=norm(value);
+  const starts=parseQuery(query).some(t=>INITIAL.test(t.value))?wordsOf(hay):null;
+  return evalTree(tree,paper||{},hay,starts,{annotation:hay,note:hay});
+ }
  /* ---- 저널 이름 · ISO 4 약어 · 약칭 ----
     "Nat Methods", "Proc Natl Acad Sci", "PNAS", "NAR" and "JACS" all name a
     journal. Each journal is known by its full title, every abbreviation the
@@ -391,6 +401,6 @@
  function unlinkCards(board,from,to){const before=board.edges.length;board.edges=board.edges.filter(e=>!((e.source===from&&e.target===to)||(e.source===to&&e.target===from)));return before-board.edges.length;}
  function deleteBoard(cache,id){const board=(cache.boards||[]).find(b=>b.id===id);if(!board)return null;cache.boards=cache.boards.filter(b=>b.id!==id);cache.boardTrash=[...(cache.boardTrash||[]),board].slice(-20);return board;}
  function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 이름의 보드가 이미 있습니다. 다른 이름을 쓰세요.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
- const api={journalKeys,journalScore,journalChoices,legacyRules,parseQuery,parseTree,isBoolean,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
+ const api={matchesQuery,journalKeys,journalScore,journalChoices,legacyRules,parseQuery,parseTree,isBoolean,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
  root.CustomStyleWorkspace=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

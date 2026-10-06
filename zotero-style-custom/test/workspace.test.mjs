@@ -138,3 +138,25 @@ test('one Hangul syllable is a word, not an initial; quoted text is literal; typ
  assert.deepEqual(Model.parseQuery('title:“deep learning”').map(t=>[t.field,t.value,t.phrase]),[['title','deep learning',true]]);
  assert.equal(Model.matches('유방암 치료','암'),true);
 });
+
+// Astra round 17 #5: the notes and annotations boxes took OR, -word and field: as literal words.
+test('the note and annotation search reads the same syntax as the library box: OR, -word, groups, phrases and the paper\'s fields',()=>{
+ const text='CRISPR screens in yeast reveal a Cas9 off-target hotspot';
+ const paper={title:'Genome-wide screens',authors:'Kim; Lee',venue:'Nature',year:'2021',tags:['screening']};
+ assert.equal(W.matchesQuery(text,'CRISPR'),true);
+ assert.equal(W.matchesQuery(text,'TALEN OR Cas9'),true);
+ assert.equal(W.matchesQuery(text,'CRISPR -yeast'),false);
+ assert.equal(W.matchesQuery(text,'CRISPR -mouse'),true);
+ assert.equal(W.matchesQuery(text,'annotation:CRISPR'),true,'note: and annotation: point at the text being searched');
+ assert.equal(W.matchesQuery(text,'note:hotspot'),true);
+ assert.equal(W.matchesQuery(text,'"off-target hotspot"'),true);
+ assert.equal(W.matchesQuery(text,'"hotspot off-target"'),false);
+ assert.equal(W.matchesQuery(text,'(TALEN OR zinc) -yeast'),false);
+ assert.equal(W.matchesQuery(text,'author:kim',paper),true,'a paper field asks the paper');
+ assert.equal(W.matchesQuery(text,'author:park',paper),false);
+ assert.equal(W.matchesQuery(text,'author:kim'),false,'no paper, no author');
+ assert.equal(W.matchesQuery(text,'year:2020-2022 Cas9',paper),true);
+ assert.equal(W.matchesQuery(text,'tag:screen',paper),true);
+ assert.equal(W.matchesQuery(text,'journal:nature',paper),true);
+ assert.equal(W.matchesQuery(text,''),true);
+});

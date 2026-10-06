@@ -111,7 +111,21 @@
   // Two files are the same document when their first pages agree. Publishers
   // re-flow text between downloads, so this compares content, not bytes.
   function sameDocument(a, b, {need = 0.9} = {}) {
-    const left = flat(a).slice(0, 600), right = flat(b).slice(0, 600);
+    const A = flat(a), B = flat(b);
+    if (!sameWords(A.slice(0, 600), B.slice(0, 600), need)) return false;
+    /* A cover page is not the document: a paper's "Supplementary Methods" and
+       "Supplementary Tables" can open with the same title block and differ
+       after it, and calling one a duplicate offers it for the trash. Past the
+       opening, the two must be about as long and agree in the middle too.
+       (All 17 duplicates on the real library are within 1% of each other.) */
+    if (A.length < 2000 || B.length < 2000) return true;
+    if (Math.min(A.length, B.length) / Math.max(A.length, B.length) < 0.85) return false;
+    const middle = (text, width) => { const at = Math.max(0, Math.floor(text.length * 0.5) - width / 2); return text.slice(at, at + width); };
+    const [short, long] = A.length <= B.length ? [A, B] : [B, A];
+    return sameWords(middle(short, 600), middle(long, 1600), 0.8);
+  }
+  // The shorter text's words, found in the longer: reflowed text keeps its words.
+  function sameWords(left, right, need) {
     if (!left || !right) return false;
     if (left === right) return true;
     const shorter = left.length < right.length ? left : right;

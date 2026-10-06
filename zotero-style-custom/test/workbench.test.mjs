@@ -10,6 +10,7 @@ import JCRCategories from '../src/jcr-categories.js';
 import JCRBrowser from '../src/jcr-browser.js';
 import PaperGraph from '../src/paper-graph.js';
 import Discover from '../src/discover.js';
+import '../src/reader-tools.js';
 const require=createRequire(import.meta.url);
 const SelfCheck=require('../src/selfcheck.js');
 const settle=async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));};
@@ -1192,6 +1193,40 @@ test('an owned unread paper from the inbox waits under 읽기 대기 until readi
  f.bench.destroy();
 });
 
+// Astra round 17 #6: the reading clock (and read-aloud credit) repainted the library cards but not this page.
+test('읽기 진행 follows the reading clock while it is on screen, at most every few seconds, and not under a focused control',async()=>{
+ const f=fixture();
+ f.runtime.formatReadTime=s=>Math.floor(s)+'s';
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
+ f.runtime.cache.items[1]={...(f.runtime.cache.items[1]||{}),seconds:60,lastRead:new Date().toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{0:60},total:8,visited:1,percent:13,attachmentID:100,lastPageIndex:0}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ assert.match(f.body().querySelector('[data-reading-progress]').textContent,/60s/);
+ f.runtime.cache.items[1].seconds=80;
+ f.bench.refreshMetrics(1);
+ assert.match(f.body().querySelector('[data-reading-progress]').textContent,/80s/,'the first tick repaints at once');
+ f.runtime.cache.items[1].seconds=95;
+ f.bench.refreshMetrics(1);
+ assert.match(f.body().querySelector('[data-reading-progress]').textContent,/80s/,'the next one waits');
+ f.bench.destroy();
+});
+
+// The real library has pages read for over an hour (3,760 s on one page): "3760초" said nothing at a glance.
+test('a page cell past a minute says its time the way the rest of the panel does',async()=>{
+ const f=fixture();
+ f.runtime.formatReadTime=s=>Math.floor(s/60)+'분';
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
+ f.runtime.cache.items[1]={...(f.runtime.cache.items[1]||{}),seconds:3800,lastRead:new Date().toISOString()};
+ f.runtime.pageProgress=ref=>ref.id===1?{pages:{0:3760,1:40},total:3,visited:2,percent:67,attachmentID:100,lastPageIndex:1}:{pages:{},total:0,visited:0,percent:0};
+ await f.bench.show('reading');
+ const fold=f.body().querySelector('.sc-resume-pages');if(fold){fold.open=true;fold.dispatchEvent(new f.win.Event('toggle'));await new Promise(r=>setTimeout(r,20));}
+ const cells=[...f.body().querySelectorAll('button.sc-page-cell')];
+ assert.ok(cells.length>=2);
+ assert.equal(cells[0].getAttribute('title'),'1페이지 · 62분');
+ assert.equal(cells[1].getAttribute('title'),'2페이지 · 40초');
+ f.bench.destroy();
+});
+
 test('collections show how much of each has been read, colour chips say what the colour means, and 최근 문헌 opens on the week',async()=>{
  const f=fixture();
  const now=Date.now(),day=864e5;
@@ -2249,7 +2284,7 @@ test('what the scan found is reachable, and a duplicate can be dealt with', asyn
  assert.match(text,/다른 논문이 붙어 있음 1/);
  // A paper with no file that has not been read is the one the file stands in front of.
  assert.match(text,/안 읽었고 파일도 없는 문헌 1/);
- assert.match(text,/never uses the title/);
+ assert.match(text,/문헌 제목의 단어가 이 파일에 거의 나오지 않습니다/,'the reason, in the panel language');
  await f.click('휴지통으로');
  assert.deepEqual(trashed,['22']);
  assert.match(f.bench.panel.querySelector('.sc-status').textContent,/휴지통/);
@@ -2282,6 +2317,22 @@ test('the attachment heading counts what the search actually left, and per-file 
  assert.match(f.body().textContent,/판별됨/,'the scan answered and noted the supplementary file');
  f.input('작업 패널 검색','PDF one');await f.bench.render();
  assert.match(f.body().textContent,/이 범위의 첨부파일 1/,'the heading counts files left after the search, not every file in scope');
+ f.bench.destroy();
+});
+/* The file checker's reasons are stored in English ('says so in its opening words'); the Korean
+   findings list printed them as they were, on 1,230 judged files of the real library. */
+test('the reason a file was judged supplementary, duplicate or foreign is said in the panel language',async()=>{
+ const f=fixture();
+ f.runtime.attachmentFindings=async()=>({supplementary:[{id:'1',fileID:'99',title:'A paper with extras',year:'2026',file:'si.pdf',why:'says so in its opening words'}],
+  duplicate:[{id:'1',fileID:'98',title:'A paper with extras',year:'2026',file:'copy.pdf',why:'the same document as another file on this item'}],
+  foreign:[{id:'1',fileID:'97',title:'A paper with extras',year:'2026',file:'other.pdf',why:'this document never uses the title of the paper it is filed under (57% of 7 words)'}],orphan:[],missing:[],unread:0});
+ await f.bench.show('attachments');
+ const details=f.body().querySelector('.sc-attachment-findings,details');if(details)details.open=true;
+ const metas=[...f.body().querySelectorAll('.sc-hit-meta')].map(el=>el.textContent).join('\n');
+ assert.match(metas,/첫머리에 보충자료라고 적혀 있습니다/);
+ assert.match(metas,/이 문헌의 다른 파일과 같은 문서입니다/);
+ assert.match(metas,/문헌 제목의 단어 7개 중 57%만 이 파일에 나옵니다/);
+ assert.doesNotMatch(metas,/says so|same document|never uses/,'no English reason in the Korean panel');
  f.bench.destroy();
 });
 test('a runtime that cannot answer leaves the attachments tab exactly as it was', async () => {
@@ -4162,8 +4213,8 @@ test('the annotation colour tally reads as one line by meaning, not a row of pil
  // Labelled: the meaning, never the hex, with the count after it.
  assert.equal(swatches[0].querySelector('.sc-annot-meaning').textContent,'핵심 결과');
  assert.equal(swatches[0].textContent.trim(),'핵심 결과2');
- // Unlabelled but coloured: a neutral name, the hex only in the title.
- assert.equal(swatches[1].querySelector('.sc-annot-meaning').textContent,'이름 없는 색');
+ // Unlabelled but coloured: Zotero's own name for it, the hex only in the title.
+ assert.equal(swatches[1].querySelector('.sc-annot-meaning').textContent,'초록색');
  assert.doesNotMatch(swatches[1].textContent,/#5fb236/i);
  assert.match(swatches[1].getAttribute('title'),/#5fb236/i);
  // No colour at all: 색 없음, still one of the parts.
@@ -4172,12 +4223,26 @@ test('the annotation colour tally reads as one line by meaning, not a row of pil
  const parent=swatches[0].parentElement;
  const dots=[...parent.querySelectorAll('.sc-annot-dot')].map(()=>1).length;
  assert.equal(dots,3);
- assert.match(parent.textContent,/핵심 결과2\s*이름 없는 색1\s*색 없음1/);assert.doesNotMatch(parent.textContent,/핵심 결과2\s*·/);
+ assert.match(parent.textContent,/핵심 결과2\s*초록색1\s*색 없음1/);assert.doesNotMatch(parent.textContent,/핵심 결과2\s*·/);
  swatches[0].click();await settle();
  assert.equal(f.bench.state.color,'#ffd400','pressing a part filters by that colour, same as before');
  f.bench.destroy();
 });
 
+test('the annotation search box takes OR and -word like the library box',async()=>{
+ const f=fixture();
+ f.library.annotations=f.record('annotations',[
+  {id:'1',parentID:'1',attachmentID:'9',text:'CRISPR screen hit',comment:'',color:'#ffd400',type:'highlight',pageIndex:0},
+  {id:'2',parentID:'1',attachmentID:'9',text:'Cas9 nickase variant',comment:'',color:'#ffd400',type:'highlight',pageIndex:1},
+  {id:'3',parentID:'1',attachmentID:'9',text:'TALEN control',comment:'',color:'#ffd400',type:'highlight',pageIndex:2},
+ ]);
+ await f.bench.show('annotations');
+ f.input('작업 패널 검색','CRISPR OR Cas9');await f.bench.render();await settle();
+ assert.deepEqual([...f.body().querySelectorAll('.sc-annot-text')].map(el=>el.textContent).sort(),['CRISPR screen hit','Cas9 nickase variant']);
+ f.input('작업 패널 검색','CRISPR OR Cas9 -nickase');await f.bench.render();await settle();
+ assert.deepEqual([...f.body().querySelectorAll('.sc-annot-text')].map(el=>el.textContent),['CRISPR screen hit']);
+ f.bench.destroy();
+});
 test('색 없음 filters to colourless annotations, distinct from no filter at all',async()=>{
  const f=fixture();
  f.library.annotations=f.record('annotations',[
@@ -4961,6 +5026,22 @@ test('관계 graph: edges are co-authorship among followed authors, weighted by 
   // No label box overlaps another (labels that would collide are hidden).
   const shown = [...f.body().querySelectorAll('.sc-author-graph .sc-graph-label')].filter(l => l.getAttribute('display') !== 'none');
   assert.ok(shown.length >= 1);
+  f.bench.destroy();
+});
+
+// Astra round 17 #7: two followed authors signing seventh and eighth were joined by stored ids, not the six names.
+test('관계 graph: stored co-author ids link followed authors who sign past the sixth name',async()=>{
+  const f = fixture();
+  f.runtime.cache.workbenchUI = {...(f.runtime.cache.workbenchUI || {}), authorGraphOpen: true};
+  const team = ['B1','B2','B3','B4','B5','B6'].map(id => ({id, name: id + ' Person'}));
+  const news = {id: 'W7', title: 'Big lab paper', doi: '10.1/big', date: '2026-09-03', venue: 'Cell',
+    people: team.map(p => p.name), coauthors: [...team, {id: 'A7', name: 'Gil Seven'}, {id: 'A8', name: 'Hana Eight'}], authorCount: 8};
+  const rows = [{id: 'A7', name: 'Gil Seven', institution: 'X', seen: [], news: [news]}, {id: 'A8', name: 'H. Eight', institution: 'X', seen: [], news: [news]}];
+  f.runtime.watchedAuthors = () => rows;f.runtime.watchedAuthorsByNews = () => rows;f.runtime.graphTools = PaperGraph;
+  await f.bench.show('authors');
+  const lines = [...f.body().querySelectorAll('.sc-author-graph line')];
+  assert.equal(lines.length, 1, 'one edge, found by id though the second spells her name differently');
+  assert.deepEqual([lines[0].getAttribute('data-a'), lines[0].getAttribute('data-b')].sort(), ['A7', 'A8']);
   f.bench.destroy();
 });
 

@@ -1574,3 +1574,21 @@ test('the reader\'s language menu offers Automatic, naming what it resolves to, 
  assert.equal(f.panel().querySelector('.sc-ra-tr .sc-ra-menu-item').getAttribute('aria-checked'),'true');
  f.stop();
 });
+
+/* The reading clock keeps counting for idleSeconds (60 s by default) after the
+   last touch; listening credited in that window was counted twice. Only the
+   part of a sentence past the clock's reach is listening credit. */
+test('listening credit stops where the reading clock\'s idle window ends, so the same seconds are never counted twice',async()=>{
+ const f=fixture({settings:{idleSeconds:60,recordReading:true}});await f.sync();
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);f.synth.begin();await settle();
+ await new Promise(r=>setTimeout(r,20));f.sessionOf().lastActivity=Date.now()-10000;f.synth.finish();f.synth.begin();await settle();
+ assert.equal(f.readings.length,0,'touched 10 s ago: the clock still counts these seconds');
+ f.allSettings.recordReading=false;
+ await new Promise(r=>setTimeout(r,20));f.sessionOf().lastActivity=Date.now()-10000;f.synth.finish();f.synth.begin();await settle();
+ assert.equal(f.readings.length,1,'with the reading clock off, listening is the only record');
+ // Astra round 17 #3: the clock stops the moment Zotero loses focus; listening from another app is credited.
+ f.allSettings.recordReading=true;f.win.document.hasFocus=()=>false;
+ await new Promise(r=>setTimeout(r,20));f.sessionOf().lastActivity=Date.now()-10000;f.synth.finish();f.synth.begin();await settle();
+ assert.equal(f.readings.length,2,'Zotero in the background: the clock is not counting, the listening is');
+ f.stop();
+});

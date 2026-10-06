@@ -906,7 +906,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const child = this.Z.Items.get(id);
       return child && !child.deleted;
     });
-    if (trashStub && stub && !left.length) {
+    // A note on it is the reader's own work: the entry holding it is not an empty stub.
+    const notes = (stub?.getNotes?.() || []).filter(id => { const child = this.Z.Items.get(id); return child && !child.deleted; });
+    if (trashStub && stub && !left.length && !notes.length) {
       stub.deleted = true;
       await stub.saveTx();
       trashed = 1;
@@ -3237,6 +3239,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // A name or title reduced to its letters and digits (Unicode, NFKC), for comparing.
   static newsKey(text) { return String(text || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''); }
 
+  /* Every author of a stored paper with their OpenAlex id, so the followed
+     author's graph can be drawn from news without a request: the six names
+     kept for the namesake check drop a PI who signs last. Past thirty
+     authors only the count is kept -- the graph leaves a crowd out anyway. */
+  static newsCoauthors(people) {
+    const list = (Array.isArray(people) ? people : []).filter(p => p && p.name);
+    return {coauthors: list.length > 30 ? [] : list.map(p => ({id: String(p.id || ''), name: String(p.name)})), authorCount: list.length};
+  }
+
   /* One paper once. The same OpenAlex id twice, the "Angewandte Chemie" and
      "... International Edition" records of one article, and a preprint beside
      its journal version all arrived as separate news. By id first, then by
@@ -3344,7 +3355,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const held = new Map((row.unverified || []).map(w => [w.id, w]));
       for (const work of moved) if (!held.has(work.id) && !(row.rejected || []).includes(work.id)) held.set(work.id, {
         id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''), date: work.date || '',
-        people: (work.people || []).slice(0, 6), places: work.places || [], country: work.country || '', subfield: work.subfield || ''
+        people: (work.people || []).slice(0, 6), places: work.places || [], country: work.country || '', subfield: work.subfield || '',
+        ...(Array.isArray(work.coauthors) ? {coauthors: work.coauthors, authorCount: work.authorCount} : {})
       });
       row.unverified = [...held.values()].sort((m, n) => String(n.date || '').localeCompare(String(m.date || ''))).slice(0, 20);
     }
@@ -3894,6 +3906,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''),
           date: work.date || (work.year ? String(work.year) : ''),
           people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
+          ...CustomStyleRuntime.newsCoauthors(work.people),
           places: (ownOf(work)?.institutions || []).map(h => h.institution).slice(0, 4),
           country: ownOf(work)?.country || '',
           subfield: work.subfieldName || ''
@@ -3920,6 +3933,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // The first few names, so a new collaborator can be spotted later
         // without another request.
         people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
+        ...CustomStyleRuntime.newsCoauthors(work.people),
         // What the same record says about this followed author's part in it and how often it is cited, so the inbox can say so without a request.
         citations: Number.isInteger(work.citations) ? work.citations : null,
         position: ownOf(work)?.position || '',
@@ -4121,6 +4135,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: work.type,
         preprint: /preprint/i.test(work.type || '') || /rxiv|research square|preprints?\b|ssrn/i.test(work.venue || ''),
         date: work.date, inLibrary: !!work.doi && owned.has(work.doi), people: work.people || [],
+        ...(Array.isArray(work.coauthors) ? {coauthors: work.coauthors, authorCount: work.authorCount} : {}),
         citations: null, position: '', corresponding: false,
         places: work.places || [], country: work.country || '', subfield: work.subfield || '', verified: 'confirmed'
       }, ...(row.news || [])], this.panelSeenKeys(), this.NEWS_STORE_LIMIT || 200);
@@ -5707,6 +5722,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   /* 논문 비교 evidence: what each paper says, in the reader's own words, kept
      locally per item (`libraryID:key`) next to the other per-paper records. */
+  // The evidence box's own maxlength says the same, so a long entry is stopped while typing, never cut after saving.
+  static get EVIDENCE_LIMIT() { return 20000; }
   static get EVIDENCE_FIELDS() { return [['species', '생물종/균주'], ['construct', 'construct'], ['condition', '조건'], ['control', '대조군'], ['result', '결과'], ['limit', '한계']]; }
   evidenceOf(item) {
     const row = item?.key ? (this.cache?.evidence || {})[this.identity(item)] : null;
@@ -5719,7 +5736,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const known = new Set(this.constructor.EVIDENCE_FIELDS.map(([key]) => key));
     const store = this.cache.evidence && typeof this.cache.evidence === 'object' ? this.cache.evidence : (this.cache.evidence = {});
     const id = this.identity(item), row = {...(store[id] || {})};
-    for (const [key, value] of Object.entries(patch || {})) if (known.has(key)) row[key] = String(value ?? '').slice(0, 4000);
+    for (const [key, value] of Object.entries(patch || {})) if (known.has(key)) row[key] = String(value ?? '').slice(0, this.constructor.EVIDENCE_LIMIT || 20000);
     for (const key of Object.keys(row)) if (!row[key].trim()) delete row[key];
     if (Object.keys(row).length) store[id] = row; else delete store[id];
     this.dirty = true;

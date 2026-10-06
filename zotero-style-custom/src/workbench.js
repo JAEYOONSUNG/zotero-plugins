@@ -3832,10 +3832,12 @@
    const paperOf=n=>state.items.find(i=>String(i.id)===String(n.parentID||''));
    const sourceHit=new Map();
    const matching=notes.filter(n=>{
-    if(model.matches(n.title+' '+n.text,state.query))return true;
-    const p_=paperOf(n);if(!p_)return false;
+    // The library box's syntax (OR, -word, "phrase", author: …) here too; field terms ask the note's paper.
+    const p_=paperOf(n);
+    if(model.matchesQuery(n.title+' '+n.text,state.query,p_))return true;
+    if(!p_)return false;
     const meta=[p_.title,p_.authors,p_.year,p_.venue,...(p_.tags||[])].join(' ');
-    if(!model.matches(n.title+' '+n.text+' '+meta,state.query))return false;
+    if(!model.matchesQuery(n.title+' '+n.text+' '+meta,state.query,p_))return false;
     const words=String(state.query||'').toLowerCase().split(/\s+/).filter(Boolean);
     const fields=[['저자',p_.authors],['제목',p_.title],['저널',p_.venue],['연도',p_.year],['태그',(p_.tags||[]).join(' ')]];
     const hit=fields.find(([,v])=>words.some(w=>String(v||'').toLowerCase().includes(w)&&!String(n.title+' '+n.text).toLowerCase().includes(w)));
@@ -3978,8 +3980,9 @@
    const viaSource=new Set();
    const unfiltered=list.filter(a=>{
     if(setting('annotationIgnoreFigures',false)&&/^(?:figure|fig\.?|table|그림|표)\s*\d/i.test((a.text||'').trim()))return false;
-    if(!state.query||model.matches(a.text+' '+a.comment,state.query))return true;
-    if(model.matches(a.text+' '+a.comment+' '+sourceText(a),state.query)){viaSource.add(a.id);return true;}
+    const paper=paperByID.get(String(a.parentID||''));
+    if(!state.query||model.matchesQuery(a.text+' '+a.comment,state.query,paper))return true;
+    if(model.matchesQuery(a.text+' '+a.comment+' '+sourceText(a),state.query,paper)){viaSource.add(a.id);return true;}
     return false;
    });
    const filtered=unfiltered.filter(a=>colorMatches(a)&&(!state.annotationPaperID||String(a.parentID||'')===state.annotationPaperID));
@@ -4003,6 +4006,7 @@
    // #FFD400 and #ffd400 are one colour: one chip, one count, one filter.
    for(const a of unfiltered){const hex=String(a.color||'').toLowerCase();counts.set(hex,(counts.get(hex)||0)+1);}
    const labels=runtime.cache.readerSettings?.colorLabels||{};
+   const colorWord=hex=>{const c=root.CustomStyleReaderTools?.colorName?.(hex);return c?(c.near?F('{0} 계열',T(c.name)).text:T(c.name)):T('이름 없는 색');};
    const colorMeaning=hex=>{const key=Object.keys(labels).find(k=>k.toLowerCase()===String(hex||'').toLowerCase());return key?String(labels[key]||'').trim().slice(0,24):'';};
    const summary=bar();
    node('span',`주석 ${filtered.length}개`,summary,{class:'sc-muted'});
@@ -4012,7 +4016,7 @@
    [...counts].sort((a,b)=>b[1]-a[1]).forEach(([hex,n],i)=>{
     const on=state.color===colorKey(hex);
     const meaning=hex?colorMeaning(hex):'';
-    const label=hex&&meaning?D(meaning):hex?T('이름 없는 색'):T('색 없음');
+    const label=hex&&meaning?D(meaning):hex?colorWord(hex):T('색 없음');
     const chip=node('button',null,summary,{class:'sc-annot-swatch',type:'button','aria-pressed':String(on),
      title:on?`${hex} · ${n}개 · 다시 눌러 색 필터 해제`:`${hex||T('색 없음')} · ${n}개 · 눌러서 이 색만 보기`});
     node('span',null,chip,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});
@@ -4038,7 +4042,7 @@
     const cols=[...counts.keys()];
     const table=node('table',null,fold,{class:'sc-annot-summary-table'});
     const hr=node('tr',null,node('thead',null,table));node('th',T('문헌'),hr);
-    for(const hex of cols){const th=node('th',null,hr);node('span',null,th,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});node('span',colorMeaning(hex)?D(colorMeaning(hex)):hex?D(hex):T('색 없음'),th);}
+    for(const hex of cols){const th=node('th',null,hr);node('span',null,th,{class:'sc-annot-dot',style:`background:${/^#[0-9a-f]{6}$/i.test(hex)?hex:'var(--sc-faint)'}`});node('span',colorMeaning(hex)?D(colorMeaning(hex)):hex?colorWord(hex):T('색 없음'),th,{title:hex||''});}
     const tbody=node('tbody',null,table);
     const papersSorted=[...perPaper].sort((a,b)=>[...b[1].values()].reduce((x,y)=>x+y,0)-[...a[1].values()].reduce((x,y)=>x+y,0));
     for(const [pid,row] of papersSorted.slice(0,state.annotationTableAll?papersSorted.length:12)){
@@ -4797,6 +4801,22 @@
      cost a scroll forever after. It is a collapsed fold now, its summary
      the same counts read at a glance; each section inside caps at ten rows
      with its own 더 보기, since a library-wide scan can run to hundreds. */
+  /* attachment-kinds stores its reasons in English; said here in the panel's language. */
+  const FILE_REASONS={'no extracted text':'추출된 글자가 없습니다','says so in its opening words':'첫머리에 보충자료라고 적혀 있습니다',
+   'opens like an article':'논문 본문처럼 시작합니다','both markers; the earlier one decides':'본문과 보충자료 표시가 모두 있어 먼저 나온 쪽으로 판단했습니다',
+   'mentions supplements, but not at the top':'보충자료를 언급하지만 첫머리는 아닙니다','article markers below the fold':'본문 표시가 첫머리 아래에 있습니다',
+   'nothing decisive on the first page':'첫 쪽에 판단할 단서가 없습니다','the same document as another file on this item':'이 문헌의 다른 파일과 같은 문서입니다',
+   'the item already has its article, and this belongs to the same paper':'이 문헌에 이미 본문이 있고, 이 파일도 같은 논문의 것입니다',
+   'the file that best matches this paper':'이 문헌과 가장 잘 맞는 파일입니다','the first readable file':'읽을 수 있는 첫 파일입니다','the only file':'유일한 파일입니다'};
+  function fileReason(why){
+   const text=String(why||'');if(!text)return '';
+   if(FILE_REASONS[text])return T(FILE_REASONS[text]);
+   const m=text.match(/never uses the title of the paper it is filed under \((\d+)%(?: of (\d+) words)?\)/);
+   if(m)return m[2]?F('문헌 제목의 단어 {0}개 중 {1}%만 이 파일에 나옵니다',m[2],m[1]).text:F('문헌 제목의 단어 중 {0}%만 이 파일에 나옵니다',m[1]).text;
+   if(/never uses the title/.test(text))return T('문헌 제목의 단어가 이 파일에 거의 나오지 않습니다');
+   // A reason written in Korean already (a publisher's SI download) is shown as it is.
+   return /[가-힣]/.test(text)?T(text):'';
+  }
   function drawFindingsBox(found,parent){
    const details=node('details',null,parent,{class:'sc-attachment-findings'});
    if(state.attachmentFindingsOpen)details.open=true;
@@ -4825,7 +4845,7 @@
     for(const row of rows.slice(0,all?rows.length:PAGE)){
      const c=node('div',null,list,{class:'sc-hit'+(tone?' sc-hit-'+tone:'')});
      node('p',Dor(row.title,'제목 없음'),c,{class:'sc-hit-title'});
-     node('p',[row.year,row.file,row.why].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
+     node('p',[row.year,row.file,fileReason(row.why)].filter(Boolean).join(' · '),c,{class:'sc-hit-meta'});
      const actions=node('div',null,c,{class:'sc-hit-actions'});
      if(row.fileID)button('파일 열기',()=>library.openItem(row.fileID),actions,{'data-opens':'window'});
      button('문헌 보기',()=>library.openItem(row.id),actions,{'data-opens':'window'});
@@ -4853,7 +4873,7 @@
       const result=await runtime.rehomeSupplement(row.fileID,home.id);
       message(result.moved?`보충자료를 원논문으로 옮겼습니다${result.trashed?' · 빈 항목은 휴지통으로':''}. Zotero에서 되돌릴 수 있습니다.`:'옮길 것이 없었습니다.');
       await render();
-     }),actions);
+     }),actions,{'data-writes':'library'});
      button('원논문 보기',()=>library.openItem(home.id),actions,{'data-opens':'window'});
      node('p',F('원논문으로 보이는 문헌: {0}',D(home.title)),actions.parentNode,{class:'sc-hit-meta'});
     } else if(home&&home.ambiguous){
@@ -4864,7 +4884,7 @@
        const result=await runtime.rehomeSupplement(row.fileID,candidate.id);
        message(result.moved?'보충자료를 옮겼습니다. Zotero에서 되돌릴 수 있습니다.':'옮길 것이 없었습니다.');
        await render();
-      }),actions);
+      }),actions,{'data-writes':'library'});
     } else {
      node('p','원논문을 라이브러리에서 찾지 못했습니다.',actions.parentNode,{class:'sc-hit-meta'});
     }
@@ -5207,7 +5227,8 @@
         drew as the same empty cell, so the strip read as less read than it was. */
      const seen=Object.prototype.hasOwnProperty.call(p.pages||{},n);
      const notes=byPage?.get(n);
-     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${seen?`${Math.round(sec)}초`:T('안 엶')}${notes?.length?', '+T(`주석 ${notes.length}개`):''}`,title:`${n+1}페이지 · ${seen?`${Math.round(sec)}초`:T('안 엶')}`});
+     const spent=sec>=60&&runtime.formatReadTime?runtime.formatReadTime(sec,{compact:true}):`${Math.round(sec)}초`;
+     const cell=node('button','',cells,{class:'sc-page-cell',type:'button','data-level':String(level),'aria-label':`${n+1}페이지, ${seen?spent:T('안 엶')}${notes?.length?', '+T(`주석 ${notes.length}개`):''}`,title:`${n+1}페이지 · ${seen?spent:T('안 엶')}`});
      if(seen&&!level)cell.dataset.visited='1';
      if(notes?.length){
       const hex=notes.find(a=>/^#[0-9a-f]{6}$/i.test(a.color))?.color;
@@ -5863,7 +5884,7 @@
     if(!heading&&!paper&&CLAMPED.has(field)){cell.textContent='';node('div',D(String(value)),cell,{class:'sc-matrix-clamp'});}
     if(!heading&&rowItem&&String(field||'').startsWith('ev_')&&typeof runtime.setEvidence==='function'){
      cell.textContent='';
-     const area=node('textarea',null,cell,{class:'sc-matrix-edit',rows:'2','aria-label':`${T(fieldNames[field])} · ${rowItem.title}`,placeholder:T('적기')});
+     const area=node('textarea',null,cell,{class:'sc-matrix-edit',rows:'2',maxlength:String(runtime.constructor?.EVIDENCE_LIMIT||20000),'aria-label':`${T(fieldNames[field])} · ${rowItem.title}`,placeholder:T('적기')});
      area.value=String(value);
      // Keyed by the paper, not by its title and position: same-title papers
      // and a reordered table must not swap what was typed.
@@ -7891,8 +7912,16 @@
       shared.get(pair).keys.add(key);
      }
     };
-    for(const person of watched)for(const work of person.news||[])
-     link([person,...(work.people||[]).map(name=>byName.get(fold(name)))],'w:'+seenWorkKey(work));
+    // By id first (every OpenAlex record of a merged person), names only for news stored before the ids were.
+    const byID=new Map();
+    for(const person of watched)for(const id of [person.id,...(person.alsoIds||[])])if(id&&!byID.has(String(id)))byID.set(String(id),person);
+    for(const person of watched)for(const work of person.news||[]){
+     if(Number(work.authorCount)>30)continue;
+     const others=Array.isArray(work.coauthors)&&work.coauthors.length
+      ?work.coauthors.map(p=>byID.get(String(p?.id||''))||byName.get(fold(p?.name||'')))
+      :(work.people||[]).map(name=>byName.get(fold(name)));
+     link([person,...others],'w:'+seenWorkKey(work));
+    }
     for(const item of state.items){
      const people=String(item.authors||'').split(';').map(name=>byName.get(fold(name.trim())));
      link(people,item.doi?'w:'+bareDOI(item.doi):'l:'+item.id);
@@ -9430,8 +9459,21 @@
    const value=tile.querySelector('b');
    if(value&&seconds>0)value.textContent=runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):Math.round(seconds/60)+'분';
   }
+  /* 읽기 진행 follows the reading clock (and read-aloud credit) while it is on
+     screen: the first tick at once, then at most every ten seconds, and never
+     while a control in the list has focus -- the list is rebuilt. */
+  let readingTickAt=0,readingTickTimer=null;
+  function readingTick(){
+   if(disposed||panel.hidden||state.tab!=='reading')return;
+   const wait=readingTickAt+10000-Date.now();
+   const busy=()=>!!doc.activeElement?.closest?.('[data-reading-progress]');
+   if(wait<=0&&!busy()){readingTickAt=Date.now();refreshReading();return;}
+   if(readingTickTimer)return;
+   readingTickTimer=win.setTimeout(()=>{readingTickTimer=null;readingTick();},Math.max(wait,2000));
+  }
   function refreshMetrics(itemID){
    if(disposed||panel.hidden)return;
+   if(state.tab==='reading')readingTick();
    if(itemID==null){
     for(const item of state.items){const ref=runtime.Z.Items.get(Number(item.id));if(ref)Object.assign(item,(runtime.panelState||runtime.state).call(runtime,ref));}
     for(const card of body.querySelectorAll('[data-item-id]')){const item=itemsByID().get(card.dataset.itemId);if(item)paintMetrics(item,card);}
@@ -9496,7 +9538,7 @@
    // panel must write it, not discard it.
    for(const entry of memoFields)Promise.resolve(entry.flush()).catch(error=>runtime.Z.logError?.(error));
    memoFields=[];
-   abortAround();dismissToast();disposed=true;LIVE_DRAFT_WINDOWS.delete(WINDOW_ID);stopMemoListener?.();win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
+   abortAround();dismissToast();if(readingTickTimer){win.clearTimeout(readingTickTimer);readingTickTimer=null;}disposed=true;LIVE_DRAFT_WINDOWS.delete(WINDOW_ID);stopMemoListener?.();win.clearInterval(selectionTimer);epoch++;loadEpoch++;aiEpoch++;if(draftTimer){win.clearTimeout(draftTimer);draftTimer=null;Promise.resolve(runtime.flush()).catch(error=>runtime.Z.logError?.(error));}if(reloadTimer)win.clearTimeout(reloadTimer);if(searchTimer){win.clearTimeout(searchTimer);searchTimer=null;}noteCache=null;if(notifier!=null)runtime.Z.Notifier.unregisterObserver(notifier);clear();for(const[target,event,fn]of listeners)target.removeEventListener(event,fn);toolbar?.remove();panel.remove();sheet.remove();jcrSheet.remove();}
   const accent=runtime.pref('accentColor','#374151');if(/^#[a-f\d]{6}$/i.test(accent)&&!['#374151','#5654d8'].includes(accent.toLowerCase()))panel.style.setProperty('--sc-accent',accent);setPanelFontSize(Math.max(11,Math.min(20,Number(runtime.pref('panelFontSize',13))||13)));
   // Long background work reports here rather than through a modal, so the user
   // can keep reading while the columns fill in behind them.

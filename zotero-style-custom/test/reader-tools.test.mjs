@@ -408,3 +408,15 @@ test('the toolbar group is one row of icon buttons: no text label hangs under th
  assert.ok(f.Z.Reader._registeredListeners.some(l=>l.type==='renderTextSelectionPopup'),'the selection popup hook is registered');
  f.service.stop();
 });
+
+test('an unlabelled annotation colour is named: Zotero\'s own name, else the nearest one with 계열 (the real library had #ec2814, #facd5a, #ffed99, #ffff00)', () => {
+  const {colorName} = tools;
+  assert.deepEqual(colorName('#FF6666'), {name: '빨간색', near: false});
+  assert.deepEqual(colorName('#ec2814'), {name: '빨간색', near: true});
+  assert.deepEqual(colorName('#facd5a'), {name: '노란색', near: true});
+  assert.deepEqual(colorName('#ffff00'), {name: '노란색', near: true});
+  assert.deepEqual(colorName('#6ad926'), {name: '초록색', near: true});
+  assert.deepEqual(colorName('#999999'), {name: '회색', near: true});
+  assert.equal(colorName(''), null);
+  assert.equal(colorName('red'), null);
+});
