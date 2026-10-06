@@ -284,13 +284,14 @@
   // make the picture look connected: an edge exists because the two names are
   // on the same paper, and it says how many.
   function coauthors(works, authorID, {limit = 24} = {}) {
-    const me = text(authorID).replace(/^https?:\/\/openalex\.org\//i, '');
+    // One person may carry several OpenAlex ids (one ORCID on two records): any of them is the person.
+    const mine = new Set((Array.isArray(authorID) ? authorID : [authorID]).map(id => text(id).replace(/^https?:\/\/openalex\.org\//i, '')).filter(Boolean));
     const people = new Map();
     for (const work of Array.isArray(works) ? works : []) {
       const on = (work.people || []).filter(person => person.id);
-      if (!on.some(person => person.id === me)) continue;
+      if (!on.some(person => mine.has(person.id))) continue;
       for (const person of on) {
-        if (person.id === me) continue;
+        if (mine.has(person.id)) continue;
         const found = people.get(person.id) || {
           id: person.id, name: person.name, institution: person.institution || '', papers: 0, titles: [], last: null
         };
@@ -329,6 +330,8 @@
     const myID = text(me?.id).replace(/^https?:\/\/openalex\.org\//i, '');
     const myName = fold(me?.name);
     const shortID = value => text(value).replace(/^https?:\/\/openalex\.org\//i, '');
+    // Every OpenAlex record of the centre (one ORCID on several ids) is the centre.
+    const myIDs = new Set([myID, ...(Array.isArray(me?.ids) ? me.ids.map(shortID) : [])].filter(Boolean));
     /* The id is the identity. A name stands in only for a record that carries
        none (the stored news and the library's author lists are names alone):
        it joins the one person of that name the ids know, and stands by itself
@@ -363,11 +366,11 @@
         let identity;
         if (person.id) {
           // With ids on both sides the ids decide; a matching name alone never makes someone the centre.
-          if (myID ? person.id === myID : person.folded === myName) { mine = true; continue; }
+          if (myID ? myIDs.has(person.id) : person.folded === myName) { mine = true; continue; }
           identity = person.id;
         } else {
           const candidates = idsByName.get(person.folded);
-          if (person.folded === myName && (!candidates || !myID || candidates.has(myID))) { mine = true; continue; }
+          if (person.folded === myName && (!candidates || !myID || [...myIDs].some(id => candidates.has(id)))) { mine = true; continue; }
           identity = candidates && candidates.size === 1 ? [...candidates][0] : 'n:' + person.folded;
         }
         names.add(identity);

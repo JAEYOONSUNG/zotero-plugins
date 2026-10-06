@@ -718,7 +718,8 @@ test("unseen news is dropped only when seen or older than the retention, and a s
   const page = works => ({results: works, meta: {next_cursor: null}});
   const swept = new Date(Date.now() - 3 * 864e5).toISOString();
   const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
-  const old = {id: "Wold", title: "old", doi: "10.1/old", date: day(200)};
+  // Retention counts from when a paper was announced (round 13): this one was found 200 days ago.
+  const old = {id: "Wold", title: "old", doi: "10.1/old", date: day(200), foundAt: day(200)};
   const mid = {id: "Wmid", title: "mid", doi: "10.1/mid", date: day(120)};
   const gone = {id: "Wseen", title: "seen", doi: "10.1/seen", date: day(10)};
   const rows = [person("A1", {sweptAt: swept, seen: [], news: [old, mid, gone]})];
@@ -887,4 +888,136 @@ test("keepNews carries a seen mark from a dropped twin to the one that stays", (
     {id: "W8", title: "Pathway Engineering in Yeast", doi: "10.1038/j", date: "2026-08-01"}], ctx.panelSeenKeys(), 50);
   assert.deepEqual(out.map(n => n.id), ["W8"]);
   assert.equal(ctx.cache.workbenchUI.inboxSeen["10.1038/j"], "2026-09-01");
+});
+
+/* One ORCID on several OpenAlex records (round 13, round 6 leftover): following
+   the person follows every record, and the sweep, the page and the circle read them all. */
+test("following a merged person keeps every OpenAlex id, and an earlier row of one of them is folded in", async () => {
+  const rows = [person("A2", {seen: ["W50"], news: [{id: "W51", title: "Held over from the alias row", date: RECENT}]}), person("A9")];
+  const h = host({rows, pages: []});
+  h.unwatchAuthor = Runtime.prototype.unwatchAuthor;
+  h.watchedRowOf = Runtime.prototype.watchedRowOf;
+  await h.watchAuthor({id: "A1", alsoIds: ["https://openalex.org/A2", "A3", "W4", "A1"], name: "Merged Person", seen: ["W1"]});
+  const list = h.cache.watchedAuthors;
+  assert.equal(list.length, 2, "the A2 row became part of the merged person");
+  const merged = list.find(r => r.id === "A1");
+  assert.deepEqual(merged.alsoIds, ["A2", "A3"], "only other author ids, in order");
+  assert.ok(merged.seen.includes("W1") && merged.seen.includes("W50"), "what A2 already knew stays known");
+  assert.deepEqual(merged.news.map(n => n.id), ["W51"], "unseen news of the folded row is kept");
+  assert.equal(h.watchedRowOf("A3").id, "A1", "any of the ids finds the person");
+  await h.unwatchAuthor("A3");
+  assert.deepEqual(h.cache.watchedAuthors.map(r => r.id), ["A9"], "unfollowing by any id lets the whole person go");
+});
+
+test("the sweep asks for every id of a merged person in one batch and files the news under the person", async () => {
+  const rows = [person("A1", {alsoIds: ["A2"]}), person("A3")];
+  const h = host({rows, pages: [{results: [work("W1", ["A2"]), work("W2", ["A1"]), work("W3", ["A1", "A2", "B7"])], meta: {}}]});
+  const result = await h.sweepWatchedAuthors();
+  const url = decodeURIComponent(h.calls.find(u => /\/works\?/.test(u)));
+  assert.match(url, /author\.id:A1\|A2\|A3/);
+  const profilesURL = decodeURIComponent(h.calls.find(u => /\/authors\?/.test(u)));
+  assert.match(profilesURL, /ids\.openalex:A1\|A2\|A3/);
+  const row = h.cache.watchedAuthors.find(r => r.id === "A1");
+  assert.deepEqual(row.news.map(n => n.id).sort(), ["W1", "W2", "W3"], "a paper under the second record is the person's news");
+  assert.equal(result.works, 3);
+  assert.equal(row.news.find(n => n.id === "W1").position, "first", "their part is read off whichever record signed it");
+  assert.ok(!h.cache.watchedAuthors.some(r => r.id === "A2"), "no second row appears for the alias");
+});
+
+test("a merged person's batches never split their ids across two requests", () => {
+  const groups = [...Array.from({length: 49}, (_, n) => "A" + (n + 1)), ["A100", "A101"], "A102"];
+  const batches = discover.authorBatches(groups);
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].length, 49);
+  assert.deepEqual(batches[1], ["A100", "A101", "A102"]);
+  // Plain ids pack fifty to a request as before.
+  assert.deepEqual(discover.authorBatches(Array.from({length: 120}, (_, n) => "A" + n)).map(b => b.length), [50, 50, 20]);
+});
+
+test("the person view lists works under every id of a merged person", () => {
+  const url = decodeURIComponent(discover.authorAllWorksURL("A1", {ids: ["A1", "A2"]}));
+  assert.match(url, /author\.id:A1\|A2/);
+  assert.match(decodeURIComponent(discover.authorWorksURL(["A1", "A2"], {limit: 25})), /author\.id:A1\|A2/);
+  const payload = {results: [{id: "https://openalex.org/W1", title: "T", publication_year: 2026,
+    authorships: [{author: {id: "https://openalex.org/A2"}, author_position: "last", is_corresponding: true}]}]};
+  const [row] = discover.readAuthorWorks(payload, {authorID: "A1", ids: ["A1", "A2"]});
+  assert.equal(row.position, "last");
+  assert.equal(row.corresponding, true);
+});
+
+/* Real data, 2026-10-06: all 55 stored news of the user's 110 followed authors
+   carried 미분류, and no sweep had run for 17 days. Read back by id (one filter
+   request per fifty), 49 were signed from a known place and 6 were namesakes
+   (four "Huimin Zhao" papers from Hainan, Nanjing Tech, Zhejiang). */
+test("unclassified stored news is settled by asking for those works by id, without a sweep (round 13)", async () => {
+  const stored = (id, title) => ({id, title, doi: "10.1/" + id.toLowerCase(), date: RECENT, people: ["Someone Else"], unclassified: true});
+  const rows = [person("A1", {institution: "University of Illinois Urbana-Champaign", news: [stored("W1", "Own paper"), stored("W2", "Namesake paper"), {id: "W3", title: "Already checked", date: RECENT, verified: "place"}]}),
+    person("A2", {alsoIds: ["A5"], institution: "MIT", news: [stored("W4", "Under the second record")]})];
+  const at = (id, authorID, place) => work(id, [authorID], {authorships: [{author: {id: "https://openalex.org/" + authorID, display_name: authorID},
+    author_position: "last", institutions: [{display_name: place}]}]});
+  const h = host({rows, pages: [{results: [at("W1", "A1", "University of Illinois Urbana-Champaign"), at("W2", "A1", "Hainan University"), at("W4", "A5", "Massachusetts Institute of Technology")], meta: {}}]});
+  h.classifyStoredNews = Runtime.prototype.classifyStoredNews;
+  const result = await h.classifyStoredNews();
+  assert.equal(h.calls.length, 1, "one request for every unclassified paper");
+  assert.match(decodeURIComponent(h.calls[0]), /ids\.openalex:W1\|W2\|W4/);
+  assert.deepEqual({asked: result.asked, settled: result.settled, held: result.held}, {asked: 3, settled: 2, held: 1});
+  const [a1, a2] = h.cache.watchedAuthors;
+  assert.deepEqual(a1.news.map(n => n.id), ["W1", "W3"], "the namesake paper leaves the news");
+  assert.equal(a1.news[0].unclassified, undefined);
+  assert.equal(a1.news[0].verified, "place");
+  assert.deepEqual(a1.unverified.map(n => n.id), ["W2"], "and waits under 확인 필요");
+  assert.equal(a2.news[0].verified, "place", "a merged person's second record counts as theirs");
+  assert.ok(h.saved, "written once at the end");
+  // Nothing left to ask: no request at all.
+  const again = await h.classifyStoredNews();
+  assert.equal(again.asked, 0);
+  assert.equal(h.calls.length, 1);
+});
+
+test("a sweep settles stored 미분류 news first, in one extra request only when there is some (round 13)", async () => {
+  const rows = [person("A1", {news: [{id: "W1", title: "Old stored paper", date: "2025-01-01", unclassified: true}]})];
+  const h = host({rows, pages: [{results: [work("W1", ["A1"])], meta: {}}, {results: [], meta: {}}]});
+  h.classifyStoredNews = Runtime.prototype.classifyStoredNews;
+  const result = await h.sweepWatchedAuthors();
+  assert.ok(h.calls.some(u => /ids\.openalex:W1/.test(decodeURIComponent(u))), "the stored paper is read back by id");
+  assert.equal(result.classified.settled, 1);
+  assert.equal(h.cache.watchedAuthors[0].news.find(n => n.id === "W1")?.unclassified, undefined);
+});
+
+test("following or unfollowing while a sweep runs is not undone when it finishes (round 13, Astra)", async () => {
+  const rows = [person("A1"), person("A3")];
+  const h = host({rows, pages: [{results: [work("W1", ["A1"]), work("W3", ["A3"])], meta: {}}]});
+  h.unwatchAuthor = Runtime.prototype.unwatchAuthor;
+  h.watchedRowOf = Runtime.prototype.watchedRowOf;
+  const ask = h.discoverJSON;
+  let once = false;
+  h.discoverJSON = async function (url) {
+    if (!once) { once = true; await this.unwatchAuthor("A1"); await this.watchAuthor({id: "A2", name: "Added meanwhile"}); }
+    return ask.call(this, url);
+  };
+  await h.sweepWatchedAuthors();
+  assert.deepEqual(h.cache.watchedAuthors.map(r => r.id).sort(), ["A2", "A3"], "A1 stays gone and A2 stays followed");
+  assert.deepEqual(h.cache.watchedAuthors.find(r => r.id === "A3").news.map(n => n.id), ["W3"], "the sweep's own answer still lands");
+  // Two presses share one run.
+  const h2 = host({rows: [person("A1")], pages: [{results: [], meta: {}}]});
+  const [a, b] = await Promise.all([h2.sweepWatchedAuthors(), h2.sweepWatchedAuthors()]);
+  assert.equal(a, b);
+  assert.equal(h2.calls.filter(u => /\/works\?/.test(u)).length, 1);
+});
+
+test("an unseen paper is kept 180 days from when it was announced, not from its publication date (round 13, Astra)", async () => {
+  /* 37 of the user's 55 stored news were published over 180 days ago but
+     announced on 2026-09-19 and never looked at; the next sweep would have
+     deleted them without a 확인함. */
+  const swept = new Date(Date.now() - 17 * 864e5).toISOString();
+  const longAgo = new Date(Date.now() - 400 * 864e5).toISOString();
+  const rows = [person("A1", {sweptAt: swept, news: [
+    {id: "W1", title: "Published long ago, announced lately", date: "2025-04-01", verified: "place"},
+    {id: "W2", title: "Announced long ago", date: "2025-03-01", verified: "place", foundAt: longAgo}]})];
+  const h = host({rows, pages: [{results: [work("W5", ["A1"])], meta: {}}]});
+  await h.sweepWatchedAuthors();
+  const news = h.cache.watchedAuthors[0].news;
+  assert.deepEqual(news.map(n => n.id).sort(), ["W1", "W5"]);
+  assert.ok(news.find(n => n.id === "W5").foundAt, "a paper says when it was first announced");
+  assert.equal(news.find(n => n.id === "W1").foundAt, swept, "an older one counts from the sweep that stored it");
 });

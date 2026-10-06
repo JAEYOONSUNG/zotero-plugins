@@ -9448,3 +9448,107 @@ test('the 자료 점검 counts are read once per load, not on every redraw or ke
  assert.equal(reads,first+1,'a reload (the library changed) reads again');
  }finally{f.bench.destroy();}
 });
+
+test('marking a person\'s new papers seen is one save and one undo, not one per paper (round 13)',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'First Person',seen:[],sweptAt:'2026-09-19T00:00:00Z',news:[
+  {id:'W1',title:'Paper one',doi:'10.1/one',date:'2026-09-03'},{id:'W2',title:'Paper two',doi:'10.1/two',date:'2026-09-02'},{id:'W3',title:'Paper three',doi:'10.1/three',date:'2026-09-01'}]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.authorUpdates=async()=>({profile:{name:'First Person'},works:[],fresh:[],watching:true,checkedAt:'2026-09-19T00:00:00Z'});
+ await f.bench.show('authors');
+ f.body().querySelector('.sc-watch').click();await settle();
+ const before=f.calls.filter(c=>c[0]==='flush').length;
+ await f.click('새 논문 3편을 확인함으로 표시');await settle();
+ assert.equal(f.calls.filter(c=>c[0]==='flush').length-before,1,'three marks, one write of the cache file');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.inboxSeen).sort(),['10.1/one','10.1/three','10.1/two']);
+ const undo=f.bench.panel.querySelector('.sc-undo-toast-button');assert.ok(undo);
+ const mid=f.calls.filter(c=>c[0]==='flush').length;
+ undo.click();await settle();
+ assert.equal(f.calls.filter(c=>c[0]==='flush').length-mid,1,'and one write to take them back');
+ assert.deepEqual(Object.keys(f.runtime.cache.workbenchUI.inboxSeen||{}),[]);
+ f.bench.destroy();
+});
+
+test('the inbox says how many papers are still unclassified and settles them in one press, without a full sweep (round 13)',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'First Person',seen:[],sweptAt:'2026-09-19T00:00:00Z',news:[
+  {id:'W1',title:'Old stored paper',doi:'10.1/old',date:'2026-09-01',unclassified:true},
+  {id:'W2',title:'Another stored paper',doi:'10.1/old2',date:'2026-08-01',unclassified:true},
+  {id:'W3',title:'Checked paper',doi:'10.1/ok',date:'2026-08-01',verified:'place'}]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ f.runtime.classifyStoredNews=async()=>{f.calls.push(['classify']);rows[0].news=rows[0].news.filter(w=>w.id!=='W2').map(w=>{const c={...w};delete c.unclassified;c.verified='place';return c;});return {asked:2,settled:1,held:1,requests:1,budgetGone:false};};
+ await f.bench.show('authors');
+ const line=f.body().querySelector('.sc-inbox-unclassified');
+ assert.ok(line,'a line of its own above the list');
+ assert.match(line.textContent,/미분류 2편/);
+ const press=line.querySelector('button');
+ assert.equal(press.getAttribute('data-writes'),'cache');
+ assert.match(press.title,/요청 1회/,'the cost is said before the press');
+ press.click();await settle();
+ assert.ok(f.calls.some(c=>c[0]==='classify'));
+ assert.equal(f.body().querySelector('.sc-inbox-unclassified'),null,'nothing left to settle');
+ assert.equal(f.body().querySelectorAll('.sc-unclassified').length,0);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/1편은 이 저자의 논문.*1편은 확인 필요/);
+ f.bench.destroy();
+});
+
+test('when everyone was last checked weeks ago the inbox says how long ago, not that "some" are stale, and the sweep says its cost (round 13)',async()=>{
+ const f=fixture();
+ const at=new Date(Date.now()-17*864e5).toISOString();
+ const rows=Array.from({length:3},(_,i)=>({id:'A'+(i+1),alsoIds:i?[]:['A9'],name:'Person '+i,seen:[],sweptAt:at,news:i?[]:[{id:'W1',title:'A paper',doi:'10.1/a',date:'2026-09-01'}]}));
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ await f.bench.show('authors');
+ const note=f.body().querySelector('.sc-author-inbox-section .sc-inbox-note').textContent;
+ assert.match(note,/17일 전/);
+ assert.doesNotMatch(note,/확인하지 않은 저자가 있습니다/,'all of them are that old, not some');
+ const sweep=f.findButton('새 논문 다시 확인');
+ assert.match(sweep.title,/관심 저자 3명.*OpenAlex 요청 약 2회/,'four ids: one batch of works and one of profiles');
+ f.bench.destroy();
+});
+
+test('an owned paper\'s title in the inbox opens it with the library\'s old search and filters cleared (round 13, Astra)',async()=>{
+ const f=fixture();
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news:[{id:'W2',title:'Owned one',doi:'10.1234/a',date:'2026-08-01'}]}];
+ f.bench.state.query='unrelated search';f.bench.state.status='done';
+ await f.bench.show('authors');
+ const link=f.body().querySelector('.sc-author-inbox-row .sc-hit-title-link');
+ assert.ok(link);link.click();await settle();
+ assert.equal(f.bench.state.tab,'explore');
+ assert.equal(f.bench.state.query,'','an old search would hide the paper behind "no matching items"');
+ assert.equal(f.bench.state.status,'');
+ assert.equal(f.bench.state.scope,'selected');
+ f.bench.destroy();
+});
+
+test('모두 확인함 names its count when the list shows only part of what it will mark (round 13, Astra)',async()=>{
+ const f=fixture();
+ const news=Array.from({length:14},(_,i)=>({id:'W'+i,title:'Paper '+i,doi:'10.1/p'+i,date:'2026-09-'+String(28-i).padStart(2,'0')}));
+ f.runtime.watchedAuthorsByNews=()=>[{id:'A1',name:'First Person',seen:[],news}];
+ await f.bench.show('authors');
+ assert.equal(f.body().querySelectorAll('.sc-author-inbox-row').length,12,'twelve on screen');
+ const mark=f.body().querySelector('.sc-inbox-mark-all');
+ assert.equal(mark.textContent,'14편 모두 확인함','the press marks fourteen, and says so');
+ assert.match(mark.title,/14편.*보이지 않는/);
+ await f.click('14편 모두 확인함');
+ assert.equal(Object.keys(f.runtime.cache.workbenchUI.inboxSeen).length,14);
+ f.bench.destroy();
+});
+
+test('a paper marked "다른 사람입니다" leaves the person\'s full list and their co-author circle (round 13, Astra)',async()=>{
+ const f=fixture();
+ const rows=[{id:'A1',name:'First Person',seen:[],sweptAt:'2026-09-19T00:00:00Z',rejected:['W2'],news:[{id:'W3',title:'Fresh one',doi:'10.1/fresh',date:'2026-09-10'}]}];
+ f.runtime.watchedAuthors=()=>rows;f.runtime.watchedAuthorsByNews=()=>rows;
+ const recent=[{id:'W1',title:'Own paper',doi:'10.1/own',date:'2026-09-01',people:[{id:'A1',name:'First Person'},{id:'B1',name:'Real Colleague'}]},
+  {id:'W2',title:'Namesake paper',doi:'10.1/other',date:'2026-08-01',people:[{id:'A1',name:'First Person'},{id:'B2',name:'Stranger Coauthor'}]}];
+ f.runtime.authorUpdates=async()=>({profile:{name:'First Person'},works:recent,fresh:[],watching:true,checkedAt:'2026-09-19T00:00:00Z'});
+ f.runtime.authorAllWorks=async()=>({works:recent.map(w=>({...w})),checkedAt:'2026-10-01T00:00:00Z',truncated:false,cached:true});
+ f.runtime.coauthorsOf=(id,works)=>require('../src/author-portrait.js').coauthors(works,id);
+ await f.bench.show('authors');
+ f.body().querySelector('.sc-watch').click();await settle();await settle();
+ const list=f.body().querySelector('.sc-person-papers');
+ assert.match(list.textContent,/Own paper/);
+ assert.doesNotMatch(list.textContent,/Namesake paper/);
+ assert.match(list.textContent,/다른 사람으로 표시한 1편은 뺐습니다/);
+ assert.doesNotMatch(f.body().textContent,/Stranger Coauthor/,'nor does their co-author appear in the circle or graph');
+ f.bench.destroy();
+});

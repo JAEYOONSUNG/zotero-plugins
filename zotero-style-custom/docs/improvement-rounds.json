@@ -1380,7 +1380,7 @@
         },
         {
           "file": "src/runtime.js",
-          "marker": "const profile = profiles.get(row.id);"
+          "marker": "const profileNow = profiles.get(row.id) || idsOf(row)"
         },
         {
           "file": "src/runtime.js",
@@ -2646,7 +2646,7 @@
         },
         {
           "file": "src/workbench.js",
-          "marker": "runtime.worksByID(shown.map"
+          "marker": "runtime.worksByID(missing.map"
         }
       ],
       "tests": [

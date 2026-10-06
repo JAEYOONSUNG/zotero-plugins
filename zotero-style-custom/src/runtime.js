@@ -3409,6 +3409,58 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // The panel's safety net: the same one-paper-once rule, asked through the instance.
   dedupeNews(list) { return CustomStyleRuntime.dedupeNews(list, (winner, twin) => this.carrySeen?.(winner, twin)); }
 
+  /* Papers stored before the namesake check (“미분류”) judged now: read back
+     by id, fifty to a filter request, with the followed author's own
+     authorship -- any of a merged person's records -- and classified by the
+     same rules as a sweep. A namesake's paper moves to 확인 필요; the rest
+     stay as news, verified. Asks nothing when there is nothing unclassified. */
+  async classifyStoredNews({signal} = {}) {
+    const rows = this.watchedAuthors();
+    const wanted = new Map();
+    for (const row of rows) for (const work of row.news || []) {
+      if (!work?.unclassified || !/^W\d+$/.test(String(work.id || ''))) continue;
+      if (!wanted.has(work.id)) wanted.set(work.id, []);
+      wanted.get(work.id).push({row, work});
+    }
+    const result = {asked: wanted.size, settled: 0, held: 0, requests: 0, budgetGone: false};
+    if (!wanted.size) return result;
+    const ids = [...wanted.keys()], touched = new Set(), options = this.discoverOptions();
+    for (let i = 0; i < ids.length; i += this.discoverTools.AUTHOR_BATCH) {
+      if (signal?.aborted) break;
+      const url = this.discoverTools.watchedNewsURL(ids.slice(i, i + this.discoverTools.AUTHOR_BATCH), options);
+      if (!url) continue;
+      let payload;
+      try { payload = await this.discoverJSON(url, {signal}); result.requests++; }
+      catch (error) {
+        if (this.outOfBudget(error)) { result.budgetGone = true; break; }
+        this.Z.logError(error); continue;
+      }
+      for (const found of this.discoverTools.readWorks(payload)) {
+        for (const {row, work} of wanted.get(found.id) || []) {
+          const mine = new Set(CustomStyleRuntime.authorIDsOf(row));
+          const own = (found.people || []).find(p => p.id && mine.has(p.id));
+          // The record no longer names this author at all: nothing ties the paper to them.
+          work.places = own ? (own.institutions?.length ? own.institutions.map(h => h.institution) : own.institution ? [own.institution] : []).filter(Boolean).slice(0, 4) : [];
+          work.country = own?.country || '';
+          if (found.subfieldName) work.subfield = found.subfieldName;
+          if (own) { work.position = own.position || work.position || ''; work.corresponding = !!own.corresponding; }
+          touched.add(row);
+        }
+      }
+    }
+    for (const row of touched) {
+      const before = new Set((row.news || []).map(work => work.id));
+      CustomStyleRuntime.reclassifyNewsRow(row, null);
+      const after = new Set((row.news || []).map(work => work.id));
+      for (const id of before) if (wanted.has(id) && wanted.get(id).some(entry => entry.row === row)) {
+        if (!after.has(id)) result.held++;
+        else if (!row.news.find(work => work.id === id)?.unclassified) result.settled++;
+      }
+    }
+    if (touched.size) { this.cache.watchedAuthors = this.watchedAuthors(); this.dirty = true; await this.flush(); }
+    return result;
+  }
+
   reclassifyStoredNews() {
     let moved = 0;
     for (const row of this.watchedAuthors?.() || []) {
@@ -3450,10 +3502,36 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return Array.isArray(saved) ? saved.filter(row => row && typeof row.id === 'string') : [];
   }
 
+  /* Every OpenAlex id of a followed person: their own, then the other records
+     one ORCID sits on (`alsoIds`), so the sweep and the person view read all. */
+  static authorIDsOf(row) {
+    const short = value => String(value || '').replace(/^https?:\/\/openalex\.org\//i, '').toUpperCase();
+    return [...new Set([row?.id, ...(Array.isArray(row?.alsoIds) ? row.alsoIds : [])].map(short).filter(id => /^A\d+$/.test(id)))];
+  }
+  // The followed row a given id belongs to, as its own id or one of its other records.
+  watchedRowOf(authorID) {
+    const id = this.discoverTools.shortID(authorID);
+    if (!id) return null;
+    return this.watchedAuthors().find(row => row.id === id || (Array.isArray(row.alsoIds) && row.alsoIds.includes(id))) || null;
+  }
+  // The ids to ask OpenAlex about for one person: all of a followed person's records, else the one given.
+  authorIDs(authorID) {
+    const row = this.watchedRowOf?.(authorID);
+    return row ? CustomStyleRuntime.authorIDsOf(row) : [this.discoverTools.shortID(authorID)].filter(Boolean);
+  }
+
   async watchAuthor(person) {
     const id = this.discoverTools.shortID(person?.id);
     if (!id.startsWith('A')) throw new Error('저자 식별자가 올바르지 않습니다. 관심 저자 목록에서 저자를 다시 고르세요.');
-    const rest = this.watchedAuthors().filter(row => row.id !== id);
+    /* One person on several OpenAlex records (one ORCID, two ids): all are
+       followed as one row. A row already kept for one of them is folded in --
+       what it had seen stays seen and its unseen news stays. */
+    const given = [...(Array.isArray(person?.alsoIds) ? person.alsoIds : []), ...(Array.isArray(person?.ids) ? person.ids : [])];
+    const alsoGiven = given.map(value => this.discoverTools.shortID(value)).filter(value => /^A\d+$/.test(value) && value !== id);
+    const wanted = new Set([id, ...alsoGiven]);
+    const ofPerson = this.watchedAuthors().filter(row => CustomStyleRuntime.authorIDsOf(row).some(value => wanted.has(value)));
+    const alsoIds = [...new Set([...alsoGiven, ...ofPerson.flatMap(row => CustomStyleRuntime.authorIDsOf(row))])].filter(value => value !== id).slice(0, 10);
+    const rest = this.watchedAuthors().filter(row => !ofPerson.includes(row));
     // The old cap was 100 because each author used to cost a request of their
     // own. The user already follows 109, so adding anyone simply failed. One
     // sweep now covers fifty per request, and the real cost is the stored news,
@@ -3461,10 +3539,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (rest.length >= this.WATCH_LIMIT) {
       throw new Error(`관심 저자는 ${this.WATCH_LIMIT}명까지 저장합니다. 목록에서 몇 명을 해제하세요.`);
     }
+    const folded = ofPerson;
+    const seen = [...new Set([...(Array.isArray(person.seen) ? person.seen : []), ...folded.flatMap(row => row.seen || [])])];
+    const news = folded.flatMap(row => Array.isArray(row.news) ? row.news : []);
     this.cache.watchedAuthors = [...rest, {
       id, name: String(person.name || id), institution: String(person.institution || ''),
+      ...(alsoIds.length ? {alsoIds} : {}),
       // What was already known when the author was added, so "new" means new to the user.
-      seen: Array.isArray(person.seen) ? person.seen.slice(0, this.SEEN_LIMIT) : [],
+      seen: seen.slice(0, this.SEEN_LIMIT),
+      ...(news.length ? {news: this.keepNews ? this.keepNews(news) : news} : {}),
       checkedAt: new Date().toISOString()
     }];
     this.dirty = true;
@@ -3474,7 +3557,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
   async unwatchAuthor(authorID) {
     const id = this.discoverTools.shortID(authorID);
-    this.cache.watchedAuthors = this.watchedAuthors().filter(row => row.id !== id);
+    // Any of a merged person's ids lets the whole person go.
+    this.cache.watchedAuthors = this.watchedAuthors().filter(row => !CustomStyleRuntime.authorIDsOf(row).includes(id) && row.id !== id);
     this.dirty = true;
     await this.flush();
   }
@@ -3566,19 +3650,34 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         } catch (error) { this.Z.logError(error); }
       }));
     }
-    if (checked) { this.cache.watchedAuthors = rows; await this.flush(); }
+    if (checked) { this.cache.watchedAuthors = this.watchedAuthors(); await this.flush(); }
     return {checked, flagged, total: jobs.length};
   }
 
-  async sweepWatchedAuthors({months = 18, onProgress, signal} = {}) {
+  /* One sweep at a time: a second press (or the backfill) while one runs
+     waits for that one instead of asking OpenAlex the same thing again. */
+  sweepWatchedAuthors(options = {}) {
+    if (this.authorSweepJob) return this.authorSweepJob;
+    const job = CustomStyleRuntime.prototype.sweepWatchedAuthorsOnce.call(this, options);
+    this.authorSweepJob = job;
+    const clear = () => { if (this.authorSweepJob === job) this.authorSweepJob = null; };
+    job.then(clear, clear);
+    return job;
+  }
+  async sweepWatchedAuthorsOnce({months = 18, onProgress, signal} = {}) {
     const rows = this.watchedAuthors();
     const result = {authors: rows.length, withNews: 0, works: 0, added: 0, requests: 0, budgetGone: false, remaining: 0};
     if (!rows.length) return result;
     // A sweep is a request for what is new: the author pages asked earlier are forgotten.
     for (const key of [...(this.discoverCache?.keys?.() || [])]) if (String(key).startsWith('author:')) this.discoverCache.delete(key);
     const options = this.discoverOptions();
-    const byID = new Map(rows.map(row => [this.discoverTools.shortID(row.id), row]));
-    const batches = this.discoverTools.authorBatches(rows.map(row => row.id));
+    /* Every OpenAlex id of every person: a merged person (one ORCID on two
+       records) is asked about under all of them, in one batch, and what any
+       of them signed is that person's news. */
+    const idsOf = row => CustomStyleRuntime.authorIDsOf(row);
+    const byID = new Map();
+    for (const row of rows) for (const id of [this.discoverTools.shortID(row.id), ...idsOf(row)]) if (id && !byID.has(id)) byID.set(id, row);
+    const batches = this.discoverTools.authorBatches(rows.map(row => idsOf(row).length > 1 ? idsOf(row) : row.id));
     const found = new Map();
     // A fixed eighteen-month window silently hides anything published between
     // following someone and first sweeping them, which for an author added two
@@ -3623,6 +3722,16 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       await this.pause(150);
     }
     if (result.budgetGone) return result;
+    /* Stored news older than this sweep's window would keep 미분류 for ever:
+       it is read back by id first (nothing is asked when none is left). */
+    if (typeof this.classifyStoredNews === 'function') {
+      try {
+        const settled = await this.classifyStoredNews({signal});
+        result.requests += settled.requests;
+        result.classified = settled;
+        if (settled.budgetGone) { result.budgetGone = true; result.remaining = batches.length; return result; }
+      } catch (error) { this.Z.logError(error); }
+    }
     /* A batch that failed (a 503, a timeout) used to fall through as "checked,
        nothing new": its authors' news was replaced by nothing and their
        last-checked date moved on. They are now left exactly as they were, and
@@ -3655,7 +3764,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           result.requests++;
           const works = this.discoverTools.readWorks(payload);
           for (const [id, list] of this.discoverTools.attribute(works, batch)) {
-            found.set(id, [...(found.get(id) || []), ...list]);
+            const owner = byID.get(id)?.id || id;
+            const had = found.get(owner) || [];
+            found.set(owner, [...had, ...list.filter(work => !had.includes(work))]);
           }
           cursor = works.length ? payload?.meta?.next_cursor || '' : '';
           if (cursor) { remember(cursor); await this.pause(150); }
@@ -3731,10 +3842,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          country and field as before, the paper is held as unverified and
          is neither counted nor shown as news until the reader confirms it.
          A paper that lists no institution passes. */
-      const profileNow = profiles.get(row.id);
-      const shortOf = this.discoverTools.shortID(row.id);
+      const rowIDs = new Set([row.id, this.discoverTools.shortID(row.id), ...idsOf(row)]);
+      const profileNow = profiles.get(row.id) || idsOf(row).map(id => profiles.get(id)).find(Boolean);
       const rejected = new Set(row.rejected || []);
-      const ownOf = work => (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf));
+      const ownOf = work => (work.people || []).find(p => p.id && rowIDs.has(p.id));
       const placesOf = work => {
         const own = ownOf(work);
         const list = own?.institutions?.length ? own.institutions.map(h => ({name: h.institution, ror: h.ror || ''}))
@@ -3783,8 +3894,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''),
           date: work.date || (work.year ? String(work.year) : ''),
           people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
-          places: ((work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf))?.institutions || []).map(h => h.institution).slice(0, 4),
-          country: (work.people || []).find(p => p.id && (p.id === row.id || p.id === shortOf))?.country || '',
+          places: (ownOf(work)?.institutions || []).map(h => h.institution).slice(0, 4),
+          country: ownOf(work)?.country || '',
           subfield: work.subfieldName || ''
         });
         row.unverified = [...keepHeld.values()].sort((m, n) => String(n.date || '').localeCompare(String(m.date || ''))).slice(0, 20);
@@ -3795,6 +3906,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          not got round to marking, so the weekly check reads the same both
          when something happened and when nothing did. */
       const announced = new Set((row.news || []).map(work => work.id));
+      /* When each stored paper was first announced: its own stamp, else the
+         sweep that stored it (rows saved before the stamp existed). */
+      const announcedBy = row.sweptAt || row.checkedAt || '';
+      const foundAtOf = new Map((row.news || []).filter(Boolean).map(work => [work.id, work.foundAt || announcedBy]));
       const storeLimit = this.NEWS_STORE_LIMIT || 200;
       const toNews = work => ({
         id: work.id, title: work.title, venue: work.venue, doi: work.doi,
@@ -3807,24 +3922,30 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
         // What the same record says about this followed author's part in it and how often it is cited, so the inbox can say so without a request.
         citations: Number.isInteger(work.citations) ? work.citations : null,
-        position: (work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.position || '',
-        corresponding: !!(work.people || []).find(p => p.id && (p.id === row.id || p.id === short))?.corresponding,
+        position: ownOf(work)?.position || '',
+        corresponding: !!ownOf(work)?.corresponding,
         // What the namesake check went by, kept so stored news can be judged again on load.
         places: placesOf(work).map(pl => pl.name).slice(0, 4),
         country: ownOf(work)?.country || '', subfield: work.subfieldName || '',
-        verified: basisOf.get(work.id) || ''
+        verified: basisOf.get(work.id) || '',
+        foundAt: foundAtOf.get(work.id) || checkedAt
       });
       /* Always merged, never replaced: a refresh that finds nothing (the date
          floor hides everything already known) must not empty what the reader
          has not looked at. An earlier item stays until it is marked seen,
          rejected, or older than the retention. */
       const retention = Date.now() - (this.NEWS_RETENTION_DAYS || 180) * 864e5;
+      // Its own stamp; for one stored before stamps, the later of its date and the sweep that stored it (undated: kept, as before).
+      const announcedAt = old => old.foundAt ? Date.parse(old.foundAt)
+        : old.date ? Math.max(Date.parse(old.date) || 0, Date.parse(announcedBy) || 0) : NaN;
       const found_ = new Set(papers.map(work => work.id));
       const heldIDs = new Set((row.unverified || []).map(w => w?.id));
       const earlier = (row.news || []).filter(old => old && !found_.has(old.id)
         && !heldIDs.has(old.id)
         && !panelSeen.has(CustomStyleRuntime.seenWorkKey(old)) && !seen.has(old.id) && !rejected.has(old.id)
-        && !(Date.parse(old.date || '') < retention));
+        // Kept 180 days from when it was announced: a paper published long ago but found last week is still unread news.
+        && !(announcedAt(old) < retention));
+      for (const old of earlier) if (!old.foundAt && Number.isFinite(announcedAt(old))) old.foundAt = new Date(announcedAt(old)).toISOString();
       row.news = this.keepNews([...papers.map(toNews), ...earlier], panelSeen, storeLimit);
       /* Two things the same records say for free.
 
@@ -3855,7 +3976,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
          so a ROR match settles it when both sides have one, and otherwise a
          name that is the other's initials, or contained in it, is the same
          institution. Anything left is a real change of address. */
-      const profile = profiles.get(row.id);
+      const profile = profileNow;
       // Kept for the portrait search: Wikidata is found by ORCID.
       if (profile?.orcid) row.orcid = profile.orcid;
       // Kept so the list can be grouped by what people work on; no request of its own.
@@ -3917,13 +4038,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const known = new Set(row.coauthorsSeen || []);
       for (const work of windowWorks) {
         if (newsIDs.has(work.id)) continue;
-        for (const person of work.people || []) if (person.name && person.id !== row.id) known.add(person.name);
+        for (const person of work.people || []) if (person.name && !rowIDs.has(person.id)) known.add(person.name);
       }
       const fresherNames = [];
       for (const work of papers) {
         if ((work.people || []).length > 15) continue;
         for (const person of work.people || []) {
-          if (!person.name || person.id === row.id) continue;
+          if (!person.name || rowIDs.has(person.id)) continue;
           if (!known.has(person.name) && !fresherNames.includes(person.name)) fresherNames.push(person.name);
         }
       }
@@ -3945,7 +4066,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       result.works += waiting;
       result.added += row.news.filter(work => !announced.has(work.id)).length;
     }
-    this.cache.watchedAuthors = rows;
+    // The list as it stands now, not as it stood when the requests went out.
+    this.cache.watchedAuthors = this.watchedAuthors();
     this.dirty = true;
     try { result.signals = await this.sweepWatchedSignals({signal}); } catch (error) { this.Z.logError(error); }
     await this.flush();
@@ -4426,16 +4548,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // No extra requests: the works the author tab already fetched carry every
   // authorship, so the circle of colleagues is already in hand.
   coauthorsOf(authorID, works) {
-    return this.portraitTools.coauthors(works, authorID);
+    const ids = this.authorIDs ? this.authorIDs(authorID) : [];
+    return this.portraitTools.coauthors(works, ids.length > 1 ? ids : authorID);
   }
 
   // What this author has published since the user last looked.
   async authorUpdates(authorID, {limit = 25, signal} = {}) {
     const id = this.discoverTools.shortID(authorID);
-    const watched = this.watchedAuthors().find(row => row.id === id);
+    const watched = this.watchedRowOf ? this.watchedRowOf(id) : this.watchedAuthors().find(row => row.id === id);
     /* Asked once per session: the card, 관심 등록, 확인함 and every co-author
-       chip reopened this page and each paid two metered requests. */
-    const {profile, works} = await this.authorActivityCached(id, {limit, signal});
+       chip reopened this page and each paid two metered requests. A merged
+       person's works are asked for under every id they carry. */
+    const ids = watched ? CustomStyleRuntime.authorIDsOf(watched) : [id];
+    const {profile, works} = await this.authorActivityCached(watched ? watched.id : id, {limit, signal, ...(ids.length > 1 ? {ids} : {})});
     const seen = new Set(watched?.seen || []);
     // Papers held under 확인 필요 or turned down are not news: the list and the
     // detail read one classification.
@@ -4449,7 +4574,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async markAuthorSeen(authorID, works) {
     const id = this.discoverTools.shortID(authorID);
     const rows = this.watchedAuthors();
-    const row = rows.find(entry => entry.id === id);
+    const row = rows.find(entry => entry.id === id) || rows.find(entry => (entry.alsoIds || []).includes(id));
     if (!row) return false;
     const ids = (Array.isArray(works) ? works : []).map(work => work.id).filter(Boolean);
     row.seen = [...new Set([...ids, ...(row.seen || [])])].slice(0, this.SEEN_LIMIT);
@@ -4530,7 +4655,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       }
       if (index + 1 < due.length) await this.pause(1000);
     }
-    if (result.checked) { this.cache.watchedAuthors = rows; await this.flush(); }
+    if (result.checked) { this.cache.watchedAuthors = this.watchedAuthors(); await this.flush(); }
     return result;
   }
 
@@ -4698,7 +4823,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return this.discoverCached('related:' + this.identity(item) + '|' + seed, () => this.relatedWorks(item, options));
   }
   authorActivityCached(authorID, options = {}) {
-    return this.discoverCached('author:' + this.discoverTools.shortID(authorID), () => this.authorActivity(authorID, options));
+    const ids = Array.isArray(options.ids) && options.ids.length > 1 ? '|' + options.ids.join('|') : '';
+    return this.discoverCached('author:' + this.discoverTools.shortID(authorID) + ids, () => this.authorActivity(authorID, options));
   }
   authorsOfCached(item, options = {}) {
     const seed = this.workFingerprint(item);this.noteFingerprint(item, seed);
@@ -5468,9 +5594,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return work?.people?.filter(person => person.id) || [];
   }
 
-  async authorActivity(authorID, {limit = 25, signal} = {}) {
+  async authorActivity(authorID, {limit = 25, signal, ids} = {}) {
     const options = this.discoverOptions();
-    const worksURL = this.discoverTools.authorWorksURL(authorID, {...options, limit});
+    const worksURL = this.discoverTools.shortID(authorID).startsWith('A')
+      ? this.discoverTools.authorWorksURL(Array.isArray(ids) && ids.length > 1 ? [authorID, ...ids] : authorID, {...options, limit}) : null;
     if (!worksURL) throw new Error('저자 식별자가 올바르지 않습니다. 관심 저자 목록에서 저자를 다시 고르세요.');
     const profileURL = `${this.discoverTools.API}authors/${this.discoverTools.shortID(authorID)}`
       + `?select=id,display_name,works_count,cited_by_count,summary_stats,last_known_institutions,topics,orcid`
@@ -5503,6 +5630,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return id.startsWith('A') ? id : iD ? 'orcid:' + iD : '';
   }
   async authorAllWorks(authorID, {orcid = '', refresh = false, signal} = {}) {
+    // A followed person on several OpenAlex records is read under all of them, kept under their own id.
+    const followed = this.watchedRowOf?.(authorID);
+    if (followed && followed.id !== this.discoverTools.shortID(authorID)) authorID = followed.id;
+    const ids = followed ? CustomStyleRuntime.authorIDsOf(followed) : [];
+    const idsKey = ids.length > 1 ? ids.join('|') : '';
     const key = this.authorWorksKey(authorID, orcid);
     if (!key) throw new Error('저자 식별자가 올바르지 않습니다. 관심 저자 목록에서 저자를 다시 고르세요.');
     const store = this.authorWorksStore();
@@ -5510,7 +5642,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const shape = (row, cached) => ({works: row.works.map(work => ({...work, inLibrary: !!work.doi && owned().has(work.doi)})),
       checkedAt: row.checkedAt, truncated: !!row.truncated, cached});
     const hit = store[key];
-    if (!refresh && hit && hit.v === 1 && Array.isArray(hit.works) && !this.expiredAt(hit.checkedAt, this.constructor.EXPIRY_DAYS.authorWorks)) return shape(hit, true);
+    if (!refresh && hit && hit.v === 1 && Array.isArray(hit.works) && (hit.ids || '') === idsKey && !this.expiredAt(hit.checkedAt, this.constructor.EXPIRY_DAYS.authorWorks)) return shape(hit, true);
     this.authorWorksPending = this.authorWorksPending || new Map();
     /* One fetch per person, shared by whoever asks while it runs, with its own
        controller: it stops when every one of them has gone (the panel closed,
@@ -5529,18 +5661,18 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         let cursor = '*', truncated = false;
         for (let page = 0; page < PAGES && cursor; page++) {
           check();
-          const url = tools.authorAllWorksURL(authorID, {...options, orcid, cursor});
+          const url = tools.authorAllWorksURL(authorID, {...options, orcid, cursor, ids});
           if (!url) break;
           const payload = await this.discoverJSON(url, {signal: controller.signal});
           check();
-          const works = tools.readAuthorWorks(payload, {authorID, orcid});
+          const works = tools.readAuthorWorks(payload, {authorID, ids, orcid});
           for (const work of works) if (!all.has(work.id)) all.set(work.id, work);
           cursor = works.length ? payload?.meta?.next_cursor || '' : '';
           if (cursor && page === PAGES - 1) truncated = true;
           if (cursor) { await this.pause(150); check(); }
         }
         check();
-        const row = {v: 1, checkedAt: new Date().toISOString(), truncated, works: [...all.values()].sort(tools.byNewest)};
+        const row = {v: 1, checkedAt: new Date().toISOString(), truncated, works: [...all.values()].sort(tools.byNewest), ...(idsKey ? {ids: idsKey} : {})};
         store[key] = row;
         // Forty people at most: each holds a few hundred rows.
         const keys = Object.keys(store);

@@ -6809,7 +6809,8 @@
    };
    const watchedRow=id=>{
     const short=runtime.discoverTools?.shortID?.(id)||id;
-    return (runtime.watchedAuthors?.()||[]).find(w=>w.id===id||(runtime.discoverTools?.shortID?.(w.id)||w.id)===short)||null;
+    // A merged person (one ORCID on several OpenAlex records) is found by any of their ids.
+    return (runtime.watchedAuthors?.()||[]).find(w=>w.id===id||(runtime.discoverTools?.shortID?.(w.id)||w.id)===short||(Array.isArray(w.alsoIds)&&w.alsoIds.includes(short)))||null;
    };
    /* What of this person is already on the shelf, and how far each has been
       read -- from the loaded library, so it shows before OpenAlex answers.
@@ -6844,8 +6845,9 @@
     const stored=watchedRow(person.id);
     const mine=papersBy(myName);
     const all=state.egoAll===person.id;
-    const followed=(runtime.watchedAuthors?.()||[]).filter(w=>w.id!==person.id).map(w=>({id:w.id,name:w.name}));
-    const graph=tools.egoGraph({me:{id:person.id,name:myName},works,news:stored?.news||[],items:mine.guess?[]:mine.items,followed,limit:all?EGO_MAX:EGO_LIMIT});
+    const followed=(runtime.watchedAuthors?.()||[]).filter(w=>w!==stored&&w.id!==person.id).map(w=>({id:w.id,name:w.name}));
+    const myIDs=stored?[stored.id,...(stored.alsoIds||[])]:[person.id];
+    const graph=tools.egoGraph({me:{id:stored?.id||person.id,ids:myIDs,name:myName},works,news:stored?.news||[],items:mine.guess?[]:mine.items,followed,limit:all?EGO_MAX:EGO_LIMIT});
     const g=personGroup('공저 관계',graph.total||'',parent,'sc-person-ego');
     if(!graph.nodes.length){node('p',T('이 저자와 함께 쓴 논문이 아직 보이지 않습니다. 서재의 논문이나 확인한 새 논문에서 공저자를 찾아 그립니다.'),g,{class:'sc-muted'});return;}
     const bar_=node('div',null,g,{class:'sc-author-graph-tools'});
@@ -6996,11 +6998,15 @@
      box.replaceChildren();
      // Newest first, whatever order the store handed over: the full date when there is one, else the year.
      const stamp=w=>String(w.date||(w.year?w.year+'-00-00':''));
-     const works=result.works.slice().sort((a,b)=>stamp(b).localeCompare(stamp(a))||(Number(b.citations)||0)-(Number(a.citations)||0)),total=works.length;
+     // Papers the reader said belong to someone else (다른 사람입니다) are not this person's list.
+     const rejected=new Set(watchedRow(person.id)?.rejected||[]);
+     const works=result.works.filter(w=>!rejected.has(w.id)).sort((a,b)=>stamp(b).localeCompare(stamp(a))||(Number(b.citations)||0)-(Number(a.citations)||0)),total=works.length;
+     const dropped=result.works.length-total;
      countEl.textContent=String(total);
      const listed=profile?.works;
      if(listed!=null&&listed!==total)node('p',F('OpenAlex에는 이 저자의 논문이 {0}편으로 집계되어 있고, {1}편을 불러왔습니다.',fmtN(listed),fmtN(total)),box,{class:'sc-muted sc-papers-note'});
      if(result.truncated)node('p',T('불러오기 한도에 닿아 더 오래된 논문은 빠졌을 수 있습니다.'),box,{class:'sc-muted sc-papers-note'});
+     if(dropped>0)node('p',F('다른 사람으로 표시한 {0}편은 뺐습니다.',dropped),box,{class:'sc-muted sc-papers-note'});
      const checked=String(result.checkedAt||'').slice(0,10);
      if(checked)node('p',F('목록 확인 {0}',checked),box,{class:'sc-muted sc-papers-checked'});
      if(!total){node('p','이 저자의 논문을 찾지 못했습니다.',box,{class:'sc-muted'});return;}
@@ -7041,7 +7047,8 @@
     const text=node('div',null,row,{class:'sc-inbox-text'});
     const title=node('p',null,text,{class:'sc-hit-title'});
     const mine=ctx.held.get(bareDOI(work.doi))||null;
-    if(mine)button(Dor(work.title,'제목 없음'),()=>{state.selected=new Set([String(mine.id)]);state.scope='selected';scope.value='selected';return navigate('explore');},title,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
+    // Through showPaper: a search or filter left on the library list would otherwise hide the paper ("no matching items").
+    if(mine)button(Dor(work.title,'제목 없음'),()=>showPaper(mine.id),title,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
     else if(work.doi){const link=node('button',Dor(work.title,'제목 없음'),title,{type:'button',class:'sc-hit-title-link','data-opens':'browser',title:T('doi.org에서 열기')});link.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+bareDOI(work.doi));}catch(e){message(readable(e),true);}});}
     else title.appendChild(doc.createTextNode(String(D(work.title||'').text||T('제목 없음'))));
     if(ctx.isNew){title.appendChild(doc.createTextNode(' '));node('span',T('새'),title,{class:'sc-tag sc-new',title:T('마지막 확인 이후 새로 나온 논문')});}
@@ -7170,15 +7177,17 @@
       // Marked one by one in the store the inbox reads, so 확인함 above and
       // here agree and either can be undone. The sweep's own record of what
       // it has found is left alone; a later sweep replaces it anyway.
-      const marked=toMark.map(work=>({key:newsKey(work)}));
-      for(const entry of marked)await setSeen(entry,true);
+      // One write for all of them (the cache file is megabytes), and one for the undo.
+      const marked=toMark.map(work=>({key:newsKey(work)})).filter(entry=>entry.key);
+      const keys=marked.map(seenKey),evicted={};
+      await setSeenMany(keys,true,null,{evicted});
       if(inline)state.watchRefocus=true;
       await refreshed();
       // The button is gone after the press, so the result is said where status lines are said, with the way back.
       if(disposed||state.tab!=='authors')return;
       message(F('새 논문 {0}편을 확인함으로 표시했습니다.',marked.length));
       undoToast(F('새 논문 {0}편을 확인함으로 표시했습니다.',marked.length).text,async()=>{
-       for(const entry of marked)await setSeen(entry,false);
+       await setSeenMany(keys,false,null,{restore:evicted});
        if(disposed||state.tab!=='authors')return;
        await refreshed();
        message(F('새 논문 {0}편을 다시 미확인으로 되돌렸습니다.',marked.length));
@@ -7233,10 +7242,13 @@
      drawAllPapers(person,profile,newIDs,works,wrap,live);
     }
     drawShelf(profile?.name||person.name,person,wrap,redo);
-    drawEgo(person,profile,works,wrap,redo,opts);
+    // Without the papers turned down as a namesake's: their co-authors are not this person's circle.
+    const turnedDown=new Set(stored?.rejected||[]);
+    const ownWorks=turnedDown.size?works.filter(w=>!turnedDown.has(w.id)):works;
+    drawEgo(person,profile,ownWorks,wrap,redo,opts);
     // The circle of colleagues, out of the works already in hand: no request of
     // its own, and an edge exists because two names are on the same paper.
-    const circle=runtime.coauthorsOf?.(person.id,works)||[];
+    const circle=runtime.coauthorsOf?.(person.id,ownWorks)||[];
     if(circle.length){
      const g=personGroup('함께 낸 저자',circle.length,wrap,'sc-person-circle');
      const net=node('div',null,g,{class:'sc-network'});
@@ -7363,7 +7375,8 @@
     const title=node('p',null,text,{class:'sc-hit-title'});
     const mine=ctx.byDOI.get(bareDOI(work.doi));
     // A paper on the shelf opens there; one that is not opens at its DOI.
-    if(mine)button(Dor(work.title,'제목 없음'),()=>{state.selected=new Set([String(mine.id)]);state.scope='selected';scope.value='selected';return navigate('explore');},title,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
+    // Through showPaper: a search or filter left on the library list would otherwise hide the paper ("no matching items").
+    if(mine)button(Dor(work.title,'제목 없음'),()=>showPaper(mine.id),title,{class:'sc-hit-title-link',title:T('이 문헌 자세히 보기')});
     else if(work.doi){const link=node('button',Dor(work.title,'제목 없음'),title,{type:'button',class:'sc-hit-title-link','data-opens':'browser',title:T('doi.org에서 열기')});link.addEventListener('click',()=>{try{win.Zotero.launchURL('https://doi.org/'+bareDOI(work.doi));}catch(e){message(readable(e),true);}});}
     else title.textContent=work.title||T('제목 없음');
     // Worst news first: a withdrawn paper must not read like a paper.
@@ -7467,9 +7480,31 @@
     if(last){
      const shown=(runtime.formatStamp&&runtime.localStamp?runtime.formatStamp(runtime.localStamp(last)):String(last).replace('T',' ')).slice(0,16);
      const note=node('p',T(`마지막 확인 ${shown} · 저자마다 확인 안 한 새 논문은 최대 50편까지`),section,{class:'sc-muted sc-inbox-note'});
+     // How old the newest check is: nothing sweeps on its own, so a list three weeks old must say so.
+     const lastDays=Math.floor((Date.now()-Date.parse(last))/864e5);
+     if(lastDays>=1)note.firstChild.textContent=T(`마지막 확인 ${shown} (${lastDays}일 전) · 저자마다 확인 안 한 새 논문은 최대 50편까지`);
      // What the date above does not cover, said next to it rather than left out.
      if(never)note.appendChild(doc.createTextNode(' · '+T(`${never}명은 아직 확인하지 않았습니다`)));
-     else if(staleDays>7)note.appendChild(doc.createTextNode(' · '+T(`${staleDays}일 넘게 확인하지 않은 저자가 있습니다`)));
+     else if(staleDays>7&&staleDays-lastDays>1)note.appendChild(doc.createTextNode(' · '+T(`${staleDays}일 넘게 확인하지 않은 저자가 있습니다`)));
+    }
+    /* Papers stored before the namesake check carry 미분류 until a sweep reads
+       them again, and a sweep is a press away that the reader may not make for
+       weeks (all 55 of the user's stored news were 미분류, 17 days after the last
+       one). They are settled here by id instead: one filter request per fifty. */
+    const unclassified=watched.reduce((n,p)=>n+(p.news||[]).filter(w=>w&&w.unclassified).length,0);
+    if(unclassified&&typeof runtime.classifyStoredNews==='function'){
+     const line=node('p',null,section,{class:'sc-muted sc-inbox-note sc-inbox-unclassified'});
+     node('span',F('미분류 {0}편은 동명이인 검사 전에 저장되어 아직 이 저자의 논문인지 가리지 않았습니다.',unclassified),line);
+     line.appendChild(doc.createTextNode(' '));
+     const requests=Math.ceil(unclassified/50);
+     button('지금 가리기',()=>run(async()=>{
+      message(F('미분류 {0}편을 OpenAlex에서 확인하는 중…',unclassified));
+      const result=await runtime.classifyStoredNews();
+      if(token!==epoch||disposed||state.tab!=='authors')return;
+      refreshWatched();
+      if(result.budgetGone)message(T('OpenAlex 하루 한도를 다 썼습니다. 한국 시간 오전 9시에 초기화되니 그때 다시 확인하세요.'),true);
+      else message(F('미분류 {0}편을 확인했습니다: {1}편은 이 저자의 논문, {2}편은 확인 필요로 옮겼습니다. 요청 {3}회.',result.asked,result.settled,result.held,result.requests));
+     }),line,{'data-writes':'cache',class:'sc-quiet-action',title:F('OpenAlex 요청 {0}회로 각 논문에 적힌 이 저자의 소속을 읽어 가립니다',requests).text});
     }
     // The author picked in the 관계 map narrows this list; counts follow it.
     const focused=()=>state.authorFocus?watched.find(p=>p.id===state.authorFocus)||null:null;
@@ -7516,6 +7551,11 @@
       return words.every(w=>hay.includes(w));
      });
      shownUnseen=rows.filter(e=>!isSeen(e));markAll.disabled=!shownUnseen.length;
+     // The press takes every match of the search and author filter, also the ones below the first twelve: said on the button when some are out of sight.
+     const outOfSight=!state.inboxAll&&rows.length>12;
+     const n=shownUnseen.length;
+     markAll.textContent=outOfSight?T(`${n}편 모두 확인함`):T('모두 확인함');
+     markAll.title=outOfSight?T(`검색과 저자 필터에 맞는 미확인 새 논문 ${n}편을 모두 확인함으로 둡니다. 목록에 보이지 않는 논문도 포함합니다.`):T('지금 목록에 보이는 안 읽은 새 논문을 모두 확인한 것으로 둡니다');
      if(!rows.length){node('p',T(words.length?'검색어에 맞는 새 논문이 없습니다.':who?'이 저자의 해당 새 논문이 없습니다.':view==='new'?'확인하지 않은 새 논문이 없습니다.':'확인한 새 논문이 없습니다.'),box,{class:'sc-muted sc-inbox-empty'});more.hidden=true;return;}
      for(const entry of rows.slice(0,state.inboxAll?rows.length:12))drawInboxRow(entry,box,{byDOI,redraw:draw,toggle:async(entry,seen,row)=>{
       // The focus moves to the next paper's button, so a list is worked through from the keyboard.
@@ -7807,6 +7847,9 @@
     if(fresh.length){const heading=node('h3',null,head,{class:'sc-hit-group'});
      node('span',unseenNews.length?T(`확인 안 한 새 논문 ${unseenNews.length}편`):T('새 논문 모두 확인함'),heading,{class:'sc-watch-count','data-state':unseenNews.length?'new':'done'});}
     const tools=node('div',null,head,{class:'sc-watch-tools'});
+    /* What a press costs, said before it: fifty ids to a request, once for the works and once for where everyone is now. */
+    const sweepIDs=watched.reduce((n,p)=>n+1+(Array.isArray(p.alsoIds)?p.alsoIds.length:0),0);
+    const sweepCost=2*Math.ceil(sweepIDs/50);
     button(swept?'새 논문 다시 확인':'새 논문 한 번에 확인',()=>run(async()=>{
      message(`관심 저자 ${watched.length}명의 새 논문을 확인하는 중…`);
      const result=await runtime.sweepWatchedAuthors({onProgress:(done,total)=>
@@ -7834,7 +7877,7 @@
        refreshWatched();
       }).catch(error=>runtime.Z.logError?.(error));
      }
-    }),tools);
+    }),tools,{'data-writes':'cache',title:F('관심 저자 {0}명의 새 논문을 OpenAlex 요청 약 {1}회로 확인합니다 (논문이 많으면 조금 더)',watched.length,sweepCost).text});
     /* Faces for everyone on the list at once: Wikidata first (a freely licensed
        photograph, by ORCID), then each person's own pages. About two dozen
        requests for a hundred people; what is found stays for two months. */
@@ -8266,7 +8309,7 @@
      /* Following a paper's authors used to mean opening each in turn. The
         row says who is already followed; for the rest one press follows,
         with their current papers as the baseline so nothing old reads new. */
-     const followed=runtime.watchedAuthors?.().some(w=>runtime.discoverTools?.shortID?.(w.id)===runtime.discoverTools?.shortID?.(person.id)||w.id===person.id);
+     const followed=!!watchedRow(person.id);
      if(followed)node('span','관심 저자',row,{class:'sc-hit-owned'});
      else{const add=button('관심 저자로 등록',()=>run(async()=>{
       const {profile,works}=await runtime.authorActivityCached(person.id);

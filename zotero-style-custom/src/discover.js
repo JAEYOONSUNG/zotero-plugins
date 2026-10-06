@@ -724,11 +724,16 @@
   const readAuthors = payload => (Array.isArray(payload?.results) ? payload.results : [])
     .map(shapeAuthor).filter(Boolean);
 
-  const authorWorksURL = (authorID, options = {}) => shortID(authorID).startsWith('A')
-    ? `${API}works?per_page=${Math.min(50, options.limit || 25)}`
-      + `&filter=${encodeURIComponent('author.id:' + shortID(authorID))}`
-      + `&sort=publication_date:desc&select=${WORK_FIELDS}${credentials(options)}`
-    : null;
+  /* One person can sit on several OpenAlex records (one ORCID, two ids); a
+     list of ids is ORed into one filter, the first being the person's own. */
+  const authorIDList = value => [...new Set((Array.isArray(value) ? value : [value]).map(shortID).filter(id => /^A\d+$/.test(id)))].slice(0, AUTHOR_BATCH);
+  const authorWorksURL = (authorID, options = {}) => {
+    const ids = authorIDList(authorID);
+    if (!ids.length || (!Array.isArray(authorID) && !shortID(authorID).startsWith('A'))) return null;
+    return `${API}works?per_page=${Math.min(50, options.limit || 25)}`
+      + `&filter=${encodeURIComponent('author.id:' + ids.join('|'))}`
+      + `&sort=publication_date:desc&select=${WORK_FIELDS}${credentials(options)}`;
+  };
 
   /* Everything an author has published, newest first: the person view's own
      list. 200 to a page and cursor paging, because OpenAlex stops offset paging
@@ -738,9 +743,10 @@
      last, corresponding) is read; the reference lists are not asked for. */
   const ORCID_ID = /(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i;
   const orcidDashed = value => (ORCID_ID.exec(text(value)) || [])[1]?.toUpperCase() || '';
-  function authorAllWorksURL(authorID, {orcid = '', cursor = '*', ...options} = {}) {
+  function authorAllWorksURL(authorID, {orcid = '', cursor = '*', ids = [], ...options} = {}) {
     const id = shortID(authorID), iD = orcidDashed(orcid);
-    const filter = id.startsWith('A') ? 'author.id:' + id : iD ? 'author.orcid:https://orcid.org/' + iD : '';
+    const every = authorIDList([id, ...(Array.isArray(ids) ? ids : [])]);
+    const filter = id.startsWith('A') ? 'author.id:' + every.join('|') : iD ? 'author.orcid:https://orcid.org/' + iD : '';
     if (!filter) return null;
     return `${API}works?per_page=200&cursor=${encodeURIComponent(cursor)}`
       + `&filter=${encodeURIComponent(filter)}`
@@ -748,13 +754,13 @@
   }
   /* One compact row per work, with this author's part in it. Nothing else of
      the authorship list is kept, so a few hundred works stay small in the cache. */
-  function readAuthorWorks(payload, {authorID = '', orcid = ''} = {}) {
-    const id = shortID(authorID), iD = orcidDashed(orcid);
+  function readAuthorWorks(payload, {authorID = '', ids = [], orcid = ''} = {}) {
+    const mineIDs = new Set([shortID(authorID), ...(Array.isArray(ids) ? ids : []).map(shortID)].filter(Boolean)), iD = orcidDashed(orcid);
     return (Array.isArray(payload?.results) ? payload.results : []).map(raw => {
       const work = shapeWork(raw);
       if (!work) return null;
       const mine = (Array.isArray(raw.authorships) ? raw.authorships : []).find(a =>
-        (id && shortID(a?.author?.id) === id) || (iD && orcidDashed(a?.author?.orcid) === iD));
+        mineIDs.has(shortID(a?.author?.id)) || (iD && orcidDashed(a?.author?.orcid) === iD));
       return {id: work.id, doi: work.doi, title: work.title, year: work.year, date: work.date,
         citations: work.citations, venue: work.venue, type: work.type,
         position: mine ? text(mine.author_position) : '', corresponding: mine?.is_corresponding === true};
@@ -781,6 +787,16 @@
     return `${API}works?per_page=200&cursor=${encodeURIComponent(cursor)}`
       + `&filter=${encodeURIComponent(filters.join(','))}`
       + `&sort=publication_date:desc&select=${WATCH_FIELDS}${credentials(options)}`;
+  }
+
+  /* Stored news read back by work id (fifty to a filter request, $0.0001
+     each) with the authorships, so a paper saved before the namesake check
+     can be judged without sweeping everyone again. */
+  function watchedNewsURL(workIDs, options = {}) {
+    const ids = [...new Set((Array.isArray(workIDs) ? workIDs : []).map(shortID).filter(id => /^W\d+$/.test(id)))].slice(0, AUTHOR_BATCH);
+    if (!ids.length) return null;
+    return `${API}works?per_page=${AUTHOR_BATCH}&filter=${encodeURIComponent('ids.openalex:' + ids.join('|'))}`
+      + `&select=${WATCH_FIELDS}${credentials(options)}`;
   }
 
   // Where OpenAlex currently places an author. Its author record carries
@@ -825,11 +841,21 @@
     }).filter(Boolean);
   }
 
+  /* Fifty ids to a request. An entry may be one id or one person's several
+     ids (one ORCID on several OpenAlex records); a person's ids always share
+     a batch, so their news and their resume point belong to one request. */
   const authorBatches = authorIDs => {
-    const ids = [...new Set((Array.isArray(authorIDs) ? authorIDs : [])
-      .map(shortID).filter(id => id.startsWith('A')))];
-    const batches = [];
-    for (let i = 0; i < ids.length; i += AUTHOR_BATCH) batches.push(ids.slice(i, i + AUTHOR_BATCH));
+    const taken = new Set(), batches = [];
+    let current = [];
+    for (const entry of Array.isArray(authorIDs) ? authorIDs : []) {
+      const group = (Array.isArray(entry) ? entry : [entry]).map(shortID).filter(id => id.startsWith('A') && !taken.has(id));
+      const ids = [...new Set(group)].slice(0, AUTHOR_BATCH);
+      if (!ids.length) continue;
+      for (const id of ids) taken.add(id);
+      if (current.length + ids.length > AUTHOR_BATCH) { batches.push(current); current = []; }
+      current.push(...ids);
+    }
+    if (current.length) batches.push(current);
     return batches;
   };
 
@@ -1026,7 +1052,7 @@
     worksByDOIsURL, institutionsURL, readInstitutions,
     workURL, worksByIDsURL, citingURL, PATH_FIELDS, abstractOf, findingOf, abstractsURL, readAbstracts, cleanAbstract, sameTitle, pickByTitle, matchWork, sameFirstAuthor, readWork, readWorks, mergeSuggestions, relevance,
     authorSearchURL, readAuthors, authorWorksURL, authorNames, shortID, bareDOI, credentials,
-    authorAllWorksURL, readAuthorWorks, byNewest, orcidDashed, watchedWorksURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH,
+    authorAllWorksURL, readAuthorWorks, byNewest, orcidDashed, watchedWorksURL, watchedNewsURL, watchedProfilesURL, readProfiles, authorBatches, attribute, AUTHOR_BATCH,
     freshCitersURL, freshBatches, rankFreshCiters, FRESH_BATCH, FRESH_FIELDS};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStyleDiscover = api;

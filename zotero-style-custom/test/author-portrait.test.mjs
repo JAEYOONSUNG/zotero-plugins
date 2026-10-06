@@ -304,3 +304,13 @@ test("the ego layout never overlaps or leaves the frame, at 320, 480 and 760 wid
   const roomy = portrait.egoLayout(portrait.egoGraph({me: {id: "A1", name: "Me Self"}, works: [{id: "W", doi: "10/w", people: [{id: "A1", name: "Me Self"}, {id: "B", name: "Co Aay"}]}]}), {width: 760, height: 360});
   assert.equal(roomy.height, 360, "when everything fits, the asked height stands");
 });
+
+test("a merged person's second OpenAlex id is the centre, not a co-author of themselves (round 13)", () => {
+  const works = [
+    {id: "W1", doi: "10/1", people: [{id: "A1", name: "Pat Lee"}, {id: "B1", name: "Co One"}]},
+    {id: "W2", doi: "10/2", people: [{id: "A2", name: "P. Lee"}, {id: "B2", name: "Co Two"}]}];
+  const g = portrait.egoGraph({me: {id: "A1", ids: ["A1", "A2"], name: "Pat Lee"}, works});
+  assert.deepEqual(g.nodes.map(n => n.id).sort(), ["B1", "B2"]);
+  const circle = portrait.coauthors(works, ["A1", "A2"]);
+  assert.deepEqual(circle.map(c => c.id).sort(), ["B1", "B2"]);
+});
