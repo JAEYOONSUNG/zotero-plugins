@@ -12,10 +12,16 @@
     trip because its jamo are letters, not marks, and NFC puts them back. */
  const DASHES=/[‐-―−]/g;
  const norm=value=>text(value).normalize('NFKD').replace(/\p{M}+/gu,'').normalize('NFC').toLowerCase().replace(DASHES,'-');
- const tokenize=query=>[...norm(query).matchAll(/"([^"]+)"|(\S+)/g)].map(m=>m[1]||m[2]);
+ /* Typographic quotes count as quotes: the hint itself shows “phrase”, and a
+    Mac turns a typed " into one when smart quotes are on. */
+ const QUOTES=/[“”„‟«»＂]/g;
+ const straight=value=>text(value).replace(QUOTES,'"');
+ const tokenize=query=>[...norm(straight(query)).matchAll(/"([^"]+)"|(\S+)/g)].map(m=>m[1]||m[2]);
  /* A lone letter is an initial, not a substring: "J. Y. Sung" is looking for
-    Jae Yoon Sung, not for every title with a j in it. */
- const INITIAL=/^\p{L}\.?$/u;
+    Jae Yoon Sung, not for every title with a j in it. Only an alphabet's
+    letter: one Hangul syllable or Han character is a word (암 is in 유방암),
+    never an initial. */
+ const INITIAL=/^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}]\.?$/u;
  const wordsOf=hay=>hay.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
  function hit(hay,token,starts){
   if(!INITIAL.test(token))return hay.includes(token);
@@ -52,7 +58,7 @@
     own, so "or" and "ORCID" stay words. Parentheses are always grouping. */
  function lexQuery(query){
   const out=[];
-  for(const m of text(query).matchAll(/(-?)\(|\)|(?<![^\s(])(?:OR|\|\|?)(?![^\s()])|(-?)(?:([\p{L}]+):)?(?:"([^"]*)"|([^\s()]+))/gu)){
+  for(const m of straight(query).matchAll(/(-?)\(|\)|(?<![^\s(])(?:OR|\|\|?)(?![^\s()])|(-?)(?:([\p{L}]+):)?(?:"([^"]*)"|([^\s()]+))/gu)){
    if(m[0]==='('||m[0]==='-('){out.push({t:'open',neg:m[1]==='-'});continue;}
    if(m[0]===')'){out.push({t:'close'});continue;}
    if(m[3]===undefined&&m[4]===undefined&&m[5]===undefined&&/^(OR|\|\|?)$/.test(m[0])){out.push({t:'or'});continue;}
@@ -109,13 +115,14 @@
     annotation text, so -x, OR and field prefixes all see the same thing. */
  function termHit(item,hay,term,starts,extra){
   const f=term.field;
-  if(!f)return hit(hay,term.value,starts);
+  // "a" in quotes is the text a, not an initial.
+  if(!f)return term.phrase?hay.includes(term.value):hit(hay,term.value,starts);
   if(f==='year')return yearTerm(term.value,item.year);
   if(f==='tag')return (item.tags||[]).some(t=>norm(t).includes(term.value));
   if(f==='collection')return (item.collectionNames||[]).some(n=>norm(n).includes(term.value));
   if(f==='journal')return journalScore(journalKeysOf(item),term.value)!==null;
   const h=f==='annotation'?(extra&&extra.annotation)||'':f==='note'&&extra&&extra.note?norm(fieldText(item,f))+' '+extra.note:norm(fieldText(item,f));
-  return hit(h,term.value,INITIAL.test(term.value)?wordsOf(h):null);
+  return term.phrase?h.includes(term.value):hit(h,term.value,INITIAL.test(term.value)?wordsOf(h):null);
  }
  /* ---- 저널 이름 · ISO 4 약어 · 약칭 ----
     "Nat Methods", "Proc Natl Acad Sci", "PNAS", "NAR" and "JACS" all name a

@@ -125,3 +125,16 @@ test('filter with records: one document per paper, and the tree is evaluated onc
   assert.deepEqual(ids('annotation:spindle'), ['2']);
   assert.deepEqual(W.filter(items, {query: 'note:mitosis'}).map(i => i.id), [], 'without records nothing changes');
 });
+
+test('one Hangul syllable is a word, not an initial; quoted text is literal; typographic quotes work like straight ones',()=>{
+ const items=[{id:'1',title:'유방암 치료 반응',authors:'김 철수',tags:[]},{id:'2',title:'Deep learning for protein design',authors:'Ada Lovelace',tags:[]},{id:'3',title:'Learning deep structures',authors:'Bo Lee',tags:[]},{id:'4',title:'A survey of xylose',authors:'Ann Kim',tags:[]}];
+ const Model=W;const ids=query=>Model.filter(items,{query}).map(i=>i.id);
+ assert.deepEqual(ids('암'),['1'],'암 is found inside 유방암');
+ assert.deepEqual(ids('"암"'),['1']);
+ assert.deepEqual(ids('“deep learning”'),['2'],'the hint shows “phrase”; it must work as typed');
+ assert.deepEqual(ids('"deep learning"'),['2']);
+ assert.deepEqual(ids('a.'),['2','4'],'a Latin initial still matches a word start');
+ assert.deepEqual(ids('"xyl"'),['4']);
+ assert.deepEqual(Model.parseQuery('title:“deep learning”').map(t=>[t.field,t.value,t.phrase]),[['title','deep learning',true]]);
+ assert.equal(Model.matches('유방암 치료','암'),true);
+});

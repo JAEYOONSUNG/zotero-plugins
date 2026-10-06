@@ -1282,10 +1282,10 @@ test('a row carries the reader’s own memo; a collection says when it was last 
  await f.bench.show('recent');
  const titles=()=>[...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent);
  assert.equal(titles().length,2);
- await f.click('1편 추가');
+ await f.click('1편 추가됨');
  assert.deepEqual(titles(),['Paper Beta'],'only what was added this week');
  assert.match(f.body().querySelector('.sc-paper-why').textContent,/^추가/);
- await f.click('1편 추가');
+ await f.click('1편 추가됨');
  assert.equal(titles().length,2,'pressed again, all of them');
  f.bench.destroy();
 });
@@ -9276,4 +9276,170 @@ test('maps: journal colour is a choice, and the key follows it',async()=>{
  await f.click('저널 색');await settle();
  assert.ok(painted()>0&&named()>0,'on again');
  f.bench.destroy();
+});
+
+/* ---- Round 11: 보유 문헌 and 최근 문헌 ---- */
+test('note: and annotation: typed in the search box reach notes and annotations even with 내 기록 포함 off',async()=>{
+ const f=fixture();
+ try{
+ await f.bench.show('explore');
+ f.library.notes=async()=>[{id:'9',title:'Beta note',text:'mitosis timing',modified:'today',parentID:'2'}];
+ f.library.annotations=async()=>[{id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'spindle assembly',comment:'',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0}];
+ await f.bench.load();
+ assert.equal(f.bench.state.searchRecords,false,'the box is off');
+ const ids=async query=>{f.input('작업 패널 검색',query);await settle();return [...f.body().querySelectorAll('.sc-paper-card')].map(c=>c.dataset.itemId).sort();};
+ assert.deepEqual(await ids('annotation:spindle'),['1'],'an annotation: term reads annotation text without the box ticked');
+ assert.deepEqual(await ids('note:mitosis'),['2'],'a note: term reads note text');
+ assert.deepEqual(await ids('Paper OR annotation:spindle'),['1','2'],'inside an OR too');
+ assert.deepEqual(await ids('mitosis'),[],'a plain word still keeps to the paper\'s own fields while the box is off');
+ assert.equal(f.bench.panel.querySelector('[data-tab="explore"] .sc-nav-count')?.textContent,'0');
+ await ids('annotation:spindle');
+ assert.equal(f.bench.panel.querySelector('[data-tab="explore"] .sc-nav-count')?.textContent,'1','the badge counts the list drawn');
+}finally{f.bench.destroy();}
+});
+
+test('the 최근 문헌 rail badge counts the papers listed there, not the whole library',async()=>{
+ const f=fixture();f.papers.splice(0);
+ try{
+ const now=Date.now();
+ for(let n=1;n<=80;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.runtime.state=ref=>({dateAdded:new Date(now-ref.id*36e5).toISOString()});
+ await f.bench.show('recent');
+ const shown=f.body().querySelectorAll('.sc-paper-card').length;
+ assert.equal(shown,50);
+ assert.equal(f.bench.panel.querySelector('[data-tab="recent"] .sc-nav-count')?.textContent,'50');
+ // A selection change redraws the chrome; the badge stays the list's.
+ f.body().querySelector('.sc-paper-card').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.panel.querySelector('[data-tab="recent"] .sc-nav-count')?.textContent,'50');
+}finally{f.bench.destroy();}
+});
+
+test('a bulk edit (dozens of papers saved in the same minute) does not bury what was read and added in 최근 문헌',async()=>{
+ const f=fixture();f.papers.splice(0);
+ try{
+ const now=Date.now(),hour=36e5,bulk=new Date(now-2*hour).toISOString();
+ for(let n=1;n<=40;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ // 1: read a day ago; 2: added two days ago; 3: edited by hand three hours ago; 4-40: one sync/migration two hours ago.
+ f.runtime.state=ref=>ref.id===1?{lastRead:new Date(now-24*hour).toISOString(),dateAdded:'2020-01-01T00:00:00Z',dateModified:'2020-01-01T00:00:00Z'}
+  :ref.id===2?{dateAdded:new Date(now-48*hour).toISOString(),dateModified:'2020-01-01T00:00:00Z'}
+  :ref.id===3?{dateAdded:'2020-01-01T00:00:00Z',dateModified:new Date(now-3*hour).toISOString()}
+  :{dateAdded:'2020-01-01T00:00:00Z',dateModified:bulk};
+ await f.bench.show('recent');
+ const titles=()=>[...f.body().querySelectorAll('.sc-paper-title')].map(n=>n.textContent);
+ assert.deepEqual(titles().slice(0,3),['Paper 3','Paper 1','Paper 2'],'a hand edit, the read and the addition lead');
+ const why=id=>f.body().querySelector(`[data-item-id="${id}"] .sc-paper-why`)?.textContent||'';
+ assert.match(why('4'),/^추가/,'a paper touched only by the bulk edit is listed by when it was added, not as edited');
+ assert.match(f.body().textContent,/한꺼번에 수정된 37편/,'and the page says they were set aside');
+ const edited=[...f.body().querySelectorAll('button')].find(b=>/수정/.test(b.textContent)&&/편/.test(b.textContent));
+ assert.match(edited.textContent,/^1편/,'the week\'s edit count is the hand edit');
+}finally{f.bench.destroy();}
+});
+
+test('an edit that reorders or drops a row keeps the page; a new search, sort or filter starts at page 1',async()=>{
+ const f=fixture();f.papers.splice(0);
+ try{
+ for(let n=1;n<=250;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ const status=new Map();
+ f.runtime.state=ref=>({status:status.get(ref.id)||'unread'});
+ await f.bench.show('explore');
+ await f.click('다음 페이지');
+ assert.equal(f.bench.state.pageIndex,1);
+ status.set(150,'done');status.set(20,'done');await f.bench.load();
+ assert.equal(f.bench.state.pageIndex,1,'a reload after marking papers read stays on page 2');
+ assert.match(f.body().textContent,/Paper 150/);
+ f.input('작업 패널 검색','Paper 1');await settle();
+ assert.equal(f.bench.state.pageIndex,0,'a new search starts from the top');
+}finally{f.bench.destroy();}
+});
+
+test('최근 문헌 says what happened in English with a capital, and the week\'s tiles name the activity',async()=>{
+ const f=fixture(undefined,undefined,{locale:'en-US'});
+ try{
+ const now=Date.now();
+ f.runtime.state=ref=>ref.id===1?{lastRead:new Date(now-60e3).toISOString()}:{dateAdded:new Date(now-2*864e5).toISOString()};
+ await f.bench.show('recent');
+ const why=[...f.body().querySelectorAll('.sc-paper-why')].map(n=>n.textContent);
+ assert.ok(why.some(t=>/^Read · today$/.test(t)),why.join(' | '));
+ assert.ok(why.some(t=>/^Added · 2 days ago/.test(t)),why.join(' | '));
+ const tiles=f.body().textContent;
+ assert.match(tiles,/Added/);assert.doesNotMatch(tiles,/papersAdd\b|\bAdd\b/);
+}finally{f.bench.destroy();}
+});
+
+test('with reference lists on hand but no citation link, the summary says so in a line instead of an empty fold',async()=>{
+ const f=fixture();
+ try{
+ f.runtime.state=ref=>({status:ref.id===1?'done':'unread',citations:3});
+ f.runtime.paperWorks=()=>({'1:K1':{openalex:'W1',references:['W99']},'1:K2':{openalex:'W2',references:['W98']}});
+ await f.bench.show('explore');
+ const fold=f.body().querySelector('.sc-local-reading-links');
+ assert.equal(fold,null,'no fold that opens on nothing');
+ assert.match(f.body().textContent,/인용으로 이어진 안 읽은 문헌 없음/);
+}finally{f.bench.destroy();}
+});
+
+test('clicking a row ticks its own checkbox, and Shift-click takes every row between',async()=>{
+ const f=fixture();f.papers.splice(0);
+ for(let n=1;n<=6;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.setSelection([]);
+ await f.bench.show('explore');f.bench.state.selected=new Set();await f.bench.render();
+ try{
+ const card=id=>f.body().querySelector(`[data-item-id="${id}"]`);
+ const box=id=>card(id).querySelector('.sc-paper-heading input[type=checkbox]');
+ const press=(id,shift=false)=>{const e=new f.win.Event('click',{bubbles:true});Object.defineProperty(e,'shiftKey',{value:shift});card(id).dispatchEvent(e);};
+ press('2');await settle();
+ assert.equal(box('2').checked,true,'the box follows the row');
+ assert.equal(card('2').dataset.selected,'true');
+ press('5',true);await settle();
+ assert.deepEqual([...f.bench.state.selected].sort(),['2','3','4','5'],'2 through 5');
+ for(const id of ['3','4','5'])assert.equal(box(id).checked,true);
+ assert.equal(box('6').checked,false);
+ // From the checkbox with Shift as well: unticking 3 with Shift from 5 clears 3-5.
+ const c=box('3');const e=new f.win.Event('click',{bubbles:true});Object.defineProperty(e,'shiftKey',{value:true});c.dispatchEvent(e);c.checked=false;c.dispatchEvent(new f.win.Event('change'));await settle();
+ assert.deepEqual([...f.bench.state.selected].sort(),['2']);
+ }finally{f.bench.destroy();}
+});
+
+test('오늘의 읽기 stays when the panel opens with a paper picked in Zotero (a selection, not a narrowing)',async()=>{
+ const f=fixture();
+ f.runtime.state=ref=>({citations:3,impactFactor:4,status:ref.id===1?'reading':''});
+ f.runtime.cache.items[1]={seconds:60,lastRead:new Date(Date.now()-864e5).toISOString()};
+ f.runtime.pageProgress=()=>({pages:{},total:0,visited:0,percent:0});
+ await f.bench.show('explore');f.bench.state.selected=new Set(['2']);f.bench.state.scope='library';await f.bench.render();
+ try{assert.ok(f.body().querySelector('.sc-today'),'still offered');}finally{f.bench.destroy();}
+});
+
+test('최근 문헌 keeps an order the reader chose; a week tile lists all of that week, past the fifty',async()=>{
+ const f=fixture();f.papers.splice(0);
+ const now=Date.now();
+ for(let n=1;n<=70;n++){f.papers.push({id:String(n),key:'K'+n,libraryID:1,title:'Paper '+n,itemType:'journalArticle',tags:[]});f.refs.set(n,{id:n});}
+ f.runtime.state=ref=>({dateAdded:new Date(now-ref.id*60e3).toISOString(),citations:ref.id===40?999:ref.id});
+ await f.bench.show('recent');
+ try{
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,50);
+ f.bench.state.sort='citations-desc';await f.bench.render();
+ assert.equal(f.body().querySelector('.sc-paper-title').textContent,'Paper 40','the most cited of the fifty first');
+ f.bench.state.sort='library';await f.bench.render();
+ await f.click('70편 추가됨');
+ assert.equal(f.body().querySelectorAll('.sc-paper-card').length,70,'the tile said 70; the list shows 70');
+ }finally{f.bench.destroy();}
+});
+
+test('the 자료 점검 counts are read once per load, not on every redraw or keystroke',async()=>{
+ const f=fixture();
+ let reads=0,links=0;
+ f.runtime.backfillPending=async()=>{reads++;return {signals:3,journals:0,authors:0};};
+ f.runtime.unlinkedPublished=async()=>{links++;return [];};
+ await f.bench.show('explore');
+ try{
+ await settle();
+ const first=reads;assert.ok(first>=1);
+ for(const q of ['a','ab','abc'])f.input('작업 패널 검색',q),await settle();
+ await f.bench.render();f.bench.panel.querySelector('nav [data-tab="recent"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'recent');
+ assert.equal(reads,first,'redraws and a change of page reuse the count');assert.equal(links,first);
+ assert.match(f.bench.panel.querySelector('.sc-notice-toggle').textContent,/자료 점검 1가지/);
+ await f.bench.load();await f.bench.render();await settle();
+ assert.equal(reads,first+1,'a reload (the library changed) reads again');
+ }finally{f.bench.destroy();}
 });

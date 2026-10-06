@@ -1135,7 +1135,6 @@
  "별점 없음": "No rating",
  "별점 열 표시": "Show the Rating column",
  "별점 지우기": "Clear rating",
- "별점 태그를 지웠습니다 · {0}개": "Rating tags removed · {0}",
  "별점을 매기지 않은 문헌은 0점으로 셉니다.": "Papers with no rating count as 0.",
  "병합은 같은 PDF·유형·색상에, 같은 페이지 또는 인접한 두 페이지에서만 됩니다. 기존 참조 노트의 링크는 바뀌지 않습니다.": "Merging works only within one PDF, one type and one colour, on the same page or two adjacent ones. Links in existing notes are not changed.",
  "병합하면 사라질 주석을 노트 {0}개가 인용하고 있어 병합하지 않았습니다({1}). 노트의 인용을 먼저 정리하세요.": "Not merged: {0} notes quote an annotation the merge would remove ({1}). Tidy those notes first.",
@@ -1907,7 +1906,7 @@
  "이탈리아": "Italy",
  "이하": "or less",
  "인도": "India",
- "인용": "cited",
+ "인용": "Cited",
  "인용 10+": "Cited 10+",
  "인용 {0}": "{0} citations",
  "인용 · {0}개": "Citations · {0}",
@@ -2797,7 +2796,22 @@
  "단축키: {0} 재생·일시정지, {1} 이전 문장, {2} 다음 문장.": "Keys: {0} play or pause, {1} back a sentence, {2} forward a sentence.",
  "하위 노트로 저장": "Save as a child note",
  "하위 노트로 저장했습니다.": "Saved as a child note.",
- "AI 브리지로 약 {0}토큰 · {1}의 사용 한도에서 씁니다": "Tokens through the AI bridge: about {0} · from the allowance of {1}"
+ "AI 브리지로 약 {0}토큰 · {1}의 사용 한도에서 씁니다": "Tokens through the AI bridge: about {0} · from the allowance of {1}",
+ "읽음 · {0}": "Read · {0}",
+ "추가 · {0}": "Added · {0}",
+ "수정 · {0}": "Edited · {0}",
+ "추가됨": "added",
+ "수정됨": "edited",
+ "최근 활동이 있는 {0}편을 고른 순서로 보여 줍니다.": "The {0} papers with recent activity, in the order you chose.",
+ "한꺼번에 수정된 {0}편(같은 분에 {1}편 이상)의 수정 시각은 최근 활동으로 세지 않습니다.": "Bulk edits ({1} or more papers saved in the same minute) to {0} papers are not counted as recent activity.",
+ "인용으로 이어진 안 읽은 문헌 없음": "No unread papers linked by citation",
+ "참고문헌 기록 {0}편 기준": "from {0} reference lists",
+ "첨부파일 {0}개에서 별점 태그를 지웠습니다": "Removed the rating tag from {0} attachments",
+ "노트 본문": "note text",
+ "주석 본문": "annotation text",
+ "둘 중 하나": "either",
+ "노트:단어": "note:word",
+ "주석:단어": "annotation:word"
 };
   const api = {en};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

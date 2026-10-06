@@ -2367,11 +2367,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     let removed = 0;
     for (const id of ids || []) {
       const item = await this.Z.Items.getAsync(Number(id));
-      if (!item || this.isRegular(item) || (item.parentItemID ?? item.parentID) || item.isEditable?.() === false) continue;
-      const kept = (item.getTags() || []).filter(tag => !/^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)));
-      if (kept.length === (item.getTags() || []).length) continue;
+      // A standalone attachment only: a note or an annotation is not what the finding named, and a trashed one is left alone.
+      if (!item || item.deleted || this.isRegular(item) || item.isNote?.() || item.isAnnotation?.() || (item.parentItemID ?? item.parentID) || item.isEditable?.() === false) continue;
+      const before = [...(item.getTags() || [])];
+      const kept = before.filter(tag => !/^style-custom:rating:[0-5]$/.test(String(tag?.tag ?? tag)));
+      if (kept.length === before.length) continue;
       item.setTags(kept);
-      if (typeof item.saveTx === 'function') await item.saveTx(); else await item.save();
+      // A save that fails puts the tags back in memory, so a later save of this item cannot write the removal after all.
+      try { if (typeof item.saveTx === 'function') await item.saveTx(); else await item.save(); }
+      catch (error) { try { item.setTags(before); } catch (_) {} throw error; }
       removed++;
     }
     return {removed};

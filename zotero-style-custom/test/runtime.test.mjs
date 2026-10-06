@@ -5442,3 +5442,19 @@ test('R9 a zero or legacy citation count is drawn in readable ink, not placehold
   assert.equal(Identity.readable(ink, false), ink, '4.5:1 on white');
   window.ZoteroPane = undefined;
 });
+
+test('the orphan rating repair skips notes and trashed items, and a failed save puts the tag back in memory',async()=>{
+ const {plugin,item,Z}=fixture();Z.Libraries.userLibraryID=1;plugin.active=true;
+ const make=(id,extra={})=>{const ref=item(id,{tags:[{tag:'style-custom:rating:4',type:0},{tag:'keep',type:0}]});ref.isRegularItem=()=>false;ref.isEditable=()=>true;
+  ref.setTags=tags=>{ref.getTags=()=>tags;};Object.assign(ref,extra);return ref;};
+ const note=make(5,{isNote:()=>true,saveTx:async()=>{throw new Error('should not save a note');}});
+ const trashed=make(6,{deleted:true,saveTx:async()=>{throw new Error('should not save a trashed item');}});
+ const failing=make(7,{saveTx:async()=>{throw new Error('disk full');}});
+ const all=[note,trashed,failing];
+ Z.Items={...(Z.Items||{}),getAll:async()=>all,getAsync:async id=>all.find(i=>i.id===id)};
+ const out=await plugin.removeOrphanRatingTags(['5','6']);
+ assert.equal(out.removed,0,'a note and a trashed attachment are not touched');
+ assert.ok(note.getTags().some(t=>/rating/.test(t.tag)));
+ await assert.rejects(plugin.removeOrphanRatingTags(['7']),/disk full/);
+ assert.deepEqual(failing.getTags().map(t=>t.tag),['style-custom:rating:4','keep'],'the tag is back on the item in memory');
+});
