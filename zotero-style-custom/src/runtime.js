@@ -3227,6 +3227,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         // "at" are one campus written two ways.
         const bare = name => lower(name).replace(/[,.]/g, '').split(/\s+/).filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le)$/.test(w)).join(' ');
         if (bare(a) && bare(a) === bare(b)) return true;
+        // "Philipps-Universität Marburg" on ORCID is "Philipps University of Marburg" on OpenAlex: the same words in another language and order.
+        const words = name => [...new Set(String(name).normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ')
+          .filter(w => w && !/^(of|the|and|for|at|in|de|du|des|la|le|der|die|das|di|del|y|e|et|und)$/.test(w))
+          .map(w => /^universi(ty|tat|te|dad|dade|ta|teit|tet)$/.test(w) ? 'university' : /^(technische|technischen|technique|tecnica|tecnico)$/.test(w) ? 'technical' : w))].sort().join(' ');
+        if (words(a).includes(' ') && words(a) === words(b)) return true;
         if (initials(a) === lower(b).toUpperCase() || initials(b) === lower(a).toUpperCase()) return true;
         // "UC Berkeley" for "University of California, Berkeley": the
         // leading words shortened, the campus kept.
@@ -3306,81 +3311,215 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return list.filter((work, index) => !drop.has(index));
   }
 
-  /* Where a stored or fresh paper stands for one followed author.
-     item: {id, places: [{name, ror}] or null when unknown, country, subfield, people: [names]}
-     ctx:  {confirmed, knownPlaces, knownCountries, evidence (folded coauthor names), selfKey}
-     A paper that names no institution is not taken on trust: it passes only
-     when it shares a coauthor with papers already verified for this author. */
-  static newsVerdict(item, ctx) {
-    if (ctx.confirmed.has(item.id)) return {verdict: 'ok', basis: 'confirmed'};
-    if (!Array.isArray(item.places)) return {verdict: 'unclassified', basis: ''};
-    if (!item.places.length) {
-      const shared = (item.people || []).some(name => { const key = CustomStyleRuntime.newsKey(name); return key && key !== ctx.selfKey && ctx.evidence.has(key); });
-      return shared ? {verdict: 'ok', basis: 'coauthor'} : {verdict: 'unverified', basis: ''};
+  /* Whose paper is it? Judged only by evidence the user trusts.
+
+     OpenAlex merges people of one name into one profile, and the merged
+     profile lists the namesake's institutions too: Huimin Zhao's names a
+     Chengdu hospital and the Chinese Academy of Agricultural Sciences. Taking
+     those as places the author is known at let a namesake's rice, PCOS,
+     thiazole and birch papers through. So the places and colleagues a paper
+     is checked against come only from
+       - the place the author was followed with (typed or picked by the user),
+       - papers by this author held in the library (matched by OpenAlex id, or
+         by name when they share a coauthor with an id-matched one),
+       - papers the user marked 본인 논문 (and the places they were signed from),
+       - the author's ORCID employment and education, when an ORCID is known.
+     The profile's places, and places picked up from papers that passed, are
+     weak: they decide nothing unless there is nothing trusted at all.
+
+     A paper is the author's own when it is signed from a trusted place, or
+     shares two coauthors with trusted papers, or sits in the same subfield or
+     topic and shares one. A paper settled by trusted evidence (a place, a held
+     or a confirmed paper) lends its coauthors and field to the rest of the
+     batch; one settled by coauthors lends nothing, so no chain forms.
+     Everything else waits under 확인 필요 with the reason. */
+  // "Erin E. Doherty" and "Erin Doherty" are one coauthor: first given name and family name, accents dropped.
+  static personKey(name) {
+    const parts = String(name || '').normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);
+    if (!parts.length) return '';
+    return parts.length === 1 ? parts[0] : parts[0] + ' ' + parts[parts.length - 1];
+  }
+  // The followed author under another spelling: same family name, same first initial ("Martin Jinek", "Jennifer Doudna").
+  static sameAuthorName(a, b) {
+    const split = name => String(name || '').normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);
+    const x = split(a), y = split(b);
+    if (x.length < 2 || y.length < 2) return x.join(' ') === y.join(' ') && !!x.length;
+    return x[x.length - 1] === y[y.length - 1] && x[0][0] === y[0][0];
+  }
+  static newsPeopleNames(work) {
+    const all = Array.isArray(work?.coauthors) && work.coauthors.length ? work.coauthors.map(p => p?.name) : work?.people;
+    return (Array.isArray(all) ? all : []).map(p => typeof p === 'string' ? p : p?.name).filter(Boolean);
+  }
+  static authorEvidence(row, {library = [], profile = null} = {}) {
+    const R = CustomStyleRuntime;
+    const ids = new Set(R.authorIDsOf(row));
+    const self = String(row?.name || '');
+    const isSelf = name => R.sameAuthorName(name, self);
+    const places = [], weak = [], coauthors = new Map(), fields = new Set(), topics = new Set(), seen = new Set();
+    const add = (list, name, ror, source) => {
+      name = String(name || '').trim();
+      if (!name || seen.has(source + '|' + name)) return;
+      seen.add(source + '|' + name);
+      list.push({name, ror: String(ror || '').replace(/^https?:\/\/ror\.org\//i, ''), source});
+    };
+    const addPeople = names => { for (const name of names || []) { if (!name || isSelf(name)) continue; const key = R.personKey(name); if (key) coauthors.set(key, (coauthors.get(key) || 0) + 1); } };
+    const addField = work => { if (work?.subfield) fields.add(String(work.subfield)); if (work?.topic) topics.add(String(work.topic)); };
+    add(places, row?.institutionGiven, '', 'followed');
+    add(places, row?.institution, row?.institutionRor, 'followed');
+    add(places, row?.previousInstitution, row?.previousInstitutionRor, 'followed');
+    for (const pl of Array.isArray(row?.placesConfirmed) ? row.placesConfirmed : []) add(places, pl?.name, pl?.ror, 'confirmed');
+    for (const pl of Array.isArray(row?.orcidPlaces) ? row.orcidPlaces : []) add(places, pl?.name, pl?.ror, 'orcid');
+    const namesOf = paper => [...new Set([...(paper?.creators || []), ...(paper?.people || []).map(p => p?.name)].filter(Boolean).map(String))];
+    const placesOf = person => person?.institutions?.length
+      ? person.institutions.map(h => ({name: h.institution || h.name, ror: h.ror})) : [{name: person?.institution, ror: person?.ror}];
+    const byName = [];
+    for (const paper of Array.isArray(library) ? library : []) {
+      if (!paper) continue;
+      const names = namesOf(paper);
+      const me = (paper.people || []).find(p => p?.id && ids.has(String(p.id)));
+      if (me) { for (const h of placesOf(me)) add(places, h.name, h.ror, 'library'); addPeople(names); addField(paper); }
+      else if (names.some(isSelf)) byName.push({paper, names});
     }
-    if (!ctx.knownPlaces.length) return {verdict: 'ok', basis: 'open'};
-    if (item.places.some(h => ctx.knownPlaces.some(pl => CustomStyleRuntime.samePlace(pl.name, h.name, pl.ror || '', h.ror || '')))) return {verdict: 'ok', basis: 'place'};
-    if (item.country && ctx.knownCountries.has(item.country) && ctx.subfieldKnown && item.subfield === ctx.subfieldKnown) return {verdict: 'ok', basis: 'country'};
-    return {verdict: 'unverified', basis: ''};
+    // By name alone a held paper may be a namesake's too: it counts when it shares a coauthor with one held by id.
+    const anchor = new Set(coauthors.keys());
+    for (const {paper, names} of byName) {
+      if (!names.some(name => !isSelf(name) && anchor.has(R.personKey(name)))) continue;
+      const me = (paper.people || []).find(p => isSelf(p?.name));
+      if (me) for (const h of placesOf(me)) add(places, h.name, h.ror, 'library');
+      addPeople(names); addField(paper);
+    }
+    const confirmed = new Set(Array.isArray(row?.confirmed) ? row.confirmed : []);
+    for (const work of Array.isArray(row?.news) ? row.news : []) {
+      if (!work || !(confirmed.has(work.id) || work.verified === 'confirmed')) continue;
+      addPeople(R.newsPeopleNames(work)); addField(work);
+      for (const name of work.places || []) add(places, name, '', 'confirmed');
+    }
+    for (const pl of [...(row?.places || []), ...(row?.placesSeen || []), ...(profile?.places || [])]) add(weak, pl?.name, pl?.ror, 'profile');
+    return {ids, selfName: self, places, weak, coauthors, fields, topics, confirmed};
+  }
+  static sharedCoauthors(names, ctx) {
+    const keys = new Set();
+    for (const name of names || []) {
+      if (!name || CustomStyleRuntime.sameAuthorName(name, ctx.selfName)) continue;
+      const key = CustomStyleRuntime.personKey(name);
+      if (key && ctx.coauthors.has(key)) keys.add(key);
+    }
+    return keys.size;
   }
 
-  static newsContext(row, profileNow, extraEvidence = []) {
-    const knownPlaces = [
-      {name: row.institution, ror: row.institutionRor}, {name: row.institutionGiven, ror: ''},
-      {name: row.previousInstitution, ror: row.previousInstitutionRor},
-      ...(row.places || []), ...(row.placesSeen || []), ...(profileNow?.places || [])
-    ].filter(pl => pl && pl.name);
-    const confirmed = new Set(row.confirmed || []);
-    const evidence = new Set(extraEvidence);
-    for (const work of row.news || []) {
-      if (work && (['place', 'country', 'confirmed'].includes(work.verified) || confirmed.has(work.id))) {
-        for (const name of work.people || []) { const key = CustomStyleRuntime.newsKey(name); if (key) evidence.add(key); }
-      }
+  /* Where a stored or fresh paper stands for one followed author.
+     item: {id, places: [{name, ror}] or null when unknown, people: [names], subfield, topic, inLibrary}
+     ctx:  newsContext(row) -- the trusted evidence above.
+     Returns {verdict: ok | unverified | unclassified, basis, reason}; reason
+     is no-place, profile-only (signed only from a place the merged profile
+     lists) or other-place. */
+  static newsVerdict(item, ctx) {
+    const R = CustomStyleRuntime;
+    if (ctx.confirmed.has(item.id)) return {verdict: 'ok', basis: 'confirmed', reason: ''};
+    if (item.inLibrary) return {verdict: 'ok', basis: 'library', reason: ''};
+    const known = Array.isArray(item.places);
+    const places = known ? item.places.map(h => typeof h === 'string' ? {name: h, ror: ''} : h).filter(h => h && h.name) : [];
+    const at = list => places.some(h => list.some(pl => R.samePlace(pl.name, h.name, pl.ror || '', h.ror || '')));
+    if (places.length && at(ctx.places)) return {verdict: 'ok', basis: 'place', reason: ''};
+    const shared = R.sharedCoauthors(item.people, ctx);
+    if (shared >= 2) return {verdict: 'ok', basis: 'coauthors', reason: ''};
+    const sameField = (item.subfield && ctx.fields.has(item.subfield)) || (item.topic && ctx.topics.has(item.topic));
+    if (shared >= 1 && sameField) return {verdict: 'ok', basis: 'field', reason: ''};
+    if (!known) return {verdict: 'unclassified', basis: '', reason: ''};
+    const onProfile = places.length > 0 && at(ctx.weak);
+    // Followed by id alone, nothing held, no ORCID: the profile is all there is to go by.
+    if (!ctx.places.length && !ctx.coauthors.size && places.length) {
+      if (!ctx.weak.length) return {verdict: 'ok', basis: 'open', reason: ''};
+      if (onProfile) return {verdict: 'ok', basis: 'profile', reason: ''};
     }
+    return {verdict: 'unverified', basis: '', reason: !places.length ? 'no-place' : onProfile ? 'profile-only' : 'other-place'};
+  }
+
+  static newsContext(row, profileNow, {library = []} = {}) {
+    return CustomStyleRuntime.authorEvidence(row, {library, profile: profileNow});
+  }
+
+  // A batch judged together: papers settled by trusted evidence lend their coauthors and field to the rest, once.
+  static judgeNews(items, ctx) {
+    const R = CustomStyleRuntime, verdicts = new Map();
+    for (const item of items) verdicts.set(item.id, R.newsVerdict(item, ctx));
+    const before = ctx.coauthors.size + ctx.fields.size + ctx.topics.size;
+    for (const item of items) {
+      if (!['place', 'confirmed', 'library'].includes(verdicts.get(item.id).basis)) continue;
+      for (const name of item.people || []) {
+        if (!name || R.sameAuthorName(name, ctx.selfName)) continue;
+        const key = R.personKey(name);
+        if (key) ctx.coauthors.set(key, (ctx.coauthors.get(key) || 0) + 1);
+      }
+      if (item.subfield) ctx.fields.add(item.subfield);
+      if (item.topic) ctx.topics.add(item.topic);
+    }
+    if (ctx.coauthors.size + ctx.fields.size + ctx.topics.size !== before)
+      for (const item of items) if (verdicts.get(item.id).verdict !== 'ok') verdicts.set(item.id, R.newsVerdict(item, ctx));
+    return verdicts;
+  }
+
+  static heldEntry(work, reason) {
     return {
-      confirmed, knownPlaces, evidence, selfKey: CustomStyleRuntime.newsKey(row.name),
-      knownCountries: new Set(row.countriesSeen || []), subfieldKnown: row.subfield || ''
+      id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''), date: work.date || '',
+      people: (work.people || []).slice(0, 6), places: work.places || [], country: work.country || '', subfield: work.subfield || '',
+      ...(work.topic ? {topic: work.topic} : {}), reason: reason || work.reason || '',
+      ...(Array.isArray(work.coauthors) ? {coauthors: work.coauthors, authorCount: work.authorCount} : {})
     };
   }
 
   /* Stored news is judged again by the rules now in force, with no request.
-     A paper whose stored record names its institutions is classified like a
-     fresh one; one swept before the classifier existed has nothing to judge
-     by, so it is marked `unclassified` -- unless it shares a coauthor with
-     verified papers, or the row has verified papers and it shares none, in
-     which case it is held as unverified. Returns how many moved. */
-  static reclassifyNewsRow(row, profileNow, extraEvidence = []) {
-    if (!Array.isArray(row?.news) || !row.news.length) return {moved: 0, unclassified: 0};
-    const ctx = CustomStyleRuntime.newsContext(row, profileNow, extraEvidence);
+     A paper judged under these rules carries `rule: 2` and is left alone; one
+     judged by the old ones (profile places counted) is judged again when its
+     places are stored. A paper with no stored places stays 미분류 unless its
+     coauthors settle it: 지금 가리기 reads it back. With `release`, papers
+     held under 확인 필요 are judged again too, and the ones trusted evidence
+     now covers return to the news. Returns how many moved each way. */
+  static reclassifyNewsRow(row, profileNow, {library = [], release = false} = {}) {
+    const R = CustomStyleRuntime;
+    const hasNews = Array.isArray(row?.news) && row.news.length, hasHeld = release && Array.isArray(row?.unverified) && row.unverified.length;
+    if (!hasNews && !hasHeld) return {moved: 0, unclassified: 0, released: 0};
+    const ctx = R.newsContext(row, profileNow, {library});
+    const asItem = work => ({id: work.id, places: Array.isArray(work.places) ? work.places.map(name => ({name, ror: ''})) : null,
+      people: R.newsPeopleNames(work), subfield: work.subfield || '', topic: work.topic || '', inLibrary: !!work.inLibrary});
+    const judged = (row.news || []).filter(work => work && work.verified !== 'confirmed' && work.rule !== 2 && (Array.isArray(work.places) || !work.verified));
+    const rejected = new Set(row.rejected || []);
+    const heldNow = release ? (row.unverified || []).filter(work => work && !rejected.has(work.id)) : [];
+    const verdicts = R.judgeNews([...judged, ...heldNow].map(asItem), ctx);
     const kept = [], moved = [];
     let unclassified = 0;
-    for (const work of row.news) {
+    const judgedIDs = new Set(judged.map(work => work.id));
+    for (const work of row.news || []) {
       if (!work) continue;
-      if (work.verified) { kept.push(work); continue; }
-      const item = {id: work.id, places: Array.isArray(work.places) ? work.places.map(name => ({name, ror: ''})) : null,
-        country: work.country || '', subfield: work.subfield || '', people: work.people || []};
-      let result = CustomStyleRuntime.newsVerdict(item, ctx);
-      if (result.verdict === 'unclassified') {
-        // No institutions stored: the coauthors are the only evidence left.
-        const shared = (work.people || []).some(name => { const key = CustomStyleRuntime.newsKey(name); return key && key !== ctx.selfKey && ctx.evidence.has(key); });
-        result = shared ? {verdict: 'ok', basis: 'coauthor'} : ctx.evidence.size ? {verdict: 'unverified', basis: ''} : result;
-      }
-      if (result.verdict === 'unverified') { moved.push(work); continue; }
-      if (result.verdict === 'unclassified') { work.unclassified = true; unclassified++; }
-      else { work.verified = result.basis; delete work.unclassified; }
+      if (!judgedIDs.has(work.id)) { kept.push(work); continue; }
+      const result = verdicts.get(work.id);
+      if (result.verdict === 'unverified') { moved.push({work, reason: result.reason}); continue; }
+      if (result.verdict === 'unclassified') { work.unclassified = true; delete work.verified; unclassified++; }
+      else { work.verified = result.basis; work.rule = 2; delete work.unclassified; }
       kept.push(work);
     }
-    if (moved.length) {
-      const held = new Map((row.unverified || []).map(w => [w.id, w]));
-      for (const work of moved) if (!held.has(work.id) && !(row.rejected || []).includes(work.id)) held.set(work.id, {
-        id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: String(work.type || ''), date: work.date || '',
-        people: (work.people || []).slice(0, 6), places: work.places || [], country: work.country || '', subfield: work.subfield || '',
-        ...(Array.isArray(work.coauthors) ? {coauthors: work.coauthors, authorCount: work.authorCount} : {})
+    const released = [];
+    for (const work of heldNow) {
+      const result = verdicts.get(work.id);
+      if (result?.verdict !== 'ok') { if (result?.reason) work.reason = result.reason; continue; }
+      released.push(work);
+      kept.push({
+        id: work.id, title: work.title, venue: work.venue, doi: work.doi, type: work.type || '',
+        preprint: /preprint/i.test(work.type || '') || /rxiv|research square|preprints?\b|ssrn/i.test(work.venue || ''),
+        date: work.date || '', inLibrary: false, people: work.people || [],
+        ...(Array.isArray(work.coauthors) ? {coauthors: work.coauthors, authorCount: work.authorCount} : {}),
+        places: work.places || [], country: work.country || '', subfield: work.subfield || '', ...(work.topic ? {topic: work.topic} : {}),
+        verified: result.basis, rule: 2, foundAt: new Date().toISOString()
       });
+    }
+    if (moved.length || released.length) {
+      const out = new Set(released.map(work => work.id));
+      const held = new Map((row.unverified || []).filter(w => w && !out.has(w.id)).map(w => [w.id, w]));
+      for (const {work, reason} of moved) if (!held.has(work.id) && !rejected.has(work.id)) held.set(work.id, R.heldEntry(work, reason));
       row.unverified = [...held.values()].sort((m, n) => String(n.date || '').localeCompare(String(m.date || ''))).slice(0, 20);
     }
     row.news = kept;
-    return {moved: moved.length, unclassified};
+    return {moved: moved.length, unclassified, released: released.length};
   }
 
   /* One person once on a stored work. 240 of 1,140 stored people lists named someone twice; the sweep
@@ -3443,8 +3582,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   /* Papers stored before the namesake check (“미분류”) judged now: read back
      by id, fifty to a filter request, with the followed author's own
      authorship -- any of a merged person's records -- and classified by the
-     same rules as a sweep. A namesake's paper moves to 확인 필요; the rest
-     stay as news, verified. Asks nothing when there is nothing unclassified. */
+     same rules as a sweep. The evidence those rules trust is gathered here
+     too: a missing ORCID from the authors' records (fifty to a request) and
+     the ORCID employment and education of everyone involved (fifty to one
+     batched ORCID search, kept two months). A namesake's paper moves to
+     확인 필요 with the reason; the rest stay as news, verified; a held paper
+     the evidence now covers comes back. Asks nothing when nothing is 미분류. */
   async classifyStoredNews({signal} = {}) {
     const rows = this.watchedAuthors();
     const wanted = new Map();
@@ -3453,9 +3596,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!wanted.has(work.id)) wanted.set(work.id, []);
       wanted.get(work.id).push({row, work});
     }
-    const result = {asked: wanted.size, settled: 0, held: 0, requests: 0, budgetGone: false};
+    const result = {asked: wanted.size, settled: 0, held: 0, released: 0, requests: 0, orcidRequests: 0, budgetGone: false};
     if (!wanted.size) return result;
-    const ids = [...wanted.keys()], touched = new Set(), options = this.discoverOptions();
+    const ids = [...wanted.keys()], options = this.discoverOptions();
+    const involved = new Set([...wanted.values()].flat().map(entry => entry.row));
     for (let i = 0; i < ids.length; i += this.discoverTools.AUTHOR_BATCH) {
       if (signal?.aborted) break;
       const url = this.discoverTools.watchedNewsURL(ids.slice(i, i + this.discoverTools.AUTHOR_BATCH), options);
@@ -3471,32 +3615,144 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           const mine = new Set(CustomStyleRuntime.authorIDsOf(row));
           const own = (found.people || []).find(p => p.id && mine.has(p.id));
           // The record no longer names this author at all: nothing ties the paper to them.
-          work.places = own ? (own.institutions?.length ? own.institutions.map(h => h.institution) : own.institution ? [own.institution] : []).filter(Boolean).slice(0, 4) : [];
+          work.places = own ? (own.institutions?.length ? own.institutions.map(h => h.institution) : own.institution ? [own.institution] : []).filter(Boolean).slice(0, 8) : [];
           work.country = own?.country || '';
           if (found.subfieldName) work.subfield = found.subfieldName;
+          if (found.topic) work.topic = found.topic;
+          // Every author, so the coauthor rule sees more than the first six names.
+          if (Array.isArray(found.people) && found.people.length) Object.assign(work, CustomStyleRuntime.newsCoauthors(found.people));
           if (own) { work.position = own.position || work.position || ''; work.corresponding = !!own.corresponding; }
-          touched.add(row);
+          delete work.rule;
         }
       }
     }
-    for (const row of touched) {
+    if (!result.budgetGone && !signal?.aborted) {
+      try {
+        result.requests += await this.lookUpOrcids([...involved], {signal});
+        result.orcidRequests += await this.fetchOrcidPlaces([...involved], {signal});
+      } catch (error) {
+        if (this.outOfBudget(error)) result.budgetGone = true; else this.Z.logError(error);
+      }
+    }
+    const library = typeof this.libraryPapers === 'function' ? this.libraryPapers() : [];
+    for (const row of involved) {
       const before = new Set((row.news || []).map(work => work.id));
-      CustomStyleRuntime.reclassifyNewsRow(row, null);
+      result.released += CustomStyleRuntime.reclassifyNewsRow(row, null, {library, release: true}).released;
       const after = new Set((row.news || []).map(work => work.id));
       for (const id of before) if (wanted.has(id) && wanted.get(id).some(entry => entry.row === row)) {
         if (!after.has(id)) result.held++;
         else if (!row.news.find(work => work.id === id)?.unclassified) result.settled++;
       }
     }
-    if (touched.size) { this.cache.watchedAuthors = this.watchedAuthors(); this.dirty = true; await this.flush(); }
+    this.cache.watchedAuthors = this.watchedAuthors(); this.dirty = true; await this.flush();
     return result;
+  }
+
+  /* The ORCID of followed authors who have none on their row, from their
+     OpenAlex records, fifty to a request; asked once per person. Returns the
+     number of requests. */
+  async lookUpOrcids(rows, {signal} = {}) {
+    const lacking = (rows || []).filter(row => row && !row.orcid && !row.orcidLookedUp);
+    let requests = 0;
+    for (let i = 0; i < lacking.length; i += this.discoverTools.AUTHOR_BATCH) {
+      if (signal?.aborted) break;
+      const batch = lacking.slice(i, i + this.discoverTools.AUTHOR_BATCH);
+      const url = this.discoverTools.watchedProfilesURL(batch.flatMap(row => CustomStyleRuntime.authorIDsOf(row)), this.discoverOptions());
+      if (!url) continue;
+      const payload = await this.discoverJSON(url, {signal});
+      requests++;
+      const profiles = this.discoverTools.readProfiles(payload);
+      const now = new Date().toISOString();
+      for (const row of batch) {
+        const ids = new Set(CustomStyleRuntime.authorIDsOf(row));
+        const profile = profiles.find(pf => ids.has(pf.id) && pf.orcid);
+        if (profile) row.orcid = profile.orcid;
+        row.orcidLookedUp = now;
+      }
+    }
+    return requests;
+  }
+
+  static orcidSearchURL(orcids) {
+    const list = [...new Set((orcids || []).map(id => (String(id || '').match(/\d{4}-\d{4}-\d{4}-\d{3}[\dX]/i) || [''])[0].toUpperCase()).filter(Boolean))].slice(0, 50);
+    if (!list.length) return '';
+    return 'https://pub.orcid.org/v3.0/expanded-search/?q=' + encodeURIComponent('orcid:(' + list.join(' OR ') + ')') + '&rows=' + list.length;
+  }
+  // ORCID's batched search answers with every organisation a person lists (employment and education among them).
+  static readOrcidSearch(payload) {
+    const out = new Map();
+    for (const row of Array.isArray(payload?.['expanded-result']) ? payload['expanded-result'] : []) {
+      const id = String(row?.['orcid-id'] || '').toUpperCase();
+      if (!id) continue;
+      out.set(id, [...new Set((Array.isArray(row['institution-name']) ? row['institution-name'] : []).map(name => String(name || '').trim()).filter(Boolean))]);
+    }
+    return out;
+  }
+  /* Where followed authors say they have worked and studied, from ORCID: one
+     public, keyless search per fifty people, kept two months on the row.
+     Asked only from 지금 가리기 and the 새 논문 확인 sweep. A failed request
+     leaves the rows as they were. Returns the number of requests. */
+  async fetchOrcidPlaces(rows, {signal, maxAgeDays = 60} = {}) {
+    const stale = row => !row.orcidCheckedAt || Date.now() - Date.parse(row.orcidCheckedAt) > maxAgeDays * 864e5;
+    const due = (rows || []).filter(row => row?.orcid && stale(row));
+    let requests = 0;
+    for (let i = 0; i < due.length; i += 50) {
+      if (signal?.aborted) break;
+      const batch = due.slice(i, i + 50);
+      const url = CustomStyleRuntime.orcidSearchURL(batch.map(row => row.orcid));
+      if (!url) continue;
+      let reply;
+      try {
+        reply = await this.Z.HTTP.request('GET', url, {responseType: 'json', timeout: 20000, headers: {Accept: 'application/json'}, successCodes: false});
+      } catch (error) { this.Z.logError?.(error); continue; }
+      requests++;
+      if (reply?.status !== 200) continue;
+      const found = CustomStyleRuntime.readOrcidSearch(reply.response);
+      const now = new Date().toISOString();
+      for (const row of batch) {
+        const names = found.get(String(row.orcid).toUpperCase());
+        row.orcidPlaces = (names || []).slice(0, 30).map(name => ({name, ror: ''}));
+        row.orcidCheckedAt = now;
+      }
+      if (i + 50 < due.length) await this.pause(300);
+    }
+    if (requests) this.dirty = true;
+    return requests;
+  }
+
+  /* The library's papers as the namesake check reads them: each held paper's
+     OpenAlex authorship (first and last authors with their places, from the
+     cache) and its full Zotero creator list. Rebuilt when the cache grows. */
+  libraryPapers() {
+    const works = this.paperWorks?.() || {};
+    const sig = Object.keys(works).length;
+    if (this._libraryPapers?.sig === sig) return this._libraryPapers.list;
+    const list = [];
+    let complete = true;
+    for (const [identity, work] of Object.entries(works)) {
+      if (!work) continue;
+      const at = identity.indexOf(':');
+      let creators = [];
+      try {
+        const item = this.Z.Items?.getByLibraryAndKey?.(Number(identity.slice(0, at)), identity.slice(at + 1));
+        if (item?.deleted) continue;
+        creators = (item?.getCreators?.() || []).filter(c => !c.creatorType || c.creatorType === 'author')
+          .map(c => [c.firstName, c.lastName || c.name].filter(Boolean).join(' ').trim()).filter(Boolean);
+      } catch (_) { complete = false; }
+      if (!creators.length && !(Array.isArray(work.people) && work.people.length)) continue;
+      list.push({people: Array.isArray(work.people) ? work.people : [], creators});
+    }
+    // Items not loaded yet: used once, not remembered.
+    if (complete) this._libraryPapers = {sig, list};
+    return list;
   }
 
   reclassifyStoredNews() {
     let moved = 0;
+    const library = typeof this.libraryPapers === 'function' ? this.libraryPapers() : [];
     for (const row of this.watchedAuthors?.() || []) {
       const before = JSON.stringify([row.news, row.unverified]);
-      moved += CustomStyleRuntime.reclassifyNewsRow(row, null).moved;
+      moved += CustomStyleRuntime.reclassifyNewsRow(row, null, {library}).moved;
       if (JSON.stringify([row.news, row.unverified]) !== before) this.dirty = true;
     }
     return moved;
@@ -3829,6 +4085,20 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
     result.failed = failed.size;result.unfinished = unfinished.size;
     const owned = this.libraryDOIs();
+    /* The namesake check's trusted evidence, gathered once for the run: the
+       library's papers, and ORCID's employment and education for the people
+       this run found anything for (one batched search per fifty, kept two
+       months). The ORCID comes free with the profiles read above. */
+    const library = typeof this.libraryPapers === 'function' ? this.libraryPapers() : [];
+    result.orcidRequests = 0;
+    if (typeof this.fetchOrcidPlaces === 'function' && !signal?.aborted) {
+      const withWorks = rows.filter(row => (found.get(row.id) || []).length);
+      for (const row of withWorks) {
+        const profile = profiles.get(row.id) || idsOf(row).map(id => profiles.get(id)).find(Boolean);
+        if (profile?.orcid) row.orcid = profile.orcid;
+      }
+      try { result.orcidRequests = await this.fetchOrcidPlaces(withWorks, {signal}); } catch (error) { this.Z.logError(error); }
+    }
     const checkedAt = new Date().toISOString();
     for (const row of rows) {
       // A batch that never ran must not be recorded as "checked, nothing new" --
@@ -3879,12 +4149,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       /* Namesakes. OpenAlex sometimes merges two people of one name into one
          profile, so every work carrying the followed id arrived as news. The
          followed author's own authorship names the institutions that signed
-         the paper: if none is a place this row knows (the one followed with,
-         its listed appointments, places on papers already accepted or
-         confirmed, the profile's current places), and it is not the same
-         country and field as before, the paper is held as unverified and
-         is neither counted nor shown as news until the reader confirms it.
-         A paper that lists no institution passes. */
+         the paper; it is judged against trusted evidence only (see
+         authorEvidence): a place the author was followed with, held in the
+         library, confirmed or listed on ORCID; two shared coauthors; or the
+         same field and one shared coauthor. The profile's own places are
+         weak. Anything else is held under 확인 필요 with the reason, and is
+         neither counted nor shown as news until the reader confirms it. */
       const rowIDs = new Set([row.id, this.discoverTools.shortID(row.id), ...idsOf(row)]);
       const profileNow = profiles.get(row.id) || idsOf(row).map(id => profiles.get(id)).find(Boolean);
       const rejected = new Set(row.rejected || []);
@@ -3895,32 +4165,24 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           : (own?.institution ? [{name: own.institution, ror: own.ror || ''}] : []);
         return list.filter(pl => pl.name);
       };
-      const asItem = work => ({id: work.id, places: placesOf(work), country: ownOf(work)?.country || '',
-        subfield: work.subfieldName || '', people: (work.people || []).map(p => p.name).filter(Boolean)});
+      const asItem = work => ({id: work.id, places: placesOf(work), people: (work.people || []).map(p => p.name).filter(Boolean),
+        subfield: work.subfieldName || '', topic: work.topic || '', inLibrary: !!work.doi && owned.has(work.doi)});
       /* What was stored before this sweep is judged first, by the same rules:
          a namesake paper kept from an earlier sweep must not stay in the
-         news just because this sweep did not find it again. */
-      CustomStyleRuntime.reclassifyNewsRow(row, profileNow);
-      const ctx = CustomStyleRuntime.newsContext(row, profileNow);
-      const knownCountries = ctx.knownCountries;
+         news just because this sweep did not find it again; a held paper the
+         evidence now covers comes back. */
+      CustomStyleRuntime.reclassifyNewsRow(row, profileNow, {library, release: true});
+      const ctx = CustomStyleRuntime.newsContext(row, profileNow, {library});
+      const knownCountries = new Set(row.countriesSeen || []);
       const candidates = fresh.filter(work => !rejected.has(work.id));
-      const verdicts = new Map();
-      // Papers that name an institution first; their coauthors then vouch for the ones that name none.
-      for (const work of candidates) {
-        const item = asItem(work);
-        if (item.places.length || ctx.confirmed.has(work.id)) verdicts.set(work.id, CustomStyleRuntime.newsVerdict(item, ctx));
-      }
-      for (const work of candidates) {
-        const result = verdicts.get(work.id);
-        if (result && ['place', 'country', 'confirmed'].includes(result.basis))
-          for (const name of asItem(work).people) { const key = CustomStyleRuntime.newsKey(name); if (key) ctx.evidence.add(key); }
-      }
-      for (const work of candidates) if (!verdicts.has(work.id)) verdicts.set(work.id, CustomStyleRuntime.newsVerdict(asItem(work), ctx));
+      const verdicts = CustomStyleRuntime.judgeNews(candidates.map(asItem), ctx);
       const confirmed = ctx.confirmed;
-      const checked = candidates.map(work => ({work, verdict: verdicts.get(work.id).verdict, basis: verdicts.get(work.id).basis}));
+      const checked = candidates.map(work => ({work, ...verdicts.get(work.id)}));
       const basisOf = new Map(checked.map(c => [c.work.id, c.basis]));
+      const reasonOf = new Map(checked.map(c => [c.work.id, c.reason || '']));
       const held = checked.filter(c => c.verdict === 'unverified').map(c => c.work)
         .filter(work => !CustomStyleRuntime.NOT_A_PAPER.test(String(work.type || '')));
+      // Places on papers that passed: weak evidence, kept for the record, never trusted on their own.
       const placesSeen = new Map((row.placesSeen || []).map(pl => [pl.name, pl]));
       for (const {work, verdict} of checked) {
         if (verdict !== 'ok') continue;
@@ -3938,9 +4200,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
           date: work.date || (work.year ? String(work.year) : ''),
           people: (work.people || []).slice(0, 6).map(p => p.name).filter(Boolean),
           ...CustomStyleRuntime.newsCoauthors(work.people),
-          places: (ownOf(work)?.institutions || []).map(h => h.institution).slice(0, 4),
+          places: (ownOf(work)?.institutions || []).map(h => h.institution).slice(0, 8),
           country: ownOf(work)?.country || '',
-          subfield: work.subfieldName || ''
+          subfield: work.subfieldName || '', ...(work.topic ? {topic: work.topic} : {}),
+          reason: reasonOf.get(work.id) || ''
         });
         row.unverified = [...keepHeld.values()].sort((m, n) => String(n.date || '').localeCompare(String(m.date || ''))).slice(0, 20);
       }
@@ -3970,9 +4233,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         position: ownOf(work)?.position || '',
         corresponding: !!ownOf(work)?.corresponding,
         // What the namesake check went by, kept so stored news can be judged again on load.
-        places: placesOf(work).map(pl => pl.name).slice(0, 4),
-        country: ownOf(work)?.country || '', subfield: work.subfieldName || '',
-        verified: basisOf.get(work.id) || '',
+        places: placesOf(work).map(pl => pl.name).slice(0, 8),
+        country: ownOf(work)?.country || '', subfield: work.subfieldName || '', ...(work.topic ? {topic: work.topic} : {}),
+        verified: basisOf.get(work.id) || '', rule: 2,
         foundAt: foundAtOf.get(work.id) || checkedAt
       });
       /* Always merged, never replaced: a refresh that finds nothing (the date
@@ -4160,6 +4423,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const placesSeen = new Map((row.placesSeen || []).map(pl => [pl.name, pl]));
       for (const name of work.places || []) if (!placesSeen.has(name)) placesSeen.set(name, {name, ror: ''});
       row.placesSeen = [...placesSeen.values()].slice(-30);
+      // The user's word is trusted evidence: the namesake check counts these places as the author's own.
+      const placesConfirmed = new Map((row.placesConfirmed || []).map(pl => [pl.name, pl]));
+      for (const name of work.places || []) if (name && !placesConfirmed.has(name)) placesConfirmed.set(name, {name, ror: ''});
+      row.placesConfirmed = [...placesConfirmed.values()].slice(-30);
       if (work.country) row.countriesSeen = [...new Set([...(row.countriesSeen || []), work.country])].slice(-10);
       const owned = this.libraryDOIs();
       row.news = this.keepNews([{
@@ -4168,7 +4435,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         date: work.date, inLibrary: !!work.doi && owned.has(work.doi), people: work.people || [],
         ...(Array.isArray(work.coauthors) ? {coauthors: work.coauthors, authorCount: work.authorCount} : {}),
         citations: null, position: '', corresponding: false,
-        places: work.places || [], country: work.country || '', subfield: work.subfield || '', verified: 'confirmed'
+        places: work.places || [], country: work.country || '', subfield: work.subfield || '', ...(work.topic ? {topic: work.topic} : {}), verified: 'confirmed', rule: 2
       }, ...(row.news || [])], this.panelSeenKeys(), this.NEWS_STORE_LIMIT || 200);
     } else {
       row.rejected = [...new Set([workID, ...(row.rejected || [])])].slice(0, 200);

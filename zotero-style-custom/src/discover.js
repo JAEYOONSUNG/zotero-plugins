@@ -21,7 +21,7 @@
   // ids per paper, and none of it is shown, so asking for it would turn a cheap
   // question into a multi-megabyte one.
   const WATCH_FIELDS = 'id,doi,title,publication_year,publication_date,cited_by_count,type,'
-    + 'primary_location,authorships,open_access';
+    + 'primary_location,authorships,open_access,primary_topic';
 
   /* The reading order reads two hundred works for their reference lists and
      shows about thirty. Authorships were 57% of those bytes (measured on nine
@@ -118,8 +118,9 @@
       references: (Array.isArray(raw.referenced_works) ? raw.referenced_works : []).map(shortID).filter(Boolean),
       subjects: subjectsOf(raw),
       // The primary topic's name, so a grouping by topic can say what it is.
-      topic: text(Array.isArray(raw.topics) ? raw.topics[0]?.display_name : ''),
-      subfieldName: text(Array.isArray(raw.topics) ? raw.topics[0]?.subfield?.display_name : ''),
+      // The sweep asks for primary_topic alone (one entry, not three): the namesake check compares fields.
+      topic: text(Array.isArray(raw.topics) && raw.topics.length ? raw.topics[0]?.display_name : raw.primary_topic?.display_name),
+      subfieldName: text(Array.isArray(raw.topics) && raw.topics.length ? raw.topics[0]?.subfield?.display_name : raw.primary_topic?.subfield?.display_name),
       // Kept only for the paper in hand (the only record asked for with it):
       // what kind of paper it is is best read from its own words.
       abstract: raw.abstract_inverted_index ? abstractOf(raw.abstract_inverted_index).slice(0, 3000) : '',

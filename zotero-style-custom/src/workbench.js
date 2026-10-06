@@ -377,6 +377,23 @@
      carries data-writes. The self-check sweep skips by this attribute, so it
      holds in every language; a test scans the source for writers not listed. */
   const annotationNotes=new Map();/* libraryID:parent → {id, signature} of the note 이 문헌 주석에서 노트 만들기 made this session */
+  /* 주석 바구니. Annotations chosen anywhere in the 주석 tab -- under one colour,
+     one paper, one search, then another -- are kept together, per library, in
+     the cache: the choice on a card IS its place in the basket, so a filter
+     that hides a card never drops it. The basket makes one note (Zotero's own
+     serializer, so image and ink annotations survive), copies Markdown with
+     citations, or goes to 논문 비교. */
+  const basketLib=()=>state.libraryID??runtime.Z.Libraries?.userLibraryID??1;
+  const basketList=()=>model.basketItems?model.basketItems(runtime.cache,basketLib()):[];
+  const basketIDs=()=>new Set(basketList().map(e=>e.id));
+  function basketSaved(){runtime.dirty=true;if(typeof runtime.scheduleFlush==='function')runtime.scheduleFlush(2000);else runtime.flush?.();}
+  // The paper fields an entry carries, so it can be cited when its paper is outside the scope on screen.
+  const basketMark=a=>{const paper=state.items.find(i=>String(i.id)===String(a.parentID||''));return {...a,paper:paper?{id:String(paper.id),title:paper.title,authors:paper.authors,year:paper.year,venue:paper.venue,doi:paper.doi}:String(a.parentID||'')};};
+  function basketAddMarks(marks){model.basketAdd(runtime.cache,basketLib(),marks.map(basketMark));basketSaved();}
+  function basketDrop(ids){model.basketRemove(runtime.cache,basketLib(),ids);basketSaved();}
+  // Short enough for a line in the list: "Lovelace 2025".
+  const basketSource=e=>{const people=String(e.authors||'').split(/\s*;\s*/).filter(Boolean);const first=people[0]?people[0].includes(',')?people[0].split(',')[0]:people[0].split(/\s+/).pop():'';return [first+(people.length>1?' et al.':''),e.year].filter(Boolean).join(' ')||String(e.paperTitle||'').slice(0,40);};
+  let basketRedraw=null;/* the open 주석 tab's way to redraw its basket bar in place */
   let sweepJob=null;/* the running 모두 찾기, if any: {controller} */
   const worksFetches=new Set();/* AbortControllers of person-page Papers fetches; destroy() aborts them */
   const WRITES_CACHE_HANDLER=/\b(saveUI|setSeen|setSeenMany|setReadingQueue|saveWatchOptions|importHere|save|setRulesFor|putQuick|dropQuick|switchBrowser)\(|runtime\.(dirty\s*=[^=]|flush\(|cache\.\w+(\.\w+|\[[^\]]*\])*\s*=[^=]|set[A-Z]\w*\()|\breader\.(apply|reset|set|save|select|close|move|restore|rename|update|delete|undelete)\w*\(|\bmodel\.(create|delete|restore|add|remove|link|unlink|rename|update|set)\w*\(/;
@@ -474,6 +491,9 @@
    comment:[['path',{d:'M3 3.5h10v7H7.5L4.5 13v-2.5H3z'}]],
    search:[['circle',{cx:7.25,cy:7.25,r:4.25}],['line',{x1:10.5,y1:10.5,x2:13.5,y2:13.5}]],
    close:[['line',{x1:4,y1:4,x2:12,y2:12}],['line',{x1:12,y1:4,x2:4,y2:12}]],
+   basket:[['path',{d:'M2.6 6.4h10.8l-1.2 6.3H3.8z'}],['path',{d:'M5.6 6.4 7.2 3M10.4 6.4 8.8 3'}]],
+   moveUp:[['path',{d:'M4 9.8 8 5.8l4 4'}]],
+   moveDown:[['path',{d:'M4 6.2 8 10.2l4-4'}]],
    maximize:[['path',{d:'M9.5 3h3.5v3.5M13 3l-4 4M6.5 13H3V9.5M3 13l4-4'}]],
    tab:[['rect',{x:2.6,y:4.6,width:10.8,height:8.4,rx:1.2}],['path',{d:'M2.6 7.4h10.8M5.2 4.6V3h4.4v1.6'}]],
    window:[['rect',{x:2.8,y:3,width:10.4,height:10,rx:1.2}],['path',{d:'M2.8 6h10.4'}],['circle',{cx:4.6,cy:4.5,r:.5}]],
@@ -3935,6 +3955,107 @@
      Now the highlight is the content and everything else gets out of its way:
      a colour dot and the page, the text at reading size, the comment under it
      as an editable memo, and the actions only on hover. */
+  /* The basket bar: slim when closed (count, the four things to do with it),
+     a list when open -- each annotation with its colour, page, text and
+     paper, moved by dragging, by Alt+↑↓ or by its arrows, and taken out by ×
+     or Delete. onChange keeps the cards on screen in step. */
+  function drawAnnotationBasket(box,onChange){
+   const lib=basketLib(),list=basketList();
+   box.replaceChildren();box.hidden=!list.length;
+   if(!list.length){state.basketOpen=false;return;}
+   const changed=focusID=>{basketSaved();drawAnnotationBasket(box,onChange);onChange?.();if(focusID)[...box.querySelectorAll('.sc-basket-item')].find(li=>li.dataset.id===focusID)?.focus?.();};
+   const head=node('div',null,box,{class:'sc-basket-head'});
+   const title=node('span',null,head,{class:'sc-basket-title'});
+   const icon=node('span',null,title,{class:'sc-basket-icon','aria-hidden':'true'});setIcon(icon,'basket');
+   node('span','바구니',title,{class:'sc-basket-name'});
+   node('span',String(list.length),title,{class:'sc-basket-count',title:F('바구니에 주석 {0}개',list.length).text});
+   const paperCount=new Set(list.map(e=>e.paper).filter(Boolean)).size;
+   if(paperCount>1)node('span',F('문헌 {0}편',paperCount),head,{class:'sc-muted sc-basket-papers'});
+   const open=!!state.basketOpen;
+   viewButton(open?'바구니 접기':'바구니 펼치기',()=>{state.basketOpen=!open;drawAnnotationBasket(box,onChange);if(!open)box.querySelector('.sc-basket-item')?.focus?.();},head,{class:'sc-basket-toggle','aria-expanded':String(open)});
+   const acts=node('div',null,head,{class:'sc-basket-actions'});
+   button('바구니로 노트 만들기',()=>basketNote(),acts,{'data-variant':'primary','data-writes':'library','data-action-key':'basket-note:'+lib,title:T('한 문헌이면 그 문헌 아래 노트로, 여러 문헌이면 문헌마다 제목을 단 종합 노트 하나로 만듭니다. 그림·필기 주석도 그대로 들어갑니다')});
+   button('Markdown으로 복사',()=>basketMarkdownCopy(),acts,{'data-writes':'clipboard',title:T('인용(저자 연도, 쪽)과 원문 링크, 참고문헌을 붙인 Markdown을 클립보드에 넣습니다')});
+   // It switches the panel to 논문 비교 and changes what is chosen there: the self-check's sweep leaves it alone.
+   button('논문 비교로 보내기',()=>basketToCompare(),acts,{'data-opens':'tab',title:T('바구니에 든 문헌을 논문 비교에서 나란히 보고, 바구니 주석을 한 칸에 모읍니다')});
+   button('바구니 비우기',()=>{
+    const removed=model.basketClear(runtime.cache,lib);changed();
+    message(F('바구니에서 주석 {0}개를 뺐습니다.',removed.length));
+    undoToast(F('바구니를 비웠습니다. 주석 {0}개',removed.length),async()=>{model.basketRestore(runtime.cache,lib,removed);basketSaved();basketRedraw?.();message(F('바구니에 주석 {0}개를 되돌렸습니다.',removed.length));});
+   },acts,{'data-writes':'cache',class:'sc-quiet-action'});
+   const made=model.basketStore(runtime.cache,lib,false).note;
+   if(made&&made.signature===model.basketSignature(list))button('만든 노트 열기',()=>library.openItem(made.id),acts,{'data-opens':'window'});
+   if(!open)return;
+   const ol=node('ol',null,box,{class:'sc-basket-list','aria-label':'바구니 주석 순서'});
+   let dragging=null;
+   list.forEach((e,index)=>{
+    const li=node('li',null,ol,{class:'sc-basket-item',tabindex:'0',draggable:'true','data-id':e.id,'aria-label':F('{0}번째 · {1}쪽 · {2}',index+1,e.page||'?',basketSource(e)).text});
+    const dot=node('span',null,li,{class:'sc-annot-dot','aria-hidden':'true'});dot.style.background=/^#[0-9a-f]{6}$/i.test(e.color)?e.color:'var(--sc-faint)';
+    node('span',e.page?D('p.'+e.page):'',li,{class:'sc-basket-page'});
+    node('span',e.text?D(e.text):e.type==='image'?T('그림 주석'):e.type==='ink'?T('필기 주석'):T('내용 없음'),li,{class:'sc-basket-text'});
+    node('span',D(basketSource(e)),li,{class:'sc-muted sc-basket-source',title:D(e.paperTitle||'')});
+    const tools=node('span',null,li,{class:'sc-basket-tools'});
+    const move=step=>{if(model.basketMove(runtime.cache,lib,e.id,step,{relative:true}))changed(e.id);};
+    const up=button('',()=>move(-1),tools,{class:'sc-icon-button','data-basket':'up','data-writes':'cache','aria-label':'위로 옮기기',title:'위로 옮기기'});setIcon(up,'moveUp');up.disabled=index===0;
+    const down=button('',()=>move(1),tools,{class:'sc-icon-button','data-basket':'down','data-writes':'cache','aria-label':'아래로 옮기기',title:'아래로 옮기기'});setIcon(down,'moveDown');down.disabled=index===list.length-1;
+    const drop=button('',()=>{const next=list[index+1]?.id||list[index-1]?.id||'';model.basketRemove(runtime.cache,lib,[e.id]);changed(next);},tools,{class:'sc-icon-button','data-basket':'remove','data-writes':'cache','aria-label':'바구니에서 빼기',title:'바구니에서 빼기'});setIcon(drop,'close');
+    li.addEventListener('keydown',event=>{
+     if(event.target!==li)return;
+     if((event.key==='ArrowUp'||event.key==='ArrowDown')&&event.altKey){event.preventDefault?.();move(event.key==='ArrowUp'?-1:1);return;}
+     if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault?.();(event.key==='ArrowUp'?li.previousElementSibling:li.nextElementSibling)?.focus?.();return;}
+     if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault?.();drop.click();}
+    });
+    li.addEventListener('dragstart',event=>{dragging=e.id;try{event.dataTransfer?.setData('text/plain',e.id);if(event.dataTransfer)event.dataTransfer.effectAllowed='move';}catch(_){}li.dataset.dragging='true';});
+    li.addEventListener('dragend',()=>{dragging=null;delete li.dataset.dragging;});
+    li.addEventListener('dragover',event=>{event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='move';});
+    li.addEventListener('drop',event=>{
+     event.preventDefault();
+     let from=dragging;try{from=from||event.dataTransfer?.getData('text/plain');}catch(_){}
+     if(from&&from!==e.id&&model.basketMove(runtime.cache,lib,from,index))changed(from);
+    });
+   });
+   node('p','끌거나 Alt+↑↓로 순서를 바꾸고, ×나 Delete로 뺍니다. 노트와 Markdown은 이 순서를 따릅니다.',box,{class:'sc-muted sc-basket-hint'});
+  }
+  // A note made from this very basket and still there is not made again: the round-19 rule for 이 문헌 주석에서 노트 만들기.
+  async function basketNoteStillThere(made){
+   try{const item=runtime.Z.Items.get?.(Number(made.id));if(item)return !item.deleted;}catch(_){}
+   if(made.parent){try{return (await library.notes([String(made.parent)])).some(n=>String(n.id)===String(made.id));}catch(_){}}
+   return false;
+  }
+  async function basketNote(){
+   const lib=basketLib(),list=basketList();
+   if(!list.length)return;
+   const signature=model.basketSignature(list),made=model.basketStore(runtime.cache,lib,false).note;
+   if(made&&made.signature===signature&&await basketNoteStillThere(made)){message('이 바구니로 만든 노트가 이미 있습니다. 바구니를 바꾸면 새로 만들 수 있습니다.');return;}
+   if(list.some(e=>!e.paper))throw new Error('부모 문헌이 없는 PDF의 주석은 노트로 모을 수 없습니다. 바구니에서 빼고 다시 누르세요.');
+   const papers=[...new Set(list.map(e=>e.paper))];
+   let id;
+   // One paper: a child note through Zotero's own serializer. Several: one standalone note, a heading per run of one paper, in basket order.
+   if(papers.length===1)id=await library.noteFromAnnotations(list.map(e=>e.id));
+   else{
+    const collection=win.ZoteroPane?.getSelectedCollection?.();
+    id=await library.synthesisNote(model.basketRuns(list).map(run_=>({id:run_.paper,evidence:[],annotationIDs:run_.ids})),{title:T('주석 바구니')+' · '+new Date().toISOString().slice(0,10),collectionID:collection?.id});
+   }
+   noteCache=null;
+   model.basketStore(runtime.cache,lib,true).note={id:String(id),signature,parent:papers.length===1?papers[0]:'',at:new Date().toISOString()};
+   basketSaved();basketRedraw?.();
+   message(papers.length===1?F('바구니 주석 {0}개로 이 문헌 아래에 노트를 만들었습니다.',list.length):F('문헌 {0}편의 바구니 주석 {1}개로 종합 노트를 만들었습니다. 각 주석 위치로 가는 링크가 들어 있습니다.',papers.length,list.length));
+  }
+  function basketMarkdownCopy(){
+   const lib=basketLib(),list=basketList();
+   if(!list.length)return;
+   const keyOf=id=>{try{return String(runtime.Z.Items.get?.(Number(id))?.key||'');}catch(_){return '';}};
+   let route='library';
+   if(lib!==(runtime.Z.Libraries?.userLibraryID??lib)){const group=(()=>{try{return runtime.Z.Groups?.getGroupIDFromLibraryID?.(lib);}catch(_){return null;}})();route=group?'groups/'+group:'';}
+   copy(model.basketMarkdown(list,{title:T('주석 바구니')+' · '+new Date().toISOString().slice(0,10),attachmentKey:route?keyOf:()=>'',route,
+    labels:{references:T('참고문헌'),open:T('원문'),image:T('[그림 주석]'),ink:T('[필기 주석]')}}));
+  }
+  function basketToCompare(){
+   const papers=[...new Set(basketList().map(e=>e.paper).filter(Boolean))];
+   if(!papers.length)throw new Error('바구니 주석이 있는 문헌을 찾지 못했습니다. 주석 탭에서 문헌에 딸린 주석을 바구니에 담은 뒤 다시 누르세요.');
+   state.matrixBasket=true;
+   return navigateSelection('matrix',papers,T('주석 바구니'));
+  }
   async function drawAnnotations(token){
    /* '색 없음' and "no colour filter" both used state.color=''; pressing the
       chip could not tell one from the other and did nothing. A sentinel that
@@ -3949,6 +4070,11 @@
    // The three things done to a selection sit with the selection, after the
    // list's summary; the colour swatches there filter by colour, so the hex
    // box and its button are gone.
+   const basketBox=node('section',null,body,{class:'sc-basket','aria-label':'주석 바구니'});
+   let syncCards=()=>{};
+   const drawBasketBar=()=>drawAnnotationBasket(basketBox,()=>syncCards());
+   basketRedraw=()=>{drawBasketBar();syncCards();};
+   drawBasketBar();
    const selectionTools=node('div',null,null,{class:'sc-annot-selection'});
    const chosenCount=node('span','',selectionTools,{class:'sc-annot-chosen',role:'status'});
    const colorEdit=node('input',null,selectionTools,{type:'color',value:'#ffd400','aria-label':'선택 주석 새 색상',title:'선택 주석에 칠할 색'});
@@ -3981,6 +4107,8 @@
     const chosen=[...state.annotationIDs].filter(id=>visibleAnnotationIDs.has(id));
     const mark=epoch;
     const id=await library.mergeAnnotations(chosen,{isCurrent:()=>!disposed&&!panel.hidden&&epoch===mark});
+    // The others went to the trash: the basket keeps the one that remains.
+    basketDrop(chosen.map(String).filter(c=>c!==String(id)));
     state.annotationIDs=new Set([String(id)]);
     await render();message('주석을 병합했습니다. 나머지 주석은 휴지통에서 복원할 수 있습니다.');
    },selectionTools,{'data-needs':'2',title:'병합은 같은 PDF·유형·색상에, 같은 페이지 또는 인접한 두 페이지에서만 됩니다. 기존 참조 노트의 링크는 바뀌지 않습니다.'});
@@ -4004,7 +4132,8 @@
     return false;
    });
    const filtered=unfiltered.filter(a=>colorMatches(a)&&(!state.annotationPaperID||String(a.parentID||'')===state.annotationPaperID));
-   state.annotationIDs=new Set([...state.annotationIDs].filter(id=>filtered.some(a=>a.id===id)));
+   // What is chosen is what is in the basket and on screen; a filter hides a choice, it never drops it.
+   {const inBasket=basketIDs();state.annotationIDs=new Set(filtered.filter(a=>inBasket.has(String(a.id))).map(a=>a.id));}
    setNavBadge(filtered.length||null);
 
    // Nothing at all to show: no chips or table either. With annotations that a colour or paper filter hides, those stay (below).
@@ -4127,12 +4256,13 @@
     button('색·문헌 필터 해제',()=>{state.color='';state.annotationPaperID='';render();},emptyActions(emptied),{'data-variant':'primary'});
     return;
    }
-   button('보이는 주석 전체 선택',()=>{state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary,{class:'sc-annot-select-all'});
+   button('보이는 주석 전체 선택',()=>{basketAddMarks(filtered.filter(a=>visibleAnnotationIDs.has(a.id)));state.annotationIDs=new Set(visibleAnnotationIDs);render();},summary,{class:'sc-annot-select-all','data-writes':'cache'});
    // Drawn every time, hidden by syncChosen() rather than only appearing when
    // annotationIDs already had something in it at draw time -- selecting the
    // first card never redraws the panel, so a button that only exists when
    // the count was already non-zero could never appear on that first click.
-   const clearBtn=button('선택 해제',()=>{state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear'});
+   // The chosen cards on screen leave the basket; ones chosen under another filter stay (바구니 비우기 empties it all).
+   const clearBtn=button('선택 해제',()=>{basketDrop([...state.annotationIDs]);state.annotationIDs=new Set();render();},summary,{'data-role':'annot-clear','data-writes':'cache'});
    // The three verbs act on the selection, so with nothing chosen there is
    // nothing here to show -- not a row of disabled buttons waiting for one.
    const syncChosen=()=>{
@@ -4227,7 +4357,7 @@
       left--;
        visibleAnnotationIDs.add(a.id);annotationPaper.set(String(a.id),String(a.parentID||''));
        const tint=/^#[0-9a-f]{6}$/i.test(a.color)?a.color:'var(--sc-faint)';
-       const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id))});
+       const row=node('article',null,stack,{class:'sc-annot',tabindex:'0','data-selected':String(state.annotationIDs.has(a.id)),'data-annotation-id':String(a.id)});
        // The annotation's colour, shown as a square before its page (see the CSS).
        row.style.setProperty('--sc-annot',tint);
        const head=node('div',null,row,{class:'sc-annot-head'});
@@ -4269,10 +4399,11 @@
        // label longer than most of the annotations.
        row.addEventListener('click',event=>{
         if(event.target.closest('button, textarea, a'))return;
-        if(state.annotationIDs.has(a.id))state.annotationIDs.delete(a.id);
-        else state.annotationIDs.add(a.id);
+        // A chosen card is in the basket; choosing it again takes it out.
+        if(state.annotationIDs.has(a.id)){state.annotationIDs.delete(a.id);basketDrop([a.id]);}
+        else{state.annotationIDs.add(a.id);basketAddMarks([a]);}
         row.dataset.selected=String(state.annotationIDs.has(a.id));
-        syncChosen();
+        syncChosen();drawBasketBar();
        });
        row.addEventListener('keydown',event=>{
         if(event.target!==row)return; // Space and Enter typed in the memo stay in the memo.
@@ -4283,6 +4414,12 @@
      if(capped)viewButton(T(`이 문헌 주석 ${paperEntry.count-3}개 더 보기`),()=>{openAnnotGroups.add(paperEntry.key);render();},paperBox,{class:'sc-annot-group-more'});
    }
    syncChosen();
+   syncCards=()=>{
+    const inBasket=basketIDs();
+    state.annotationIDs=new Set([...visibleAnnotationIDs].filter(id=>inBasket.has(String(id))));
+    for(const card of body.querySelectorAll('.sc-annot[data-annotation-id]'))card.dataset.selected=String(inBasket.has(card.dataset.annotationId));
+    syncChosen();
+   };
    if(rest.length){
     const more=rest.reduce((sum,entry)=>sum+entry.count,0);
     const wrap=node('div',null,body,{class:'sc-annot-more'});
@@ -5790,13 +5927,16 @@
    let typing=null;
    search.addEventListener('input',()=>{state.matrixPickerQuery=search.value;state.matrixPickerAll=false;win.clearTimeout(typing);typing=win.setTimeout(drawResults,150);});
   }
-  const CLAMPED=new Set(['abstract','summary','remark']);
+  const CLAMPED=new Set(['abstract','summary','remark','basket']);
   // 논문 비교 evidence fields, in the order a methods table reads them; kept per paper by runtime.setEvidence.
   // Saves still in flight; an export waits for them so the last edit is in it.
   const evidenceSaves=new Set(),settleEvidence=async()=>{while(evidenceSaves.size)await Promise.allSettled([...evidenceSaves]);};
   const EVIDENCE=[['species','생물종/균주'],['construct','construct'],['condition','조건'],['control','대조군'],['result','결과'],['limit','한계']];
   function drawMatrix(){
    const available=[['title','제목'],['authors','저자'],['year','발행연도'],['venue','저널'],['doi','DOI'],['citations','인용 수'],['impactFactor','IF'],['status','읽기 상태'],['rating','별점'],['seconds','읽기 시간'],['tags','태그'],['abstract','초록'],['remark','읽기 메모'],['summary','AI 요약'],...EVIDENCE.map(([key,label])=>['ev_'+key,label])];
+   // The basket's annotations per paper, a column while the basket holds any (sent from 주석 바구니, it is shown at once).
+   const basketByPaper=new Map();for(const e of basketList()){if(!e.paper)continue;if(!basketByPaper.has(e.paper))basketByPaper.set(e.paper,[]);basketByPaper.get(e.paper).push(e);}
+   if(basketByPaper.size)available.splice(1,0,['basket','바구니 주석']);
    // The deciding figures come right after the name, ahead of venue and
    // authors, so they fit before a docked panel runs out of width; DOI is
    // still there to add back, but nobody compares two papers by their DOI.
@@ -5814,6 +5954,7 @@
    const saved=runtime.cache.matrixFields;
    const fields=Array.isArray(saved)?[...new Set(saved.filter(field=>available.some(([key])=>field===key)))]:defaultFields;
    if(!fields.length)fields.push(...defaultFields);
+   if(state.matrixBasket&&basketByPaper.size&&!fields.includes('basket'))fields.splice(1,0,'basket');
    /* 2-4 papers flip to one row per paper by default -- the shape that fits a
       docked panel without a scrollbar -- but a reader who has chosen a side
       keeps it: null means "decide for me", true/false means they did. */
@@ -5840,7 +5981,8 @@
     const ref=runtime.Z.Items.get(Number(item.id)),entry=ref?runtime.entry(ref):{};
     const seconds=Number(item.seconds)||0;
     const evidence=ref&&typeof runtime.evidenceOf==='function'?runtime.evidenceOf(ref):{};
-    return {...item,...Object.fromEntries(EVIDENCE.map(([key])=>['ev_'+key,evidence[key]||''])),tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
+    const marks=basketByPaper.get(String(item.id))||[];
+    return {...item,basket:marks.map(e=>(e.page?'p.'+e.page+' ':'')+'“'+(e.text||T(e.type==='image'?'그림 주석':e.type==='ink'?'필기 주석':'내용 없음'))+'”'+(e.comment?' — '+e.comment:'')).join('\n'),...Object.fromEntries(EVIDENCE.map(([key])=>['ev_'+key,evidence[key]||''])),tags:(item.tags||[]).join(' · '),remark:entry.remark||'',summary:entry.summary||'',
      status:T(STATUS[item.status]||item.status||'안 읽음'),
      seconds:seconds>0?(runtime.formatReadTime?runtime.formatReadTime(seconds,{compact:true}):`${seconds}초`):''};
    });
@@ -5853,7 +5995,7 @@
     }),b,{title:T('생물종/균주 · construct · 조건 · 대조군 · 결과 · 한계 칸을 표에 넣고 직접 적습니다')});
     button('종합 노트 만들기',()=>run(async()=>{
      await settleEvidence();
-     const wanted=new Set([...state.annotationIDs].map(String)),marks=wanted.size?(await library.annotations(values.map(v=>v.id))).filter(m=>wanted.has(String(m.id))):[];
+     const wanted=new Set([...basketIDs(),...state.annotationIDs].map(String)),marks=wanted.size?(await library.annotations(values.map(v=>v.id))).filter(m=>wanted.has(String(m.id))):[];
      const entries=values.map(v=>({id:v.id,evidence:EVIDENCE.map(([key,label])=>[label,v['ev_'+key]]),annotationIDs:marks.filter(m=>String(m.parentID)===String(v.id)).map(m=>m.id)}))
       .filter(entry=>entry.annotationIDs.length||entry.evidence.some(([,text])=>String(text||'').trim()));
      if(!entries.length){message('적어 둔 근거 칸이나 고른 주석이 없어 노트를 만들지 않았습니다. 칸에 내용을 적거나 주석 탭에서 주석을 고르세요.',true);return;}
@@ -7739,15 +7881,22 @@
     if(state.namesakeOpen)fold.open=true;
     fold.addEventListener('toggle',()=>{state.namesakeOpen=fold.open;});
     node('summary',T(`확인 필요 ${held.length}`),fold);
-    node('p',T('같은 이름의 다른 사람 논문일 수 있습니다. 이 저자의 알려진 소속과 겹치지 않아 새 논문 수에서 뺐습니다.'),fold,{class:'sc-muted sc-inbox-note'});
+    /* Judged only by what the reader trusts: papers held in the library, papers
+       marked as the author's own, and the author's ORCID. The places OpenAlex
+       lists on a merged profile are a namesake's as often as not. */
+    node('p',T('같은 이름의 다른 사람 논문일 수 있습니다. 보유 논문·ORCID·직접 확인한 논문의 소속이나 공저자와 겹치지 않아 새 논문 수에서 뺐습니다.'),fold,{class:'sc-muted sc-inbox-note'});
+    const REASON={
+     'no-place':'논문에 이 저자의 소속이 없고, 확인된 논문과 겹치는 공저자가 부족합니다',
+     'profile-only':'OpenAlex 프로필에만 있는 소속입니다. 합쳐진 동명이인의 소속일 수 있습니다',
+     'other-place':'보유 논문·ORCID·확인한 논문 어디에도 없는 소속입니다'};
     for(const {person,work} of held){
      const row=node('div',null,fold,{class:'sc-author-inbox-row'});
      node('b',D(work.title||work.doi||work.id),row);
      node('p',D([person.name,work.venue,(work.date||'').slice(0,4),(work.places||[]).join(', ')].filter(Boolean).join(' · ')),row,{class:'sc-muted'});
-     node('p',T('동명이인일 수 있음'),row,{class:'sc-muted'});
+     node('p',T(REASON[work.reason]||'동명이인일 수 있음'),row,{class:'sc-muted sc-namesake-reason'});
      const acts=node('div',null,row,{class:'sc-hit-actions'});
-     button('이 저자의 논문입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,true);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{class:'sc-namesake-confirm'});
-     button('다른 사람입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,false);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{class:'sc-namesake-reject'});
+     button('이 저자의 논문입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,true);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{'data-writes':'cache',class:'sc-namesake-confirm',title:T('본인 논문으로 표시합니다. 이 논문의 소속과 공저자는 다음부터 이 저자를 가리는 근거가 됩니다')});
+     button('다른 사람입니다',()=>run(async()=>{await runtime.resolveNamesake(person.id,work.id,false);if(!disposed&&state.tab==='authors')refreshWatched();}),acts,{'data-writes':'cache',class:'sc-namesake-reject'});
     }
    }
    function drawAuthorInbox(watched,parent,hook={}){
@@ -7792,8 +7941,8 @@
       if(token!==epoch||disposed||state.tab!=='authors')return;
       refreshWatched();
       if(result.budgetGone)message(T('OpenAlex 하루 한도를 다 썼습니다. 한국 시간 오전 9시에 초기화되니 그때 다시 확인하세요.'),true);
-      else message(F('미분류 {0}편을 확인했습니다: {1}편은 이 저자의 논문, {2}편은 확인 필요로 옮겼습니다. 요청 {3}회.',result.asked,result.settled,result.held,result.requests));
-     }),line,{'data-writes':'cache',class:'sc-quiet-action',title:F('OpenAlex 요청 {0}회로 각 논문에 적힌 이 저자의 소속을 읽어 가립니다',requests).text});
+      else message(F('미분류 {0}편을 확인했습니다: {1}편은 이 저자의 논문, {2}편은 확인 필요로 옮겼습니다. 요청 {3}회.',result.asked,result.settled,result.held,result.requests+(result.orcidRequests||0)));
+     }),line,{'data-writes':'cache',class:'sc-quiet-action',title:F('OpenAlex 요청 {0}회로 각 논문에 적힌 이 저자의 소속을 읽고, 보유 논문·ORCID 경력과 맞춰 가립니다',requests).text});
     }
     // The author picked in the 관계 map narrows this list; counts follow it.
     const focused=()=>state.authorFocus?watched.find(p=>p.id===state.authorFocus)||null:null;

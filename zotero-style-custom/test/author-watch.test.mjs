@@ -199,7 +199,9 @@ test("an author who has never been checked uses the default window", async () =>
 test("a sweep notices a lab move and a first-time co-author, and drops repository deposits", async () => {
   const signed = (author, place) => ({author: {id: "https://openalex.org/" + author, display_name: author},
     author_position: "first", institutions: place ? [{display_name: place}] : []});
-  const rows = [{id: "A1", name: "Ada", institution: "MIT", institutionRor: "042nb2s44", places: [{name: "Massachusetts Institute of Technology", ror: "042nb2s44"}], seen: ["W0"], coauthorsSeen: ["Old Friend"], sweptAt: "2026-07-01T00:00:00Z"}];
+  // ORCID already lists Stanford (kept two months, so not asked again): the papers signed from there are hers.
+  const rows = [{id: "A1", name: "Ada", institution: "MIT", institutionRor: "042nb2s44", places: [{name: "Massachusetts Institute of Technology", ror: "042nb2s44"}], seen: ["W0"], coauthorsSeen: ["Old Friend"], sweptAt: "2026-07-01T00:00:00Z",
+    orcidPlaces: [{name: "Stanford University", ror: ""}], orcidCheckedAt: new Date().toISOString()}];
   const pages = [{
     results: [
       // Signed from Stanford now, with someone never seen before.
@@ -621,10 +623,11 @@ test("a paper signed only from places the author was never at is held as unverif
     signed("W3", "A1", [])], meta: {}}]});
   const result = await h.sweepWatchedAuthors();
   const saved = h.cache.watchedAuthors[0];
-  assert.deepEqual(saved.news.map(n => n.id).sort(), ["W1", "W3"]);
-  assert.deepEqual(saved.unverified.map(n => n.id), ["W2"]);
-  assert.equal(saved.unverified[0].places[0], "Nanjing Agricultural University");
-  assert.equal(result.works, 2, "the held paper is not in the new-paper total");
+  assert.deepEqual(saved.news.map(n => n.id).sort(), ["W1"]);
+  // A paper signed from nowhere, with no coauthor of trusted papers, is held too (round 21: Stockwell's unsigned protocol).
+  assert.deepEqual(saved.unverified.map(n => [n.id, n.reason]).sort(), [["W2", "other-place"], ["W3", "no-place"]]);
+  assert.equal(saved.unverified.find(n => n.id === "W2").places[0], "Nanjing Agricultural University");
+  assert.equal(result.works, 1, "the held papers are not in the new-paper total");
 });
 
 test("confirming a held paper makes it news and teaches the place; rejecting remembers it", async () => {
@@ -765,23 +768,25 @@ test("news swept before the classifier has nothing to judge by: marked unclassif
   assert.equal(saved.placesSeen, undefined, "the row itself still reads as never classified by a sweep");
 });
 
-test("once a row has verified papers, a stored paper with no data and no shared coauthor is held; one that shares a coauthor stays", () => {
-  const row = person("A1", {name: "Huimin Zhao", confirmed: [], news: [
-    nw("Wv", {verified: "place", people: ["Huimin Zhao", "Real Colleague"]}),
-    nw("Wshared", {people: ["Real Colleague", "Other"]}),
+test("a stored paper with no places is settled by two coauthors of a confirmed paper; otherwise it waits as 미분류 for 지금 가리기", () => {
+  const row = person("A1", {name: "Huimin Zhao", confirmed: ["Wv"], news: [
+    nw("Wv", {verified: "confirmed", people: ["Huimin Zhao", "Real Colleague", "Second Colleague"]}),
+    nw("Wshared", {people: ["Real Colleague", "Second Colleague", "Other"]}),
+    nw("Wone", {people: ["Real Colleague", "Other"]}),
     nw("Wrice", {people: ["Somebody Else", "Another One"]})]});
   const h = host({rows: [row], pages: []});
   h.reclassifyStoredNews();
   const saved = h.cache.watchedAuthors[0];
-  assert.deepEqual(saved.news.map(n => n.id).sort(), ["Wshared", "Wv"]);
-  assert.deepEqual(saved.unverified.map(n => n.id), ["Wrice"]);
+  assert.equal(saved.news.find(n => n.id === "Wshared").verified, "coauthors");
+  assert.deepEqual(saved.news.filter(n => n.unclassified).map(n => n.id).sort(), ["Wone", "Wrice"], "not held on no evidence: read back first");
+  assert.equal(saved.unverified, undefined);
 });
 
-test("a fresh paper that names no institution is unverified unless it shares a coauthor with verified work", async () => {
+test("a fresh paper that names no institution is unverified unless it shares two coauthors with verified work", async () => {
   const none = (id, names) => work(id, [], {authorships: names.map((n, i) => ({author: {id: "https://openalex.org/" + (i ? "X" + n : "A1"), display_name: i ? n : "Ada"}, author_position: "first", institutions: []}))});
   const h = host({rows: [person("A1", {name: "Ada", institution: "Somewhere"})], pages: [{results: [
-    work("W1", [], {authorships: [{author: {id: "https://openalex.org/A1", display_name: "Ada"}, author_position: "first", institutions: [{display_name: "Somewhere"}]}, {author: {id: "https://openalex.org/XBo", display_name: "Bo"}, author_position: "middle", institutions: []}]}),
-    none("W2", ["Ada", "Bo"]), none("W3", ["Ada", "Stranger"])], meta: {}}]});
+    work("W1", [], {authorships: [{author: {id: "https://openalex.org/A1", display_name: "Ada"}, author_position: "first", institutions: [{display_name: "Somewhere"}]}, {author: {id: "https://openalex.org/XBo", display_name: "Bo Chen"}, author_position: "middle", institutions: []}, {author: {id: "https://openalex.org/XCy", display_name: "Cy Park"}, author_position: "middle", institutions: []}]}),
+    none("W2", ["Ada", "Bo Chen", "Cy Park"]), none("W3", ["Ada", "Bo Chen", "Stranger"])], meta: {}}]});
   await h.sweepWatchedAuthors();
   const saved = h.cache.watchedAuthors[0];
   assert.deepEqual(saved.news.map(n => n.id).sort(), ["W1", "W2"]);
@@ -1058,4 +1063,28 @@ test("stored news keeps the co-author list with ids, so a last-author PI's paper
   assert.deepEqual(big.coauthors, []);
   assert.equal(big.authorCount, 41);
   assert.equal(portrait.egoGraph({me: {id: "A1", name: "A1 Name"}, news: [big]}).nodes.length, 0, "a crowd is not a co-author circle, even when the followed author is among the first six");
+});
+
+/* Round 21: a sweep reads ORCID for the people it found papers for, in one
+   batched search, and a place listed only on the OpenAlex profile (a move it
+   has recorded, or a namesake's) does not vouch for a paper by itself. */
+test("a sweep asks ORCID once for the authors with papers; a profile-only place is held until ORCID or the user vouches", async () => {
+  const at = (id, place) => work(id, [], {authorships: [{author: {id: "https://openalex.org/A1", display_name: "Ada"}, author_position: "last", institutions: [{display_name: place}]}]});
+  const rows = [person("A1", {name: "Ada", institution: "MIT"}), person("A2", {name: "Bo"})];
+  const profiles = [{results: [{id: "https://openalex.org/A1", display_name: "Ada", orcid: "https://orcid.org/0000-0001-0000-0001",
+    last_known_institutions: [{display_name: "Stanford University"}, {display_name: "MIT"}], affiliations: []},
+    {id: "https://openalex.org/A2", display_name: "Bo", orcid: "https://orcid.org/0000-0001-0000-0002", last_known_institutions: [], affiliations: []}]}];
+  const h = host({rows, pages: [{results: [at("W1", "Stanford University"), at("W2", "MIT")], meta: {}}], profiles});
+  h.fetchOrcidPlaces = Runtime.prototype.fetchOrcidPlaces;
+  const orcidCalls = [];
+  h.Z.HTTP = {async request(method, url) { orcidCalls.push(url); return {status: 200, response: {"expanded-result": [{"orcid-id": "0000-0001-0000-0001", "institution-name": []}]}}; }};
+  const result = await h.sweepWatchedAuthors();
+  assert.equal(orcidCalls.length, 1);
+  assert.match(decodeURIComponent(orcidCalls[0]), /0000-0001-0000-0001/);
+  assert.doesNotMatch(decodeURIComponent(orcidCalls[0]), /0000-0001-0000-0002/, "Bo found nothing: not asked");
+  assert.equal(result.orcidRequests, 1);
+  const ada = h.cache.watchedAuthors[0];
+  assert.deepEqual(ada.news.map(n => n.id), ["W2"]);
+  assert.deepEqual(ada.unverified.map(n => [n.id, n.reason]), [["W1", "profile-only"]]);
+  assert.ok(ada.orcidCheckedAt);
 });

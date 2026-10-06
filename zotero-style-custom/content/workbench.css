@@ -3224,3 +3224,46 @@
 #style-custom-workbench .sc-ego-rest { margin: var(--sc-space-2) 0 0; color: var(--sc-muted); font: var(--sc-card-meta); }
 #style-custom-workbench .sc-ego-rest > summary { cursor: pointer; color: var(--sc-text); }
 #style-custom-workbench .sc-ego-rest-list { display: flex; flex-wrap: wrap; gap: var(--sc-space-1) var(--sc-space-3); margin: var(--sc-space-2) 0 0; padding: 0; list-style: none; }
+
+/* ==== 주석 바구니 (round 21): a slim white card over the list; opened, a soft grey tray of rows ==== */
+#style-custom-workbench .sc-basket {
+  display: flex; flex-direction: column; gap: var(--sc-space-2);
+  margin: var(--sc-space-1) 0 var(--sc-space-3); padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-card); background: var(--sc-surface-alt);
+}
+#style-custom-workbench .sc-basket[hidden] { display: none; }
+#style-custom-workbench .sc-basket-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); min-height: var(--sc-h-ctl); }
+#style-custom-workbench .sc-basket-title { display: inline-flex; align-items: center; gap: 6px; color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-title)/var(--sc-lh-title) var(--sc-font); }
+#style-custom-workbench .sc-basket-icon { display: inline-flex; color: var(--sc-muted); }
+#style-custom-workbench .sc-basket-icon svg { width: 16px; height: 16px; }
+#style-custom-workbench .sc-basket-count {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  height: var(--sc-h-badge); min-width: var(--sc-h-badge); padding: 0 6px; border-radius: var(--sc-radius-pill);
+  background: var(--sc-nav-on); color: var(--sc-nav-on-ink);
+  font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); font-variant-numeric: tabular-nums;
+}
+#style-custom-workbench .sc-basket-papers { font: var(--sc-card-meta); }
+#style-custom-workbench .sc-basket-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1); margin-inline-start: auto; }
+#style-custom-workbench .sc-basket-list {
+  display: flex; flex-direction: column; gap: var(--sc-space-1); max-height: 340px; overflow: auto;
+  margin: 0; padding: 0; list-style: none;
+}
+#style-custom-workbench .sc-basket-item {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--sc-space-2);
+  min-height: var(--sc-h-ctl); padding: 2px var(--sc-space-1) 2px var(--sc-space-2);
+  border-radius: var(--sc-radius); background: var(--sc-row-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); cursor: grab;
+}
+#style-custom-workbench .sc-basket-item:hover { box-shadow: 0 0 0 1px var(--sc-border-strong); }
+#style-custom-workbench .sc-basket-item:focus-visible { outline: 2px solid var(--sc-focus); outline-offset: 1px; }
+#style-custom-workbench .sc-basket-item[data-dragging=true] { opacity: .55; cursor: grabbing; }
+#style-custom-workbench .sc-basket-page { color: var(--sc-muted); font: var(--sc-fw-medium) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#style-custom-workbench .sc-basket-text { min-width: 0; overflow: hidden; color: var(--sc-text); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-basket-source { max-width: 18ch; overflow: hidden; font: var(--sc-card-meta); text-overflow: ellipsis; white-space: nowrap; }
+#style-custom-workbench .sc-basket-tools { display: inline-flex; gap: 2px; }
+#style-custom-workbench .sc-basket-tools .sc-icon-button { width: 24px; min-width: 24px; height: 24px; min-height: 24px; }
+#style-custom-workbench .sc-basket-tools .sc-icon-button:disabled { background: transparent; opacity: .35; }
+#style-custom-workbench .sc-basket-hint { margin: 0; font: var(--sc-card-meta); }
+@container sc-workbench (max-width: 820px) {
+  #style-custom-workbench .sc-basket-actions { flex-basis: 100%; margin-inline-start: 0; }
+  #style-custom-workbench .sc-basket-source { display: none; }
+}

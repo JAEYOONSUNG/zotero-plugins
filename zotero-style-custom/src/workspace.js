@@ -401,6 +401,76 @@
  function unlinkCards(board,from,to){const before=board.edges.length;board.edges=board.edges.filter(e=>!((e.source===from&&e.target===to)||(e.source===to&&e.target===from)));return before-board.edges.length;}
  function deleteBoard(cache,id){const board=(cache.boards||[]).find(b=>b.id===id);if(!board)return null;cache.boards=cache.boards.filter(b=>b.id!==id);cache.boardTrash=[...(cache.boardTrash||[]),board].slice(-20);return board;}
  function restoreBoard(cache){const board=cache.boardTrash?.at(-1);if(!board)return null;if((cache.boards||[]).some(b=>b.id===board.id))throw new Error('같은 이름의 보드가 이미 있습니다. 다른 이름을 쓰세요.');cache.boardTrash.pop();cache.boards=[...(cache.boards||[]),board];return board;}
- const api={matchesQuery,journalKeys,journalScore,journalChoices,legacyRules,parseQuery,parseTree,isBoolean,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard};
+ /* 주석 바구니: annotations gathered across filters, papers and searches,
+    kept per library in the cache ({[libraryID]: {items, note}}), in the
+    order the reader put them. Each entry keeps enough to be shown and cited
+    when its paper is outside the current scope. */
+ const BASKET_LIMIT=500;
+ function basketStore(cache,libraryID,create){
+  const all=cache.annotationBasket&&typeof cache.annotationBasket==='object'&&!Array.isArray(cache.annotationBasket)?cache.annotationBasket:(create?(cache.annotationBasket={}):{});
+  const key=String(libraryID??'');
+  let store=all[key];
+  if(!store||typeof store!=='object'||!Array.isArray(store.items)){if(!create)return {items:[]};store=all[key]={items:[]};}
+  return store;
+ }
+ function basketEntry(a){
+  const paper=a?.paper&&typeof a.paper==='object'?a.paper:null;
+  const cut=(value,n)=>text(value).slice(0,n);
+  return {id:text(a?.id),key:text(a?.key),paper:text(paper?.id??(typeof a?.paper==='string'?a.paper:a?.parentID??'')),attachment:text(a?.attachment??a?.attachmentID??''),
+   text:cut(a?.text,1200),comment:cut(a?.comment,600),color:text(a?.color).toLowerCase(),page:text(a?.page??a?.pageLabel??(Number.isInteger(a?.pageIndex)?a.pageIndex+1:'')),
+   pageIndex:Number.isInteger(a?.pageIndex)?a.pageIndex:null,type:text(a?.type),
+   paperTitle:cut(paper?.title??a?.paperTitle,300),authors:cut(paper?.authors??a?.authors,300),year:text(paper?.year??a?.year).slice(0,4),venue:cut(paper?.venue??a?.venue,200),doi:text(paper?.doi??a?.doi).slice(0,200)};
+ }
+ function basketItems(cache,libraryID){return basketStore(cache||{},libraryID,false).items.filter(e=>e&&e.id);}
+ function basketAdd(cache,libraryID,marks){
+  const store=basketStore(cache,libraryID,true),have=new Set(store.items.map(e=>e.id));
+  for(const mark of marks||[]){const entry=basketEntry(mark);if(!entry.id||have.has(entry.id)||store.items.length>=BASKET_LIMIT)continue;have.add(entry.id);store.items.push(entry);}
+  return store.items;
+ }
+ function basketRemove(cache,libraryID,ids){const out=new Set((ids||[]).map(String)),store=basketStore(cache,libraryID,true);store.items=store.items.filter(e=>!out.has(e.id));return store.items;}
+ // To an index, or by a step with {relative:true}; clamped at both ends.
+ function basketMove(cache,libraryID,id,to,{relative=false}={}){
+  const store=basketStore(cache,libraryID,true),from=store.items.findIndex(e=>e.id===String(id));
+  if(from<0)return false;
+  const target=Math.max(0,Math.min(store.items.length-1,relative?from+Number(to):Number(to)));
+  if(target===from||!Number.isFinite(target))return false;
+  const [entry]=store.items.splice(from,1);store.items.splice(target,0,entry);return true;
+ }
+ function basketClear(cache,libraryID){const store=basketStore(cache,libraryID,true),removed=store.items;store.items=[];return removed;}
+ function basketRestore(cache,libraryID,removed){const store=basketStore(cache,libraryID,true),have=new Set(store.items.map(e=>e.id));store.items=[...(removed||[]).filter(e=>e&&!have.has(e.id)),...store.items].slice(0,BASKET_LIMIT);return store.items;}
+ // What one note is made of: the ids in order.
+ function basketSignature(list){return (list||[]).map(e=>e.id).join(',');}
+ // Consecutive entries of one paper, so a synthesis note keeps the basket's order with a heading per run.
+ function basketRuns(list){const runs=[];for(const e of list||[]){const last=runs[runs.length-1];if(last&&last.paper===e.paper)last.ids.push(e.id);else runs.push({paper:e.paper,ids:[e.id]});}return runs;}
+ const familyOf=name=>{name=text(name).trim();if(!name)return '';if(name.includes(','))return name.split(',')[0].trim();const parts=name.split(/\s+/);return parts[parts.length-1];};
+ const authorList=value=>text(value).split(/\s*;\s*|\s+and\s+/).map(s=>s.trim()).filter(Boolean);
+ function basketCitation(e){const people=authorList(e.authors),first=familyOf(people[0])||text(e.paperTitle).split(/\s+/).slice(0,3).join(' ')||'?';return `(${first}${people.length>1?' et al.':''}${e.year?' '+e.year:''}${e.page?', p. '+e.page:''})`;}
+ function basketReference(e){
+  const people=authorList(e.authors).map(name=>{if(name.includes(','))return name;const parts=name.split(/\s+/),family=parts.pop();return family+(parts.length?', '+parts.map(p=>p[0]+'.').join(' '):'');});
+  const who=people.length>3?people.slice(0,3).join(', ')+', et al.':people.join(', ');
+  return `- ${who?who+' ':''}${e.year?'('+e.year+'). ':''}${text(e.paperTitle)||'?'}.${e.venue?' *'+e.venue+'*.':''}${e.doi?' https://doi.org/'+e.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i,''):''}`;
+ }
+ /* Markdown for pasting into a draft: each annotation a quote, its memo
+    under it, a citation with the page and a link back to the place; one
+    reference per paper at the end. attachmentKey(id) gives the PDF's key for
+    the link (none: no link). */
+ function basketMarkdown(list,{title='',attachmentKey=()=> '',route='library',labels={}}={}){
+  const L={references:'References',open:'open',image:'[image annotation]',ink:'[ink annotation]',...labels};
+  const lines=[`# ${text(title)||'Annotations'}`,''];
+  const seen=new Map();
+  for(const e of list||[]){
+   const body=text(e.text).trim()||(e.type==='image'?L.image:e.type==='ink'?L.ink:'');
+   if(body)lines.push(...body.split(/\r?\n/).map(line=>'> '+line));
+   const key=text(attachmentKey(e.attachment));
+   const link=key&&e.key?` · [${L.open}](zotero://open-pdf/${route}/items/${key}?${e.pageIndex!=null?'page='+(e.pageIndex+1)+'&':e.page&&/^\d+$/.test(e.page)?'page='+e.page+'&':''}annotation=${e.key})`:'';
+   lines.push((body?'>\n> — ':'— ')+basketCitation(e)+link);
+   if(text(e.comment).trim())lines.push('',text(e.comment).trim());
+   lines.push('');
+   if(e.paper&&!seen.has(e.paper))seen.set(e.paper,e);
+  }
+  if(seen.size){lines.push(`## ${L.references}`,'');for(const e of seen.values())lines.push(basketReference(e));lines.push('');}
+  return lines.join('\n');
+ }
+ const api={matchesQuery,journalKeys,journalScore,journalChoices,legacyRules,parseQuery,parseTree,isBoolean,plainQuery,syntaxQuery,RULE_KINDS,RULE_FIELDS,RULE_LABELS:KIND_LABELS,FIELD_LABELS,STATUS_LABELS,ruleActive,cleanRules,cleanRulesByTab,ruleHas,applyRules,countOptions,collectionContext,describeRule,filter,sortItems,norm,matches,relevance,rankByQuery,csv,matrix,layout,progress,createBoard,addToBoard,addBoardNote,moveCard,linkCards,removeCard,renameBoard,updateCard,unlinkCards,deleteBoard,restoreBoard,BASKET_LIMIT,basketEntry,basketItems,basketAdd,basketRemove,basketMove,basketClear,basketRestore,basketSignature,basketRuns,basketCitation,basketMarkdown,basketStore};
  root.CustomStyleWorkspace=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

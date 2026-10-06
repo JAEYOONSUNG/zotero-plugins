@@ -6647,6 +6647,8 @@ for(const locale of ['ko-KR','en-US']){
    // Unverified namesake works for a watched author: the approve / reject buttons exist and are never pressed.
    const person={id:'A1',name:'Ann Author',institution:'Somewhere',seen:[],news:[{id:'W4',title:'Fresh paper',doi:'10.1/f',date:'2026-09-01',places:[]}],works:[],unverified:[{id:'W3',title:'Namesake paper',doi:'10.1/n',date:'2020-01-01',places:['Elsewhere']}]};
    f.runtime.watchedAuthors=()=>[person];f.runtime.watchedAuthorsByNews=()=>[person];
+   // A basket with something in it (round 21): its view button is pressed, its writers are not.
+   f.runtime.cache.annotationBasket={1:{items:[{id:'3',key:'K3',paper:'1',attachment:'99',text:'Highlight',page:'1',color:'#ffd400'}]}};
    const tabs=Workbench.TABS.map(([key])=>key);
    const uiBefore=JSON.stringify(f.runtime.cache.workbenchUI||{});
    const rest=()=>JSON.stringify(f.runtime.cache,(k,v)=>k==='workbenchUI'||k==='lastTab'?undefined:k==='items'&&v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([,row])=>Object.keys(row).length)):v);/* reading a paper creates its empty row: not a change */
@@ -9879,5 +9881,172 @@ test('library map under 150 papers: drawn paper by paper, topics named in chips;
  assert.equal(svg.closest('.sc-graph-frame').dataset.zoomed,'true','the map zooms to the topic');
  const dim=[...svg.querySelectorAll('g[data-id] > circle')].filter(c=>c.getAttribute('opacity')==='0.18').length;
  assert.equal(dim,30,'the other topic\'s thirty papers step back');
+ f.bench.destroy();
+});
+
+/* Round 21: the annotation basket. Choosing annotations under one colour, one
+   paper or one search, then another, gathers them all in one place, kept per
+   library in the cache; the basket makes one note (Zotero's own serializer,
+   so images and ink survive), copies Markdown with citations, or goes to
+   논문 비교. */
+const basketMarks=[
+ {id:'3',key:'K3',parentID:'1',attachmentID:'99',text:'Alpha yellow',comment:'Key result',color:'#ffd400',type:'highlight',pageLabel:'1',pageIndex:0},
+ {id:'4',key:'K4',parentID:'1',attachmentID:'99',text:'Alpha red',comment:'',color:'#ff6666',type:'highlight',pageLabel:'5',pageIndex:4},
+ {id:'5',key:'K5',parentID:'2',attachmentID:'98',text:'Beta yellow',comment:'',color:'#ffd400',type:'image',pageLabel:'2',pageIndex:1}];
+function basketFixture(cache){
+ const f=fixture(cache);
+ f.library.annotations=async()=>basketMarks.map(a=>({...a}));
+ return f;
+}
+const cardOf=(f,text)=>[...f.body().querySelectorAll('.sc-annot')].find(r=>r.textContent.includes(text));
+const pick=async(f,text)=>{const row=cardOf(f,text);assert.ok(row,'card: '+text);row.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();};
+const basketBar=f=>f.bench.panel.querySelector('.sc-basket');
+
+test('주석 바구니: choices under different colour filters and searches gather in one basket, and a filter never drops them',async()=>{
+ const f=basketFixture();
+ await f.bench.show('annotations');
+ assert.equal(basketBar(f).hidden,true,'no basket bar while it is empty');
+ await pick(f,'Alpha yellow');
+ assert.equal(basketBar(f).hidden,false);
+ assert.match(basketBar(f).querySelector('.sc-basket-count').textContent,/1/);
+ // Only the red ones now: the yellow choice stays in the basket.
+ const red=[...f.body().querySelectorAll('.sc-annot-swatch')].find(b=>/#ff6666/.test(b.getAttribute('title')||''));
+ red.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(cardOf(f,'Alpha yellow'),undefined,'the yellow card is filtered out');
+ await pick(f,'Alpha red');
+ // The colour filter off, then a search for the other paper.
+ const off=[...f.body().querySelectorAll('.sc-annot-swatch')].find(b=>b.getAttribute('aria-pressed')==='true');off.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ f.input('작업 패널 검색','Beta');await settle();
+ assert.equal(cardOf(f,'Alpha red'),undefined,'the search hides the other paper');
+ await pick(f,'Beta yellow');
+ assert.deepEqual(f.runtime.cache.annotationBasket['1'].items.map(e=>e.id),['3','4','5'],'all three, in the order chosen');
+ assert.match(basketBar(f).querySelector('.sc-basket-count').textContent,/3/);
+ assert.ok(f.runtime.dirty||f.calls.some(c=>c[0]==='flush'),'kept in the cache');
+ // A card in the basket shows as chosen when it is back on screen.
+ f.input('작업 패널 검색','');await settle();
+ assert.equal(cardOf(f,'Alpha yellow').dataset.selected,'true');
+ // Unchoosing a card takes it out of the basket.
+ await pick(f,'Alpha yellow');
+ assert.deepEqual(f.runtime.cache.annotationBasket['1'].items.map(e=>e.id),['4','5']);
+ f.bench.destroy();
+ // Another session over the same cache: the basket is still there.
+ const g=basketFixture(f.runtime.cache);
+ await g.bench.show('annotations');
+ assert.match(basketBar(g).querySelector('.sc-basket-count').textContent,/2/);
+ g.bench.destroy();
+});
+
+test('주석 바구니: the list opens, reorders by buttons, Alt+arrow keys and drag, and removes one at a time',async()=>{
+ const f=basketFixture({items:{},readerSettings:{},annotationBasket:{1:{items:basketMarks.map(a=>({id:a.id,key:a.key,paper:a.parentID,attachment:a.attachmentID,text:a.text,comment:a.comment,color:a.color,page:a.pageLabel,type:a.type}))}}});
+ await f.bench.show('annotations');
+ const order=()=>[...f.bench.panel.querySelectorAll('.sc-basket-item')].map(li=>li.dataset.id);
+ assert.equal(f.bench.panel.querySelector('.sc-basket-list'),null,'closed by default');
+ await f.click('바구니 펼치기');
+ assert.deepEqual(order(),['3','4','5']);
+ const item=id=>[...f.bench.panel.querySelectorAll('.sc-basket-item')].find(li=>li.dataset.id===id);
+ item('3').querySelector('[data-basket="down"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(order(),['4','3','5']);
+ const key=new f.win.Event('keydown',{bubbles:true});Object.assign(key,{key:'ArrowUp',altKey:true});
+ item('5').dispatchEvent(key);await settle();
+ assert.deepEqual(order(),['4','5','3']);
+ // Drag 3 onto 4: it takes 4's place.
+ const drag=(type,target)=>{const e=new f.win.Event(type,{bubbles:true});e.dataTransfer={setData(){},getData:()=> '3',effectAllowed:'',dropEffect:''};e.preventDefault=()=>{};target.dispatchEvent(e);};
+ drag('dragstart',item('3'));drag('dragover',item('4'));drag('drop',item('4'));await settle();
+ assert.deepEqual(order(),['3','4','5']);
+ assert.deepEqual(f.runtime.cache.annotationBasket['1'].items.map(e=>e.id),['3','4','5'],'the order is saved');
+ item('4').querySelector('[data-basket="remove"]').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(order(),['3','5']);
+ // Delete on a focused item removes it too.
+ const del=new f.win.Event('keydown',{bubbles:true});Object.assign(del,{key:'Delete'});item('5').dispatchEvent(del);await settle();
+ assert.deepEqual(order(),['3']);
+ for(const b of f.bench.panel.querySelectorAll('.sc-basket button'))
+  assert.ok(b.hasAttribute('data-writes')||b.hasAttribute('data-opens')||b.getAttribute('data-safe')==='view',`${b.textContent||b.getAttribute('aria-label')} declares what it does`);
+ f.bench.destroy();
+});
+
+test('주석 바구니: one paper makes one child note through the native serializer, in basket order; a double press makes one note',async()=>{
+ const f=basketFixture();
+ await f.bench.show('annotations');
+ await pick(f,'Alpha red');await pick(f,'Alpha yellow');
+ let made=0,release,args=null;const gate=new Promise(r=>{release=r;});
+ f.library.noteFromAnnotations=async ids=>{made++;args=ids;await gate;return '9';};
+ const note=()=>[...f.bench.panel.querySelectorAll('.sc-basket button')].find(b=>b.textContent==='바구니로 노트 만들기');
+ assert.equal(note().getAttribute('data-writes'),'library');
+ assert.ok(note().getAttribute('data-action-key'));
+ const press=b=>b.dispatchEvent(new f.win.Event('click',{bubbles:true}));
+ press(note());press(note());await settle();
+ await f.bench.render();press(note());
+ release();await settle();await settle();
+ assert.equal(made,1,'one press, one note');
+ assert.deepEqual(args,['4','3'],'in the basket order, not page order');
+ // The same basket again, the note still there: no copy.
+ press(note());await settle();await settle();
+ assert.equal(made,1);
+ assert.match(f.bench.panel.querySelector('.sc-status').textContent,/이미/);
+ f.bench.destroy();
+});
+
+test('주석 바구니: several papers make one standalone synthesis note, a heading per run of one paper',async()=>{
+ const f=basketFixture();
+ await f.bench.show('annotations');
+ await pick(f,'Alpha yellow');await pick(f,'Beta yellow');await pick(f,'Alpha red');
+ let made=null;f.library.synthesisNote=async(entries,options)=>{made={entries,options};return '77';};
+ await f.click('바구니로 노트 만들기');
+ assert.deepEqual(made.entries.map(e=>[e.id,e.annotationIDs]),[['1',['3']],['2',['5']],['1',['4']]]);
+ assert.match(made.options.title,/주석 바구니/);
+ f.bench.destroy();
+});
+
+test('주석 바구니: Markdown with citations goes to the clipboard; 비우기 empties it with an undo',async()=>{
+ const f=basketFixture();
+ await f.bench.show('annotations');
+ await pick(f,'Alpha yellow');await pick(f,'Beta yellow');
+ await f.click('Markdown으로 복사');
+ const md=f.calls.filter(c=>c[0]==='copy').at(-1)[1];
+ assert.match(md,/> Alpha yellow/);assert.match(md,/Key result/);
+ assert.match(md,/\(Lovelace 2025, p\. 1\)/);assert.match(md,/\(Lovelace 2024, p\. 2\)/);
+ assert.match(md,/## (References|참고문헌)/);
+ await f.click('바구니 비우기');
+ assert.deepEqual(f.runtime.cache.annotationBasket['1'].items,[]);
+ assert.equal(basketBar(f).hidden,true);
+ const undo=f.bench.panel.querySelector('.sc-undo-toast-button');assert.ok(undo,'an undo is offered');
+ undo.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(f.runtime.cache.annotationBasket['1'].items.map(e=>e.id),['3','5']);
+ f.bench.destroy();
+});
+
+test('주석 바구니: 논문 비교로 compares the basket\'s papers with their annotations in a column, and the synthesis note takes them',async()=>{
+ const f=basketFixture();
+ f.runtime.evidenceOf=()=>({});f.runtime.setEvidence=async()=>{};
+ let made=null;f.library.synthesisNote=async(entries,options)=>{made={entries,options};return '77';};f.library.openItem=async()=>{};
+ await f.bench.show('annotations');
+ await pick(f,'Alpha yellow');await pick(f,'Beta yellow');
+ await f.click('논문 비교로 보내기');
+ assert.equal(f.bench.state.tab,'matrix');
+ assert.deepEqual([...f.bench.state.selected].sort(),['1','2']);
+ assert.match(f.body().textContent,/바구니 주석/);
+ assert.match(f.body().textContent,/Alpha yellow/);
+ await f.click('종합 노트 만들기');
+ assert.deepEqual(made.entries.map(e=>[e.id,e.annotationIDs]).sort(),[['1',['3']],['2',['5']]],'the basket annotations are the chosen ones');
+ f.bench.destroy();
+});
+
+test('확인 필요 says why each paper is held: no affiliation, a place only on the OpenAlex profile, or a place nothing trusted lists (round 21)',async()=>{
+ const f=fixture();
+ const person={id:'A1',name:'Huimin Zhao',institution:'University of Illinois Urbana-Champaign',seen:[],news:[],works:[],unverified:[
+  {id:'W1',title:'Rice herbicide resistance',date:'2025-10-03',places:[],reason:'no-place'},
+  {id:'W2',title:'PCOS mechanism',date:'2025-09-24',places:['Zhejiang University'],reason:'other-place'},
+  {id:'W3',title:'Chengdu cohort',date:'2025-09-01',places:["Third People's Hospital of Chengdu"],reason:'profile-only'}]};
+ f.runtime.watchedAuthors=()=>[person];f.runtime.watchedAuthorsByNews=()=>[person];
+ f.bench.state.namesakeOpen=true;
+ await f.bench.show('authors');await f.bench.load();
+ const reasons=[...f.bench.panel.querySelectorAll('.sc-namesake-reason')].map(p=>p.textContent);
+ assert.equal(reasons.length,3);
+ assert.match(reasons[0],/소속이 없고/);
+ assert.match(reasons[1],/어디에도 없는 소속/);
+ assert.match(reasons[2],/OpenAlex 프로필에만/);
+ assert.match(f.bench.panel.querySelector('.sc-namesake-group').textContent,/ORCID/);
+ const yes=[...f.bench.panel.querySelectorAll('.sc-namesake-confirm')][0];
+ assert.equal(yes.getAttribute('data-writes'),'cache','본인 논문 writes the cache: the self-check never presses it');
  f.bench.destroy();
 });
