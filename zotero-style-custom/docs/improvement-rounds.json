@@ -2670,7 +2670,7 @@
       "sources": [
         {
           "file": "src/workbench.js",
-          "marker": "const unasked=chosen.filter"
+          "marker": "const unasked=fetchable.filter"
         }
       ],
       "tests": [
@@ -4021,6 +4021,46 @@
       ],
       "status": "verified",
       "review": "새 논문·새 특허·소속 이동이 있는 사람만 카드로 보이고, 조용한 사람은 '조용한 저자 n명 보기' 한 번으로 펼친다. 아무도 소식이 없으면 접지 않고 전부 보인다. 받은함 행은 저널 마크가 앞에 서고 프리프린트는 칩으로 말한다."
+    },
+    {
+      "round": "R157",
+      "title": "관계 그래프가 주제로 나뉘고, 150편이 넘으면 주제 묶음으로 접히며, 연도 막대로 거른다",
+      "gap": "The 120-paper map was one disc with every line crossing it; past the 180-paper limit the rest of the library was simply cut; layout ran in one 350 ms block; there was no way to see or filter by publication year.",
+      "entryPoint": "정리 › 관계 그래프 › 라이브러리",
+      "sources": [
+        {
+          "file": "src/paper-graph.js",
+          "marker": "function communities(nodeIDs, edges"
+        },
+        {
+          "file": "src/paper-graph.js",
+          "marker": "async function layoutAsync("
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "const GRAPH_FOLD_AT=150"
+        },
+        {
+          "file": "src/workbench.js",
+          "marker": "function yearHistogram(parent,nodes"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/paper-graph.test.mjs",
+          "name": "communities: two dense groups joined by one citation fall into two topics, numbered biggest first, the same every time"
+        },
+        {
+          "file": "test/paper-graph.test.mjs",
+          "name": "layoutAsync gives the window back between slices and lands on the very picture layout() draws"
+        },
+        {
+          "file": "test/workbench.test.mjs",
+          "name": "library map past 150 papers: folded into named topic bubbles, a bubble opens in place, year bars filter the map"
+        }
+      ],
+      "status": "verified",
+      "review": "서재 1,205편이 주제 묶음(예: Escherichia coli 162편, CRISPR · RNA-guided 123편)으로 접혀 보이고, 묶음을 누르면 그 논문들이 펼쳐진다. 지도 위 출판 연도 막대를 누르면 그 해의 논문만 남는다. 배치는 조금씩 나눠 계산해 창이 멈추지 않는다."
     }
   ],
   "introducedInVersion": "0.6.0"

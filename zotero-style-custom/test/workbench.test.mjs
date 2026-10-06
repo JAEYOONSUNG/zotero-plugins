@@ -8475,7 +8475,9 @@ test('the relation graph hands the whole library to library.graph; nothing slice
 });
 
 /* ---- Audit 2026-10-04, item 3: the checked date, 새로고침, and one refresh when a stale record is opened ---- */
-test('a stored citation list shows when it was checked and has its own 새로고침 (data-writes); a stale one refreshes once on opening',async()=>{
+/* Round 15 (Astra): a stale list no longer refreshes itself when the paper is drawn -- that was a request and a write
+   nobody pressed for, against the press-to-load rule. It says it is old and its 새로고침 is the primary button. */
+test('a stored citation list shows when it was checked and has its own 새로고침 (data-writes); a stale one waits for the press',async()=>{
  const f=scopeFixture({graphKind:'paper',graphPaper:'1'});
  let state={works:{state:'fresh',checkedAt:'2026-09-20T00:00:00Z',missing:false},citers:{state:'fresh',checkedAt:''}};
  const refreshed=[];const wait=()=>new Promise(r=>setTimeout(r,30));
@@ -8489,14 +8491,17 @@ test('a stored citation list shows when it was checked and has its own 새로고
  button.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
  assert.deepEqual(refreshed,[1],'only that paper');
  assert.match(f.bench.panel.querySelector('.sc-list-checked').textContent,/2026-10-04/);
- // A stale record: opened once, refreshed once, not again on the next draw.
+ // A stale record: drawn twice, asked nothing; it says so, and the press is one away.
  state={works:{state:'stale',checkedAt:'2020-01-01T00:00:00Z'},citers:{state:'fresh',checkedAt:''}};
- refreshed.length=0;f.bench.state.listsRefreshed=undefined;
+ refreshed.length=0;
  await f.bench.show('graph');await wait();await settle();
- assert.deepEqual(refreshed,[1],'refreshed when opened');
- state={works:{state:'stale',checkedAt:'2020-01-01T00:00:00Z'},citers:{state:'fresh',checkedAt:''}};
  await f.bench.show('graph');await wait();await settle();
- assert.deepEqual(refreshed,[1],'and not in a loop');
+ assert.deepEqual(refreshed,[],'drawing never refreshes on its own');
+ assert.match(f.bench.panel.querySelector('.sc-list-checked').textContent,/오래되었습니다/);
+ const again=[...f.body().querySelectorAll('button')].find(b=>b.textContent==='새로고침');
+ assert.equal(again.getAttribute('data-variant'),'primary','the stale list\'s refresh is the button to press');
+ again.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.deepEqual(refreshed,[1]);
  f.bench.destroy();
 });
 
@@ -9550,5 +9555,189 @@ test('a paper marked "다른 사람입니다" leaves the person\'s full list and
  assert.doesNotMatch(list.textContent,/Namesake paper/);
  assert.match(list.textContent,/다른 사람으로 표시한 1편은 뺐습니다/);
  assert.doesNotMatch(f.body().textContent,/Stranger Coauthor/,'nor does their co-author appear in the circle or graph');
+ f.bench.destroy();
+});
+
+/* ---- Round 15 (Astra #2): a paper outside the collection but on the shelf is not "not in my library" ---- */
+test('collection map: an outside work the shelf holds is drawn as the held paper, says so, survives 내 서재만, and its row finds it on the map',async()=>{
+ const f=scopeFixture({graphKind:'collection',graphCollection:'40',graphSub:true});
+ const works=f.runtime.paperWorks();works['1:K13']={openalex:'W13',references:['W12','G2','W1']};
+ await f.bench.show('graph');await settle();
+ const held=f.body().querySelector('svg.sc-graph g[data-id="1"]');
+ assert.ok(held,'paper 1 (held, outside the collection) is drawn under its own item id, not W:W1');
+ assert.equal(held.querySelector('circle').getAttribute('data-ghost'),null,'not hollow');
+ assert.match(held.querySelector('title').textContent,/내 서재에 있음/);
+ assert.match(held.querySelector('title').textContent,/이 컬렉션 밖/);
+ const chip=[...f.body().querySelectorAll('button.sc-graph-chip')].find(b=>b.textContent==='내 서재만');
+ chip?.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.notEqual(held.getAttribute('display'),'none','내 서재만 keeps a paper the shelf holds');
+ const row=f.body().querySelector('.sc-scope-lists [data-node-id="1"]');
+ assert.ok(row,'its row in 바깥 논문 names the same id');
+ f.bench.destroy();
+});
+
+test('library map: a work cited across the scope but held elsewhere in the library is not listed as missing (Astra round 15)',async()=>{
+ const f=fixture();
+ const extra=[];
+ for(const n of [10,11,12]){extra.push({...f.papers[0],id:String(n),key:'K'+n,title:'Mine '+n});f.refs.set(n,{id:n,libraryID:1,key:'K'+n});}
+ extra.push({...f.papers[0],id:'20',key:'K20',title:'Held but not in this search'});f.refs.set(20,{id:20,libraryID:1,key:'K20'});
+ f.library.snapshot=async()=>[...f.papers,...extra];
+ const works={'1:K20':{openalex:'W20',references:[]}};
+ for(const p of [...f.papers,...extra.slice(0,3)])works['1:'+p.key]={openalex:'W'+p.id,references:['W99','W20','W'+(p.id==='1'?'2':'1')]};
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=f.runtime.journalIdentity||JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);f.runtime.citedByStore=()=>({});f.runtime.citedByFor=()=>({});
+ f.runtime.cache.workMeta={W99:{id:'W99',title:'Truly missing',year:2001}};
+ await f.bench.load();f.input('작업 패널 검색','Mine');await settle();
+ await f.bench.show('graph');await settle();
+ const titles=[...f.body().querySelectorAll('.sc-hit .sc-hit-title')].map(t=>t.textContent).join('|');
+ assert.match(titles,/W99/,'the work nobody holds is listed');
+ assert.doesNotMatch(titles,/\bW20\b/,'W20 is on the shelf');
+ f.bench.destroy();
+});
+
+/* ---- Round 15 (Astra #5, #6): the journal overview's unread list reaches every paper, and a small share is not 0% ---- */
+test('내 문헌 분석: past twenty unread, one press shows every one of them; a one-paper journal is "<1%" with a bar, not 0% and nothing',async()=>{
+ const f=fixture();
+ const big=Array.from({length:240},(_,i)=>({id:String(100+i),key:'B'+i,libraryID:1,title:'Big '+i,year:'2020',venue:'Big Journal',itemType:'journalArticle',citations:1,tags:[]}));
+ const tiny={id:'99',key:'T1',libraryID:1,title:'Tiny one',year:'2020',venue:'Tiny Journal',itemType:'journalArticle',citations:1,tags:[]};
+ f.library.snapshot=async()=>[...big,tiny];
+ for(const p of [...big,tiny])f.refs.set(Number(p.id),{id:Number(p.id),libraryID:1,key:p.key});
+ f.runtime.state=()=>({status:'',citations:1});
+ await f.bench.show('journals');
+ const row=venue=>[...f.body().querySelectorAll('.sc-journal-reading-row')].find(r=>r.querySelector('.sc-journal-reading-name-text')?.textContent===venue);
+ const share=row('Tiny Journal').querySelector('.sc-journal-reading-share .sc-journal-reading-pct').textContent;
+ assert.equal(share,'<1%');
+ const fill=row('Tiny Journal').querySelector('.sc-journal-reading-bar > span');
+ assert.ok(fill&&parseFloat(fill.style.width)>0,'a bar, however thin: '+fill?.style.width);
+ row('Big Journal').querySelector('.sc-journal-reading-unread button').dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.body().querySelectorAll('.sc-journal-reading-paper').length,20);
+ const all=[...f.body().querySelectorAll('.sc-journal-reading-papers button')].find(b=>/240/.test(b.textContent));
+ assert.ok(all,'a button names all 240 unread');
+ all.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(f.bench.state.tab,'explore');
+ assert.equal(f.bench.state.selected.size,240,'every unread paper of the journal, not the twenty shown');
+ f.bench.destroy();
+});
+
+/* ---- Round 15: the author's graph says its point in a line, and "Show all" never promises people it leaves out (Astra #8) ---- */
+test('ego graph: one line says who this author works with most; past 48 co-authors the button says top 48 of n and the rest are listed by name',async()=>{
+ const {f}=egoFixture();
+ const mates=Array.from({length:55},(_,i)=>({id:'N'+i,name:'Person '+String.fromCharCode(97+i%26)+String.fromCharCode(97+Math.floor(i/26))+'q'}));
+ const work=(id,doi,people)=>({id,doi,title:'Paper '+id,year:2025,people:[{id:'A1',name:'Ada Lovelace'},...people]});
+ const works=[work('W10','10.1/e1',[{id:'A2',name:'Bo Chen'}]),work('W11','10.1/e2',[{id:'A2',name:'Bo Chen'}]),work('W12','10.1/e3',[{id:'A2',name:'Bo Chen'}]),...mates.map((m,i)=>work('X'+i,'10.2/'+i,[m]))];
+ f.runtime.authorUpdates=async id=>({profile:{name:'Ada Lovelace',hIndex:50,works:120,citations:9000,institutions:['MIT'],topics:[],orcid:''},works:id==='A1'?works:[],fresh:[],watching:true,checkedAt:'2026-09-17T00:00:00Z'});
+ try{
+  await openAda(f);
+  const ego=personOf(f).querySelector('.sc-person-ego');
+  assert.match(ego.querySelector('.sc-graph-insight')?.textContent||'',/Bo Chen \(3편\)/,'the most frequent co-author, in one line');
+  const toggle=ego.querySelector('.sc-graph-all');
+  assert.doesNotMatch(toggle.textContent,/모두 보기/,'56 co-authors cannot all be drawn: not "show all"');
+  assert.match(toggle.textContent,/상위 48명 보기 \(전체 56명\)/);
+  toggle.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+  const svg=personOf(f).querySelector('.sc-ego-graph');
+  assert.equal(svg.querySelectorAll('g[data-ego]').length,49,'48 drawn and the author');
+  const rest=personOf(f).querySelector('.sc-person-ego .sc-ego-rest');
+  assert.ok(rest,'the eight not drawn are listed');
+  assert.equal(rest.querySelectorAll('li').length,8);
+ }finally{f.bench.destroy();}
+});
+
+test('관계 graph of everyone followed says in one line how many write together, who links the most, and the strongest pair (round 15)',async()=>{
+ const f=await graphFixture();
+ try{
+  const line=f.body().querySelector('.sc-author-graph-wrap .sc-graph-insight')?.textContent||'';
+  assert.match(line,/관심 저자 4명 중 3명이 서로 함께 썼습니다/);
+  assert.match(line,/가장 강한 공저: Ada · Brent \(2편\)/);
+ }finally{f.bench.destroy();}
+});
+
+test('every chart says what it shows in one line above it: journals, reading, one paper, a collection (round 15)',async()=>{
+ {const f=fixture();
+  const big=Array.from({length:12},(_,i)=>({id:String(100+i),key:'B'+i,libraryID:1,title:'Big '+i,year:'2020',venue:'Big Journal',itemType:'journalArticle',citations:1,tags:[]}));
+  const read={id:'99',key:'T1',libraryID:1,title:'Read one',year:'2020',venue:'Read Journal',itemType:'journalArticle',citations:1,tags:[]};
+  f.library.snapshot=async()=>[...big,read];
+  for(const p of [...big,read])f.refs.set(Number(p.id),{id:Number(p.id),libraryID:1,key:p.key});
+  f.runtime.state=ref=>ref.id===99?{status:'done',citations:1,seconds:3600}:{status:'',citations:1};
+  await f.bench.show('journals');
+  const line=f.body().querySelector('.sc-journal-insight')?.textContent||'';
+  assert.match(line,/가장 많이 모은 저널: Big Journal \(12편, 92%\)/);
+  assert.match(line,/모은 만큼 읽지 않은 저널: Big Journal \(보유 92% · 읽은 시간 0%\)/);
+  f.bench.destroy();}
+ {const f=scopeFixture({graphKind:'paper',graphPaper:'1'});
+  await f.bench.show('graph');await settle();
+  assert.match(f.body().querySelector('.sc-graph-insight')?.textContent||'',/내 서재의 \d+편과 직접 이어집니다 \(안 읽음 \d+편\)/);
+  f.bench.destroy();}
+ {const f=scopeFixture({graphKind:'collection',graphCollection:'40',graphSub:true});
+  await f.bench.show('graph');await settle();
+  const line=f.body().querySelector('.sc-graph-insight')?.textContent||'';
+  assert.match(line,/가장 많이 기대는 바깥 논문: Ghost number one \(3편이 인용\)/);
+  const insight=f.body().querySelector('.sc-graph-insight'),tiles=f.body().querySelector('.sc-overview-facts');
+  assert.ok(insight.compareDocumentPosition(tiles)&4,'the sentence comes before the figures');
+  f.bench.destroy();}
+});
+
+/* ---- Round 15: topics, folding and years on the library map ---- */
+const topicFixture=n=>{
+ const f=fixture();
+ const papers=[],works={};
+ for(let i=0;i<n;i++){
+  const a=i%2===0,id=String(1000+i),key='T'+i;
+  papers.push({...f.papers[0],id,key,libraryID:1,title:(a?'Loop extrusion by cohesin ':'Phage defence islands ')+i,year:String(a?2005+(i%10):2016+(i%10)),venue:'Somewhere'});
+  f.refs.set(Number(id),{id:Number(id),libraryID:1,key});
+  // Every paper of a topic reads the same four works: each topic is one tight community, and the two never meet.
+  const refs=(a?['RA1','RA2','RA3','RA4']:['RB1','RB2','RB3','RB4']).concat(i===1?['W1000']:[]);// one phage paper cites one cohesin paper
+  works['1:'+key]={openalex:'W'+id,references:refs};
+ }
+ f.library.snapshot=async()=>papers;
+ f.runtime.graphTools=PaperGraph;f.runtime.paperWorks=()=>works;f.runtime.journalIdentity=f.runtime.journalIdentity||JournalIdentity;
+ f.runtime.identity=ref=>'1:'+(ref.key||'K'+ref.id);f.runtime.citedByStore=()=>({});f.runtime.citedByFor=()=>({});
+ return f;
+};
+// A map past sixty nodes is laid out a slice at a time: wait until the frame that stands in for it is gone.
+const drawn=async f=>{for(let i=0;i<400&&(f.body().querySelector('.sc-graph-pending')||!f.body().querySelector('svg.sc-graph'));i++)await new Promise(r=>setTimeout(r,5));await settle();};
+test('library map past 150 papers: folded into named topic bubbles, a bubble opens in place, year bars filter the map',async()=>{
+ const f=topicFixture(200);
+ await f.bench.show('graph');await settle();await drawn(f);
+ const bubbles=()=>[...f.body().querySelectorAll('svg.sc-graph g[data-cluster]')];
+ assert.equal(bubbles().length,2,'two topics, two bubbles: '+bubbles().map(g=>g.querySelector('title').textContent).join(' | '));
+ assert.equal(f.body().querySelectorAll('svg.sc-graph g[data-id]:not([data-cluster])').length,0,'no paper drawn one by one yet');
+ const names=bubbles().map(g=>g.querySelector('.sc-graph-label').textContent).sort();
+ assert.match(names.join('|'),/cohesin|Loop extrusion/i);assert.match(names.join('|'),/Phage|defence/i);
+ assert.match(names[0],/· 100$/,'each bubble says how many papers it holds');
+ assert.match(f.body().querySelector('.sc-graph-insight').textContent,/200편이 주제 2개로 나뉩니다/);
+ const chips=[...f.body().querySelectorAll('.sc-graph-topic')];
+ assert.equal(chips.length,2);assert.equal(chips[0].getAttribute('data-safe'),'view');
+ // Open the cohesin topic from its bubble.
+ const cohesin=bubbles().find(g=>/cohesin|Loop/i.test(g.querySelector('.sc-graph-label').textContent));
+ cohesin.dispatchEvent(new f.win.Event('click'));await settle();await drawn(f);
+ assert.equal(bubbles().length,1,'the other topic stays folded');
+ assert.equal(f.body().querySelectorAll('svg.sc-graph g[data-id]:not([data-cluster])').length,100,'the opened topic\'s papers are drawn');
+ assert.ok([...f.body().querySelectorAll('svg.sc-graph line')].some(l=>l.dataset.bundle),'a bundled line joins the open papers to the folded topic');
+ // Year bars: press 2005 and only the papers of 2005 (and the folded topic, if it has any) stay.
+ const hist=f.body().querySelector('.sc-graph-card .sc-year-hist');
+ assert.ok(hist,'the year bars sit in the map card');
+ const bar=[...hist.querySelectorAll('.sc-year-hist-bar')].find(b=>/^2005년/.test(b.getAttribute('aria-label')));
+ bar.dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ const shown=[...f.body().querySelectorAll('svg.sc-graph g[data-id]:not([data-cluster])')].filter(g=>g.getAttribute('display')!=='none');
+ assert.equal(shown.length,20,'the twenty cohesin papers of 2005');
+ assert.equal(bubbles()[0].getAttribute('display'),'none','the phage topic has no paper from 2005');
+ assert.match(f.body().querySelector('.sc-year-hist-status').textContent,/2005 · 20편 표시/);
+ // Nothing was asked of OpenAlex, nothing written.
+ assert.equal(f.calls.filter(c=>/openalex|fetch|sweep/i.test(String(c[0]))).length,0);
+ f.bench.destroy();
+});
+
+test('library map under 150 papers: drawn paper by paper, topics named in chips; a chip lights its topic and zooms to it',async()=>{
+ const f=topicFixture(60);
+ await f.bench.show('graph');await settle();
+ assert.equal(f.body().querySelectorAll('svg.sc-graph g[data-cluster]').length,0,'not folded');
+ const chips=[...f.body().querySelectorAll('.sc-graph-topic')];
+ assert.equal(chips.length,2);
+ chips[0].dispatchEvent(new f.win.Event('click',{bubbles:true}));await settle();
+ assert.equal(chips[0].getAttribute('aria-pressed'),'true');
+ const svg=f.body().querySelector('svg.sc-graph');
+ assert.equal(svg.closest('.sc-graph-frame').dataset.zoomed,'true','the map zooms to the topic');
+ const dim=[...svg.querySelectorAll('g[data-id] > circle')].filter(c=>c.getAttribute('opacity')==='0.18').length;
+ assert.equal(dim,30,'the other topic\'s thirty papers step back');
  f.bench.destroy();
 });

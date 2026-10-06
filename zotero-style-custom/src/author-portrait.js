@@ -420,7 +420,9 @@
     return {
       centre: {id: myID || 'me', name: text(me?.name), initials: initialsOf(me?.name)},
       nodes, edges: nodes.map(node => ({source: myID || 'me', target: node.id, weight: node.weight})),
-      links, total, shown: nodes.length, hidden: total - nodes.length
+      links, total, shown: nodes.length, hidden: total - nodes.length,
+      // The ones past the cap, by name: a graph that cannot draw everyone still names everyone.
+      rest: ranked.slice(nodes.length).map(row => ({name: row.name, weight: row.weight, authorID: row.authorID || '', followed: !!row.who}))
     };
   }
 

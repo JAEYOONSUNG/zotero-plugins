@@ -442,3 +442,128 @@ test("a fetched citer that the shelf holds counts as a shelf citer even when its
   assert.ok(g.nodes.some(n => n.id === "2" && n.role === "citedBy"), "B is a solid node");
   assert.ok(g.edges.some(e => e.source === "2" && e.target === "1"), "with a confirmed B to A edge");
 });
+
+/* ---- Round 15: topics, folding, years, a layout that gives the window back ---- */
+
+// Two dense groups of five joined by a single citation: two communities, the bridge does not merge them.
+const twoTopics = () => {
+  const nodes = [], edges = [];
+  for (const [prefix, word] of [["a", "Loop extrusion by cohesin"], ["b", "Phage defence systems"]]) {
+    for (let i = 0; i < 5; i++) nodes.push({id: prefix + i, label: `${word} part ${i}`, year: prefix === "a" ? 2010 + i : 2020 + i});
+    for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) edges.push({source: prefix + i, target: prefix + j, kind: "cites"});
+  }
+  edges.push({source: "a0", target: "b0", kind: "cites"});
+  return {nodes, edges};
+};
+
+test("communities: two dense groups joined by one citation fall into two topics, numbered biggest first, the same every time", () => {
+  const {nodes, edges} = twoTopics();
+  const one = graph.communities(nodes.map(n => n.id), edges);
+  const two = graph.communities(nodes.map(n => n.id), edges);
+  assert.deepEqual([...one], [...two], "deterministic");
+  assert.equal(new Set(["a0", "a1", "a2", "a3", "a4"].map(id => one.get(id))).size, 1);
+  assert.equal(new Set(["b0", "b1", "b2", "b3", "b4"].map(id => one.get(id))).size, 1);
+  assert.notEqual(one.get("a0"), one.get("b0"), "the one bridging citation does not merge the two");
+  assert.deepEqual(new Set(one.values()), new Set([0, 1]));
+});
+
+test("communityNames: a topic is named by the words common inside it and rare outside, a phrase when one is as telling", () => {
+  const {nodes, edges} = twoTopics();
+  const com = graph.communities(nodes.map(n => n.id), edges);
+  const names = graph.communityNames(nodes, com);
+  const a = names.get(com.get("a0")), b = names.get(com.get("b0"));
+  assert.match(a.name, /Loop extrusion|cohesin/i);
+  assert.match(b.name, /Phage defence|defence systems|Phage/i);
+  assert.doesNotMatch(a.name, /\bpart\b/i, "a word every topic shares does not name one");
+  assert.equal(a.size, 5);
+});
+
+test("collapse: a closed topic is one bubble with its papers counted, lines between topics are bundled, an open topic keeps its papers", () => {
+  const {nodes, edges} = twoTopics();
+  const com = graph.communities(nodes.map(n => n.id), edges);
+  const names = graph.communityNames(nodes, com);
+  const closed = graph.collapse({nodes, edges}, com, {names});
+  assert.equal(closed.nodes.length, 2, "two bubbles");
+  assert.ok(closed.nodes.every(n => n.kind === "cluster" && n.size === 5 && n.members.length === 5));
+  assert.equal(closed.edges.length, 1, "one bundled line between the two topics");
+  assert.equal(closed.edges[0].count, 1);
+  const open = graph.collapse({nodes, edges}, com, {names, open: new Set([com.get("a0")])});
+  assert.equal(open.nodes.filter(n => n.kind === "cluster").length, 1, "the other topic stays folded");
+  assert.equal(open.nodes.filter(n => n.kind !== "cluster").length, 5, "the opened topic's papers are drawn");
+  assert.equal(open.edges.filter(e => e.kind === "cites").length, 10, "the opened topic's own lines are kept");
+  const bridge = open.edges.find(e => e.kind === "bundle");
+  assert.deepEqual([bridge.source, bridge.target].sort(), ["C:" + com.get("b0"), "a0"].sort(), "a paper's line into a closed topic ends at its bubble");
+});
+
+test("yearBins: a year a bar while it fits, round-year bars past that, unknown years counted apart", () => {
+  const few = graph.yearBins([{year: 2019}, {year: 2019}, {year: 2021}, {year: null}]);
+  assert.deepEqual(few.bins.map(b => [b.from, b.count]), [[2019, 2], [2020, 0], [2021, 1]]);
+  assert.equal(few.unknown, 1);
+  const wide = graph.yearBins([{year: 1970}, {year: 2026}, {year: 2024}]);
+  assert.ok(wide.bins.length <= 30, `${wide.bins.length} bars`);
+  assert.equal(wide.width, 2);
+  assert.equal(wide.bins[0].from % wide.width, 0, "bars start at round years");
+  assert.equal(wide.bins.reduce((n, b) => n + b.count, 0), 3);
+});
+
+test("layoutAsync gives the window back between slices and lands on the very picture layout() draws", async () => {
+  const nodes = [], edges = [];
+  for (let i = 0; i < 90; i++) nodes.push({id: String(i), rank: (i % 7) / 7});
+  for (let i = 1; i < 90; i++) edges.push({source: String(i), target: String((i * 7) % i), kind: "cites"});
+  const sync = graph.layout({nodes, edges}, {width: 800, height: 500});
+  let pauses = 0, t = 0;
+  // A clock that moves 5ms per reading: a 12ms budget is used up every couple of steps.
+  const laid = await graph.layoutAsync({nodes, edges}, {width: 800, height: 500},
+    {budget: 12, now: () => (t += 5), wait: async () => { pauses++; }});
+  assert.ok(pauses > 10, `yielded ${pauses} times`);
+  assert.deepEqual(laid.nodes.map(n => [n.x, n.y]), sync.nodes.map(n => [n.x, n.y]));
+  const stopped = await graph.layoutAsync({nodes, edges}, {width: 800, height: 500},
+    {budget: 1, now: () => (t += 5), wait: async () => {}, cancelled: () => true});
+  assert.equal(stopped, null, "a layout the reader has left is dropped, not finished");
+});
+
+test("grouped layout: papers of one topic sit closer to each other than to the other topic", () => {
+  const {nodes, edges} = twoTopics();
+  const com = graph.communities(nodes.map(n => n.id), edges);
+  const laid = graph.layout({nodes, edges}, {width: 800, height: 500, group: n => com.get(n.id)});
+  const at = new Map(laid.nodes.map(n => [n.id, n]));
+  const mean = pairs => pairs.reduce((s, [p, q]) => s + Math.hypot(at.get(p).x - at.get(q).x, at.get(p).y - at.get(q).y), 0) / pairs.length;
+  const inside = [], across = [];
+  for (const p of at.keys()) for (const q of at.keys()) if (p < q) (com.get(p) === com.get(q) ? inside : across).push([p, q]);
+  assert.ok(mean(inside) < mean(across) * 0.6, `inside ${mean(inside).toFixed(0)} vs across ${mean(across).toFixed(0)}`);
+});
+
+test("missing: a work the library holds outside the drawn papers is not 'missing' (Astra round 15)", () => {
+  const papers = [paper(1, "W1", ["R1", "H1"]), paper(2, "W2", ["R1", "H1"]), paper(3, "W3", ["R1", "H1"])];
+  const plain = graph.build(papers);
+  assert.deepEqual(plain.missing.map(m => m.id).sort(), ["H1", "R1"]);
+  const held = graph.build(papers, {held: new Set(["H1"])});
+  assert.deepEqual(held.missing.map(m => m.id), ["R1"], "H1 is on the shelf, only outside this scope");
+});
+
+test("copies of one work are one paper: a duplicate item neither doubles a citation nor draws twice (Astra round 15)", () => {
+  const papers = [
+    paper(1, "W1", ["W9", "R1", "R2", "R3"]),
+    paper(2, "W1", ["W9", "R1", "R2", "R3"]),   // the same work, held twice
+    paper(9, "W9", ["R1", "R2", "R3", "R7"])
+  ];
+  const built = graph.build(papers);
+  assert.deepEqual(built.nodes.map(n => n.id).sort(), ["1", "9"], "one node for W1");
+  assert.deepEqual(built.nodes.find(n => n.id === "1").aliases, ["2"], "the copy is kept as an alias");
+  const into9 = built.edges.filter(e => e.kind === "cites" && e.target === "9");
+  assert.equal(into9.length, 1, "W9 is cited by one work, not two");
+});
+
+test("collapse keeps each topic's strongest bundles, measured against the sizes they join, and counts the rest", () => {
+  // Five topics of four papers; topic 0 is tied to every other by one thread, and 1-2 by three.
+  const nodes = [], edges = [], com = new Map();
+  for (let c = 0; c < 5; c++) for (let i = 0; i < 4; i++) { const id = `p${c}_${i}`; nodes.push({id, label: id}); com.set(id, c); }
+  for (let c = 1; c < 5; c++) edges.push({source: "p0_0", target: `p${c}_0`, kind: "cites"});
+  for (let i = 0; i < 3; i++) edges.push({source: `p1_${i}`, target: `p2_${i}`, kind: "cites"});
+  const folded = graph.collapse({nodes, edges}, com, {keep: 1});
+  const bundles = folded.edges.filter(e => e.kind === "bundle");
+  assert.ok(bundles.length < 5, `${bundles.length} of 5 bundles drawn`);
+  assert.ok(bundles.some(e => [e.source, e.target].sort().join() === "C:1,C:2" && e.count === 3), "the strong 1-2 bundle stays");
+  assert.deepEqual(folded.bundles, {drawn: bundles.length, total: 5});
+  for (let c = 0; c < 5; c++) assert.ok(bundles.some(e => e.source === "C:" + c || e.target === "C:" + c), `topic ${c} keeps a line`);
+});

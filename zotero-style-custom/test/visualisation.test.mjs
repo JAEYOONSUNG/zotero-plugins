@@ -173,3 +173,18 @@ test('placeLabelsAround keeps the chosen paper named even in a crowd, and drops 
   assert.ok(places.has('17'), 'the chosen paper keeps its words');
   assert.ok(places.size < nodes.length, 'a crowd does not get a label each');
 });
+
+/* ---- Round 15 (Astra #7) ---- */
+test('finding on a map steps the other papers back by their shapes, never by fading their words below 4.5:1', () => {
+  const rules = [...css.matchAll(/([^{}]*\[data-finding\][^{}]*)\{([^}]*)\}/g)];
+  assert.ok(rules.length, 'there is a finding rule');
+  for (const [, selector, decl] of rules) {
+    if (/opacity/.test(decl)) assert.match(selector.trim(), /(circle|rect[^,]*)\s*$/m, `opacity only on shapes: ${selector.trim()}`);
+  }
+});
+
+test('a map is laid out no taller than the frame will show it, so its 11px labels are not scaled down', () => {
+  // The drawing's height is capped at the share of the panel the CSS lets the map have (max-height: 70cqh).
+  assert.match(css, /\.sc-graph \{[^}]*max-height: 70cqh/);
+  assert.match(source, /const graphHeight=nodes=>\{[^\n]*panel\??\.clientHeight[^\n]*\*\s*0\.7/);
+});

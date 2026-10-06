@@ -2228,7 +2228,9 @@
      left an 860x540 drawing fitted into 228 pixels, which scaled 11px labels to
      under 5px. Same formula as the CSS height, so the scale stays near one. */
   // A crowded map (past 80 papers) gets more height to breathe in; the ceiling is still under a screen.
-  const graphHeight=nodes=>Math.max(220,Math.min((nodes||0)>80?680:540,90+Math.max(1,nodes||0)*46));
+  /* Never taller than the frame will show it: the CSS lets a map have 70% of the panel's height, and a 680-high drawing in a
+     420-high frame came out with its 11px labels at 6.8px (Astra, round 15). */
+  const graphHeight=nodes=>{const room=Math.round((panel?.clientHeight||0)*0.7);const want=Math.max(220,Math.min((nodes||0)>80?680:540,90+Math.max(1,nodes||0)*46));return room>=220?Math.min(want,room):want;};
   /* And its width follows the panel's. Laid out at 860 and fitted into a 640px
      narrow panel, an 11px label came out at 8px (Codex). A graph that scrolls
      sideways is worse to read than one laid out for the room it has. */
@@ -2291,7 +2293,7 @@
   const GRAPH_MAX_ZOOM=4;
   const GRAPH_HINT='끌어서 이동 · 핀치나 Ctrl+휠로 확대 · 두 번 누르면 열기';
   let lastLegend=null;/* the legend drawn for the map about to be drawn, moved into its card */
-  function graphKit({svg,frame,W,H,key,marks,lines=[],label='',filters=[],roving=true,start=null,onClear,legend=null,journalChip=false}){
+  function graphKit({svg,frame,W,H,key,marks,lines=[],label='',filters=[],roving=true,start=null,onClear,legend=null,journalChip=false,keepAlso=null,onFilter=null}){
    const views=state.graphViews||(state.graphViews=new Map());
    const round=v=>Math.round(v*100)/100;
    const clamp=v=>{const w=Math.max(W/GRAPH_MAX_ZOOM,Math.min(W,Number(v&&v.w)||W)),h=w*H/W;
@@ -2342,10 +2344,11 @@
    const on=state.graphFilterOn||(state.graphFilterOn=new Set());
    const applyFilters=()=>{
     const hidden=new Set();
-    for(const[id,m]of marks)if(filters.some(f=>on.has(f.key)&&!f.keep(m.n))){hidden.add(id);m.g.setAttribute('display','none');}else if(m.g.getAttribute('display')==='none')m.g.removeAttribute('display');
+    for(const[id,m]of marks)if(filters.some(f=>on.has(f.key)&&!f.keep(m.n))||(keepAlso&&!keepAlso(m.n))){hidden.add(id);m.g.setAttribute('display','none');}else if(m.g.getAttribute('display')==='none')m.g.removeAttribute('display');
     for(const line of lines){if(hidden.has(line.getAttribute('data-a'))||hidden.has(line.getAttribute('data-b')))line.setAttribute('display','none');else line.removeAttribute('display');}
     frame.dataset.filtered=String(hidden.size>0);
     if(box.value)runFind();
+    onFilter?.(hidden);
    };
    const usable=filters.filter(f=>[...marks.values()].some(m=>!f.keep(m.n)));
    if(usable.length||journalChip){
@@ -2409,13 +2412,16 @@
     else if(e.key==='0'){e.preventDefault();fit();}
    });
    applyFilters();
-   return {zoomAt,fit,centreOn,find:box,view:()=>({...view})};
+   // Zoom to a box of the drawing (a topic's papers), no closer than the fitted drawing allows and no further in than 4x.
+   const fitTo=({x0,y0,x1,y1},margin=40)=>{const w=Math.max(W/GRAPH_MAX_ZOOM,Math.min(W,Math.max(x1-x0+margin*2,(y1-y0+margin*2)*W/H)));view={w,h:w*H/W,x:(x0+x1)/2-w/2,y:(y0+y1)/2-w*H/W/2};apply();};
+   return {zoomAt,fit,fitTo,centreOn,find:box,view:()=>({...view}),refilter:applyFilters};
   }
   /* The filters the paper maps offer. Each says what it keeps; a filter nothing would hide is not shown. */
   const PAPER_FILTERS=()=>{const year=new Date().getFullYear();return [
    {key:'held',label:'내 서재만',title:'내 서재에 없는 논문을 숨깁니다',keep:n=>n.kind!=='ghost'&&n.kind!=='external'},
-   {key:'recent',label:'최근 5년',title:`${year-4}년 이후 논문만`,keep:n=>Number(n.year)>=year-4},
-   {key:'cited',label:'인용 10+',title:'10번 이상 인용된 논문만',keep:n=>Number(n.citations)>=10}];};
+   // A folded topic stays while any of its papers would.
+   {key:'recent',label:'최근 5년',title:`${year-4}년 이후 논문만`,keep:n=>n.kind==='cluster'?n.years.some(y=>y>=year-4):Number(n.year)>=year-4},
+   {key:'cited',label:'인용 10+',title:'10번 이상 인용된 논문만',keep:n=>n.kind==='cluster'||Number(n.citations)>=10}];};
   /* Saving a map: the drawing with its colours written into it (a saved file has no panel stylesheet), on a card-coloured
      ground, at the size it was laid out at -- the whole drawing, not the zoomed part. PNG is drawn at twice that. */
   const GRAPH_STYLE=['fill','fill-opacity','stroke','stroke-width','stroke-opacity','stroke-dasharray','stroke-linejoin','paint-order','opacity','font-family','font-size','font-weight'];
@@ -2615,6 +2621,8 @@
    return out;
   }
   function paintPaper(circle,n,{tones,picked,centre}){
+   // A folded topic is a soft grey bubble with the node ring: a container, not one more paper.
+   if(n.kind==='cluster'){circle.setAttribute('fill','var(--sc-cluster-fill)');circle.setAttribute('stroke','var(--sc-node-ring)');circle.setAttribute('stroke-width',1);circle.dataset.fill='cluster';circle.removeAttribute('stroke-dasharray');return;}
    const ghost=n.kind==='ghost'||n.kind==='external',tone=!ghost&&n.venue?tones.get(n.venue):null;
    circle.setAttribute('fill',ghost?'var(--sc-surface)':picked||centre?'var(--sc-lime)':(tone?tone.fill:'var(--sc-node-fill)'));
    circle.dataset.fill=tone?'journal':'plain';
@@ -2700,7 +2708,7 @@
     const label=doc.createElementNS(SVG,'text');label.setAttribute('x',r+4);label.setAttribute('y','3.5');label.setAttribute('class','sc-graph-label');label.textContent=n.labelText;
     if(ghost)label.dataset.kind='external';
     g.appendChild(label);
-    const title=doc.createElementNS(SVG,'title');title.textContent=paperTip(n);g.appendChild(title);
+    const title=doc.createElementNS(SVG,'title');title.textContent=paperTip(n,n.outside?[T('이 컬렉션 밖')]:[]);g.appendChild(title);
     const activate=()=>{focusID=n.id;state.graphFocus=n.id;labelled=placeAll();seatAll();for(const[key,m]of marks)paintPaper(m.circle,m.n,{tones,centre:key===centreID,picked:key===n.id&&key!==centreID});if(n.id===centreID)marks.get(n.id).circle.setAttribute('stroke-width',2.6);emphasise(n.id);onFocus(n);};
     activators.set(n.id,activate);g.addEventListener('click',activate);
     // A double click goes to the paper itself: the item in Zotero, or OpenAlex for one not on the shelf.
@@ -2764,10 +2772,9 @@
     const when=runtime.checkedDate?runtime.checkedDate(listState.works.checkedAt):'';
     const stale=listState.works.state==='stale'||(cached&&listState.citers.state==='stale');
     node('span',when?T(`인용 목록 확인 ${when}`)+(stale?' · '+T('오래되었습니다'):''):'',b,{class:'sc-muted sc-list-checked',title:T('인용 목록은 30일, OpenAlex에 없다는 답은 14일 뒤 다시 확인합니다')});
-    button('새로고침',refreshLists,b,{'data-writes':'cache',class:'sc-fetch-action',title:T('이 논문의 인용 목록만 OpenAlex에서 다시 받습니다 (요청 최대 2회)')});
-    const autoKey=runtime.identity(centreItem);
-    (state.listsRefreshed||(state.listsRefreshed=new Set()));
-    if(stale&&!state.listsRefreshed.has(autoKey)){state.listsRefreshed.add(autoKey);win.setTimeout(()=>{if(!disposed&&state.tab==='graph')refreshLists();},0);}
+    /* A list past its expiry says so and waits for this press. Drawing the tab used to refresh it a moment later on its own
+       -- a metered request and a cache write nobody pressed for, which the press-to-load rule forbids (Astra, round 15). */
+    button('새로고침',refreshLists,b,{'data-writes':'cache','data-opens':'network',class:'sc-fetch-action',title:T('이 논문의 인용 목록만 OpenAlex에서 다시 받습니다 (요청 최대 2회)'),...(stale?{'data-variant':'primary'}:{})});
    }
    if(!work||!work.openalex){
     node('p','이 논문의 인용 목록이 아직 없습니다. OpenAlex에서 한 번 가져오면 이 논문의 참고문헌과 인용한 내 문헌이 보입니다.',body,{class:'sc-muted'});
@@ -2794,6 +2801,13 @@
    }
    const W=graphWidth(),H=Math.max(380,Math.min(560,Math.round(W*0.62)));
    const laid=runtime.graphTools.egoLayout(g,{width:W,height:H});
+   /* One paper in one line: how much of the shelf it touches, how much of that is still unread, and the most cited work it
+      builds on -- the paper to read next to understand it. */
+   {const shelf=g.nodes.filter(n=>n.kind==='paper'&&n.role!=='near'),unread=shelf.filter(n=>{const i=itemOf(n.id);return i&&i.status!=='done'&&i.status!=='reading';});
+    const base=g.nodes.filter(n=>n.role==='cites'||n.role==='both').sort((a,c)=>(c.citations||0)-(a.citations||0))[0];
+    const parts=[shelf.length?F('내 서재의 {0}편과 직접 이어집니다 (안 읽음 {1}편)',shelf.length,unread.length):T('내 서재의 다른 논문과 직접 이어지지 않습니다'),
+     base&&!base.untitled?F('가장 많이 인용된 참고문헌: {0} (인용 {1})',clipTitle(base.label),fmtN(base.citations||0)):''].filter(Boolean);
+    node('p',parts.join(' · '),body,{class:'sc-muted sc-graph-summary sc-graph-insight'});}
    statTiles(body,[{value:fmtN(g.counts.cites),label:'이 논문이 인용',title:'이 논문의 참고문헌 수'},{value:fmtN(g.counts.citedBy),label:'이 논문을 인용',title:'내 문헌과, 가져온 외부 논문 중 이 논문을 인용한 수'},
     {value:fmtN(g.counts.library),label:'내 문헌',title:'이 논문과 직접 연결된 내 서재의 논문'},g.counts.near?{value:fmtN(g.counts.near),label:'2단계'}:null],{label:'논문 하나 그래프 요약'});
    drawJournalLegend(g.nodes.filter(n=>n.kind!=='ghost'),body,{outside:'circle'});
@@ -2831,7 +2845,7 @@
    const ids=new Set([String(centreItem.id),...library.neighbours(state.items,{mode:state.graphMode==='citations'?'related':state.graphMode,focus:centreItem.id})]);
    return state.items.filter(i=>ids.has(String(i.id)));
   }
-  function drawCollectionScope(b){
+  async function drawCollectionScope(b,token){
    const list=graphCollectionList();
    if(!list){node('p','컬렉션을 불러오는 중입니다.',body,{class:'sc-muted'});return;}
    const chosen=list.find(c=>String(c.id)===String(state.graphCollection));
@@ -2867,19 +2881,42 @@
    const ghostNodes=[],ghostEdges=[];
    for(const o of outside){
     const via=o.citedBy.filter(p=>inFolder.has(p));if(!via.length)continue;
-    const gid='W:'+o.openalex;
-    ghostNodes.push({id:gid,label:o.title||o.openalex,year:o.year,venue:o.venue,citations:o.citations,doi:o.doi,openalex:o.openalex,kind:'ghost',untitled:!o.title,rank:0.1,degree:via.length,inLibrary:false});
+    /* Outside this collection is not outside the library: a work the shelf holds elsewhere is that held paper, under its
+       own item id (so its row finds it), drawn solid and kept by 내 서재만; only one nobody holds is a hollow ghost. */
+    const mine=o.heldID?itemOf(o.heldID):null;
+    const gid=mine?String(o.heldID):'W:'+o.openalex;
+    ghostNodes.push(mine?{id:gid,label:mine.title||o.title||o.openalex,year:Number(mine.year)||o.year,venue:mine.venue||o.venue,citations:Number(mine.citations)||o.citations,openalex:o.openalex,kind:'paper',outside:true,rank:0.1,degree:via.length,inLibrary:true}
+     :{id:gid,label:o.title||o.openalex,year:o.year,venue:o.venue,citations:o.citations,doi:o.doi,openalex:o.openalex,kind:'ghost',untitled:!o.title,rank:0.1,degree:via.length,inLibrary:false});
     for(const p of via)ghostEdges.push({source:p,target:gid,kind:'cites',weight:1,external:true});
    }
    const linkedOut=new Set(ghostEdges.map(e=>e.source));
    const stillIsolated=built.isolated.filter(n=>!linkedOut.has(n.id));
    const joined=built.isolated.filter(n=>linkedOut.has(n.id)).map(n=>({...n,degree:ghostEdges.filter(e=>e.source===n.id).length}));
-   const laid=tools.layout({nodes:[...built.nodes,...joined,...ghostNodes],edges:[...built.edges,...ghostEdges],missing:[],isolated:[]},{width:W,height:H});
+   const whole={nodes:[...built.nodes,...joined,...ghostNodes],edges:[...built.edges,...ghostEdges],missing:[],isolated:[]};
+   // The collection's topics, from the same threads the map draws; the map keeps each topic together (paper-graph.js layout group).
+   const topics=whole.nodes.length?graphTopics(whole,{fold:false}):{com:new Map(),list:[]};
    const direct=built.edges.filter(e=>e.kind==='cites');
    const clusters=tools.clusterCount([...built.nodes,...joined,...ghostNodes].map(n=>n.id),[...built.edges,...ghostEdges])/* every drawn node, outside works included: two papers meeting at one are one group */;
-   statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.truncated?built.counted.total:built.edges.length),label:built.truncated?T(`연결 · 일부만 그림 (${fmtN(built.counted.drawn)}개 표시)`):'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
+   const collTiles=statTiles(body,[{value:fmtN(records.length),label:'논문'},{value:fmtN(built.truncated?built.counted.total:built.edges.length),label:built.truncated?T(`연결 · 일부만 그림 (${fmtN(built.counted.drawn)}개 표시)`):'연결',title:'인용과 공통 참고문헌으로 이어진 쌍'},
     {value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'},{value:fmtN(stillIsolated.length),label:'연결 없는 논문',title:'이 컬렉션 안에서 어느 논문과도 이어지지 않은 논문'}],{label:'컬렉션 그래프 요약'});
+   /* The collection in one line, above its figures: how many topics it holds, the paper inside it the rest stands on, and
+      the outside work it leans on most. */
+   {const named=topics.list.filter(t=>!t.pooled);const inCited=new Map();for(const e of direct)inCited.set(e.target,(inCited.get(e.target)||0)+1);
+    const [topID,topN]=[...inCited].sort((a,c)=>c[1]-a[1])[0]||[];const topItem=topID?itemOf(topID):null;
+    const parts=[named.length>=2?F('주제 {0}개: {1}',named.length,named.slice(0,3).map(t=>`‘${t.name}’ ${fmtN(t.papers)}`).join(', ')):'',
+     topItem&&topN>1?F('컬렉션 안에서 가장 많이 인용된 논문: {0} ({1}편이 인용)',clipTitle(topItem.title),topN):'',
+     // An outside work is named only by a title; an id is no answer, and its title is one press away in the list below.
+     outside[0]?.title?F('가장 많이 기대는 바깥 논문: {0} ({1}편이 인용)',clipTitle(outside[0].title),outside[0].count):outside.length?F('컬렉션 밖 논문 {0}편을 여러 논문이 함께 인용합니다',outside.length):''].filter(Boolean);
+    if(parts.length){const p_=node('p',parts.join(' · '),body,{class:'sc-muted sc-graph-summary sc-graph-insight'});body.insertBefore(p_,collTiles);}}
    drawJournalLegend(built.nodes,body,{outside:'circle'});
+   let laid={nodes:[],edges:[]};
+   if(whole.nodes.length){
+    const pending=node('div',null,body,{class:'sc-graph-frame sc-graph-pending','aria-busy':'true'});
+    pending.style.setProperty('--sc-graph-height',H+'px');node('p',T('지도를 배치하는 중…'),pending,{class:'sc-muted'});
+    laid=await graphLayout(whole,{width:W,height:H,group:topics.list.length>=2?n=>topics.com.has(n.id)?'c'+topics.com.get(n.id):null:null},token);
+    if(!laid||disposed||token!==epoch)return;
+    pending.remove();
+   }
    const info=node('div',null,body,{class:'sc-graph-info','aria-live':'polite'});info.hidden=true;
    const lists=node('div',null,body,{class:'sc-scope-lists'});
    let mapApi=null;
@@ -2918,15 +2955,15 @@
    if(state.graphFocus){const n=laid.nodes.find(x=>x.id===state.graphFocus);if(n)show(n,true);}
    if(items.length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
   }
-  function drawGraph(){
+  async function drawGraph(token){
    drawGraphScope();
    const b=bar();
    const modes=node('div',null,b,{class:'sc-segmented',role:'group','aria-label':'그래프 종류'});
    for(const[mode,label]of [['citations','인용 관계'],['related','관련 문헌'],['tags','공통 태그'],['authors','공통 저자']])
     viewButton(label,()=>{state.graphMode=mode;render();},modes,{'aria-pressed':state.graphMode===mode});
    if(state.graphKind==='paper')return drawPaperScope(b);
-   if(state.graphKind==='collection')return drawCollectionScope(b);
-   if(state.graphMode==='citations')return drawCitationGraph(b);
+   if(state.graphKind==='collection')return drawCollectionScope(b,token);
+   if(state.graphMode==='citations')return drawCitationGraph(b,token);
    return drawLegacyGraph(b);
   }
 
@@ -2963,7 +3000,101 @@
    const unread=neighbours.filter(item=>item.status!=='done'&&item.status!=='reading');
    return {chosen:[centre,...shown],cites,citedBy,unread,total:neighbours.length,shownCount:shown.length,cut:neighbours.length>shown.length};
   }
-  function drawCitationGraph(b){
+  /* ---- Topics, folding, years (round 15) ----------------------------------
+     Past 150 connected papers a map is folded into its topics; at or under it the papers are drawn and the topics
+     are named in chips above the map. A topic is a community of the citation and shared-reading graph
+     (paper-graph.js communities), named by its titles. Topics of fewer than four papers are pooled into one. */
+  const GRAPH_FOLD_AT=150,GRAPH_FOLD_MAX=2000,TOPIC_MIN=4;
+  function graphTopics(built,{fold}){
+   const tools=runtime.graphTools;
+   if(!tools?.communities)return {com:new Map(),names:new Map(),list:[],fold:false};
+   const com=tools.communities(built.nodes.map(n=>n.id),built.edges);
+   const names=tools.communityNames(built.nodes,com);
+   const papersIn=new Map();
+   for(const n of built.nodes)if(n.kind!=='external'){const c=com.get(n.id);papersIn.set(c,(papersIn.get(c)||0)+1);}
+   const small=[...names.keys()].filter(c=>(papersIn.get(c)||0)<TOPIC_MIN);
+   if(fold&&small.length>1){
+    // The small ones are one bubble, not twenty dots of two papers each.
+    const pooled=Math.max(...names.keys())+1;
+    for(const[id,c]of com)if(small.includes(c))com.set(id,pooled);
+    let size=0;for(const c of small){size+=papersIn.get(c)||0;names.delete(c);}
+    names.set(pooled,{name:F('작은 주제 {0}개',small.length),words:[],size,pooled:true});
+    papersIn.set(pooled,size);
+   }
+   const list=[...names].map(([c,v])=>({c,name:v.name||T('이름 없는 주제'),papers:papersIn.get(c)||0,pooled:!!v.pooled}))
+    .filter(t=>t.papers>=TOPIC_MIN||t.pooled).sort((a,b)=>(a.pooled-b.pooled)||b.papers-a.papers||a.c-b.c);
+   return {com,names,list,fold};
+  }
+  /* The layout of a map, kept for the session by what it lays out (ids, sizes, lines, frame), so a redraw -- a chip, a filter,
+     a selection -- does not lay it out again; and run a slice at a time past sixty nodes, so the window keeps painting. */
+  async function graphLayout(shape,opts,token){
+   const tools=runtime.graphTools,cache=state.graphLayouts||(state.graphLayouts=new Map());
+   const key=[opts.width,opts.height,shape.nodes.map(n=>n.id+(n.kind==='cluster'?'#'+n.size:'')).join(','),
+    shape.edges.map(e=>e.source+'>'+e.target).join(',')].join('|');
+   let pos=cache.get(key);
+   if(!pos){
+    let laid;
+    if(shape.nodes.length<=60||!tools.layoutAsync)laid=tools.layout(shape,opts);
+    else{
+     laid=await tools.layoutAsync(shape,opts,{wait:()=>new Promise(r=>win.setTimeout(r,0)),cancelled:()=>disposed||token!==epoch});
+     if(!laid)return null;
+    }
+    pos=new Map(laid.nodes.map(n=>[n.id,{x:n.x,y:n.y,r:n.r}]));
+    cache.set(key,pos);if(cache.size>8)cache.delete(cache.keys().next().value);
+   }
+   return {...shape,nodes:shape.nodes.map(n=>({...n,...pos.get(n.id)}))};
+  }
+  /* 출판 연도: bars of how many papers on the map came out in each year (or two- or five-year span); pressing one keeps that span
+     on the map, Shift widens it, pressing the only one again lets go. View-only: nothing is laid out again. */
+  function yearHistogram(parent,nodes,{range,onChange}){
+   const tools=runtime.graphTools;if(!tools?.yearBins)return null;
+   const {bins,unknown,width,lo,hi}=tools.yearBins(nodes);
+   if(bins.length<2)return null;
+   const box=node('div',null,parent,{class:'sc-year-hist',role:'group','aria-label':T('출판 연도로 거르기')});
+   const head=node('div',null,box,{class:'sc-year-hist-head'});
+   node('span',T('출판 연도'),head,{class:'sc-year-hist-title'});
+   const status=node('span','',head,{class:'sc-muted sc-year-hist-status','aria-live':'polite'});
+   const clear=viewButton('모든 연도',()=>{onChange(null);},head,{class:'sc-year-hist-clear'});
+   const bars=node('div',null,box,{class:'sc-year-hist-bars'});
+   const top=Math.max(1,...bins.map(x=>x.count));
+   const span=x=>x.from===x.to?String(x.from):`${x.from}–${x.to}`;
+   let shift=false;
+   bins.forEach(bin=>{
+    const on=range&&bin.from>=range.from&&bin.to<=range.to;
+    const label=F('{0}년 · 논문 {1}편',span(bin),bin.count);
+    const b=viewButton('',()=>{
+     if(shift&&range)onChange({from:Math.min(range.from,bin.from),to:Math.max(range.to,bin.to)});
+     else if(range&&range.from===bin.from&&range.to===bin.to)onChange(null);
+     else onChange({from:bin.from,to:bin.to});
+    },bars,{class:'sc-year-hist-bar','aria-pressed':String(!!on),title:label,'aria-label':label});
+    b.addEventListener('click',e=>{shift=!!e.shiftKey;},{capture:true});
+    if(!bin.count)b.dataset.empty='true';
+    node('span',null,b,{class:'sc-year-hist-fill','aria-hidden':'true'}).style.height=`${bin.count?Math.max(6,Math.round(bin.count/top*100)):0}%`;
+   });
+   const axis=node('div',null,box,{class:'sc-year-hist-axis','aria-hidden':'true'});
+   // The axis names the years the papers span, not the edges of the bars (2027 for a shelf that stops at 2026).
+   node('span',String(lo),axis);node('span',String(hi),axis);
+   const inside=range?bins.filter(x=>x.from>=range.from&&x.to<=range.to).reduce((n,x)=>n+x.count,0):0;
+   status.textContent=range?T(F('{0} · {1}편 표시',range.from===range.to?String(range.from):`${range.from}–${range.to}`,inside))+(unknown?' · '+T(F('연도 없음 {0}편 숨김',unknown)):'')
+    :T('막대를 누르면 그 해의 논문만 남습니다 · Shift로 넓히기');
+   clear.hidden=!range;
+   if(width>1)box.dataset.width=String(width);
+   return box;
+  }
+  // A title in a one-line insight: cut at a word, with an ellipsis, never mid-word ("…in the mic").
+  const clipTitle=(title,n=60)=>{const t=plain(title||'').trim();if(t.length<=n)return t;return (t.slice(0,n).replace(/\s+\S*$/,'')||t.slice(0,n))+'…';};
+  /* The map in one line: what a reader can take from it in ten seconds. */
+  function graphInsight(parent,{topics,top,topN,fold,count}){
+   const parts=[];
+   const named=topics.list.filter(t=>!t.pooled);
+   if(named.length>=2)parts.push(F('{0}편이 주제 {1}개로 나뉩니다',fmtN(count),named.length)+' — '+F('가장 큰 주제 ‘{0}’ {1}편',named[0].name,fmtN(named[0].papers)));
+   else if(named.length===1&&named[0].papers>=TOPIC_MIN)parts.push(F('대부분 한 주제 ‘{0}’ ({1}편)',named[0].name,fmtN(named[0].papers)));
+   if(top&&topN>1)parts.push(T(`이 그래프 안에서 가장 많이 인용된 논문: ${clipTitle(top.title)} (${topN}편이 인용)`));
+   if(fold)parts.push(T('주제를 누르면 그 논문들이 펼쳐집니다'));
+   if(!parts.length)return null;
+   return node('p',parts.join(' · '),parent,{class:'sc-muted sc-graph-summary sc-graph-insight'});
+  }
+  async function drawCitationGraph(b,token){
    // Without the journal registry the nodes still draw, in the neutral tone.
    const graphTools=runtime.graphTools,identity=runtime.journalIdentity||{identify:()=>null,colours:()=>null};
    if(!graphTools||typeof runtime.paperWorks!=='function'){drawLegacyGraph(b);return;}
@@ -2991,7 +3122,12 @@
     if(!unreadIDs.length)unreadBtn.disabled=true;
     if(neighbourInfo.cut)node('p',T(`연결 ${neighbourInfo.total}편 중 ${neighbourInfo.shownCount}편 표시`),body,{class:'sc-muted sc-graph-summary'});
    }
-   const chosen=neighbourInfo?neighbourInfo.chosen:rows().slice(0,limit);
+   /* Past the paper limit the map is folded into topics instead of cut at the first rows: every paper in view counts toward a
+      topic, and a topic opens to its papers on a press. What a press would fetch is still bounded by the limit, as before. */
+   const scopeRows=neighbourInfo?null:rows();
+   const folding=!neighbourInfo&&scopeRows.length>limit;
+   const chosen=neighbourInfo?neighbourInfo.chosen:scopeRows.slice(0,folding?GRAPH_FOLD_MAX:limit);
+   const fetchable=chosen.slice(0,limit);
    const papers=chosen.map(paper=>{
     const work=works[paper.libraryID+':'+paper.key]||works[String(paper.id)]||null;
     return {id:String(paper.id),title:paper.title,year:Number(paper.year)||null,
@@ -3003,11 +3139,11 @@
    /* "Remaining" is what a press would still ask about. A paper OpenAlex does
       not know, or one with no DOI, is answered already and is skipped by the
       sweep; counting it kept "3편 남음" on a button that could do nothing. */
-   const unasked=chosen.filter(paper=>{const r=works[paper.libraryID+':'+paper.key]||works[String(paper.id)];return !r||(r.doi&&runtime.paperRowStatus?.(r)==='stale');}).length;
+   const unasked=fetchable.filter(paper=>{const r=works[paper.libraryID+':'+paper.key]||works[String(paper.id)];return !r||(r.doi&&runtime.paperRowStatus?.(r)==='stale');}).length;
    // 주변 mode draws only from what is already cached; it never offers a fetch.
    if(!neighbourMode&&unasked){const fetchLists=button('',()=>run(async()=>{
     const wanted=[];
-    for(const paper of chosen){
+    for(const paper of fetchable){
      const found=await runtime.Z.Items.getAsync(Number(paper.id));
      if(found)wanted.push(found);
     }
@@ -3028,22 +3164,27 @@
     if(!neighbourMode)drawLegacyGraph(b);
     return;
    }
-   const W=graphWidth(),H=graphHeight(chosen.length);
+   const W=graphWidth();let H=graphHeight(chosen.length);
    const items=chosen.map(paper=>runtime.Z.Items.get(Number(paper.id))).filter(Boolean);
+   const fetchIDs=new Set(fetchable.map(paper=>String(paper.id))),fetchItems=items.filter(ref=>fetchIDs.has(String(ref.id)));
    const citedBy=typeof runtime.citedByFor==='function'&&!neighbourMode?runtime.citedByFor(items):null;
    const citedStore=typeof runtime.citedByStore==='function'&&!neighbourMode?runtime.citedByStore():{};
-   const citersDue=neighbourMode?0:items.filter(ref=>!citedStore[runtime.identity(ref)]&&(works[runtime.identity(ref)]||{}).openalex).length;
+   const citersDue=neighbourMode?0:fetchItems.filter(ref=>!citedStore[runtime.identity(ref)]&&(works[runtime.identity(ref)]||{}).openalex).length;
    // One metered request per paper: the button says so before it is pressed.
    // 주변 mode already found who cites the centre from cached reference
    // lists, so it never asks OpenAlex for the same thing.
    if(citersDue){const fetchCiters=button('',()=>run(async()=>{
-    const report=await runtime.sweepCitedBy(items,{onProgress:(d,t)=>message(`인용한 논문 ${d+1}/${t}`)});
+    const report=await runtime.sweepCitedBy(fetchItems,{onProgress:(d,t)=>message(`인용한 논문 ${d+1}/${t}`)});
     message(`${report.found}편에서 인용 ${report.citers}건`
      +(report.noWork?` · 인용 목록 먼저 필요 ${report.noWork}`:'')+(report.errors?` · 실패 ${report.errors}`:''));
     await render();
    }),b,{class:'sc-fetch-action'});
    node('span',T('인용한 논문 가져오기'),fetchCiters);node('span',T(`${citersDue}편 남음 · 요청 최대 ${citersDue}회`),fetchCiters,{class:'sc-fetch-quota'});}
-   const graph=graphTools.layout(graphTools.build(papers,{citedBy}),{width:W,height:H});
+   // Every work the library holds, wherever it is filed: one cited here but outside the scope is not "missing".
+   const heldWorks=new Set();for(const item of state.items){const w=works[item.libraryID+':'+item.key]||works[String(item.id)];const oa=w&&bareWork(w.openalex);if(oa)heldWorks.add(oa);}
+   const built=graphTools.build(papers,{citedBy,maxEdges:folding?20000:900,held:heldWorks});
+   let graph=built;
+   const topics=graphTopics(built,{fold:built.nodes.length>GRAPH_FOLD_AT});
    const counted=graph.counted||{direct:0,coupled:0,isolated:0};
    const notDrawn=[counted.isolated?T(`연결 없음 ${counted.isolated}`):'',withRefs<papers.length?T(`인용 목록 없음 ${papers.length-withRefs}`):'',counted.external?T(`바깥 논문 ${counted.external}`):''].filter(Boolean);
    /* The picture in one sentence: how many separate clusters the papers
@@ -3060,10 +3201,11 @@
     const [topID,topN]=[...citedIn].sort((a,b)=>b[1]-a[1])[0]||[];
     const top=topID?papers.find(p=>p.id===topID):null;
     // The figures are one tile row; the sentence under it names only the paper the rest stands on.
-    statTiles(body,[{value:fmtN(graph.nodes.filter(n=>n.kind==='paper').length),label:'이어진 논문'},{value:fmtN(counted.direct),label:graph.truncated?'인용 · 일부만 그림':'인용',title:'서재 안에서 확인된 인용 관계(건)'},
+    const tiles=statTiles(body,[{value:fmtN(graph.nodes.filter(n=>n.kind==='paper').length),label:'이어진 논문'},{value:fmtN(counted.direct),label:graph.truncated?'인용 · 일부만 그림':'인용',title:'서재 안에서 확인된 인용 관계(건)'},
      counted.coupled?{value:fmtN(counted.coupled),label:'공통 참고문헌 쌍'}:null,{value:fmtN(clusters),label:'묶음',title:'서로 이어진 묶음의 수'}],{label:'관계 그래프 요약'});
-    const parts=[top&&topN>1?T(`이 그래프 안에서 가장 많이 인용된 논문: ${String(top.title||'').slice(0,60)} (${topN}편이 인용)`):''].filter(Boolean);
-    if(parts.length)node('p',parts.join(' · '),body,{class:'sc-muted sc-graph-summary sc-graph-insight'});
+    // The sentence goes above the figures: what the map says first, then the counts it says it from.
+    const insight=graphInsight(body,{topics,top,topN,fold:topics.fold,count:paperIDs.size});
+    if(insight)body.insertBefore(insight,tiles);
     if(notDrawn.length)node('p',`그리지 않음: ${notDrawn.join(' · ')}`,body,{class:'sc-muted sc-graph-footnote'});
    }
    drawJournalLegend(graph.nodes.filter(n=>n.kind==='paper'),body);
@@ -3071,6 +3213,47 @@
     empty('이 범위에서는 서로 인용하거나 참고문헌을 공유하는 논문이 없습니다. 범위를 넓혀보세요.');
     return;
    }
+   /* The topics as chips over the map, "name · n": on a folded map a chip opens or closes its topic; on a drawn one it
+      lights the topic's papers and zooms to them. */
+   const openTopics=state.graphOpenTopics||(state.graphOpenTopics=new Set());
+   for(const c of [...openTopics])if(!topics.list.some(t=>t.c===c))openTopics.delete(c);
+   let lightTopic=null;
+   if(topics.list.length>=2||topics.fold){
+    const row=node('div',null,body,{class:'sc-graph-topics',role:'group','aria-label':T('주제')});
+    node('span',T(topics.fold?'주제 · 눌러서 펼치기':'주제'),row,{class:'sc-graph-topics-label'});
+    const shown=topics.list.slice(0,state.graphTopicsAll?topics.list.length:10);
+    for(const t of shown){
+     const pressed=topics.fold?openTopics.has(t.c):state.graphTopic===t.c;
+     const chip=viewButton('',()=>{
+      if(topics.fold){if(openTopics.has(t.c))openTopics.delete(t.c);else openTopics.add(t.c);return render();}
+      state.graphTopic=state.graphTopic===t.c?null:t.c;
+      for(const other of row.querySelectorAll('.sc-graph-topic'))other.setAttribute('aria-pressed',String(other===chip&&state.graphTopic===t.c));
+      lightTopic?.(state.graphTopic);
+     },row,{class:'sc-graph-topic','aria-pressed':String(pressed),'data-topic':String(t.c),
+      title:topics.fold?(pressed?T('다시 누르면 접기'):T('이 주제의 논문을 지도에 펼칩니다')):T('이 주제의 논문만 밝히고 확대합니다')});
+     node('span',D(t.name),chip,{class:'sc-graph-topic-name'});node('span',fmtN(t.papers),chip,{class:'sc-graph-topic-count'});
+    }
+    if(topics.list.length>10)viewButton(state.graphTopicsAll?T('접기'):F('주제 {0}개 더',topics.list.length-10),()=>{state.graphTopicsAll=!state.graphTopicsAll;return render();},row,{class:'sc-graph-topic sc-graph-topic-more'});
+   }else state.graphTopic=null;
+   let shape=topics.fold?graphTools.collapse(built,topics.com,{open:openTopics,names:topics.names}):built;
+   if(topics.fold){
+    // An opened topic can bring hundreds of threads: the bundles stay, and the strongest of the rest, as in an unfolded map.
+    const bundles=shape.edges.filter(e=>e.kind==='bundle'),rest=shape.edges.filter(e=>e.kind!=='bundle')
+     .sort((a,c)=>(c.kind==='cites')-(a.kind==='cites')||(c.weight||0)-(a.weight||0)).slice(0,900);
+    shape={...shape,edges:[...bundles,...rest]};
+    H=graphHeight(Math.max(81,shape.nodes.length));
+   }
+   const groupOf=n=>n.kind==='cluster'?'c'+n.community:topics.com.has(n.id)?'c'+topics.com.get(n.id):null;
+   const radiusOf=n=>n.kind==='cluster'?Math.min(44,9+Math.sqrt(n.size)*3.2):graphTools.centralityRadius(n.rank);
+   // Laid out a slice at a time past sixty nodes: the frame stands in, at the map's height, until the drawing is ready.
+   const pending=node('div',null,body,{class:'sc-graph-frame sc-graph-pending','aria-busy':'true'});
+   pending.style.setProperty('--sc-graph-height',H+'px');node('p',T('지도를 배치하는 중…'),pending,{class:'sc-muted'});
+   // Folded, the bubbles keep a label's width apart: their names are the point of the picture.
+   // An opened topic sits in the middle with the folded ones on a ring round it (paper-graph.js ringRun).
+   const laidOut=await graphLayout(shape,{width:W,height:H,nodeRadius:radiusOf,gap:topics.fold&&!openTopics.size?26:9,ring:topics.fold&&openTopics.size>0,group:topics.list.length>=2||topics.fold?groupOf:null},token);
+   if(!laidOut||disposed||token!==epoch)return;
+   pending.remove();
+   graph=laidOut;
    const svg=graphCanvas(W,H,graph.nodes.length,'인용 관계 그래프');
    // The map sits in a frame of its own so the zoom buttons can lie on it, top right, and never meet the footer.
    const mapFrame=node('div',null,body,{class:'sc-graph-frame'});mapFrame.appendChild(svg);
@@ -3100,10 +3283,13 @@
     // A stated citation is solid and carries an arrow; a shared-reading thread
     // is faint and has no direction, because it is an inference, not a fact.
     // Thin and light at rest: the lines are the texture, the papers are the subject.
-    line.setAttribute('stroke-width',cited?1.2:Math.min(1.8,0.6+e.weight*2.5));
-    line.dataset.base=String(cited?0.5:Math.min(0.32,0.1+e.weight));
+    // A bundle -- every thread between two folded topics, or between a paper and a folded topic -- is one solid line as thick as it is many.
+    const bundle=e.kind==='bundle';
+    line.setAttribute('stroke-width',bundle?Math.min(5,0.8+Math.log2(1+(e.count||1))):cited?1.2:Math.min(1.8,0.6+e.weight*2.5));
+    line.dataset.base=String(bundle?0.34:cited?0.5:Math.min(0.32,0.1+e.weight));
     line.setAttribute('stroke-opacity',line.dataset.base);
-    if(cited)line.setAttribute('marker-end','url(#sc-arrow)');
+    if(bundle){line.dataset.bundle=String(e.count||1);const t=doc.createElementNS(SVG,'title');t.textContent=T(F('연결 {0}건',e.count||1));line.appendChild(t);}
+    else if(cited)line.setAttribute('marker-end','url(#sc-arrow)');
     else line.setAttribute('stroke-dasharray','2 3');
     line.setAttribute('data-a',a.id);line.setAttribute('data-b',c.id);
     lines.push(line);group.appendChild(line);
@@ -3118,7 +3304,8 @@
     let cut=s.slice(0,26).replace(/\s+\S*$/,'');
     while(/\s(and|of|the|in|for|to|a|an|on|with|by|at|from)$/i.test(cut))cut=cut.replace(/\s+\S+$/,'');
     return cut+'…';};
-   for(const n of graph.nodes)n.labelText=[shortTitle(n.label),n.year].filter(Boolean).join(' \u00b7 ')||T('제목 없음');
+   for(const n of graph.nodes)n.labelText=n.kind==='cluster'?`${plain(n.label)||T('이름 없는 주제')} · ${fmtN(n.size)}`:[shortTitle(n.label),n.year].filter(Boolean).join(' \u00b7 ')||T('제목 없음');
+   const bubbles=graph.nodes.filter(n=>n.kind==='cluster');
    /* A small graph shows every title; there is room, and nothing to decide.
       Past that, placeLabels picks what fits without collision, and the
       chosen paper always gets its label regardless (see the opacity check
@@ -3130,7 +3317,8 @@
       most LABEL_LIMIT are shown; the chosen paper is placed first so it never loses its words. The
       boxes are estimated generously (14px line, 4px each side) because real glyph widths vary. */
    const LABEL_LIMIT=32;
-   const placeAll=()=>placeGraphLabels(graph.nodes,{W,H,first:state.selected,edges:graph.edges,limit:small?graph.nodes.length:LABEL_LIMIT});
+   // A folded topic's name is the point of the bubble: bubbles are offered a place first.
+   const placeAll=()=>placeGraphLabels(graph.nodes,{W,H,first:new Set([...bubbles.map(n=>n.id),...state.selected]),edges:graph.edges,limit:small?graph.nodes.length:LABEL_LIMIT+bubbles.length});
    let labelled=placeAll();
    const setLabel=(m,on)=>{for(const el of [m.label,m.backdrop]){if(!el)continue;if(on)el.removeAttribute('display');else el.setAttribute('display','none');}};
    // Small enough that every label stays; placeLabelSides picks whichever of
@@ -3145,8 +3333,9 @@
        recomputing it here from citations, as before, could disagree with the
        spacing the nodes were actually laid out at. */
     const r=n.r||graphTools.centralityRadius(n.rank);
-    const external=n.kind==='external';
+    const external=n.kind==='external',cluster=n.kind==='cluster';
     const circle=doc.createElementNS(SVG,external?'rect':'circle');
+    if(cluster){g.setAttribute('data-cluster',String(n.community));g.setAttribute('aria-expanded','false');}
     if(external){
      // A square for work you do not hold, so the thing you could go and read is
      // never mistaken for something already on the shelf.
@@ -3167,13 +3356,18 @@
     // forty of them piled up in the middle is worse than showing none.
     g.appendChild(label);
     const title=doc.createElementNS(SVG,'title');
-    title.textContent=paperTip(n,[n.references?T(`참고문헌 ${n.references}`):null,T(`연결 ${n.degree}`),
+    if(cluster){
+     const ys=n.years.length?[Math.min(...n.years),Math.max(...n.years)]:null;
+     title.textContent=[T(F('주제 ‘{0}’ · 논문 {1}편',plain(n.label)||T('이름 없는 주제'),fmtN(n.size))),ys?(ys[0]===ys[1]?String(ys[0]):`${ys[0]}–${ys[1]}`):'',T('눌러서 펼치기')].filter(Boolean).join(' · ');
+     g.setAttribute('aria-label',title.textContent);
+    }else title.textContent=paperTip(n,[n.references?T(`참고문헌 ${n.references}`):null,T(`연결 ${n.degree}`),
      n.rank!=null?T(`중심성 ${(n.rank*100).toFixed(0)}%`):null]);
     g.appendChild(title);
     // Selecting a node marks it in place: a redraw would reset the zoom and the hover.
-    const activate=()=>{state.selected=new Set([n.id]);labelled=placeAll();for(const[key,m]of marks)seatLabel(m,labelled.get(key));focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks)paintPaper(m.circle,m.n,{tones,picked:key===n.id});if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
+    // A folded topic opens where it is pressed; nothing is selected in Zotero for it.
+    const activate=cluster?()=>{openTopics.add(n.community);return render();}:()=>{state.selected=new Set([n.id]);labelled=placeAll();for(const[key,m]of marks)seatLabel(m,labelled.get(key));focusNode(n.id);updateSelectionUI();message(n.label);showInfo(n);for(const [key,m] of marks)paintPaper(m.circle,m.n,{tones,picked:key===n.id});if(n.kind!=='external')try{win.ZoteroPane?.selectItem?.(Number(n.id));}catch(_){}};
     g.addEventListener('click',activate);
-    g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
+    if(!cluster)g.addEventListener('dblclick',()=>run(()=>n.kind==='external'
      ?runtime.Z.launchURL&&runtime.Z.launchURL(`https://openalex.org/${n.openalex}`)
      :library.openItem(n.id)));
     g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}});
@@ -3205,6 +3399,13 @@
      const on=id?(key===id||(near&&labelled.has(key))):labelled.has(key);
      setLabel(mark,on);
     }
+    // At rest, a topic chosen in the chips stays lit.
+    if(!id&&state.graphTopic!=null&&!topics.fold)dimToTopic(state.graphTopic);
+   }
+   function dimToTopic(c){
+    const inTopic=key=>topics.com.get(key)===c;
+    for(const line of lines){const on=inTopic(line.getAttribute('data-a'))&&inTopic(line.getAttribute('data-b'));line.setAttribute('opacity',on?1:0.1);}
+    for(const[key,mark]of marks){const on=inTopic(key);mark.circle?.setAttribute('opacity',on?1:0.18);setLabel(mark,on&&labelled.has(key));}
    }
    focusNode(null);
    /* The chosen paper, pinned under the map: its whole title, how far it has
@@ -3215,13 +3416,14 @@
    function showInfo(n){
     state.graphInfoID=n.id;info.hidden=false;info.replaceChildren();
     const local=state.items.find(i=>String(i.id)===String(n.id));
-    const titleOf=id=>state.items.find(i=>String(i.id)===String(id))?.title||positions.get(id)?.label||String(id);
+    const titleOf=id=>state.items.find(i=>String(i.id)===String(id))?.title||positions.get(id)?.label||built.nodes.find(x=>x.id===id)?.label||String(id);
     node('p',D(local?.title||n.label||n.id),info,{class:'sc-graph-info-title'});
     if(local){
      const at=runtime.localStamp?runtime.localStamp(local.lastRead)?.getTime():Date.parse(local.lastRead||'');
      node('p',[local.status==='done'?T('완료'):local.status==='reading'?T('읽는 중'):T('안 읽음'),Number(local.seconds)>0&&runtime.formatReadTime?runtime.formatReadTime(local.seconds,{compact:true}):'',Number.isFinite(at)?T(`${Math.max(0,Math.floor((Date.now()-at)/864e5))}일 전 읽음`):''].filter(Boolean).join(' · '),info,{class:'sc-muted'});
     }else node('p',T('내 서재에 없는 논문'),info,{class:'sc-muted'});
-    const direct=graph.edges.filter(e=>e.kind==='cites');
+    // From every thread found, not only the ones drawn: a folded topic hides papers, not citations.
+    const direct=built.edges.filter(e=>e.kind==='cites');
     const citing=[...new Set(direct.filter(e=>e.target===n.id).map(e=>e.source))],cited=[...new Set(direct.filter(e=>e.source===n.id).map(e=>e.target))];
     /* Both lists were capped at 12 with no way past that; the head now also
        says these are edges within the drawn graph, not every citation the
@@ -3240,9 +3442,33 @@
    }
    if(state.graphInfoID&&positions.has(state.graphInfoID))showInfo(positions.get(state.graphInfoID));
    // Zoom keeps the point under the pointer (or the middle, from the buttons) and never goes out past the fitted drawing.
-   graphKit({svg,frame:mapFrame,W,H,key:'citations:'+(neighbourMode?'around:'+centreID:'scope'),marks,lines,label:'인용 관계 그래프',filters:PAPER_FILTERS(),
-    start:[...state.selected].find(id=>marks.has(id)),onClear:()=>focusNode(null),legend:lastLegend,journalChip:true});
-   node('p',T('실선 화살표는 실제 인용, 점선은 공통 참고문헌 · 크기는 이 라이브러리 안에서의 중심성')+' · '+T(GRAPH_HINT),body,{class:'sc-muted sc-graph-caption'});
+   /* 출판 연도 bars, inside the card over the drawing: a span pressed keeps its papers (and the topics holding any) on the map. */
+   const inYears=y=>{const r=state.graphYears;return !r||(Number(y)>=r.from&&Number(y)<=r.to);};
+   const keepYear=n=>!state.graphYears||(n.kind==='cluster'?n.years.some(inYears):inYears(n.year));
+   // A folded topic under a year span says how many of its papers are in it.
+   const countBubbles=()=>{for(const n of bubbles){const m=marks.get(n.id);if(!m)continue;const k=state.graphYears?n.years.filter(inYears).length:n.size;
+    m.label.textContent=state.graphYears?`${plain(n.label)||T('이름 없는 주제')} · ${fmtN(k)}/${fmtN(n.size)}`:n.labelText;seatLabel(m,labelled.get(n.id));}};
+   const kit=graphKit({svg,frame:mapFrame,W,H,key:'citations:'+(neighbourMode?'around:'+centreID:'scope')+(topics.fold?':topics':''),marks,lines,label:'인용 관계 그래프',filters:PAPER_FILTERS(),
+    start:[...state.selected].find(id=>marks.has(id)),onClear:()=>focusNode(null),legend:lastLegend,journalChip:true,keepAlso:keepYear,onFilter:countBubbles});
+   if(!neighbourMode){
+    const yearNodes=topics.fold?built.nodes:graph.nodes;
+    const drawYears=()=>{
+     const old=mapFrame.querySelector('.sc-year-hist');
+     const hist=yearHistogram(mapFrame,yearNodes,{range:state.graphYears||null,onChange:range=>{state.graphYears=range;kit.refilter();drawYears();}});
+     if(hist){if(old)old.replaceWith(hist);else mapFrame.insertBefore(hist,svg);}else old?.remove();
+    };
+    drawYears();
+   }
+   lightTopic=c=>{
+    focusNode(null);
+    if(c==null){kit.fit();return;}
+    const pts=graph.nodes.filter(n=>topics.com.get(n.id)===c);if(!pts.length)return;
+    kit.fitTo({x0:Math.min(...pts.map(n=>n.x)),y0:Math.min(...pts.map(n=>n.y)),x1:Math.max(...pts.map(n=>n.x)),y1:Math.max(...pts.map(n=>n.y))},60);
+   };
+   if(state.graphTopic!=null&&!topics.fold&&!topics.list.some(t=>t.c===state.graphTopic))state.graphTopic=null;
+   for(const n of bubbles)if(openTopics.has(n.community))marks.get(n.id)?.g.setAttribute('aria-expanded','true');
+   const bundleNote=topics.fold&&shape.bundles&&shape.bundles.total>shape.bundles.drawn?T(F('주제마다 가장 강한 연결 2개만 그렸습니다 ({0}/{1})',shape.bundles.drawn,shape.bundles.total))+' · ':'';
+   node('p',(topics.fold?T('회색 원은 접힌 주제(크기는 논문 수) · 굵은 선은 주제 사이의 연결')+' · '+bundleNote:'')+T('실선 화살표는 실제 인용, 점선은 공통 참고문헌 · 크기는 이 라이브러리 안에서의 중심성')+' · '+T(GRAPH_HINT),body,{class:'sc-muted sc-graph-caption'});
    // The one thing a citation map tells you that reading your own shelf cannot.
    if(graph.missing.length){
     sectionHead('내 라이브러리가 자주 인용하지만 갖고 있지 않은 논문',graph.missing.length);
@@ -3306,7 +3532,9 @@
     }
    }
    if(graph.truncated)node('p',T(`연결 ${fmtN(counted.total)}건 중 강한 ${fmtN(counted.drawn)}건만 그렸습니다. 검색으로 범위를 좁히면 전부 보입니다.`),body,{class:'sc-muted'});
-   if(rows().length>limit)node('p',`그래프는 최대 ${limit}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
+   // Past the limit nothing is cut any more: the map folds into topics. Only the fetch buttons still stop at the limit, and say so.
+   if(scopeRows&&scopeRows.length>GRAPH_FOLD_MAX)node('p',`그래프는 최대 ${GRAPH_FOLD_MAX}개 문헌을 표시합니다.`,body,{class:'sc-muted'});
+   else if(folding&&(unasked||citersDue))node('p',F('가져오기 버튼은 앞의 {0}편까지만 묻습니다.',limit),body,{class:'sc-muted'});
   }
 
   /* The tag, author and related-item modes, drawn with the citation map's
@@ -5080,6 +5308,16 @@
       Each count is also a button onto just those papers -- pressing the same
       one again goes back to the whole record, the one mechanism the other
       view switch already uses. */
+   /* The record in one line, before its counts: how much was read this week, and the paper left longest half-read -- the
+      one to pick up or let go. Stalled is ordered linked-first above, so the oldest is looked up by date here. */
+   if(read.length){
+    const oldest=[...stalled].sort((a,b)=>a.when-b.when)[0];
+    const finished=shaped.filter(r=>r.status==='done').length;
+    const parts=[weekRows.length?F('지난 7일 {0}편을 읽었습니다',weekRows.length):T('지난 7일 동안 읽은 논문이 없습니다'),
+     F('읽기 기록 {0}편 중 완료 {1}편',fmtN(read.length),fmtN(finished)),
+     oldest?F('14일 넘게 멈춘 논문 {0}편 · 가장 오래된 것: {1} ({2}일 전)',stalled.length,clipTitle(oldest.item.title||T('제목 없음')),Math.floor((now-oldest.when)/DAY)):''].filter(Boolean);
+    node('p',parts.join(' · '),list,{class:'sc-muted sc-graph-summary sc-graph-insight sc-reading-insight'});
+   }
    if(weekRows.length){const line=node('p',null,list,{class:'sc-overview-facts sc-reading-today'});
     for(const [key,label,value] of [['today','오늘 읽음',todayRows.length],['week','지난 7일',weekRows.length]]){
      const on=state.readingView===key;
@@ -6850,9 +7088,16 @@
     const graph=tools.egoGraph({me:{id:stored?.id||person.id,ids:myIDs,name:myName},works,news:stored?.news||[],items:mine.guess?[]:mine.items,followed,limit:all?EGO_MAX:EGO_LIMIT});
     const g=personGroup('공저 관계',graph.total||'',parent,'sc-person-ego');
     if(!graph.nodes.length){node('p',T('이 저자와 함께 쓴 논문이 아직 보이지 않습니다. 서재의 논문이나 확인한 새 논문에서 공저자를 찾아 그립니다.'),g,{class:'sc-muted'});return;}
+    /* The graph in one line: who this author works with most, and how many of the people followed are among them. */
+    {const top=graph.nodes[0],withFollowed=graph.nodes.filter(n=>n.followed).length+(graph.rest||[]).filter(r=>r.followed).length;
+     const parts=[top?F('가장 자주 함께 쓴 공저자: {0} ({1}편)',D(top.name).text,top.weight):'',withFollowed?F('관심 저자 {0}명과 함께 썼습니다',withFollowed):''].filter(Boolean);
+     if(parts.length)node('p',parts.join(' · '),g,{class:'sc-muted sc-graph-summary sc-graph-insight'});}
     const bar_=node('div',null,g,{class:'sc-author-graph-tools'});
     node('span',T(`공저자 ${graph.shown}명 · 함께 쓴 논문 순`),bar_,{class:'sc-muted'});
-    if(graph.hidden>0||all)viewButton(all?T(`상위 ${EGO_LIMIT}명만 보기`):T(`모두 보기 (${graph.total}명)`),()=>{state.egoAll=all?'':person.id;return run(redo);},bar_,{class:'sc-graph-all','aria-pressed':String(all)});
+    /* "Show all" only when all of them will be drawn; past the 48 a drawing can hold, the button says how many it shows of how many,
+       and the rest are named under the graph (Astra, round 15: "Show all (55)" drew 48). */
+    const more=graph.total>EGO_MAX?F('상위 {0}명 보기 (전체 {1}명)',EGO_MAX,graph.total):T(`모두 보기 (${graph.total}명)`);
+    if(graph.hidden>0||all)viewButton(all?T(`상위 ${EGO_LIMIT}명만 보기`):more,()=>{state.egoAll=all?'':person.id;return run(redo);},bar_,{class:'sc-graph-all','aria-pressed':String(all)});
     const room=Math.round((g.clientWidth||0)-24),W=Math.max(320,Math.min(860,room>0?room:graphWidth())),H=graph.nodes.length>12?400:320;
     const laid=tools.egoLayout(graph,{width:W,height:H});
     // A narrow panel with many co-authors needs a taller canvas than asked for: the layout says how tall.
@@ -6950,6 +7195,11 @@
     }
     graphKit({svg,frame,W,H:HT,key:'ego:'+person.id,marks,lines,label:T(`${myName} 공저 관계 그래프`),roving:false,onClear:()=>hover(null)});
     if(laid.omitted)node('p',T(`${laid.omitted}명은 그리지 않았습니다.`),g,{class:'sc-muted'});
+    if(all&&graph.rest?.length){
+     const rest=node('details',null,g,{class:'sc-ego-rest'});node('summary',F('그리지 않은 공저자 {0}명',graph.rest.length),rest);
+     const list=node('ul',null,rest,{class:'sc-ego-rest-list'});
+     for(const r of graph.rest)node('li',`${D(r.name).text} · ${T(`함께 쓴 논문 ${r.weight}편`)}`,list);
+    }
    }
    /* 논문: everything this person has published, newest first, below what is new.
 
@@ -7684,6 +7934,15 @@
     if(!edges.length){node('p',T('관심 저자 사이에 함께 쓴 논문이 아직 보이지 않습니다. 새 논문을 확인하면 공저 관계가 여기에 그려집니다.'),wrap,{class:'sc-muted sc-author-graph-empty'});return;}
     // The unlinked are left out of a drawing of links, unless the reader asks for everyone.
     if(!state.authorGraphAll){const linked=new Set(edges.flatMap(e=>[e.source,e.target]));nodes=nodes.filter(p=>linked.has(p.id)||p.id===focusID);}
+    /* The picture in one line: how many of the people followed write with each other, who joins the most of them, and
+       the strongest pair -- read off every pair found, not only the ones drawn. */
+    {const linked=new Set(edgesAll.flatMap(e=>[e.source,e.target]));
+     const nameOf=id=>D(watched.find(p=>p.id===id)?.name||'').text;
+     const hub=[...degree].sort((a,b)=>b[1]-a[1])[0],pair=[...edgesAll].sort((a,b)=>b.weight-a.weight)[0];
+     const parts=[F('관심 저자 {0}명 중 {1}명이 서로 함께 썼습니다',watched.length,linked.size),
+      hub&&hub[1]>1?F('가장 많이 이어진 사람: {0} ({1}명과)',nameOf(hub[0]),hub[1]):'',
+      pair?F('가장 강한 공저: {0} · {1} ({2}편)',nameOf(pair.source),nameOf(pair.target),pair.weight):''].filter(Boolean);
+     node('p',parts.join(' · '),wrap,{class:'sc-muted sc-graph-summary sc-graph-insight'});}
     const bar=node('div',null,wrap,{class:'sc-author-graph-tools'});
     node('span',T(`${nodes.length}명 · 공저 ${edges.length}쌍`),bar,{class:'sc-muted'});
     if(all>nodes.length||state.authorGraphAll)viewButton(state.authorGraphAll?'활동 많은 저자만 보기':T(`모두 보기 (${watched.length}명)`),()=>{state.authorGraphAll=!state.authorGraphAll;refreshWatched();},bar,{class:'sc-graph-all','aria-pressed':String(!!state.authorGraphAll)});
@@ -8565,6 +8824,17 @@
    // A search or filter above narrows this too; it says so, or a part reads as the whole library.
    const narrowed=[state.query&&T(`검색 “${state.query}”`),state.scope!=='library'&&T('선택 범위'),...Object.values(parentOptions()).filter(Boolean).length?[T('필터 적용')]:[]].filter(Boolean);
    if(narrowed.length)node('span',T('적용 중: ')+narrowed.join(' · '),head,{class:'sc-journal-reading-scope'});
+   /* The table in one line: the journal collected most, and the one collected far more than it is read -- the backlog to
+      weigh. Only named journals of five papers or more, and only once reading time has been recorded. */
+   {const named=all.filter(g=>!g.unnamed),most=[...named].sort((a,b)=>b.items.length-a.items.length)[0];
+    const pct=(part,whole)=>whole>0?Math.round(100*part/whole):0;
+    const gap=totalSeconds>0?named.filter(g=>g.items.length>=5).map(g=>({g,held:pct(g.items.length,totalPapers),time:pct(g.seconds,totalSeconds)}))
+     .filter(x=>x.held-x.time>=3).sort((a,b)=>(b.held-b.time)-(a.held-a.time))[0]:null;
+    const longest=totalSeconds>0?[...named].sort((a,b)=>b.seconds-a.seconds)[0]:null;
+    const parts=[most?F('가장 많이 모은 저널: {0} ({1}편, {2}%)',D(most.venue).text,fmtN(most.items.length),pct(most.items.length,totalPapers)):'',
+     longest&&longest!==most&&longest.seconds>0?F('가장 오래 읽은 저널: {0} (읽은 시간 {1}%)',D(longest.venue).text,pct(longest.seconds,totalSeconds)):'',
+     gap?F('모은 만큼 읽지 않은 저널: {0} (보유 {1}% · 읽은 시간 {2}%)',D(gap.g.venue).text,gap.held,gap.time):totalSeconds>0?'':T('읽은 시간 기록이 아직 없습니다')].filter(Boolean);
+    if(parts.length)node('p',parts.join(' · '),box,{class:'sc-muted sc-graph-summary sc-graph-insight sc-journal-insight'});}
    if(jcrCatalog?.source?.metricYear)node('p',T(`IF·Q·순위는 Clarivate JCR ${jcrCatalog.source.metricYear}(공식) 기준입니다.`),box,{class:'sc-muted sc-journal-reading-jcr-note'});
    const order=node('div',null,head,{class:'sc-segmented',role:'group','aria-label':T('내 문헌 분석 정렬')});
    button('안 읽음 많은 순',()=>{state.journalReadingSort='';render();},order,{'aria-pressed':String(!byTime&&!byIF)});
@@ -8629,13 +8899,15 @@
     const share=(label,part,whole)=>{
      // Label left, bar, value right: the same three tracks on both lines, so the labels, bars and figures each form a column.
      const line=node('span',null,mix,{class:'sc-journal-reading-share'});
-     const pct=whole>0?Math.round(100*part/whole):null;
+     /* The share as drawn is the exact fraction, and a share under one per cent says "<1%": rounded first, a journal with
+        six of 1,203 papers was "0%" with no bar at all (Astra, round 15). */
+     const exact=whole>0?100*part/whole:null,pct=exact==null?null:Math.round(exact);
      // The exact share on hover: the bar is a picture of it, the tooltip is the figure.
      const isTime=label==='시간';
      if(pct!=null)line.title=isTime&&runtime.formatReadTime?`${T(label)} ${runtime.formatReadTime(part,{compact:true})} / ${runtime.formatReadTime(whole,{compact:true})} (${pct}%)`:`${T(label)} ${fmtN(part)} / ${fmtN(whole)} (${pct}%)`;
      const scale=node('span',null,line,{class:'sc-journal-reading-bar','aria-hidden':'true'});
-     if(pct!=null)node('span',null,scale).style.width=`${pct}%`;
-     node('span',pct==null?'—':`${pct}%`,line,{class:'sc-journal-reading-pct',title:T(label)});
+     if(exact!=null&&part>0)node('span',null,scale).style.width=`${Math.max(0.6,Math.round(exact*10)/10)}%`;
+     node('span',exact==null?'—':part>0&&exact<1?'<1%':`${pct}%`,line,{class:'sc-journal-reading-pct',title:T(label)});
     };
     share('보유',g.items.length,totalPapers);
     share('시간',g.seconds,totalSeconds);
@@ -8669,7 +8941,8 @@
       // With its year and citations, so the unread list can be weighed where it opens; unknown is not 0.
       const c=item.citations;node('span',[item.year,c!=null&&c!==''&&Number.isFinite(Number(c))?T(`인용 ${fmtN(Number(c))}`):T('인용 미확인')].filter(Boolean).join(' · '),line,{class:'sc-muted'});
      }
-     if(g.unread.length>20)node('p',T(`외 ${g.unread.length-20}편`),list,{class:'sc-muted'});
+     // Past twenty, the rest are one press away -- all of them, in 보유 문헌, not a count with nothing behind it.
+     if(g.unread.length>20)button(F('안 읽은 {0}편 모두 보기',fmtN(g.unread.length)),()=>navigateSelection('explore',g.unread.map(i=>i.id),F('{0} · 안 읽음',g.venue)),bar(list),{class:'sc-journal-reading-all'});
     }
    }
    if(all.length>8)viewButton(state.journalReadingAll?'8종만 보기':`${all.length}종 모두 보기`,()=>{state.journalReadingAll=!state.journalReadingAll;render();},bar(box));
@@ -9124,7 +9397,7 @@
      if(token===epoch&&!disposed)updateChrome();
     } else {await paperList(rows());}
     break;
-   }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':drawGraph();break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
+   }case'recent':await drawRecent();break;case'related':await drawRelated(token);break;case'authors':await drawAuthors(token);break;case'graph':await drawGraph(token);break;case'tags':drawTags();break;case'notes':await drawNotes(token);break;case'annotations':await drawAnnotations(token);break;case'backlinks':await drawBacklinks(token);break;case'attachments':await drawAttachments(token);break;case'reading':drawReading();break;case'tabs':drawTabs();break;case'views':drawViews();break;case'canvas':drawCanvas();break;case'matrix':drawMatrix();break;case'collections':await drawCollections(token);break;case'journals':drawJournals();break;case'assist':drawAssist();break;case'appearance':drawAppearance();break;}
    if(token===epoch&&!disposed){groupSections();restoreDrafts();revealNav(navButtons.get(state.tab),false);}
   }catch(error){if(token===epoch&&!disposed)message(readable(error),true);}}
   /* A reading tick changes one paper. It used to run runtime.state() over the

@@ -96,8 +96,21 @@
      citation being drawn as neighbours; minScore against a pair that overlaps
      only because both cite everything. */
   function build(papers, {minShared = 3, minScore = 0.06, maxEdges = 900, missingFloor = 3,
-      citedBy = null, minCiters = 2, maxCiters = 120} = {}) {
-    const list = (Array.isArray(papers) ? papers : []).filter(paper => paper && paper.id != null);
+      citedBy = null, minCiters = 2, maxCiters = 120, held = null} = {}) {
+    /* One work held as two items is one paper. Drawn twice it doubled every
+       citation it made -- 84 arrows into one review in this library came from
+       70 distinct works -- and sat on the map as two dots with one title. The
+       first copy stands for the work; the others are kept as its aliases. */
+    const aliases = new Map(), firstOf = new Map();
+    const list = [];
+    for (const paper of (Array.isArray(papers) ? papers : []).filter(paper => paper && paper.id != null)) {
+      const work = text(paper.openalex);
+      const first = work ? firstOf.get(work) : null;
+      if (first) { aliases.get(first).push(String(paper.id)); continue; }
+      if (work) firstOf.set(work, paper);
+      aliases.set(paper, []);
+      list.push(paper);
+    }
     const nodes = list.map(paper => ({
       id: String(paper.id),
       label: text(paper.title) || '(제목 없음)',
@@ -106,7 +119,7 @@
       venue: text(paper.venue),
       openalex: text(paper.openalex),
       references: new Set((Array.isArray(paper.references) ? paper.references : []).map(text).filter(Boolean)),
-      inLibrary: true, degree: 0
+      inLibrary: true, degree: 0, ...(aliases.get(paper).length ? {aliases: aliases.get(paper)} : {})
     }));
     const byWork = new Map();
     for (const node of nodes) if (node.openalex) byWork.set(node.openalex, node);
@@ -190,7 +203,8 @@
       }
     }
     const missing = [...counts.values()]
-      .filter(row => row.citedBy.length >= missingFloor)
+      // A work the library holds outside the papers drawn here is not missing, only out of scope.
+      .filter(row => row.citedBy.length >= missingFloor && !(held && held.has(row.id)))
       .sort((a, b) => b.citedBy.length - a.citedBy.length);
 
     /* A paper nothing connects to is not part of the picture.
@@ -288,7 +302,100 @@
   /* Force-directed layout. Edges pull, every pair pushes, and the whole thing is
      nudged toward the middle so a component with no edges out of it does not
      drift off the canvas. */
-  function layout(graph, {width = 760, height = 480, iterations = 400, seed = 7, pad = 30, nodeRadius = null, gap = 9} = {}) {
+  function layout(graph, options = {}) {
+    const run = layoutRun(graph, options);
+    let step = run.next();
+    while (!step.done) step = run.next();
+    return step.value;
+  }
+
+  /* The same layout, a slice at a time.
+
+     A 180-paper map took about 350 ms in one go, and Zotero's window does not
+     paint or answer a click while it runs. Written as a generator, the work is
+     identical -- the same seed, the same steps, the same picture -- but the
+     caller can stop between iterations: layout() drains it at once, and
+     layoutAsync() gives the window back every few milliseconds. */
+  async function layoutAsync(graph, options = {}, {budget = 12, wait = null, cancelled = null, now = null} = {}) {
+    const clock = now || (() => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()));
+    const pause = wait || (() => new Promise(resolve => setTimeout(resolve, 0)));
+    const run = layoutRun(graph, options);
+    let slices = 0;
+    for (;;) {
+      const start = clock();
+      let step = run.next();
+      while (!step.done && clock() - start < budget) step = run.next();
+      if (step.done) return Object.assign(step.value, {slices});
+      slices++;
+      await pause();
+      if (cancelled && cancelled()) return null;
+    }
+  }
+
+  /* How hard a community holds together, swept on this library's 120- and
+     180-paper maps: at these values the lines crossing one another fell from
+     4,110 to 2,524 and 13,422 to 10,597, papers in one community sat a third
+     as far apart as papers in two (0.34 against 0.76 ungrouped), and pairs
+     closer than their own dots barely moved (4 to 17 of 3,570; 55 to 83).
+     Four times the pull packed each community into a pile of touching dots. */
+  const COHESION = 0.0001, ACROSS = 0.3;
+  function* layoutRun(graph, options = {}) {
+    if (options.ring && ((graph && graph.nodes) || []).some(node => node.kind === 'cluster')
+      && ((graph && graph.nodes) || []).some(node => node.kind !== 'cluster')) return yield* ringRun(graph, options);
+    return yield* forceRun(graph, options);
+  }
+
+  /* An opened topic, read in its context: its papers laid out by force in the
+     middle, the topics still folded on a ring round them. Laid out together,
+     the hundred papers of one topic were pulled apart by threads to every
+     bubble and scattered across the others; here they keep one place, and each
+     bubble sits on the side its threads come from, so the lines run outward
+     instead of across. */
+  function* ringRun(graph, options) {
+    const {width = 760, height = 480, nodeRadius = null} = options;
+    const radius = node => nodeRadius ? nodeRadius(node) : centralityRadius(node.rank);
+    const bubbles = graph.nodes.filter(node => node.kind === 'cluster').map(node => Object.assign({}, node));
+    const papers = graph.nodes.filter(node => node.kind !== 'cluster');
+    const ringR = node => Math.min(24, radius(node));
+    const big = Math.max(...bubbles.map(ringR));
+    const inset = Math.round(big * 2 + 30);
+    const ids = new Set(papers.map(node => String(node.id)));
+    const inner = yield* forceRun({...graph, nodes: papers, edges: (graph.edges || []).filter(e => ids.has(String(e.source)) && ids.has(String(e.target)))},
+      {...options, width: Math.max(160, width - inset * 2), height: Math.max(140, height - inset * 2)});
+    for (const node of inner.nodes) { node.x += inset; node.y += inset; }
+    const at = new Map(inner.nodes.map(node => [String(node.id), node]));
+    const cx = width / 2, cy = height / 2;
+    // Each bubble's side: the middle of the open papers its threads reach, weighted by how many.
+    const pull = new Map(bubbles.map(b => [b.id, {x: 0, y: 0, w: 0}]));
+    for (const e of graph.edges || []) {
+      const [b, p] = pull.has(String(e.source)) ? [String(e.source), at.get(String(e.target))] : pull.has(String(e.target)) ? [String(e.target), at.get(String(e.source))] : [];
+      if (!b || !p) continue;
+      const w = Number(e.count) || 1, row = pull.get(b);
+      row.x += (p.x - cx) * w; row.y += (p.y - cy) * w; row.w += w;
+    }
+    const angleOf = b => { const row = pull.get(b.id); return row.w ? Math.atan2(row.y, row.x) : null; };
+    const placed = bubbles.map((b, i) => ({b, angle: angleOf(b), i}));
+    const free = placed.filter(row => row.angle == null);
+    free.forEach((row, k) => { row.angle = -Math.PI / 2 + (k + 0.5) * 2 * Math.PI / Math.max(1, free.length); });
+    placed.sort((a, b) => a.angle - b.angle || a.i - b.i);
+    // Evenly enough apart that no two bubbles touch: at least the share of the ring each needs.
+    const need = 2 * Math.PI / Math.max(1, placed.length);
+    for (let pass = 0; pass < 40; pass++) {
+      let moved = false;
+      for (let k = 0; k < placed.length; k++) {
+        const a = placed[k], b = placed[(k + 1) % placed.length];
+        let gap = b.angle - a.angle; if (k === placed.length - 1) gap += 2 * Math.PI;
+        if (placed.length > 1 && gap < need * 0.9) { const push = (need * 0.9 - gap) / 2; a.angle -= push; b.angle += push; moved = true; }
+      }
+      if (!moved) break;
+    }
+    const rx = width / 2 - big - 6, ry = height / 2 - big - 6;
+    for (const {b, angle} of placed) { b.r = ringR(b); b.x = cx + Math.cos(angle) * rx; b.y = cy + Math.sin(angle) * ry; }
+    return {nodes: [...bubbles, ...inner.nodes], edges: graph.edges || [], missing: graph.missing || [], isolated: graph.isolated || [],
+      truncated: !!graph.truncated, counted: graph.counted};
+  }
+
+  function* forceRun(graph, {width = 760, height = 480, iterations = 400, seed = 7, pad = 30, nodeRadius = null, gap = 9, group = null} = {}) {
     const nodes = ((graph && graph.nodes) || []).map(node => Object.assign({}, node));
     if (!nodes.length) {
       return {nodes: [], edges: (graph && graph.edges) || [], missing: (graph && graph.missing) || [],
@@ -304,14 +411,40 @@
        of the canvas. */
     const k = Math.sqrt(width * height / nodes.length) * 2.8;
     const index = new Map();
+    /* With `group` (node -> community), each community starts as its own
+       little spiral round its own seat, and keeps together while the forces
+       run: the threads between communities pull at a third of their strength
+       and every paper leans a little toward its community's middle. Without
+       that, the 120-paper map of this library was one disc with every line
+       crossing it; with it, the four or five topics the shelf holds sit apart
+       and the lines between them are the few that really bridge two topics. */
+    const groupOf = group ? nodes.map(node => { const g = group(node); return g == null ? null : String(g); }) : null;
+    const seats = new Map(), seatIndex = new Map();
+    if (groupOf) {
+      const sizes = new Map();
+      for (const g of groupOf) if (g != null) sizes.set(g, (sizes.get(g) || 0) + 1);
+      const order = [...sizes].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+      order.forEach(([g, size], rank) => {
+        const angle = rank * 2.399963, radius = Math.sqrt(rank / Math.max(1, order.length)) * Math.min(width, height) * 0.38;
+        seats.set(g, {x: width / 2 + Math.cos(angle) * radius, y: height / 2 + Math.sin(angle) * radius,
+          spread: Math.min(width, height) * 0.42 * Math.sqrt(size / nodes.length), size, at: 0});
+      });
+    }
     nodes.forEach((node, i) => {
       index.set(node.id, i);
       // A spiral start rather than a random one: deterministic, and it settles
       // faster because it begins with the nodes already spread out.
-      const angle = i * 2.399963;
-      const radius = Math.sqrt(i / nodes.length) * Math.min(width, height) * 0.42;
-      node.x = width / 2 + Math.cos(angle) * radius + (random() - 0.5) * 4;
-      node.y = height / 2 + Math.sin(angle) * radius + (random() - 0.5) * 4;
+      const seat = groupOf && groupOf[i] != null ? seats.get(groupOf[i]) : null;
+      if (seat) {
+        const j = seat.at++, angle = j * 2.399963, radius = Math.sqrt(j / seat.size) * seat.spread;
+        node.x = seat.x + Math.cos(angle) * radius + (random() - 0.5) * 4;
+        node.y = seat.y + Math.sin(angle) * radius + (random() - 0.5) * 4;
+      } else {
+        const angle = i * 2.399963;
+        const radius = Math.sqrt(i / nodes.length) * Math.min(width, height) * 0.42;
+        node.x = width / 2 + Math.cos(angle) * radius + (random() - 0.5) * 4;
+        node.y = height / 2 + Math.sin(angle) * radius + (random() - 0.5) * 4;
+      }
       node.vx = 0; node.vy = 0;
       // Every node keeps its drawn size, so the layout can refuse to let two of
       // them sit on top of each other. Size is centrality within this graph
@@ -346,10 +479,25 @@
            closer two papers got the harder they were dragged together, so the
            middle of the graph became one dot with forty labels on it. Linear
            attraction settles at a spacing instead of at a point. */
-        const pull = distance / k * 4 * (edge.kind === 'cites' ? 1.2 : 0.5 + edge.weight);
+        const across = groupOf && groupOf[edge.a] !== groupOf[edge.b] ? ACROSS : 1;
+        const pull = distance / k * 4 * (edge.kind === 'cites' ? 1.2 : 0.5 + edge.weight) * across;
         const fx = dx / distance * pull, fy = dy / distance * pull;
         a.vx -= fx; a.vy -= fy;
         b.vx += fx; b.vy += fy;
+      }
+      if (groupOf) {
+        const middle = new Map();
+        nodes.forEach((node, i) => {
+          const g = groupOf[i]; if (g == null) return;
+          const m = middle.get(g) || middle.set(g, {x: 0, y: 0, n: 0}).get(g);
+          m.x += node.x; m.y += node.y; m.n++;
+        });
+        nodes.forEach((node, i) => {
+          const m = groupOf[i] == null ? null : middle.get(groupOf[i]);
+          if (!m || m.n < 2) return;
+          node.vx += (m.x / m.n - node.x) * k * COHESION;
+          node.vy += (m.y / m.n - node.y) * k * COHESION;
+        });
       }
       const limit = Math.max(2, Math.min(width, height) / 14 * cooling);
       for (const node of nodes) {
@@ -374,18 +522,21 @@
       if (step % 4 === 0 || step > iterations - 12) {
         separate(nodes, random, step > iterations * 0.4 ? 1 : 0.5, gap);
       }
+      yield step;
     }
-    for (let extra = 0; extra < 14; extra++) separate(nodes, random, 1, gap);
+    for (let extra = 0; extra < 14; extra++) { separate(nodes, random, 1, gap); if (extra % 4 === 3) yield iterations + extra; }
 
     // Fit to the box, leaving room for a label.
     const xs = nodes.map(node => node.x), ys = nodes.map(node => node.y);
     const minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
     const minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
-    const scale = Math.min((width - pad * 2) / Math.max(1, maxX - minX),
-      (height - pad * 2) / Math.max(1, maxY - minY));
+    // A node bigger than the margin (a folded topic's bubble) would hang over the edge: the margin grows to hold it.
+    const edge = Math.max(pad, ...nodes.map(node => (node.r || 0) + 4));
+    const scale = Math.min((width - edge * 2) / Math.max(1, maxX - minX),
+      (height - edge * 2) / Math.max(1, maxY - minY));
     for (const node of nodes) {
-      node.x = pad + (node.x - minX) * scale;
-      node.y = pad + (node.y - minY) * scale;
+      node.x = edge + (node.x - minX) * scale;
+      node.y = edge + (node.y - minY) * scale;
       delete node.vx; delete node.vy;
       // Kept, because label placement has to know how far out to start; the
       // same centralityRadius as at layout's start, so nothing resizes mid-draw.
@@ -748,6 +899,251 @@
       .slice(0, limit);
   }
 
+  /* ---- Topics: the communities a map falls into ------------------------
+     A map of a real shelf is not one topic; it is four or five, joined by a
+     few papers that bridge them. Drawn as one cloud that structure is the
+     thing a reader cannot see, so the communities are found first and the map
+     is drawn, named and (past 150 papers) folded by them.
+
+     Louvain modularity: every paper starts alone, each in turn moves to the
+     neighbouring community that raises modularity most, and once nothing
+     moves the communities become single nodes and the same is done again.
+     The order is the input's, so the same library falls apart the same way
+     every time. A stated citation weighs 1; shared reading weighs by how much
+     of the two reference lists is shared (0.3 at the floor, 1 at a third). */
+  function edgeWeight(edge) {
+    if (edge.kind === 'cites' || edge.kind == null) return Number(edge.weight) > 0 && edge.kind == null ? Number(edge.weight) : 1;
+    return Math.min(1, 0.3 + (Number(edge.weight) || 0) * 2);
+  }
+  function communities(nodeIDs, edges, {resolution = 1, passes = 12} = {}) {
+    const ids = [...nodeIDs].map(String);
+    const at = new Map(ids.map((id, i) => [id, i]));
+    // adjacency of the current level: Map(i -> Map(j -> weight)), A_ii holds twice the inside weight.
+    let adj = ids.map(() => new Map());
+    for (const edge of edges || []) {
+      const a = at.get(String(edge.source)), b = at.get(String(edge.target));
+      if (a == null || b == null || a === b) continue;
+      const w = edgeWeight(edge);
+      adj[a].set(b, (adj[a].get(b) || 0) + w);
+      adj[b].set(a, (adj[b].get(a) || 0) + w);
+    }
+    let member = ids.map((_, i) => i);   // original node -> current level node
+    for (let level = 0; level < 8; level++) {
+      const n = adj.length;
+      const k = adj.map(row => { let t = 0; for (const w of row.values()) t += w; return t; });
+      const m2 = k.reduce((t, v) => t + v, 0);
+      if (!m2) break;
+      const comm = adj.map((_, i) => i), tot = k.slice();
+      let moved = false;
+      for (let pass = 0; pass < passes; pass++) {
+        let changed = 0;
+        for (let i = 0; i < n; i++) {
+          if (!k[i]) continue;
+          const own = comm[i];
+          const links = new Map();
+          for (const [j, w] of adj[i]) if (j !== i) links.set(comm[j], (links.get(comm[j]) || 0) + w);
+          tot[own] -= k[i];
+          let best = own, gain = (links.get(own) || 0) - resolution * tot[own] * k[i] / m2;
+          for (const [c, w] of links) {
+            const g = w - resolution * tot[c] * k[i] / m2;
+            if (g > gain + 1e-12) { gain = g; best = c; }
+          }
+          tot[best] += k[i];
+          if (best !== own) { comm[i] = best; changed++; }
+        }
+        if (!changed) break;
+        moved = true;
+      }
+      if (!moved) break;
+      // Fold each community into one node and go again.
+      const renumber = new Map();
+      for (const c of comm) if (!renumber.has(c)) renumber.set(c, renumber.size);
+      const next = [...renumber.keys()].map(() => new Map());
+      for (let i = 0; i < n; i++) {
+        const a = renumber.get(comm[i]);
+        for (const [j, w] of adj[i]) {
+          const b = renumber.get(comm[j]);
+          next[a].set(b, (next[a].get(b) || 0) + w);
+        }
+      }
+      member = member.map(i => renumber.get(comm[i]));
+      adj = next;
+      if (next.length === n) break;
+    }
+    // Biggest community first, numbered from 0; a paper with no edge is its own community, last.
+    const sizes = new Map();
+    for (const c of member) sizes.set(c, (sizes.get(c) || 0) + 1);
+    const first = new Map();
+    member.forEach((c, i) => { if (!first.has(c)) first.set(c, i); });
+    const order = [...sizes.keys()].sort((a, b) => sizes.get(b) - sizes.get(a) || first.get(a) - first.get(b));
+    const rank = new Map(order.map((c, i) => [c, i]));
+    return new Map(ids.map((id, i) => [id, rank.get(member[i])]));
+  }
+
+  /* A community's name, from the titles in it.
+
+     The words that are common inside the community and rare outside it --
+     "loop extrusion" in one, "phage defence" in the next -- rather than the
+     commonest words, which in one field's library are the same for every
+     community ("protein", "structure", "bacterial"). A two-word phrase wins
+     when it is about as distinctive as the best single word, because it reads
+     as a topic; otherwise the two best single words, in the spelling the
+     titles use. */
+  const STOP = new Set(('a an and are as at be between by can de del der des die du during for from has have how in into is its '
+    + 'la le les of on or our than that the their these this through to toward towards und using via was we what when where which '
+    + 'while who why with within without new novel study studies analysis role roles based approach approaches use used effect effects '
+    + 'insights insight reveals reveal revealed mechanism mechanisms mediated dependent model models evidence two one three first '
+    + 'high low large small during after before under over across among review data function functions functional regulation '
+    + 'characterization identification different distinct specific multiple single its toward vs versus non system systems along '
+    + 'cell cells').split(' '));
+  function titleWords(title) {
+    const out = [];
+    let at = 0;
+    for (const raw of String(title || '').replace(/<[^>]+>/g, ' ').split(/[^\p{L}\p{N}-]+/u)) {
+      at++;
+      const word = raw.replace(/^-+|-+$/g, '');
+      if (!word || word.length < 3 && !/^[A-Z0-9]{2,}$/.test(word)) continue;
+      const low = word.toLowerCase();
+      if (STOP.has(low) || /^\d+$/.test(low)) continue;
+      // `at` is the word's place in the title: a phrase is two words side by side, not two either side of a dropped "by".
+      out.push({low, word, at});
+    }
+    return out;
+  }
+  function communityNames(nodes, community, {top = 2} = {}) {
+    const groups = new Map(), all = new Map(), spelled = new Map();
+    const docs = [];
+    for (const node of nodes || []) {
+      const c = community.get(String(node.id));
+      if (c == null) continue;
+      const words = titleWords(node.label || node.title);
+      const terms = new Set();
+      for (let i = 0; i < words.length; i++) {
+        terms.add(words[i].low);
+        const bump = (key, text) => { const m = spelled.get(key) || spelled.set(key, new Map()).get(key); m.set(text, (m.get(text) || 0) + 1); };
+        bump(words[i].low, words[i].word);
+        if (i + 1 < words.length && words[i + 1].at === words[i].at + 1) { const key = words[i].low + ' ' + words[i + 1].low; terms.add(key); bump(key, words[i].word + ' ' + words[i + 1].word); }
+      }
+      docs.push({c, terms});
+    }
+    for (const {c, terms} of docs) {
+      const g = groups.get(c) || groups.set(c, {size: 0, df: new Map()}).get(c);
+      g.size++;
+      for (const t of terms) { g.df.set(t, (g.df.get(t) || 0) + 1); all.set(t, (all.get(t) || 0) + 1); }
+    }
+    const N = docs.length;
+    const spell = key => { const m = spelled.get(key); if (!m) return key; return [...m].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0]; };
+    const names = new Map();
+    // A phrase is no more telling than its commonest word: "cohesin part" is not a topic when every title says "part".
+    const idf = t => Math.min(...[t, ...(t.includes(' ') ? t.split(' ') : [])].map(w => Math.log((N + 1) / (all.get(w) || 1))));
+    const overlap = (x, y) => x.split(' ').some(p => y.split(' ').some(q => p === q || p.includes(q) || q.includes(p)));
+    for (const [c, g] of groups) {
+      const floor = g.size >= 4 ? 2 : 1;
+      const scored = [...g.df].filter(([, df]) => df >= floor)
+        .map(([t, df]) => ({t, df, phrase: t.includes(' '), score: (df / g.size) * idf(t)}))
+        .sort((a, b) => b.score - a.score || b.df - a.df || (a.t < b.t ? -1 : 1));
+      const best = scored[0];
+      let words = [];
+      if (best) {
+        // A phrase nearly as telling as the best word, and sharing a word with it, names the topic by itself.
+        const phrase = best.phrase ? best : scored.find(row => row.phrase && row.score >= best.score * 0.6 && overlap(row.t, best.t));
+        if (phrase) words = [phrase];
+        else {
+          for (const row of scored) {
+            if (words.length >= top) break;
+            if (row.phrase || words.some(w => overlap(w.t, row.t))) continue;
+            words.push(row);
+          }
+        }
+      }
+      names.set(c, {name: words.map(w => spell(w.t)).join(' · '), words: words.map(w => w.t), size: g.size});
+    }
+    return names;
+  }
+
+  /* Past 150 papers the map is folded: each community is one bubble named
+     "topic · n", sized by how many papers it holds, joined to the others by
+     one line whose weight is how many threads run between them. `open` names
+     the communities to show paper by paper; their papers keep their own
+     lines, to each other and to the bubbles they reach. Nothing is dropped:
+     every paper is either drawn or counted inside a bubble. */
+  function collapse(graph, community, {open = new Set(), names = new Map(), keep: perEnd = 2} = {}) {
+    const opened = new Set([...open].map(Number));
+    const nodes = [], bubble = new Map(), keep = new Set();
+    for (const node of (graph && graph.nodes) || []) {
+      const c = community.get(String(node.id));
+      if (c == null || opened.has(c)) { nodes.push(node); keep.add(String(node.id)); continue; }
+      let b = bubble.get(c);
+      if (!b) {
+        const named = names.get(c) || {};
+        b = {id: 'C:' + c, kind: 'cluster', community: c, label: named.name || '', members: [], size: 0,
+          years: [], rank: 0, degree: 0, inLibrary: true};
+        bubble.set(c, b);
+      }
+      b.members.push(String(node.id));
+      if (node.kind !== 'external') b.size++;
+      if (node.year) b.years.push(Number(node.year));
+      b.rank = Math.max(b.rank, Number(node.rank) || 0);
+    }
+    const where = id => keep.has(id) ? id : (() => { const c = community.get(id); return c == null ? null : 'C:' + c; })();
+    const merged = new Map(), edges = [];
+    for (const edge of (graph && graph.edges) || []) {
+      const a = where(String(edge.source)), b = where(String(edge.target));
+      if (!a || !b || a === b) continue;
+      if (keep.has(String(edge.source)) && keep.has(String(edge.target))) { edges.push(edge); continue; }
+      const key = a < b ? a + '|' + b : b + '|' + a;
+      const row = merged.get(key) || merged.set(key, {source: a, target: b, kind: 'bundle', count: 0, weight: 0}).get(key);
+      row.count++;
+      row.weight += edgeWeight(edge);
+    }
+    /* Not every bundle: between topics of one field almost every pair shares some reading, and drawn all at once the
+       bubbles were a hairball again (140 lines between 18 topics in this library). A bundle is measured against the
+       sizes it joins -- count / sqrt(size x size) -- and each end keeps its `keep` strongest; the rest are counted. */
+    const sizeOf = id => (String(id).startsWith('C:') ? (bubble.get(Number(String(id).slice(2))) || {}).size || 1 : 1);
+    const rows = [...merged.values()].map(row => ({...row, strength: row.count / Math.sqrt(sizeOf(row.source) * sizeOf(row.target))}))
+      .sort((a, b) => b.strength - a.strength || b.count - a.count);
+    /* With a topic open, a paper keeps only its strongest line out to a folded topic, and a folded topic its four
+       strongest papers: which papers bridge to where, without a fan of lines into every bubble. */
+    const isBubble = id => String(id).startsWith('C:');
+    const cap = (end, other) => !isBubble(end) ? 1 : isBubble(other) ? perEnd : 4;
+    const kept = new Set(), per = new Map();
+    const count = (end, other) => per.get(end + '|' + isBubble(other)) || 0;
+    for (const row of rows) {
+      const a = count(row.source, row.target), b = count(row.target, row.source);
+      const both = isBubble(row.source) && isBubble(row.target);
+      if (both ? (a < cap(row.source, row.target) || b < cap(row.target, row.source)) : (a < cap(row.source, row.target) && b < cap(row.target, row.source))) {
+        kept.add(row); per.set(row.source + '|' + isBubble(row.target), a + 1); per.set(row.target + '|' + isBubble(row.source), b + 1);
+      }
+    }
+    const top = Math.max(1, ...[...kept].map(row => row.count));
+    for (const row of kept) edges.push({...row, weight: Math.min(1, 0.15 + row.count / top)});
+    const bubbles = [...bubble.values()].sort((a, b) => a.community - b.community);
+    for (const e of edges) for (const id of [e.source, e.target]) { const b = bubble.get(Number(String(id).slice(2))); if (String(id).startsWith('C:') && b) b.degree++; }
+    return {...graph, nodes: [...bubbles, ...nodes], edges, bubbles, bundles: {drawn: kept.size, total: rows.length}};
+  }
+
+  /* The years the papers on a map were published in, as bars to filter by.
+     One bar a year while the span fits thirty bars; past that two- or
+     five-year bars, aligned to round years, so a 1970-2026 shelf is twelve
+     readable bars rather than fifty-seven slivers. Papers with no year are
+     counted apart, never put in the first bar. */
+  function yearBins(nodes, {maxBars = 30} = {}) {
+    const years = [];
+    let unknown = 0;
+    for (const node of nodes || []) {
+      const y = Number(node.year);
+      if (Number.isFinite(y) && y > 1000) years.push(y); else unknown++;
+    }
+    if (!years.length) return {bins: [], unknown, width: 1};
+    const lo = Math.min(...years), hi = Math.max(...years);
+    const width = [1, 2, 5, 10, 20].find(w => Math.floor(hi / w) - Math.floor(lo / w) + 1 <= maxBars) || 50;
+    const start = Math.floor(lo / width) * width;
+    const bins = [];
+    for (let from = start; from <= hi; from += width) bins.push({from, to: from + width - 1, count: 0});
+    for (const y of years) bins[Math.floor((y - start) / width)].count++;
+    return {bins, unknown, width, lo, hi};
+  }
+
   // How many separate groups the nodes form through the given edges.
   function clusterCount(nodeIDs, edges) {
     const parent = new Map([...nodeIDs].map(id => [String(id), String(id)]));
@@ -922,7 +1318,7 @@
     return {nodes, edges: graph.edges};
   }
 
-  const api = {collectionItemIDs, outsideCited, clusterCount, egoGraph, egoLayout, build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, placeLabelsAround, labelBox, textWidth};
+  const api = {communities, communityNames, collapse, yearBins, layoutAsync, layoutRun, edgeWeight, collectionItemIDs, outsideCited, clusterCount, egoGraph, egoLayout, build, layout, coupling, radiusOf, centralityRadius, seeded, pagerank, foldCitedBy, placeLabels, placeLabelSides, placeLabelsAround, labelBox, textWidth};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CustomStylePaperGraph = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

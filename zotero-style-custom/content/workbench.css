@@ -64,6 +64,8 @@
   /* A paper on a map: the neutral node and its ring (3:1 on the card), for papers whose journal the key does not name. */
   --sc-node-fill: #e3e5e9;
   --sc-node-ring: #6b6f78;
+  /* A folded topic on a map (round 15): a soft container, lighter than a paper, ringed like one. */
+  --sc-cluster-fill: #f1f2f5;
   --sc-shadow: 0 8px 24px rgba(20, 22, 30, .14), 0 0 0 .5px rgba(20, 22, 30, .10);
   --sc-font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif;
   --sc-title-font: var(--sc-font);
@@ -801,6 +803,7 @@
     --sc-graph-line: #7d818c;
     --sc-node-fill: #41424d;
     --sc-node-ring: #9a9eaa;
+    --sc-cluster-fill: #2f3038;
     --sc-shadow: 0 8px 24px rgba(0, 0, 0, .5), 0 0 0 .5px rgba(255, 255, 255, .12);
     color-scheme: dark;
   }
@@ -3161,7 +3164,11 @@
 #style-custom-workbench .sc-graph-label[data-kind=external] { fill: var(--sc-muted); font-style: italic; }
 #style-custom-workbench .sc-graph-arrow { fill: var(--sc-graph-line); }
 /* Found, focused, hovered: the paper's ring goes to the ink; what was not found steps back. */
-#style-custom-workbench .sc-graph[data-finding] g[role=button]:not([data-match]) { opacity: .22; }
+/* Round 15: the shapes step back, not the words -- a label faded with its group was text at 1.4:1. The words of what was not found are hidden until the find is cleared. */
+#style-custom-workbench .sc-graph[data-finding] g[role=button]:not([data-match]) > circle,
+#style-custom-workbench .sc-graph[data-finding] g[role=button]:not([data-match]) > rect:not(.sc-graph-label-bg) { opacity: .22; }
+#style-custom-workbench .sc-graph[data-finding] g[role=button]:not([data-match]) > .sc-graph-label,
+#style-custom-workbench .sc-graph[data-finding] g[role=button]:not([data-match]) > .sc-graph-label-bg { visibility: hidden; }
 #style-custom-workbench .sc-graph g[data-match] > circle,
 #style-custom-workbench .sc-graph g[data-match] > rect:not(.sc-graph-label-bg) { stroke: var(--sc-text); stroke-width: 2.4px; }
 #style-custom-workbench .sc-graph g[role=button]:focus { outline: none; }
@@ -3189,3 +3196,31 @@
 /* A person's own graph: the person in the middle is ringed in the ink. */
 #style-custom-workbench .sc-ego-graph g[data-state=centre] .sc-author-ring { stroke: var(--sc-text); stroke-width: 2; }
 #style-custom-workbench .sc-graph-frame.sc-graph-card { margin-block-start: var(--sc-space-2); }
+
+/* ---- Round 15: topics over the map, folded topics, publication years, the pending frame ---------------------- */
+#style-custom-workbench .sc-graph-topics { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-1) var(--sc-space-2); margin: 0 0 var(--sc-space-2); }
+#style-custom-workbench .sc-graph-topics-label { color: var(--sc-muted); font: var(--sc-fw-medium) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); margin-inline-end: var(--sc-space-1); }
+#style-custom-workbench button.sc-graph-topic { display: inline-flex; align-items: center; gap: var(--sc-space-2); min-height: var(--sc-h-seg); height: auto; max-width: 100%; margin: 0; padding: 2px var(--sc-space-1) 2px var(--sc-space-3); border-radius: var(--sc-radius-pill); background: var(--sc-fill); box-shadow: none; color: var(--sc-text); font: var(--sc-fw-regular) var(--sc-fs-body)/var(--sc-lh-body) var(--sc-font); }
+#style-custom-workbench button.sc-graph-topic:hover { background: var(--sc-fill-hover); }
+#style-custom-workbench button.sc-graph-topic[aria-pressed=true] { background: var(--sc-nav-on); color: var(--sc-nav-on-ink); font-weight: var(--sc-fw-strong); }
+#style-custom-workbench .sc-graph-topic-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28ch; }
+#style-custom-workbench .sc-graph-topic-count { flex: none; min-width: 18px; padding: 0 6px; border-radius: var(--sc-radius-pill); background: var(--sc-surface); color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); font-variant-numeric: tabular-nums; text-align: center; }
+#style-custom-workbench button.sc-graph-topic[aria-pressed=true] .sc-graph-topic-count { background: var(--sc-on-pill-tint); color: inherit; }
+#style-custom-workbench button.sc-graph-topic-more { padding-inline-end: var(--sc-space-3); color: var(--sc-muted); }
+#style-custom-workbench .sc-year-hist { display: flex; flex-direction: column; gap: 2px; padding: 0 var(--sc-space-3) var(--sc-space-2); }
+#style-custom-workbench .sc-year-hist-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sc-space-1) var(--sc-space-2); min-height: 22px; }
+#style-custom-workbench .sc-year-hist-title { color: var(--sc-text); font: var(--sc-fw-strong) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); }
+#style-custom-workbench .sc-year-hist-status { min-width: 0; font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); }
+#style-custom-workbench button.sc-year-hist-clear { margin: 0 0 0 auto; min-height: 22px; height: 22px; padding: 0 var(--sc-space-2); border-radius: var(--sc-radius-pill); background: var(--sc-fill); box-shadow: none; color: var(--sc-text); font: var(--sc-fw-medium) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); }
+#style-custom-workbench .sc-year-hist-bars { display: flex; align-items: flex-end; gap: 2px; height: 40px; }
+#style-custom-workbench button.sc-year-hist-bar { flex: 1 1 0; min-width: 0; height: 100%; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: var(--sc-radius-sm); background: transparent; box-shadow: none; display: flex; align-items: flex-end; }
+#style-custom-workbench button.sc-year-hist-bar:hover { background: var(--sc-fill); }
+#style-custom-workbench .sc-year-hist-fill { display: block; width: 100%; border-radius: var(--sc-radius-sm); background: var(--sc-node-ring); }
+#style-custom-workbench .sc-year-hist:has(button.sc-year-hist-bar[aria-pressed=true]) button.sc-year-hist-bar[aria-pressed=false] .sc-year-hist-fill { background: var(--sc-node-fill); box-shadow: inset 0 0 0 1px var(--sc-node-ring); }
+#style-custom-workbench button.sc-year-hist-bar[aria-pressed=true] .sc-year-hist-fill { background: var(--sc-text); }
+#style-custom-workbench button.sc-year-hist-bar:focus-visible { outline: 2px solid var(--sc-focus, var(--sc-text)); outline-offset: 1px; }
+#style-custom-workbench .sc-year-hist-axis { display: flex; justify-content: space-between; color: var(--sc-muted); font: var(--sc-fw-regular) var(--sc-fs-meta)/var(--sc-lh-meta) var(--sc-font); font-variant-numeric: tabular-nums; }
+#style-custom-workbench .sc-graph-pending { display: flex; align-items: center; justify-content: center; min-height: var(--sc-graph-height, 360px); border-radius: var(--sc-radius-card); background: var(--sc-surface); box-shadow: 0 0 0 1px var(--sc-card-edge); }
+#style-custom-workbench .sc-ego-rest { margin: var(--sc-space-2) 0 0; color: var(--sc-muted); font: var(--sc-card-meta); }
+#style-custom-workbench .sc-ego-rest > summary { cursor: pointer; color: var(--sc-text); }
+#style-custom-workbench .sc-ego-rest-list { display: flex; flex-wrap: wrap; gap: var(--sc-space-1) var(--sc-space-3); margin: var(--sc-space-2) 0 0; padding: 0; list-style: none; }
