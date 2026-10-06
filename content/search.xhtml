@@ -19,6 +19,7 @@
 	<script src="chrome://zotpop/content/filters.js"></script>
 	<script src="chrome://zotpop/content/journals.js"></script>
 	<script src="chrome://zotpop/content/signals.js"></script>
+	<script src="chrome://zotpop/content/reactions.js"></script>
 	<script src="chrome://zotpop/content/related.js"></script>
 	<script src="chrome://zotpop/content/importer.js"></script>
 	<script src="chrome://zotpop/content/preview.js"></script>
@@ -55,6 +56,7 @@
 	<symbol id="ic-rotate" viewBox="0 0 16 16"><path d="M13.4 8a5.4 5.4 0 1 1-1.6-3.8M13.4 2.8v3h-3"/></symbol>
 	<symbol id="ic-book" viewBox="0 0 16 16"><path d="M2.5 3.5h3.8A1.7 1.7 0 0 1 8 5.2v8.3a1.2 1.2 0 0 0-1.2-1.2H2.5zM13.5 3.5H9.7A1.7 1.7 0 0 0 8 5.2v8.3a1.2 1.2 0 0 1 1.2-1.2h4.3z"/></symbol>
 	<symbol id="ic-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M6.3 6.3a1.8 1.8 0 1 1 2.5 1.7c-.5.3-.8.7-.8 1.3M8 11.3v.1"/></symbol>
+	<symbol id="ic-talk" viewBox="0 0 16 16"><path d="M3.5 3.5h9a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H7.2L4.5 13.3v-2.3h-1a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M5.5 6.5h5M5.5 8.5h3"/></symbol>
 	<symbol id="ic-translate" viewBox="0 0 16 16"><path d="M2.5 4h6.5M5.7 2.6V4M4 4c.3 2.2 1.9 4.2 4.5 5.4M8 4c-.4 2.6-2.4 4.7-5.2 5.8M9.5 13.4l2.2-6 2.2 6M10.2 11.6h3"/></symbol>
 </svg>
 
@@ -293,6 +295,7 @@
 					<div id="d-authors" class="d-authors"></div>
 					<div id="d-versions" class="d-versions" hidden="hidden"></div>
 					<div id="d-signals" class="d-signals" hidden="hidden"></div>
+					<div id="d-reactions" class="d-reactions" hidden="hidden" role="group" data-i18n-aria="reactTitle"></div>
 					<div id="d-why" class="d-why" hidden="hidden" role="group" data-i18n-aria="relWhyLabel"></div>
 					<div id="d-collections" class="d-collections" hidden="hidden"></div>
 					<details id="d-fold" class="d-fold">

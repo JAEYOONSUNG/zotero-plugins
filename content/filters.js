@@ -100,17 +100,25 @@ var ZotPoPFilters = (function () {
 		return out;
 	}
 	function peopleOf(r) { return Array.isArray(r.people) ? r.people : []; }
+	/* Every institution an author lists, or the one of a person saved before the list existed. */
+	function institutionsOfPerson(p) {
+		if (p && Array.isArray(p.institutions) && p.institutions.length) return p.institutions.filter(Boolean).map(i => ({ name: String(i.name || "").trim(), country: i.country || null }));
+		return p ? [{ name: String(p.institution || "").trim(), country: p.country || null }] : [];
+	}
 	function institutions(r) {
 		let out = [];
-		for (let p of peopleOf(r)) {
-			let name = String(p.institution || "").trim(), key = flat(name);
-			if (key && !out.some(o => o.key === key)) out.push({ key, name, country: p.country || null });
+		for (let p of peopleOf(r)) for (let i of institutionsOfPerson(p)) {
+			let key = flat(i.name);
+			if (key && !out.some(o => o.key === key)) out.push({ key, name: i.name, country: i.country });
 		}
 		return out;
 	}
 	function countries(r) {
 		let out = [];
-		for (let p of peopleOf(r)) { let c = String(p.country || "").toUpperCase(); if (/^[A-Z]{2}$/.test(c) && !out.includes(c)) out.push(c); }
+		for (let p of peopleOf(r)) for (let i of [{ country: p.country }, ...institutionsOfPerson(p)]) {
+			let c = String(i.country || "").toUpperCase();
+			if (/^[A-Z]{2}$/.test(c) && !out.includes(c)) out.push(c);
+		}
 		return out;
 	}
 	const REVIEW_TITLE = /(?:^|[:\-–—]\s*)(?:a |an |the )?(?:systematic |narrative |scoping |critical |brief |mini-?|literature |comprehensive )*(?:review|meta-analysis|umbrella review)\b|\b(?:systematic review|meta-analysis|literature review|a review of|an overview of)\b/i;
@@ -147,7 +155,7 @@ var ZotPoPFilters = (function () {
 				abstract: fold(r.abstract),
 				author: fold([r.authorString, ...(r.authors || []).map(authorName)].join(" ")),
 				journal: fold([r.venue, r.journalAbbrev, ...(r.venueAliases || [])].filter(Boolean).join(" ")),
-				inst: fold(people.map(p => p.institution).filter(Boolean).join(" ")),
+				inst: fold(people.flatMap(p => institutionsOfPerson(p).map(i => i.name)).filter(Boolean).join(" ")),
 				keywords: fold((Array.isArray(r.keywords) ? r.keywords : [r.keywords]).filter(Boolean).join(" ")),
 				doi: fold(r.doi),
 				year: String(r.year || "")
@@ -162,7 +170,7 @@ var ZotPoPFilters = (function () {
 	function rowText(r, env) {
 		let m = texts(r), where = env && env.where ? env.where(r) : null;
 		return [m.title, m.author, m.journal, m.doi, m.year, fold(r.status),
-			where ? fold([where.first?.institution, where.corresponding?.institution, ...(where.countries || [])].filter(Boolean).join(" ")) : ""].join(" ");
+			where ? fold([...[where.first, where.corresponding].flatMap(p => p ? (p.institutions?.length ? p.institutions.map(i => i.name) : [p.institution]) : []), ...(where.countries || [])].filter(Boolean).join(" ")) : ""].join(" ");
 	}
 	/* The "All" scope of a words rule: title, abstract, authors, every affiliation, journal and keywords, plus
 	   what the row shows. A word only in the abstract is found under All as under Abstract. */

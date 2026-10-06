@@ -37,7 +37,9 @@ export const FAKE = [
 	["A practical framework for reproducible literature synthesis", ["Sora Lee", "Lin Chen"], 2024, "Science", 97, "crossref", { doi: "10.5555/demo.002", pdf: true, jif: 45.8, abstract: "Fictional abstract for the design preview: a checklist for synthesis that another group can rerun.", aff: [HANBIT, LUMEN], corr: 1, review: true }],
 	["Spatial context and cell-state transitions in regeneration", ["Eva Morgan", "Hana Choi"], 2026, "bioRxiv", 3, "openalex", { doi: "10.5555/demo.003", pdf: true, preprint: true, server: "bioRxiv", publishedDoi: "10.5555/demo.004", aff: [KESTREL, HANBIT], corr: 1 }],
 	["Tissue-scale repair atlases from sparse sampling", ["Ren Ahn", "Paula Silva"], 2025, "Cell", 41, "crossref", { doi: "10.5555/demo.004", inLibrary: true, jif: 42.5, aff: [HANBIT, ALTMARK], corr: 1 }],
-	["Benchmarks for repair-stage classifiers", ["Kai Oh", "Chris Voigtland"], 2024, "Nature Biotechnology", 66, "europepmc", { doi: "10.5555/demo.005", pdf: true, jif: 33.1, abstract: "Fictional abstract for the design preview: held-out benchmarks for classifiers of repair stage.", aff: [SATO, MERIDIAN], corr: 0 }],
+	["Benchmarks for repair-stage classifiers", ["Kai Oh", "Chris Voigtland"], 2024, "Nature Biotechnology", 66, "europepmc", { doi: "10.5555/demo.005", pdf: true, jif: 33.1, abstract: "Fictional abstract for the design preview: held-out benchmarks for classifiers of repair stage.", aff: [SATO, MERIDIAN], corr: 0,
+		// Kai Oh holds three posts: the tier is the best of them (Kestrel's), the first one is shown with "+2".
+		more: { 0: [KESTREL, ["Example Genome Foundry", "SG"]] } }],
 	["Preregistered synthesis of repair reviews", ["Dana Yu", "Sora Lee"], 2023, "eLife", 12, "openalex", { doi: "10.5555/demo.006", pdf: true, jif: 6.4, aff: [LUMEN, HANBIT], corr: 1, also: ["europepmc"] }],
 	["Compact editors from uncultivated bacteria", ["Jenna Dowd", "Sam Sternfield", "Priya Natarajan"], 2026, "Proceedings of the National Academy of Sciences", 18, "europepmc", { doi: "10.5555/demo.007", jif: 9.4, aff: [AURORA, AURORA, KESTREL], corr: 0, retracted: true }],
 	["Guide design rules learned from a million targets", ["Jenna Dowd", "Marta Jinkova"], 2025, "Nucleic Acids Research", 88, "crossref", { doi: "10.5555/demo.008", pdf: true, jif: 13.1, aff: [AURORA, ALTMARK], corr: 1 }],
@@ -70,8 +72,10 @@ const fromPairs = list => list ? list.map(([year, n]) => ({ year, n })) : null;
 const authorId = name => "A" + (5000 + [...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0));
 function people(names, x) {
 	if (!x.aff) return null;
+	const instId = name => "I" + (name.length * 1000 + name.charCodeAt(0));
 	return names.map((n, i) => ({ name: n, openalexId: authorId(n), position: i === 0 ? "first" : i === names.length - 1 ? "last" : "middle", corresponding: x.corr === i,
-		institution: x.aff[i]?.[0] || "", institutionId: x.aff[i] ? "I" + (x.aff[i][0].length * 1000 + x.aff[i][0].charCodeAt(0)) : null, country: x.aff[i]?.[1] || null, institutionH: INST_H[x.aff[i]?.[0]] ?? null }));
+		institution: x.aff[i]?.[0] || "", institutionId: x.aff[i] ? instId(x.aff[i][0]) : null, country: x.aff[i]?.[1] || null, institutionH: INST_H[x.aff[i]?.[0]] ?? null,
+		institutions: [x.aff[i], ...(x.more?.[i] || [])].filter(Boolean).map(([name, country]) => ({ name, id: instId(name), ror: null, country, type: null, hIndex: INST_H[name] ?? null })) }));
 }
 function records(Sources) {
 	return Sources.linkPreprintVersions(FAKE.map(([title, names, year, venue, citations, source, x], i) => Sources.makeRecord({
@@ -99,6 +103,34 @@ export function longSpan(Sources) {
 		}
 	}
 	return out;
+}
+
+// Fictional answers for the reactions card: demo1 was talked about, demo8 was not. Every handle is on example domains.
+const REACT_LANDING = "https://journals.example.org/demo.001";
+const fakePost = (handle, name, rkey, date, text, likes, reposts, replies) => ({ uri: "at://did:plc:example/app.bsky.feed.post/" + rkey, author: { handle, displayName: name },
+	record: { createdAt: date, text }, likeCount: likes, repostCount: reposts, replyCount: replies, quoteCount: 0, embed: { external: { uri: REACT_LANDING, title: FAKE[0][0] } } });
+function reactionAnswer(url) {
+	const u = new URL(url), q = decodeURIComponent(url);
+	if (u.host === "api.crossref.org") {
+		const doi = q.match(/works\/(10\.5555\/demo\.\d+)/)?.[1];
+		const row = doi && FAKE.find(f => f[6].doi === doi);
+		return row ? { status: 200, response: { message: { DOI: doi, title: [row[0]], resource: { primary: { URL: "https://journals.example.org/" + doi.split("/")[1] } } } } } : { status: 404, response: null };
+	}
+	if (u.host === "www.ebi.ac.uk") return { status: 200, response: { hitCount: 0, resultList: { result: [] } } };
+	if (u.host === "api.bsky.app") {
+		if (u.searchParams.get("url") !== REACT_LANDING) return { status: 200, response: { posts: [], hitsTotal: 0 } };
+		return { status: 200, response: { hitsTotal: 9, posts: [
+			fakePost("mina-lab.example.social", "Mina Kim lab", "3demo1", "2025-03-04T09:12:00.000Z", "Our repair atlas is out: three tissues, one map of the cell states that come back after injury. Data and code are open.", 212, 64, 18),
+			fakePost("tissue-notes.example.social", "Tissue notes", "3demo2", "2025-03-05T14:40:00.000Z", "Nice to see longitudinal sampling done properly. The spatial panels in figure 3 are the part to read.", 58, 11, 4),
+			fakePost("regen-journal-club.example.social", "Regen journal club", "3demo3", "2025-03-11T18:02:00.000Z", "Picked for this week's journal club. Questions on the batch correction welcome below.", 21, 3, 9),
+			fakePost("cellmaps.example.social", "Cell maps", "3demo4", "2025-04-02T07:30:00.000Z", "Thread on how this atlas compares with last year's single-organ maps.", 9, 2, 1)] } };
+	}
+	if (u.host === "hn.algolia.com") {
+		if (u.searchParams.get("query") !== "journals.example.org/demo.001") return { status: 200, response: { hits: [] } };
+		return { status: 200, response: { hits: [{ objectID: "900001", title: "A single-cell atlas of tissue repair across three organs", url: REACT_LANDING, points: 143, num_comments: 37, created_at: "2025-03-06T11:20:00Z", author: "example" }] } };
+	}
+	if (u.host === "en.wikipedia.org") return { status: 200, response: { query: { searchinfo: { totalhits: q.includes("demo.001") ? 1 : 0 }, search: q.includes("demo.001") ? [{ title: "Tissue regeneration (fictional)", timestamp: "2026-08-01T00:00:00Z" }] : [] } } };
+	return null;
 }
 
 // Where the cells sit in a 1280 and a 1440 wide window (measured from the page in Chrome; the rows are 48px, the first at y=191),
@@ -147,7 +179,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	const errors = [];
 	let netCalls = 0, dialogs = 0;
 	// What is answered in place of the network: the OpenAlex lookup behind the citation card, and a translation service.
-	const stubbed = { openalex: [], translate: [], orcid: [], orcidAlex: [] };
+	const stubbed = { openalex: [], translate: [], orcid: [], orcidAlex: [], reactions: [] };
 	const launched = [];
 	const previewFiles = new Map();
 	let freshWork = null;
@@ -200,6 +232,8 @@ export async function buildPreview({ locale = "en" } = {}) {
 				// The one paper's refresh: answered from the fixture, counted apart from the network (which stays at zero).
 				if (/^https:\/\/api\.openalex\.org\/works\/doi:/.test(url) && freshWork) { stubbed.openalex.push(url.replace(/\?.*/, "")); return { status: 200, response: freshWork }; }
 				// The ORCID name lookup and the OpenAlex answers behind it: fictional people, answered in place of the network.
+				const reacted = reactionAnswer(url);
+				if (reacted) { stubbed.reactions.push(url.replace(/\?.*/, "")); return reacted; }
 				const fictional = orcidFixtureAnswer(url);
 				if (fictional) { (/^https:\/\/pub\.orcid\.org\//.test(url) ? stubbed.orcid : stubbed.orcidAlex).push(url.replace(/\?.*/, "")); return { status: 200, response: fictional }; }
 				netCalls++; throw new Error("network is off in the preview");
@@ -212,7 +246,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 			getCurrentTarget: () => ({ libraryID: 1, collectionID: null }), forgetTitleIndex() {} }
 	});
 	win.Zotero = ctx.Zotero;
-	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "signals", "tooltip", "cite", "translate", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
+	for (const f of ["i18n", "query", "brand-icons", "affiliations", "journal-marks", "jcr", "history", "sources", "authors", "metrics", "filters", "journals", "signals", "reactions", "tooltip", "cite", "translate", "preview"]) vm.runInContext(read(`content/${f}.js`), ctx, { filename: f });
 	// linkedom's dataset drops "data-i18n" (a digit in the name); read the attribute instead. Strings stay the real ones.
 	ctx.ZotPoPI18N.apply = (root, t) => {
 		for (const el of root.querySelectorAll("[data-i18n]")) el.textContent = t(el.getAttribute("data-i18n"));
@@ -271,6 +305,13 @@ export async function buildPreview({ locale = "en" } = {}) {
 		return html;
 	};
 	const tipTitle = tipState(0, "title"), tipAff = tipState(1, "aff"), tipJournal = tipState(0, "journal"), tipAuthors = tipState(0, "authors");
+	// Kai Oh's three institutions: the cell's "+2" and the card that lists them, hung from that row.
+	const multiIndex = [...document.querySelectorAll("#results-body tr")].findIndex(tr => tr.dataset.key.endsWith("demo5"));
+	const multiRects = TIP_RECTS.aff;
+	TIP_RECTS.aff = [cellRect(511, 661, multiIndex), cellRect(661, 811, multiIndex)];
+	const tipAffMulti = tipState(multiIndex, "aff");
+	const tipAffMultiText = tipCases.aff.text;
+	TIP_RECTS.aff = multiRects;
 	const results = page();
 	rows[0]?.dispatchEvent(new window.Event("click", { bubbles: true }));
 	await new Promise(r => setTimeout(r, 30));
@@ -826,7 +867,36 @@ export async function buildPreview({ locale = "en" } = {}) {
 	ctx.Zotero.PDFTranslate = installed;
 	trace.signals = signals;
 	trace.translateNote = translateNote;
-	return { pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, authorsPick, combinedPage: trace.combinedPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors, locale };
+	// ---- every institution in the detail: Kai Oh's three posts, the fold opened
+	fire(rowOf("demo5"));
+	await wait(30);
+	document.getElementById("d-fold").setAttribute("open", "");
+	trace.multiAff = { cell: rowOf("demo5").querySelector("td.aff").textContent.replace(/\s+/g, ""), card: tipAffMultiText,
+		authors: text("d-authors").replace(/\s+/g, " ").trim(), where: text("d-where").replace(/\s+/g, " ").trim() };
+	const detailMultiPage = page();
+	document.getElementById("d-fold").removeAttribute("open");
+	// ---- reactions: nothing asked on opening; one press draws the card (fictional answers in place of the network)
+	fire(rowOf("demo1"));
+	await wait(30);
+	const reactButton = () => document.querySelector("#d-reactions button.rx-btn");
+	trace.reactions = { before: stubbed.reactions.length, button: reactButton()?.textContent || null };
+	fire(reactButton());
+	for (let i = 0; i < 300 && !document.querySelector("#d-reactions .rx-card"); i++) await wait(10);
+	await wait(30);
+	const rcard = document.querySelector("#d-reactions .rx-card");
+	trace.reactions.requests = stubbed.reactions.length;
+	trace.reactions.chips = [...rcard.querySelectorAll(".rx-chip")].map(c => c.textContent);
+	trace.reactions.items = [...rcard.querySelectorAll("button.rx-item")].map(b => b.getAttribute("data-opens"));
+	document.getElementById("d-reactions").scrollIntoView?.();
+	const reactionsPage = page();
+	fire(rowOf("demo8"));
+	await wait(30);
+	fire(reactButton());
+	for (let i = 0; i < 300 && !document.querySelector("#d-reactions .rx-card"); i++) await wait(10);
+	await wait(30);
+	trace.reactions.empty = document.querySelector("#d-reactions .rx-empty")?.textContent || null;
+	const reactionsEmptyPage = page();
+	return { detailMultiPage, tipAffMulti, reactionsPage, reactionsEmptyPage, pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, authorsPick, combinedPage: trace.combinedPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors, locale };
 }
 
 export function checkPreview(out) {
@@ -948,7 +1018,12 @@ export function checkPreview(out) {
 		if (!d.open.shown || !d.open.attr || d.open.pressed !== "true" || !/^1 \/ 12$/.test(d.open.page) || d.open.canvases !== 1) problems.push("P should open the PDF in the detail card on page 1 of 12; got " + JSON.stringify(d.open));
 		if (!/^3 \/ 12$/.test(d.turned.page)) problems.push("the page buttons should turn pages; got " + JSON.stringify(d.turned));
 		if (d.closed.shown || d.closed.attr || d.dialogs !== 0) problems.push("P again closes the preview and no window is ever opened; got " + JSON.stringify([d.closed, d.dialogs]));
-		for (const [name, html] of [["pins", out.pinsMenuPage], ["pin-results", out.pinResultsPage], ["pdf", out.pdfPage]]) {
+		const rx = out.trace.reactions || {}, ma = out.trace.multiAff || {};
+		if (rx.before !== 0 || !(rx.requests > 0) || rx.requests > 10) problems.push("reactions are asked only when the button is pressed, at most ten requests; got " + JSON.stringify([rx.before, rx.requests]));
+		if (!rx.chips?.[0]?.startsWith("Bluesky") || !/9$/.test(rx.chips[0]) || !rx.items?.length || rx.items.some(v => v !== "browser")) problems.push("the reactions card should show Bluesky 9 and items that open the browser; got " + JSON.stringify(rx));
+		if (!rx.empty) problems.push("a paper nobody talked about should say so plainly");
+		if (!/\+2$/.test(ma.cell || "") || !/Kestrel Institute/.test(ma.card || "") || !/Example Genome Foundry/.test(ma.where || "")) problems.push("Kai Oh's three institutions should show as +2, in the card and in the detail; got " + JSON.stringify(ma));
+		for (const [name, html] of [["pins", out.pinsMenuPage], ["pin-results", out.pinResultsPage], ["pdf", out.pdfPage], ["reactions", out.reactionsPage], ["reactions-empty", out.reactionsEmptyPage], ["tooltip-aff-multi", out.tipAffMulti], ["detail-multi-aff", out.detailMultiPage]]) {
 			if (/<script\b|<link\b/i.test(html)) problems.push(name + ": script or link tag present");
 			if (!html.includes('id="results-table"')) problems.push(name + ": no table");
 		}
@@ -960,35 +1035,41 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	const out = await buildPreview({ locale: process.env.PREVIEW_LOCALE || "en" });
 	const problems = checkPreview(out);
 	if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
-	fs.mkdirSync(path.join(root, "docs"), { recursive: true });
-	fs.writeFileSync(path.join(root, "docs/search-preview.html"), out.results);
-	fs.writeFileSync(path.join(root, "docs/search-preview-detail.html"), out.detail);
-	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip.html"), out.tipTitle);
-	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip-aff.html"), out.tipAff);
-	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip-journal.html"), out.tipJournal);
-	fs.writeFileSync(path.join(root, "docs/search-preview-tooltip-authors.html"), out.tipAuthors);
-	fs.writeFileSync(path.join(root, "docs/search-preview-facet.html"), out.facet);
-	fs.writeFileSync(path.join(root, "docs/search-preview-import.html"), out.importPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-history.html"), out.historyPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-rerun.html"), out.rerun);
-	fs.writeFileSync(path.join(root, "docs/search-preview-unfolded.html"), out.unfolded);
-	fs.writeFileSync(path.join(root, "docs/search-preview-authors.html"), out.authorsPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-authors-lookup.html"), out.authorsLookup);
-	fs.writeFileSync(path.join(root, "docs/search-preview-authors-pick.html"), out.authorsPick);
-	fs.writeFileSync(path.join(root, "docs/search-preview-authors-combined.html"), out.combinedPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-orcid.html"), out.orcidLookup);
-	fs.writeFileSync(path.join(root, "docs/search-preview-orcid-summary.html"), out.orcidSummary);
-	fs.writeFileSync(path.join(root, "docs/search-preview-orcid-works.html"), out.orcidWorks);
-	fs.writeFileSync(path.join(root, "docs/search-preview-filters.html"), out.filtersPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-journals.html"), out.journalsPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-longspan.html"), out.longSpanPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-cite.html"), out.citePage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-translate.html"), out.translatedPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-signals.html"), out.signalsPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-retracted.html"), out.retractedPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-pins.html"), out.pinsMenuPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-pin-results.html"), out.pinResultsPage);
-	fs.writeFileSync(path.join(root, "docs/search-preview-pdf.html"), out.pdfPage);
-	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: docs/search-preview.html, docs/search-preview-detail.html`);
+	// PREVIEW_OUT writes somewhere else (a scratch folder), so a look at one change does not rewrite docs/.
+	const outDir = process.env.PREVIEW_OUT ? path.resolve(process.env.PREVIEW_OUT) : path.join(root, "docs");
+	fs.mkdirSync(outDir, { recursive: true });
+	fs.writeFileSync(path.join(outDir, "search-preview.html"), out.results);
+	fs.writeFileSync(path.join(outDir, "search-preview-detail.html"), out.detail);
+	fs.writeFileSync(path.join(outDir, "search-preview-tooltip.html"), out.tipTitle);
+	fs.writeFileSync(path.join(outDir, "search-preview-tooltip-aff.html"), out.tipAff);
+	fs.writeFileSync(path.join(outDir, "search-preview-tooltip-journal.html"), out.tipJournal);
+	fs.writeFileSync(path.join(outDir, "search-preview-tooltip-authors.html"), out.tipAuthors);
+	fs.writeFileSync(path.join(outDir, "search-preview-facet.html"), out.facet);
+	fs.writeFileSync(path.join(outDir, "search-preview-import.html"), out.importPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-history.html"), out.historyPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-rerun.html"), out.rerun);
+	fs.writeFileSync(path.join(outDir, "search-preview-unfolded.html"), out.unfolded);
+	fs.writeFileSync(path.join(outDir, "search-preview-authors.html"), out.authorsPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-authors-lookup.html"), out.authorsLookup);
+	fs.writeFileSync(path.join(outDir, "search-preview-authors-pick.html"), out.authorsPick);
+	fs.writeFileSync(path.join(outDir, "search-preview-authors-combined.html"), out.combinedPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-orcid.html"), out.orcidLookup);
+	fs.writeFileSync(path.join(outDir, "search-preview-orcid-summary.html"), out.orcidSummary);
+	fs.writeFileSync(path.join(outDir, "search-preview-orcid-works.html"), out.orcidWorks);
+	fs.writeFileSync(path.join(outDir, "search-preview-filters.html"), out.filtersPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-journals.html"), out.journalsPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-longspan.html"), out.longSpanPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-cite.html"), out.citePage);
+	fs.writeFileSync(path.join(outDir, "search-preview-translate.html"), out.translatedPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-signals.html"), out.signalsPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-retracted.html"), out.retractedPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-pins.html"), out.pinsMenuPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-pin-results.html"), out.pinResultsPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-pdf.html"), out.pdfPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-reactions.html"), out.reactionsPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-reactions-empty.html"), out.reactionsEmptyPage);
+	fs.writeFileSync(path.join(outDir, "search-preview-tooltip-aff-multi.html"), out.tipAffMulti);
+	fs.writeFileSync(path.join(outDir, "search-preview-detail-multi-aff.html"), out.detailMultiPage);
+	console.log(`ZotPoP search preview: real markup, CSS and ui.js, ${out.rows} fictional rows, no network: ${path.relative(root, outDir) || "."}/search-preview*.html`);
 	process.exit(0);
 }

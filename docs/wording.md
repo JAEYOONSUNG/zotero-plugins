@@ -25,7 +25,7 @@ new string that drifts fails the suite.
 
 Kept as they are in both languages: JIF, JCR, h-index, g-index, DOI, ORCID, ORCID iD,
 OpenAlex, PubMed, Crossref, Europe PMC, arXiv, Semantic Scholar, Google Scholar,
-Publish or Perish (PoP), CSV, PDF, API key.
+Publish or Perish (PoP), CSV, PDF, API key, Bluesky, Hacker News, Wikipedia (위키백과 in Korean prose).
 
 ## Rules
 

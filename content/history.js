@@ -81,6 +81,20 @@ var ZotPoPHistory = (function () {
 		for (let r of records) if (r && Array.isArray(r.citesByYear) && r.citesByYear.length && !(r.citesByYearSeen && Number.isInteger(r.citesByYearSeen.to)))
 			r.citesByYearSeen = { at: ms, from: to - 9, to };
 	}
+	/* People saved before each author kept every institution had one, in flat fields: they are read as a list
+	   of one (`institutions`), so the window, the filters and the CSV see one shape. The flat fields stay. */
+	function migratePeople(records) {
+		for (let r of Array.isArray(records) ? records : []) {
+			for (let p of Array.isArray(r?.people) ? r.people : []) {
+				if (!p || typeof p !== "object" || Array.isArray(p.institutions)) continue;
+				let name = String(p.institution || "").trim();
+				p.institutions = name || p.institutionId || p.country
+					? [{ name, id: p.institutionId || null, ror: null, country: p.country ? String(p.country).toUpperCase() : null, type: null, hIndex: Number.isFinite(p.institutionH) ? p.institutionH : null }]
+					: [];
+			}
+		}
+		return records;
+	}
 	function signature(source, query) {
 		let text = JSON.stringify([String(source || ""), normalizeQuery(query)]);
 		return fnv(text) + fnv(text.split("").reverse().join(""));
@@ -234,6 +248,7 @@ var ZotPoPHistory = (function () {
 				let parsed = JSON.parse(await io.readText(path(id + ".json")));
 				if (parsed?.version !== 1 || !Array.isArray(parsed.records)) return null;
 				stampSeries(parsed.records, parsed.savedAt);
+				migratePeople(parsed.records);
 				return parsed;
 			}
 			catch (_) {
@@ -344,7 +359,7 @@ var ZotPoPHistory = (function () {
 		};
 	}
 
-	return { create, memoryIO, signature, describe, normalizeQuery, recordKey };
+	return { create, memoryIO, signature, describe, normalizeQuery, recordKey, migratePeople };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPHistory;

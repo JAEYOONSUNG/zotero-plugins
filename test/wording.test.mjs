@@ -58,7 +58,7 @@ test("the glossary file names every rule the test enforces", () => {
 });
 
 test("English labels are in sentence case", () => {
-	const PROPER = /^(?:Zotero|ZotPoP|OpenAlex|ORCID|PubMed|Google|Scholar|Crossref|Europe|PMC|Semantic|DOI|PDFs?|CSV|JIF|JCR|PoP|Publish|Perish|LinkedIn|Style|Custom|Extra|Translate|GitHub|API|URL|IDs?|iD|Enter|Esc|Space|Shift|NCBI|AND|OR|NOT|Yonsei|CAPTCHA|JSON|Unpaywall|Research|Square|Library|English)$/;
+	const PROPER = /^(?:Zotero|ZotPoP|OpenAlex|ORCID|PubMed|Google|Scholar|Crossref|Europe|PMC|Semantic|DOI|PDFs?|CSV|JIF|JCR|PoP|Publish|Perish|LinkedIn|Style|Custom|Extra|Translate|GitHub|API|URL|IDs?|iD|Enter|Esc|Space|Shift|NCBI|AND|OR|NOT|Yonsei|CAPTCHA|JSON|Unpaywall|Research|Square|Library|English|Bluesky|Hacker|News|Wikipedia)$/;
 	const bad = Object.entries(en).filter(([, value]) => typeof value === "string" && value.length < 60 && !/[.;?!](?:\s|$)/.test(value))
 		.filter(([, value]) => value.split(/\s+[—·]\s+/).some(part => part.split(/\s+/).slice(1).some(word => /^[A-Z][a-z]/.test(word) && !PROPER.test(word.replace(/[^\w-]/g, "")))))
 		.map(([key, value]) => `${key}: ${value}`);

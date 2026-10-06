@@ -480,6 +480,8 @@ td.country { font-variant-numeric: tabular-nums; }
 #results-table td.aff .aff-flag { flex: none; font-size: 13px; line-height: 16px; }
 #results-table td.aff .aff-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 #results-table td.aff .aff-name.aff-unknown { color: var(--muted); font-style: italic; }
+/* "+2": the author's other institutions, named in the hover card */
+#results-table td.aff .aff-more { flex: none; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--chip); color: var(--muted); font-size: 11px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 /* the library column: the check sits at one x with or without the reading state after it */
 #results-table th[data-sort="inLibrary"], #results-table td.lib { text-align: left; padding-left: 12px; }
 td.lib { color: var(--ok); font-weight: 600; }
@@ -540,6 +542,57 @@ button.watch-btn[aria-pressed="true"] { background: var(--seg-on); color: var(--
 #results-table td.title .rel-chip { margin-right: 8px; }
 .rel-chip.strong { background: var(--pos-bg); color: var(--pos-ink); }
 /* "Why this paper": the held papers the ranking linked it to, in a soft tinted box; each title selects that paper in Zotero. */
+/* ---- reactions: one inner container, a chip per source with its count, then the lists. No edge bars. */
+.d-reactions { display: flex; flex-direction: column; gap: 8px; font-size: 12px; line-height: 18px; }
+.d-reactions .rx-bar-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.d-reactions button.rx-btn { height: var(--h-seg); padding: 0 12px; font-size: 11px; line-height: 16px; gap: 6px; }
+.d-reactions .rx-status, .d-reactions .rx-when { color: var(--muted); font-size: 11px; line-height: 16px; }
+.d-reactions .rx-failed { color: var(--warn); font-size: 11px; line-height: 16px; margin: 0; }
+.rx-card { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: var(--r-box); background: var(--bg-tint); }
+.rx-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rx-head .rx-title { font-size: 13px; line-height: 18px; font-weight: 600; color: var(--text); }
+.rx-head .rx-when { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rx-head button.rx-refresh { width: 26px; height: 26px; flex: none; }
+.rx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rx-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border);
+	color: var(--text); font-size: 11px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.rx-chip:not(:has(.rx-n)) { padding-right: 10px; }
+.rx-chip .rx-n { min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--chip); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.rx-chip.zero { color: var(--muted); }
+.rx-chip.failed { background: var(--att-bg); color: var(--att-ink); box-shadow: none; }
+.rx-chip.failed .rx-n { background: transparent; font-weight: 500; padding: 0 6px 0 0; }
+.rx-chip.pos { background: var(--pos-bg); color: var(--pos-ink); box-shadow: none; }
+.rx-chip.att { background: var(--att-bg); color: var(--att-ink); box-shadow: none; }
+.rx-chip.neg { background: var(--neg-bg); color: var(--neg-ink); box-shadow: none; font-weight: 600; }
+button.rx-chip-link { height: 24px; padding: 0 4px 0 10px; border: 0; }
+button.rx-chip-link:hover:not(:disabled) { background: var(--row-hover); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.rx-group, .rx-trend { display: flex; flex-direction: column; gap: 6px; }
+.rx-sub { color: var(--muted); font-size: 11px; line-height: 16px; font-weight: 600; }
+.rx-list, .rx-notices { display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 10px; background: var(--card); }
+.rx-notices { background: var(--att-bg); }
+.rx-notices.neg { background: var(--neg-bg); }
+button.rx-item { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 2px; width: 100%; height: auto; min-height: 32px; padding: 6px 8px;
+	border: 0; border-radius: var(--r-row); background: transparent; text-align: left; white-space: normal; font-weight: 400; color: var(--text); }
+button.rx-item:hover:not(:disabled) { background: var(--row-hover); }
+.rx-notices button.rx-item { color: var(--att-ink); }
+.rx-notices.neg button.rx-item { color: var(--neg-ink); }
+.rx-notices button.rx-item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.35); }
+.rx-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.rx-src { flex: none; color: var(--muted); font-size: 11px; line-height: 16px; font-weight: 600; }
+.rx-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.rx-notices .rx-who { flex: 0 1 auto; }
+.rx-date { flex: none; color: var(--muted); font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.rx-notices .rx-date { color: inherit; }
+.rx-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--text); font-size: 12px; line-height: 18px; }
+.rx-eng { color: var(--muted); font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.rx-bars { display: flex; align-items: flex-end; gap: 6px; padding: 8px 8px 4px; border-radius: 10px; background: var(--card); overflow-x: auto; }
+.rx-col { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 32px; }
+.rx-col .rx-v { color: var(--text); font-size: 11px; line-height: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rx-col .rx-bar { width: 20px; border-radius: 4px; background: var(--accent); opacity: .8; }
+.rx-col .rx-bar.partial { opacity: .35; }
+.rx-col .rx-y { color: var(--muted); font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.rx-empty { margin: 0; color: var(--muted); font-size: 12px; line-height: 18px; }
+@media (prefers-color-scheme: dark) { .rx-notices button.rx-item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); } }
 .d-why { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: var(--r-box); background: var(--bg-tint); font-size: 11px; line-height: 16px; color: var(--muted); }
 .d-why .why-head { font-weight: 600; color: var(--text); }
 .d-why .why-list { display: flex; flex-direction: column; gap: 2px; }

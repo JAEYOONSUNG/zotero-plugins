@@ -46,7 +46,9 @@ test("OpenAlex authorships become people with lab, country and role; institution
 	assert.equal(records.length, 2);
 	const [a, b] = records;
 	assert.equal(a.people.length, 3);
-	assert.deepEqual({ ...a.people[0] }, { name: "Sheila Ingemann Jensen", position: "first", corresponding: false, institution: "DTU", institutionId: "I10", country: "DK", institutionH: 640, openalexId: null, orcid: null });
+	// The flat fields are the first institution's; `institutions` lists every one (test/multi-affiliation.test.mjs).
+	assert.deepEqual(JSON.parse(JSON.stringify(a.people[0])), { name: "Sheila Ingemann Jensen", position: "first", corresponding: false, institution: "DTU", institutionId: "I10", country: "DK", institutionH: 640, openalexId: null, orcid: null,
+		institutions: [{ name: "DTU", id: "I10", ror: null, country: "DK", type: null, hIndex: 640 }] });
 	assert.equal(a.people[2].corresponding, true);
 	assert.equal(a.people[2].institutionH, 1800);
 	assert.equal(a.people[1].institutionH, null, "middle authors are not looked up");

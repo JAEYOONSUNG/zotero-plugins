@@ -12,6 +12,7 @@ import Journals from "../../content/journals.js";
 import Signals from "../../content/signals.js";
 import Related from "../../content/related.js";
 import Tip from "../../content/tooltip.js";
+import Reactions from "../../content/reactions.js";
 
 export const paper = (key, extra = {}) => ({
 	key, title: key, citations: 1, year: 2026, authors: [], ...extra
@@ -164,6 +165,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 		ZotPoPJournals: Journals,
 		ZotPoPSignals: Signals,
 		ZotPoPRelated: Related,
+		ZotPoPReactions: Reactions,
 		ZotPoPJournalMarks: JournalMarks,
 		ZotPoPTip: Tip,
 		ZotPoPJCR: JCR,
@@ -188,7 +190,7 @@ export function uiHarness({ sort = "relevance", search, request, refreshLibraryF
 			wireEvents, importRecords, openToolbarMenu, closeToolbarMenu, onToolbarMenuKey, viewMenuItems, setLanguage, languageChoice, renderVersions, renderSignals, followAuthor, heldVersion, revealRecord, buildResultContext, applyLocalFacet, setFacet, updateCounts, applyColumnView, saveLayout, originalRenderDetail, runAuthorAction, showAuthorHistory, switchSearchMode, switchAuthorProvider, renderAuthorProfiles, authorQuery, authorInputChanged, restoreAuthorPreferences, saveAuthorPreferences, originalRenderMetrics,
 			yearBins, filterSpec, addRule, openFilterPop, closeFilterPop, syncFilterUI, clearAllFilters, affLineParts, shortInstitution, renderAuthors, addVenueChip, removeVenueChip, setVenueChips, refreshVenueSuggestions, onVenueKey, wireVenueBox, ensureJournalCatalog, citeCardBody, renderCiteStrip,
 			searchMode: () => searchSurface, authorSessions, setAuthorProvider: provider => { activeAuthorProvider = provider; }, personPick, setPick, peopleClusters, setPersonMembership, unverifiedAuthorResults, validPick, metricsOwner, authorMetricsInfo,
-			renderWhy, selectHeld, relatedTipText, relatedChip, loadJournalFigures, setDetailVisible,
+			renderWhy, renderReactions, loadReactions, reactionsBusy: () => reactState.busy.size > 0, selectHeld, relatedTipText, relatedChip, loadJournalFigures, setDetailVisible,
 			ensureAbstracts, runTranslate, setTranslatorForTest: value => { translator = value; },
 			get history() { return history; },
 			setOpenSelectForTest: value => { openSel = value; } };

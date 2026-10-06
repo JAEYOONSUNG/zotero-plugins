@@ -326,17 +326,27 @@ var ZotPoPSources = (function () {
 	function openAlexId(value) { return String(value || "").replace("https://openalex.org/", "") || null; }
 	function openAlexPeople(authorships) {
 		let people = (authorships || []).map(a => {
-			let inst = (a.institutions || [])[0] || {};
+			/* Every institution the author lists (a university and its hospital, a lab and an institute), in
+			   OpenAlex's order. The flat fields stay the first one's, so whatever read them reads the same. */
+			let institutions = (a.institutions || []).filter(i => i && (i.display_name || i.id)).map(i => ({
+				name: i.display_name || "", id: openAlexId(i.id), ror: i.ror || null,
+				country: String(i.country_code || "").toUpperCase() || null, type: i.type || null, hIndex: null
+			}));
+			if (!institutions.length && (a.raw_affiliation_strings || [])[0])
+				institutions = a.raw_affiliation_strings.filter(Boolean).map(name => ({ name, id: null, ror: null, country: null, type: null, hIndex: null }));
+			let inst = institutions[0] || {};
+			if (institutions[0] && !inst.country && (a.countries || [])[0]) inst.country = String(a.countries[0]).toUpperCase();
 			return {
 				name: a.author?.display_name || a.raw_author_name || "",
 				position: a.author_position || "",
 				corresponding: Boolean(a.is_corresponding),
-				institution: inst.display_name || (a.raw_affiliation_strings || [])[0] || "",
-				institutionId: openAlexId(inst.id),
+				institution: inst.name || "",
+				institutionId: inst.id || null,
 				openalexId: openAlexId(a.author?.id),
 				orcid: a.author?.orcid || a.raw_orcid || null,
-				country: String(inst.country_code || (a.countries || [])[0] || "").toUpperCase() || null,
-				institutionH: null
+				country: inst.country || String((a.countries || [])[0] || "").toUpperCase() || null,
+				institutionH: null,
+				institutions
 			};
 		}).filter(p => p.name);
 		return people.length ? people : null;
@@ -349,10 +359,17 @@ var ZotPoPSources = (function () {
 	const affiliationText = value => String(value == null ? "" : value)
 		.replace(/\s*(?:Electronic address:\s*)?[^\s@,;()]+@[^\s@,;()]+?\.?(?=[\s,;)]|$)/gi, "")
 		.replace(/\(\s*\)/g, "").replace(/\s*[,;]\s*$/, "").replace(/\s+\./g, ".").replace(/\s{2,}/g, " ").trim();
+	/* A source that lists affiliation strings (Crossref, Europe PMC) gives each author `institutions` as names;
+	   the first is also the flat `institution`. */
 	function affiliatedPeople(entries) {
-		let people = entries.filter(p => p.name).map(p => p.institution ? Object.assign(p, { institution: affiliationText(p.institution) }) : p);
+		let people = entries.filter(p => p.name).map(p => {
+			let institutions = (p.institutions || []).map(i => ({ ...i, name: affiliationText(i.name) })).filter(i => i.name)
+				.filter((i, k, all) => all.findIndex(o => o.name === i.name) === k);
+			return Object.assign(p, { institution: institutions[0]?.name || "", institutions });
+		});
 		return people.some(p => p.institution) ? people : null;
 	}
+	const namedInstitution = (name, ror = null) => ({ name: String(name || ""), id: null, ror, country: null, type: null, hIndex: null });
 
 	function makeRecord(r) {
 		let doi = normalizeDOI(r.doi);
@@ -749,6 +766,7 @@ var ZotPoPSources = (function () {
 			let q = placed[j];
 			return q.institutionId || q.country
 				? { ...p, institution: q.institution || p.institution, institutionId: q.institutionId, country: q.country, institutionH: q.institutionH ?? p.institutionH ?? null,
+					institutions: Array.isArray(q.institutions) && q.institutions.length ? q.institutions : p.institutions,
 					openalexId: q.openalexId || p.openalexId || null, orcid: p.orcid || q.orcid || null, corresponding: Boolean(p.corresponding || q.corresponding) }
 				: p;
 		});
@@ -1023,28 +1041,48 @@ var ZotPoPSources = (function () {
 		};
 	}
 
-	function applyInstitution(p, st) {
+	/* One institution's figures, onto the institution entry (`target`) or, for a person of the old shape, onto
+	   the flat fields. The first institution's figures are also the person's flat ones. */
+	function applyInstitution(target, st) {
 		if (!st) return;
-		p.institutionH = st.hIndex;
-		if (!p.institution) p.institution = st.name;
-		if (!p.country) p.country = st.country;
+		if (target.person) {
+			let { person: p, entry } = target;
+			if (entry) {
+				entry.hIndex = st.hIndex;
+				if (!entry.name) entry.name = st.name;
+				if (!entry.country) entry.country = st.country;
+			}
+			if (!entry || p.institutions[0] === entry) {
+				p.institutionH = st.hIndex;
+				if (!p.institution) p.institution = st.name;
+				if (!p.country) p.country = st.country;
+			}
+			return;
+		}
+		applyInstitution({ person: target, entry: null }, st);
 	}
 
-	// Only the first and corresponding authors are shown, so only their labs are looked up.
+	// Only the first and corresponding authors are shown, so only their labs are looked up -- every one of them.
 	function principalPeople(record) {
 		let picked = Affiliations?.principals(record.people);
 		return picked ? [picked.first, picked.corresponding].filter(Boolean) : [];
+	}
+	function institutionTargets(p) {
+		if (Array.isArray(p.institutions) && p.institutions.length)
+			return p.institutions.filter(i => i && i.id && i.hIndex == null).map(entry => ({ id: entry.id, person: p, entry }));
+		return p.institutionId && p.institutionH == null ? [{ id: p.institutionId, person: p, entry: null }] : [];
 	}
 
 	async function enrichInstitutions(records, http, ctx = {}) {
 		let byId = new Map();
 		for (let r of records) {
 			for (let p of principalPeople(r)) {
-				if (!p.institutionId || p.institutionH != null) continue;
-				if (INSTITUTION_CACHE.has(p.institutionId)) applyInstitution(p, INSTITUTION_CACHE.get(p.institutionId));
-				else {
-					if (!byId.has(p.institutionId)) byId.set(p.institutionId, []);
-					byId.get(p.institutionId).push(p);
+				for (let target of institutionTargets(p)) {
+					if (INSTITUTION_CACHE.has(target.id)) applyInstitution(target, INSTITUTION_CACHE.get(target.id));
+					else {
+						if (!byId.has(target.id)) byId.set(target.id, []);
+						byId.get(target.id).push(target);
+					}
 				}
 			}
 		}
@@ -1344,7 +1382,8 @@ var ZotPoPSources = (function () {
 						name: a.family ? fromFamilyGiven(a.family, a.given).name : a.name || "",
 						position: a.sequence === "first" || i === 0 ? "first" : i === (w.author || []).length - 1 ? "last" : "middle",
 						corresponding: false,
-						institution: (a.affiliation || []).map(x => x.name).find(Boolean) || "",
+						institutions: (a.affiliation || []).filter(x => x?.name).map(x => namedInstitution(x.name,
+							(Array.isArray(x.id) ? x.id : []).find(id => /ror/i.test(id?.["id-type"] || ""))?.id || null)),
 						institutionId: null, country: null, institutionH: null
 					}))),
 					year: dated?.[0] || null,
@@ -2045,7 +2084,7 @@ var ZotPoPSources = (function () {
 				name: authors[i]?.name || a.fullName || "",
 				position: i === 0 ? "first" : i === epmcAuthors.length - 1 ? "last" : "middle",
 				corresponding: false,
-				institution: (a.authorAffiliationDetailsList?.authorAffiliation || []).map(x => x.affiliation).find(Boolean) || "",
+				institutions: (a.authorAffiliationDetailsList?.authorAffiliation || []).filter(x => x?.affiliation).map(x => namedInstitution(x.affiliation)),
 				institutionId: null, country: null, institutionH: null
 			}))),
 			year: toInt(r.pubYear) || yearOf(r.firstPublicationDate),

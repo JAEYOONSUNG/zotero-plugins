@@ -2941,11 +2941,16 @@
 	function tierLabel(key) {
 		return key ? key.toUpperCase() : "";
 	}
+	// An author's institutions after the first, for "+n" and the lists that name them all.
+	const otherInstitutions = p => (p?.institutions || []).slice(1).filter(i => i.name);
 	function personLine(role, p) {
 		if (!p) return "";
 		let bits = [p.name, p.institution || t("affUnknown")];
 		if (p.country) bits.push(p.flag ? p.flag + " " + p.country : p.country);
-		if (p.hIndex != null) bits.push(t("affHIndex", p.hIndex) + (p.tier ? " · " + tierLabel(p.tier) : ""));
+		if (p.hIndex != null) bits.push(t("affHIndex", p.hIndex));
+		let others = otherInstitutions(p).map(i => (i.flag ? i.flag + " " : "") + i.name);
+		if (others.length) bits.push(t("affAlso", others.join("; ")));
+		if (p.tier) bits.push(tierLabel(p.tier) + (p.tierFrom ? " " + t("tierFrom", p.tierFrom) : ""));
 		return role + ": " + bits.join(" · ");
 	}
 	function affiliationTip(where) {
@@ -3006,8 +3011,9 @@
 		let facts = [];
 		if (row.country) facts.push((row.flag ? row.flag + " " : "") + countryName(row.country));
 		if (row.hIndex != null) facts.push(t("affHIndex", row.hIndex));
-		if (row.tier) facts.push(tierLabel(row.tier));
+		if (row.tier) facts.push(tierLabel(row.tier) + (row.tierFrom ? " " + t("tierFrom", row.tierFrom) : ""));
 		if (facts.length) lines.push(facts.join(" · "));
+		for (let i of otherInstitutions(row)) lines.push("+ " + (i.flag ? i.flag + " " : "") + i.name + (i.country ? " · " + countryName(i.country) : ""));
 		let role = where.corresponding ? (where.correspondingKnown ? t("affCorresponding") : t("affLast")) : t("affFirst");
 		lines.push(role + ": " + row.name);
 		if (where.corresponding && where.first) lines.push(personLine(t("affFirst"), where.first));
@@ -3022,7 +3028,7 @@
 		if (!row && !affUnknownWanted(r, where)) return;
 		let box = document.createElement("div");
 		box.className = "aff-cell";
-		let chip = row?.tier ? tierChip({ tier: row.tier, hIndex: row.hIndex }) : null;
+		let chip = row?.tier ? tierChip(row) : null;
 		if (chip) { chip.removeAttribute("data-tip"); box.appendChild(chip); }
 		if (row?.flag) { let f = document.createElement("span"); f.className = "aff-flag"; f.textContent = row.flag; box.appendChild(f); }
 		let name = document.createElement("span");
@@ -3032,6 +3038,9 @@
 		name.textContent = inst ? shortInstitution(inst) : t("affUnknown");
 		if (inst) name.dataset.marquee = "affiliation";
 		box.appendChild(name);
+		// The author's other institutions: counted here, named in the hover card.
+		let others = otherInstitutions(row);
+		if (others.length) { let more = document.createElement("span"); more.className = "aff-more"; more.textContent = "+" + others.length; box.appendChild(more); }
 		cell.appendChild(box);
 	}
 	function affiliationSortKey(r) {
@@ -3057,7 +3066,7 @@
 		let box = $("d-authors");
 		box.textContent = "";
 		let people = (Array.isArray(r.people) ? r.people : []).filter(p => p && String(p.name || "").trim());
-		if (!people.some(p => p.institution)) { box.textContent = r.authorString || t("noAuthors"); return; }
+		if (!people.some(p => p.institution || ZotPoPAffiliations.institutionsOf(p).some(i => i.name))) { box.textContent = r.authorString || t("noAuthors"); return; }
 		state.authorsOpen ||= new Set();
 		let expanded = state.authorsOpen.has(r.key), shown = expanded ? people : people.slice(0, AUTHORS_SHOWN);
 		let flagged = people.some(p => p.corresponding);
@@ -3068,11 +3077,15 @@
 			let span = document.createElement("span");
 			span.className = "au" + (p === people[0] || p.position === "first" ? " au-first" : "");
 			span.appendChild(document.createTextNode(p.name));
-			let key = Filters.flat(p.institution);
-			if (key) {
-				if (!index.has(key)) { index.set(key, order.length + 1); order.push({ key, name: p.institution, country: p.country }); }
-				let sup = document.createElement("sup"); sup.textContent = String(index.get(key)); span.appendChild(sup);
+			// Every institution the author lists gets its number: "1,2" for a university and its hospital.
+			let marks = [];
+			for (let i of ZotPoPAffiliations.institutionsOf(p)) {
+				let key = Filters.flat(i.name);
+				if (!key) continue;
+				if (!index.has(key)) { index.set(key, order.length + 1); order.push({ key, name: i.name, country: i.country }); }
+				if (!marks.includes(index.get(key))) marks.push(index.get(key));
 			}
+			if (marks.length) { let sup = document.createElement("sup"); sup.textContent = marks.join(","); span.appendChild(sup); }
 			if (p.corresponding) { let star = document.createElement("sup"); star.className = "au-corr"; star.textContent = "*"; tip(star, t("affCorresponding")); span.appendChild(star); }
 			if (span.classList.contains("au-first")) tip(span, t("affFirst"));
 			names.appendChild(span);
@@ -3110,7 +3123,8 @@
 		let s = document.createElement("span");
 		s.className = "tier tier-" + where.tier;
 		s.textContent = tierLabel(where.tier);
-		tip(s, t("thTierTip") + (where.hIndex != null ? "\n" + t("affHIndex", where.hIndex) : ""));
+		let h = where.tierH ?? where.hIndex;
+		tip(s, t("thTierTip") + (h != null ? "\n" + (where.tierFrom ? where.tierFrom + " \u00b7 " : "") + t("affHIndex", h) : ""));
 		return s;
 	}
 
@@ -3125,9 +3139,12 @@
 		return chip;
 	}
 	function tipTierText(row) {
-		if (row.hIndex == null || !row.tier) return "";
+		let h = row.tierH ?? row.hIndex;
+		if (h == null || !row.tier) return "";
 		let tiers = ZotPoPAffiliations.TIERS, i = tiers.findIndex(x => x.key === row.tier);
-		return tiers[i].floor > 0 ? t("tipTierAbove", row.hIndex, tierLabel(row.tier), tiers[i].floor) : t("tipTierBelow", row.hIndex, tierLabel(row.tier), tiers[i - 1].floor);
+		let line = tiers[i].floor > 0 ? t("tipTierAbove", h, tierLabel(row.tier), tiers[i].floor) : t("tipTierBelow", h, tierLabel(row.tier), tiers[i - 1].floor);
+		// An author at several institutions takes the best one's tier, and says which.
+		return (row.institutions?.length > 1 && row.tierFrom ? t("tipTierFrom", row.tierFrom) + " \u00b7 " : "") + line;
 	}
 	function tipPlace(row) {
 		// Always in one order: the tier chip, the flag, then the name.
@@ -3135,6 +3152,8 @@
 		if (row.tier) line.appendChild(tipTierChip(row));
 		if (row.flag) line.appendChild(fel("span", "tip-flag", row.flag));
 		line.appendChild(fel("span", "tip-inst", row.institution || t("affUnknown")));
+		let others = otherInstitutions(row);
+		if (others.length) line.appendChild(fel("span", "tip-more", "+" + others.length));
 		return line;
 	}
 	function tipNames(r, limit) {
@@ -3181,12 +3200,28 @@
 		let box = fel("div", "tip-rich");
 		box.appendChild(fel("div", "tip-title", row.institution || t("affUnknown")));
 		let place = fel("div", "tip-where");
-		if (row.tier) place.appendChild(tipTierChip(row));
+		// The chip under a name is that institution's own: a tier earned at another of the author's institutions is named below.
+		let ownTier = !row.tierFrom || ZotPoPFilters.flat(row.tierFrom) === ZotPoPFilters.flat(row.institution) ? row.tier : row.institutions?.[0]?.tier;
+		if (ownTier) place.appendChild(tipTierChip({ tier: ownTier }));
 		if (row.flag) place.appendChild(fel("span", "tip-flag", row.flag));
 		if (row.country) place.appendChild(fel("span", "tip-inst", countryName(row.country)));
 		if (place.firstChild) box.appendChild(place);
 		let tier = tipTierText(row);
 		if (tier) box.appendChild(fel("div", "tip-meta", tier));
+		// Every institution of this author, the first one included, each with its own tier and country.
+		if (otherInstitutions(row).length) {
+			let list = fel("div", "tip-sect tip-insts");
+			list.appendChild(fel("div", "tip-meta tip-head", t("tipInstitutions", row.institutions.length)));
+			for (let i of row.institutions) {
+				let line = fel("div", "tip-where tip-inst-row");
+				if (i.tier) line.appendChild(tipTierChip(i));
+				if (i.flag) line.appendChild(fel("span", "tip-flag", i.flag));
+				line.appendChild(fel("span", "tip-inst", i.name || t("affUnknown")));
+				if (i.country) line.appendChild(fel("span", "tip-meta", countryName(i.country)));
+				list.appendChild(line);
+			}
+			box.appendChild(list);
+		}
 		let sect = fel("div", "tip-sect");
 		let role = where.corresponding ? (where.correspondingKnown ? t("affCorresponding") : t("affLast")) : t("affFirst");
 		let line = fel("div", "tip-row"); line.appendChild(fel("span", "tip-label", role)); line.appendChild(fel("span", "tip-person", row.name)); sect.appendChild(line);
@@ -3839,7 +3874,7 @@
 			r.doi, hasPDF(r), r.inLibrary, r.readState, r.isNew, r.retracted, r.status, r.statusClass, r.statusTitle,
 			r.source, r.sources, r.pdfUrl, r.pdfUrls, r.pmcid, r.arxiv,
 			// By value, never by the summary object: a new summary of unchanged data must not rebuild the row.
-			where && [where.first, where.corresponding].map(p => p && [p.name, p.institution, p.country, p.hIndex, p.tier]), where?.correspondingKnown,
+			where && [where.first, where.corresponding].map(p => p && [p.name, p.institution, p.country, p.hIndex, p.tier, p.tierFrom, p.institutions.map(i => [i.name, i.country, i.hIndex])]), where?.correspondingKnown,
 			row?.institution, row?.tier, row?.hIndex, row?.flag, where?.countries, affLineParts(r).map(p => [p.role, p.institution, p.country, p.hIndex]),
 			mark?.text, mark?.direction, citeFindable(r), Boolean(citeTrend(r)),
 			// The numbers, never the object: reading `top` would work out every row's explanation.
@@ -5064,9 +5099,11 @@
 				// Always in the same order: who, then the tier chip, the flag, the lab, the country and the h-index.
 				let line = document.createElement("div");
 				line.appendChild(document.createTextNode(role + ": " + p.name + " \u00b7 "));
-				let chip = p.tier ? tierChip({ tier: p.tier, hIndex: p.hIndex }) : null;
+				let chip = p.tier ? tierChip(p) : null;
 				if (chip) { line.appendChild(chip); line.appendChild(document.createTextNode(" ")); }
-				line.appendChild(document.createTextNode((p.flag ? p.flag + " " : "") + (p.institution || t("affUnknown")) + (p.country ? " \u00b7 " + p.country : "") + (p.hIndex != null ? " \u00b7 " + t("affHIndex", p.hIndex) : "")));
+				// Each institution the author lists, with its own country and h-index.
+				let insts = p.institutions?.length ? p.institutions : [{ name: p.institution, flag: p.flag, country: p.country, hIndex: p.hIndex }];
+				line.appendChild(document.createTextNode(insts.map(i => (i.flag ? i.flag + " " : "") + (i.name || t("affUnknown")) + (i.country ? " \u00b7 " + i.country : "") + (i.hIndex != null ? " \u00b7 " + t("affHIndex", i.hIndex) : "")).join("; ")));
 				whereBox.appendChild(line);
 			}
 		}
@@ -5095,6 +5132,7 @@
 		statusLine.hidden = !r.status;
 		renderVersions(r);
 		renderSignals(r);
+		renderReactions(r).catch(e => log("reactions: " + e.message));
 		renderWhy(r);
 
 		// The main action: an owned paper shows its library copy, any other is added.
@@ -5478,6 +5516,223 @@
 		box.hidden = !box.firstChild;
 	}
 
+	/* ---- How the paper was received (content/reactions.js): asked only when "Reactions" is pressed ----
+	   One card: a chip per source with its count, the notices, the most discussed posts and stories, the
+	   Wikipedia articles that cite it, and the yearly citations. Kept per DOI for a week in reactions.json and
+	   shown again, without a request, whenever the paper is opened. */
+	const REACT_SOURCES = [["bluesky", "Bluesky"], ["hackerNews", "Hacker News"], ["wikipedia", "Wikipedia"]];
+	const reactState = { svc: null, loading: null, busy: new Map(), results: new Map(), errors: new Map() };
+	const groupNumber = n => Number(n || 0).toLocaleString("en-US");
+	// One request through Zotero's HTTP layer; every status is an answer the module reads (404 = "not known").
+	async function reactionsFetch(url, { headers, signal } = {}) {
+		let cancel;
+		let onAbort = () => cancel?.();
+		signal?.addEventListener?.("abort", onAbort, { once: true });
+		try {
+			let xhr = await Zotero.HTTP.request("GET", url, { headers, responseType: "json", timeout: 10000, errorDelayMax: 0, successCodes: false,
+				cancellerReceiver: c => { cancel = c; if (signal?.aborted) c(); } });
+			return { status: Number(xhr?.status) || 0, json: xhr?.response ?? null };
+		}
+		catch (e) {
+			if (signal?.aborted) throw abortError();
+			let status = e?.status ?? e?.xmlhttp?.status;
+			if (status) return { status, json: null };
+			throw httpError(e, url);
+		}
+		finally { signal?.removeEventListener?.("abort", onAbort); }
+	}
+	function reactionsService() {
+		if (typeof ZotPoPReactions === "undefined") return Promise.resolve(null);
+		if (reactState.svc) return Promise.resolve(reactState.svc);
+		return reactState.loading ||= (async () => {
+			let store = ZotPoPReactions.createStore();
+			try { if (cacheIO) store.import(JSON.parse(await cacheIO.readText(dataPath("reactions.json")))); }
+			catch (_) { /* first run, or a damaged file: the next press asks again */ }
+			reactState.svc = ZotPoPReactions.create({ fetch: reactionsFetch, store,
+				openAlexKey: () => String(PREF("openAlexApiKey") || ""), openAlexHeld: () => openAlexHeld() });
+			return reactState.svc;
+		})();
+	}
+	async function saveReactions() {
+		if (!cacheIO || !reactState.svc) return;
+		try { await cacheIO.writeText(dataPath("reactions.json"), JSON.stringify(reactState.svc.store.export())); }
+		catch (e) { log("saving reactions failed: " + e.message); }
+	}
+	const reactDOI = r => r?.doi ? ZotPoPSources.normalizeDOI(r.doi) : "";
+	async function loadReactions(r, force = false) {
+		let doi = reactDOI(r);
+		if (!doi || reactState.busy.has(doi)) return;
+		let again = () => { if (detailRecord() === r) renderReactions(r); };
+		let job = (async () => {
+			let svc = await reactionsService();
+			if (!svc) return;
+			try {
+				let out = await svc.lookup({ doi, title: r.title, url: r.url, citesByYear: r.citesByYear, citations: r.citations }, { force });
+				reactState.results.set(doi, out);
+				reactState.errors.delete(doi);
+				await saveReactions();
+			}
+			catch (e) { if (e?.name !== "AbortError") { log("reactions failed: " + e.message); reactState.errors.set(doi, e); } }
+		})();
+		reactState.busy.set(doi, job);
+		again();
+		try { await job; } finally { reactState.busy.delete(doi); again(); }
+	}
+	const reactDate = iso => {
+		let d = new Date(iso);
+		if (!iso || Number.isNaN(d.getTime())) return String(iso || "");
+		try { return d.toLocaleDateString(uiLocale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }); } catch (e) { return String(iso).slice(0, 10); }
+	};
+	const openOut = url => { if (/^https:\/\//i.test(String(url || ""))) Zotero.launchURL(url); };
+	function reactLink(cls, onClick) {
+		let b = document.createElement("button");
+		b.type = "button"; b.className = cls; b.setAttribute("data-opens", "browser");
+		b.addEventListener("click", onClick);
+		return b;
+	}
+	function reactionsCard(r, out) {
+		let card = fel("div", "rx-card");
+		let head = fel("div", "rx-head");
+		head.appendChild(fel("span", "rx-title", t("reactTitle")));
+		head.appendChild(fel("span", "rx-when", t("reactChecked", reactDate(out.checked), Boolean(out.stale))));
+		let refresh = document.createElement("button");
+		refresh.type = "button"; refresh.className = "icon-btn rx-refresh"; refresh.setAttribute("data-opens", "network");
+		refresh.setAttribute("aria-label", t("reactRefresh")); tip(refresh, t("reactRefresh"));
+		refresh.appendChild(iconNode("ic-rotate"));
+		refresh.addEventListener("click", () => loadReactions(r, true));
+		head.appendChild(refresh);
+		card.appendChild(head);
+
+		// One chip per source and its count; a source that did not answer says so instead of a zero.
+		let chips = fel("div", "rx-chips");
+		let failed = new Set(out.failed || []);
+		for (let [key, name] of REACT_SOURCES) {
+			let n = out[key]?.count || 0, chip = fel("span", "rx-chip" + (failed.has(key) ? " failed" : n ? "" : " zero"));
+			chip.appendChild(fel("span", "rx-name", name));
+			chip.appendChild(fel("span", "rx-n", failed.has(key) ? t("reactNoAnswer") : groupNumber(n)));
+			chips.appendChild(chip);
+		}
+		let notices = out.notices || { status: "unknown", events: [] };
+		let state = failed.has("notices") ? null : { retracted: ["reactRetracted", "neg"], concern: ["reactConcern", "att"], corrected: ["reactCorrected", "att"], notice: ["reactIsNotice", ""], clean: ["reactNoNotices", "pos"] }[notices.status];
+		if (state) chips.appendChild(fel("span", "rx-chip " + state[1], t(state[0])));
+		else { let chip = fel("span", "rx-chip failed"); chip.appendChild(fel("span", "rx-name", t("reactNoticesName"))); chip.appendChild(fel("span", "rx-n", t("reactNoAnswer"))); chips.appendChild(chip); }
+		if (notices.comments) {
+			let c = reactLink("rx-chip rx-chip-link", () => openOut(notices.commentsUrl));
+			c.appendChild(fel("span", "rx-name", t("reactComments"))); c.appendChild(fel("span", "rx-n", groupNumber(notices.comments)));
+			tip(c, t("reactCommentsTip"));
+			chips.appendChild(c);
+		}
+		card.appendChild(chips);
+		// "Nothing found" only when every source answered; it is the answer, so it comes first.
+		if (out.nothing) card.appendChild(fel("p", "rx-empty", t("reactNothing")));
+
+		// The notices themselves: what, when, from whom, and the notice to read.
+		if (notices.events?.length) {
+			let list = fel("div", "rx-notices" + (notices.status === "retracted" ? " neg" : ""));
+			for (let e of notices.events) {
+				let item = reactLink("rx-item rx-notice", () => openOut(e.url));
+				let top = fel("span", "rx-line");
+				top.appendChild(fel("span", "rx-who", t("reactKind_" + e.kind)));
+				top.appendChild(fel("span", "rx-date", [e.date ? reactDate(e.date) : "", e.source + (e.via ? " \u00b7 " + e.via : "")].filter(Boolean).join(" \u00b7 ")));
+				item.appendChild(top);
+				tip(item, t("reactOpenNotice"));
+				list.appendChild(item);
+			}
+			card.appendChild(list);
+		}
+
+		let group = (title, rows) => {
+			let g = fel("div", "rx-group");
+			g.appendChild(fel("div", "rx-sub", title));
+			let list = fel("div", "rx-list");
+			for (let row of rows) list.appendChild(row);
+			g.appendChild(list);
+			card.appendChild(g);
+		};
+		let discussed = out.mostDiscussed || [];
+		if (discussed.length) group(t("reactMostDiscussed", discussed.length), discussed.map(x => {
+			let item = reactLink("rx-item", () => openOut(x.url));
+			let top = fel("span", "rx-line");
+			top.appendChild(fel("span", "rx-src", x.source === "bluesky" ? "Bluesky" : "Hacker News"));
+			top.appendChild(fel("span", "rx-who", x.source === "bluesky" ? "@" + x.handle : x.title));
+			top.appendChild(fel("span", "rx-date", reactDate(x.date)));
+			item.appendChild(top);
+			if (x.source === "bluesky" && x.text) item.appendChild(fel("span", "rx-text", x.text));
+			item.appendChild(fel("span", "rx-eng", x.source === "bluesky" ? t("reactLikes", x.likes, x.reposts, x.replies) : t("reactPoints", x.points, x.comments)));
+			tip(item, x.url);
+			return item;
+		}));
+		let articles = out.wikipedia?.articles || [];
+		if (articles.length) group(t("reactWikipedia", out.wikipedia.count), articles.slice(0, 5).map(a => {
+			let item = reactLink("rx-item", () => openOut(a.url));
+			let top = fel("span", "rx-line");
+			top.appendChild(fel("span", "rx-src", "Wikipedia"));
+			top.appendChild(fel("span", "rx-who", a.title));
+			item.appendChild(top);
+			tip(item, a.url);
+			return item;
+		}));
+
+		// The citation trend, as context for the attention: a bar per year, the count above it.
+		let years = (out.citations?.byYear || []).slice(-10);
+		if (years.length) {
+			let trend = fel("div", "rx-trend");
+			trend.appendChild(fel("div", "rx-sub", t("reactTrend", out.citations.total, "OpenAlex")));
+			let bars = fel("div", "rx-bars");
+			let max = Math.max(1, ...years.map(y => y.n)), thisYear = new Date().getUTCFullYear();
+			for (let y of years) {
+				let col = fel("span", "rx-col");
+				col.appendChild(fel("span", "rx-v", groupNumber(y.n)));
+				let bar = fel("span", "rx-bar" + (y.year === thisYear ? " partial" : ""));
+				bar.style.height = Math.max(2, Math.round(32 * y.n / max)) + "px";
+				col.appendChild(bar);
+				col.appendChild(fel("span", "rx-y", String(y.year)));
+				tip(col, t("reactTrendYear", y.year, y.n, y.year === thisYear));
+				bars.appendChild(col);
+			}
+			trend.appendChild(bars);
+			card.appendChild(trend);
+		}
+		// A silent source is named, never read as reassurance.
+		let silent = [...failed].map(k => k === "notices" ? t("reactNoticesName") : (REACT_SOURCES.find(([key]) => key === k) || [k, k])[1]);
+		if (silent.length) card.appendChild(fel("p", "rx-failed", t("reactFailedSources", silent.join(", "))));
+		return card;
+	}
+	async function renderReactions(r) {
+		let box = $("d-reactions");
+		if (!box) return;
+		box.textContent = "";
+		if (typeof ZotPoPReactions === "undefined" || !r) { box.hidden = true; return; }
+		box.hidden = false;
+		let doi = reactDOI(r);
+		let out = doi ? reactState.results.get(doi) : null;
+		// A kept answer is shown at once: reading the file is not a request.
+		if (doi && !out && reactState.svc) { out = reactState.svc.peek(doi); if (out) reactState.results.set(doi, out); }
+		let busy = doi && reactState.busy.has(doi);
+		if (out && !out.reason) {
+			box.appendChild(reactionsCard(r, out));
+			if (busy) box.appendChild(fel("p", "rx-status", t("reactChecking")));
+			return;
+		}
+		let bar = fel("div", "rx-bar-row");
+		let b = document.createElement("button");
+		b.type = "button"; b.className = "icon-text rx-btn"; b.setAttribute("data-opens", "network");
+		b.appendChild(iconNode("ic-talk"));
+		b.appendChild(fel("span", null, t("reactButton")));
+		b.disabled = !doi || Boolean(busy);
+		tip(b, doi ? t("reactButtonTip") : t("reactNoDoi"));
+		b.addEventListener("click", () => { if (!b.disabled) loadReactions(r); });
+		bar.appendChild(b);
+		if (busy) { let s = fel("span", "rx-status", t("reactChecking")); s.setAttribute("role", "status"); bar.appendChild(s); }
+		else if (doi && reactState.errors.has(doi)) bar.appendChild(fel("span", "rx-failed", t("reactFailed")));
+		box.appendChild(bar);
+		// The kept answers are read once from disk; a paper with one is drawn again when they arrive.
+		if (doi && !reactState.svc) {
+			await reactionsService();
+			if (reactState.svc?.peek(doi) && detailRecord() === r) renderReactions(r);
+		}
+	}
+
 	/* A preprint and the article it became are two records with two DOIs, so they are not
 	   merged. The detail says so in one plain line: which version, where, whether the library
 	   has it, and a jump to its row. A link found from title and first author says "estimated". */
@@ -5856,6 +6111,9 @@
 		if (!who) return [...personCells(null), ""];
 		return [...personCells(who), t(aff.correspondingKnown ? "csvCorrFlagged" : "csvCorrLastAuthor")];
 	}
+	const correspondingOf = aff => aff ? aff.corresponding || (aff.correspondingKnown ? aff.first : null) : null;
+	const institutionCells = p => p ? [p.institutions.map(i => i.name).filter(Boolean).join("; "), (p.countries || []).join("; ")] : ["", ""];
+	const allInstitutions = r => [...new Set((Array.isArray(r.people) ? r.people : []).flatMap(p => ZotPoPAffiliations.institutionsOf(p).map(i => i.name)).filter(Boolean))].join("; ");
 	function csvText() {
 		// A cell that starts with = + - or @ is a formula to Excel and LibreOffice ("=HYPERLINK(...)" in a
 		// scraped title runs on open); a leading apostrophe keeps it text. Numbers are left as numbers.
@@ -5876,7 +6134,9 @@
 				r.publisher, r.doi ?? "", r.url ?? "",
 				(r.pdfUrls || [])[0] || r.pdfUrl || "", (r.sources || [r.source]).join("+"), r.inLibrary ? t("csvYes") : t("csvNo"),
 				// Added at the end, so a sheet built on the earlier columns still reads them where they were.
-				r.citations == null ? "" : sourceLabel(r.citationSource || r.source), tierLabel(where?.tier), r.retracted ? t("csvYes") : ""
+				r.citations == null ? "" : sourceLabel(r.citationSource || r.source), tierLabel(where?.tier), r.retracted ? t("csvYes") : "",
+				// Every institution, after all of the above: the first and corresponding author's, then every author's.
+				...institutionCells(where?.first), ...institutionCells(correspondingOf(where)), allInstitutions(r)
 			].map(esc).join(","));
 		}
 		return lines.join("\n");

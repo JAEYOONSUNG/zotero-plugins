@@ -62,38 +62,63 @@ var ZotPoPAffiliations = (function () {
 		};
 	}
 
+	/* Every institution an author lists, in the source's order, as { name, id, ror, country, type, hIndex }.
+	   A person saved before the list existed (one institution in flat fields) reads as a list of one. */
+	function institutionsOf(person) {
+		if (!person) return [];
+		if (Array.isArray(person.institutions) && person.institutions.length) {
+			return person.institutions.filter(i => i && (text(i.name) || i.id || i.country)).map(i => ({
+				name: text(i.name), id: i.id || null, ror: i.ror || null, country: text(i.country).toUpperCase() || null, type: i.type || null,
+				hIndex: Number.isFinite(i.hIndex) ? i.hIndex : null
+			}));
+		}
+		if (!text(person.institution) && !person.institutionId && !text(person.country)) return [];
+		return [{ name: text(person.institution), id: person.institutionId || null, ror: null, country: text(person.country).toUpperCase() || null, type: null,
+			hIndex: Number.isFinite(person.institutionH) ? person.institutionH : null }];
+	}
+
+	/* One author as a row shows them. The institution, country and h-index are the first institution's (what the
+	   CSV columns have always held); the tier is the best of all of them, and `tierFrom` names that institution. */
 	function describe(person) {
 		if (!person) return null;
-		let tier = tierOf(person.institutionH);
+		let institutions = institutionsOf(person).map(i => ({ ...i, flag: flag(i.country), tier: tierOf(i.hIndex)?.key || null }));
+		let first = institutions[0] || null;
+		let best = institutions.filter(i => i.tier).sort((a, b) => b.hIndex - a.hIndex)[0] || null;
+		let country = first?.country || text(person.country).toUpperCase();
 		return {
 			name: text(person.name),
-			institution: text(person.institution),
-			country: text(person.country).toUpperCase(),
-			flag: flag(person.country),
-			hIndex: Number.isFinite(person.institutionH) ? person.institutionH : null,
-			tier: tier ? tier.key : null
+			institution: first ? first.name : text(person.institution),
+			country,
+			flag: flag(country),
+			hIndex: first && first.hIndex != null ? first.hIndex : Number.isFinite(person.institutionH) ? person.institutionH : null,
+			tier: best ? best.tier : null,
+			tierH: best ? best.hIndex : null,
+			tierFrom: best ? best.name : null,
+			institutions,
+			countries: [...new Set(institutions.map(i => i.country).filter(Boolean))]
 		};
 	}
 
 	/* What a row shows for one paper: both people, their labs, their countries, and the
-	   better of the two institutions' tiers. */
+	   better of the two people's best institutions. */
 	function summarise(people) {
 		let picked = principals(people);
 		if (!picked) return null;
 		let first = describe(picked.first);
 		let corresponding = describe(picked.corresponding);
-		let countries = [...new Set([first?.country, corresponding?.country].filter(Boolean))];
-		let best = [first, corresponding].filter(row => row?.tier).sort((a, b) => (b.hIndex || 0) - (a.hIndex || 0))[0] || null;
+		let countries = [...new Set([first, corresponding].flatMap(p => p ? (p.countries.length ? p.countries : [p.country]) : []).filter(Boolean))];
+		let best = [first, corresponding].filter(row => row?.tier).sort((a, b) => (b.tierH || 0) - (a.tierH || 0))[0] || null;
 		return {
 			first, corresponding, countries,
 			correspondingKnown: picked.correspondingKnown,
 			tier: best?.tier || null,
-			hIndex: best?.hIndex ?? first?.hIndex ?? null,
+			hIndex: best?.tierH ?? first?.hIndex ?? null,
+			tierFrom: best?.tierFrom || null,
 			international: countries.length > 1
 		};
 	}
 
-	const api = { summarise, principals, describe, tierOf, flag, TIERS };
+	const api = { summarise, principals, describe, institutionsOf, tierOf, flag, TIERS };
 	return api;
 })();
 
