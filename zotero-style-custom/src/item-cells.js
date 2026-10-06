@@ -43,17 +43,22 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     for (const key of keys) {
       const col = `${TREE}[data-sc-hover-col="${attr(key)}"]`;
       const cls = `.cell.${esc(key)}`;
-      out.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#F1F6FF}`);
+      // The cell box is shorter than its row; the tint reaches the row's full height (the gap is
+      // measured into --sc-hover-pad on hover) so the column reads as one band, not a strip of slivers.
+      out.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#F1F6FF;box-shadow:0 calc(-1 * var(--sc-hover-pad, 0px)) 0 #F1F6FF,0 var(--sc-hover-pad, 0px) 0 #F1F6FF}`);
       out.push(`${col} .virtualized-table-header ${cls}{background-color:#E8F0FF;box-shadow:inset 0 -2px 0 #7FAEFF}`);
-      dark.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#1E2A3D}`);
+      dark.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#1E2A3D;box-shadow:0 calc(-1 * var(--sc-hover-pad, 0px)) 0 #1E2A3D,0 var(--sc-hover-pad, 0px) 0 #1E2A3D}`);
       dark.push(`${col} .virtualized-table-header ${cls}{background-color:#22314A;box-shadow:inset 0 -2px 0 #5B8EE6}`);
     }
     out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(58,63,75,.045)}`);
     // The fill stays off a selected row: white selected text on this pale blue read at 1.2:1. It keeps only its outline.
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]{border-radius:7px;background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row.selected .cell[data-sc-hover-cell]{border-radius:7px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9)}`);
+    // The hovered cell: a soft rounded box as tall as the row, 3px inside it, drawn behind the cell's content.
+    const box = `content:"";position:absolute;left:-2px;right:-2px;top:calc(3px - var(--sc-hover-pad, 0px));bottom:calc(3px - var(--sc-hover-pad, 0px));border-radius:8px;pointer-events:none;z-index:-1`;
+    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{position:relative;isolation:isolate;overflow:visible}`);
+    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]::before{${box};background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
+    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row.selected .cell[data-sc-hover-cell]::before{${box};box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9)}`);
     dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(255,255,255,.04)}`);
-    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]{border-radius:7px;background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
+    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]::before{${box};background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
     return out.join("\n") + `\n@media (prefers-color-scheme: dark){\n${dark.join("\n")}\n}\n`;
   }
 
@@ -226,7 +231,7 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     const clear = () => {
       debug.clears++;
       if (lastCell) { lastCell.removeAttribute("data-sc-hover-cell"); lastCell = null; }
-      if (rootNode) { rootNode.removeAttribute("data-sc-hover-col"); rootNode = null; }
+      if (rootNode) { rootNode.removeAttribute("data-sc-hover-col"); try { rootNode.style?.removeProperty?.("--sc-hover-pad"); } catch (_) {} rootNode = null; }
       // Rows are recycled while scrolling: a mark can sit on a cell this closure no longer holds.
       try {
         for (const stale of doc.querySelectorAll?.("[data-sc-hover-cell]") || []) stale.removeAttribute("data-sc-hover-cell");
@@ -246,6 +251,11 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       if (lastCell) lastCell.removeAttribute("data-sc-hover-cell");
       lastCell = cell; cell.setAttribute("data-sc-hover-cell", "");
       rootNode = tree; tree.setAttribute("data-sc-hover-col", key);
+      // How far the cell falls short of its row, top and bottom: the tint and the box fill that gap.
+      try {
+        const gap = Math.max(0, Math.round(((row.getBoundingClientRect?.().height || 0) - (cell.getBoundingClientRect?.().height || 0)) / 2));
+        tree.style?.setProperty?.("--sc-hover-pad", gap + "px");
+      } catch (_) {}
     };
     if (hover) {
       const over = event => {
