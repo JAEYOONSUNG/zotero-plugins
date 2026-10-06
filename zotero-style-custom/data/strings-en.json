@@ -2802,5 +2802,6 @@
  "주석 본문": "annotation text",
  "둘 중 하나": "either",
  "노트:단어": "note:word",
- "주석:단어": "annotation:word"
+ "주석:단어": "annotation:word",
+ "제목 불러오기 ({0}편)": "Load titles ({0})"
 }

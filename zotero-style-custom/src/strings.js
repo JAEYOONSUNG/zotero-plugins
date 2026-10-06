@@ -8,6 +8,7 @@
 (function (root) {
   'use strict';
   const en = {
+ "제목 불러오기 ({0}편)": "Load titles ({0})",
  "미확인×{0}": "unknown×{0}",
  "종류 미확인 {0}개": "{0} of unknown kind",
  "읽기 기록 없음 · Zotero 리더에서 PDF를 열면 읽은 쪽을 셉니다": "No reading record · pages are counted once the PDF is opened in Zotero's reader",

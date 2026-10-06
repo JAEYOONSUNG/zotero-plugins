@@ -3277,11 +3277,20 @@
      const cache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
      fillFrom(cache);
     }else if(typeof runtime.worksByID==='function'){
-     const generation=epoch;
-     runtime.worksByID(shown.map(row=>row.id)).then(found=>{
-      if(disposed||generation!==epoch||!list.isConnected)return;
-      fillFrom(found);
-     }).catch(error=>runtime.Z.logError?.(error));
+     /* What is already on hand is shown at once; the rest is asked of OpenAlex (metered) only when the
+        reader presses for it. Drawing the tab used to fetch and save on its own, which is a request and
+        a write nobody asked for (the self-check's sweep caught it). */
+     const cache=runtime.cache&&typeof runtime.cache.workMeta==='object'?runtime.cache.workMeta:{};
+     fillFrom(cache);
+     const missing=shown.filter(row=>!cache[row.id]);
+     if(missing.length){
+      const generation=epoch;
+      button(F('제목 불러오기 ({0}편)',missing.length),()=>run(async()=>{
+       const found=await runtime.worksByID(missing.map(row=>row.id));
+       if(disposed||generation!==epoch||!list.isConnected)return;
+       fillFrom(found);
+      }),bar(list),{class:'sc-fetch-action','data-opens':'network','data-writes':'cache'});
+     }
     }
    }
    // The papers nothing connects to are named rather than drawn: as a ring round

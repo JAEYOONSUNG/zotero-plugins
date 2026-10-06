@@ -1,6 +1,6 @@
 {
   "name": "zotero-style-custom",
-  "version": "0.59.30",
+  "version": "0.59.31",
   "license": "MIT",
   "private": true,
   "description": "Personal Zotero reading workflow and native title scrolling",

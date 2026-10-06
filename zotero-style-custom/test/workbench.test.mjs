@@ -668,6 +668,11 @@ test('the citation map names the papers it says you lack, and asks only about wh
  f.runtime.libraryDOIs=()=>new Set(['10.1/owned']);
  f.runtime.worksByID=async ids=>({W99:{id:'W99',title:'The paper everyone cites',year:2001,doi:'10.1/w99',venue:'Cell'},W98:{id:'W98',title:'One I have',year:1999,doi:'10.1/owned'}});
  await f.bench.show('graph');await settle();
+ // Titles not yet on hand are asked of OpenAlex only on a press: drawing the tab requests and writes nothing.
+ const load=[...f.body().querySelectorAll('button')].find(b=>/제목 불러오기/.test(b.textContent));
+ assert.ok(load,'a press-to-load button for the titles not yet on hand');
+ assert.equal(load.dataset.opens,'network');
+ load.click();await settle();
  const text=f.body().textContent+f.bench.panel.textContent;
  assert.equal(/인용 목록 가져오기/.test([...f.bench.panel.querySelectorAll('button')].map(b=>b.textContent).join('|')),false,'every paper has been asked about');
  assert.match(text,/The paper everyone cites/,'a title, not W99');
