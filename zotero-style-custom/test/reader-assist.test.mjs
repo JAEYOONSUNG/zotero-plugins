@@ -35,7 +35,7 @@ function memoryIO(){
   exists:async p=>files.has(p)||p==='/usr/bin/say'&&false,stat:async p=>files.has(p)?{size:files.get(p).length,lastModified:1}:{size:1000,lastModified:5},
   readUTF8:async p=>files.get(p),writeUTF8:async(p,text)=>{files.set(p,text);},makeDirectory:async()=>{},remove:async p=>{files.delete(p);}};
 }
-function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices=null,structCache=true,io=null,runtimeState=null}={}){
+function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices=null,structCache=true,io=null,runtimeState=null,pdft=null,t4zPrefs={}}={}){
  const {document:doc,window:win}=parseHTML('<html><head></head><body><div id="split-view"></div></body></html>');
  const define=(name,value)=>Object.defineProperty(win,name,{value,configurable:true,writable:true});
  define('setTimeout',(fn,ms)=>realSetTimeout(fn,ms));define('clearTimeout',id=>realClearTimeout(id));define('navigator',{platform:'MacIntel'});
@@ -71,7 +71,8 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  const allPrefs={aiEndpoint:'https://example.org/v1/chat/completions',aiModel:'m1',aiKey:'secret-key',deeplApiKey:'',translateTarget:'KO',translateFormality:'default',...prefs};
  const allSettings={aiLanguage:'English',aiSummaryOnOpen:false,readAloudSpeed:100,readAloudVoice:'',readAloudVoiceKo:'',readAloudHeadings:false,readAloudCredit:true,...settings};
  const remarks=new Map(),memoCalls=[],notes=[],readings=[];
- const Z={Items:{get:id=>id===11?attachment:id===10?parent:null},HTTP:http,DataDirectory:{dir:'/data'},logError:e=>{(Z.errors||(Z.errors=[])).push(e);},Reader:{_readers:[reader]},PDFWorker:{async getFullText(){return {text:'Abstract\n\nPlain text. Second sentence.'};}},isMac:true};
+ const copied=[];
+ const Z={Items:{get:id=>id===11?attachment:id===10?parent:null},HTTP:http,PDFTranslate:pdft?{api:pdft}:undefined,Prefs:{get:(k)=>k.startsWith('extensions.zotero.ZoteroPDFTranslate.')?t4zPrefs[k.slice(37)]:undefined},Utilities:{Internal:{copyTextToClipboard:t=>copied.push(t)}},DataDirectory:{dir:'/data'},logError:e=>{(Z.errors||(Z.errors=[])).push(e);},Reader:{_readers:[reader]},PDFWorker:{async getFullText(){return {text:'Abstract\n\nPlain text. Second sentence.'};}},isMac:true};
  const runtime={cache:runtimeState||{},dirty:false,rootURI:'file:///plugin/',io:fileIO,paths:{join:(...p)=>p.join('/')},i18n:{isKorean:()=>false},t:I18N.t,
   pref:(k,d)=>allPrefs[k]??d,getSetting:k=>allSettings[k],setSetting:async(k,v)=>{allSettings[k]=v;allPrefs[k]=v;},scheduleFlush(){},
   entry:item=>({remark:remarks.get(item.id)||''}),addReading:async(item,seconds,location,shown)=>{readings.push({item:item.id,seconds,location,shown});},
@@ -86,7 +87,7 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  const panel=()=>doc.querySelector('[data-sc-ra]');
  const sync=async()=>{service.sync(win,[reader],'t1');await settle();};
  const sessionOf=()=>service.sessions()[0];
- return {win,doc,viewDoc,reader,synth,navs,fileIO,Z,runtime,service,toolbar,container,press,byText,panel,sync,requests,aiReplies,http,remarks,memoCalls,notes,readings,allSettings,allPrefs,sessionOf,folder,
+ return {copied,core,win,doc,viewDoc,reader,synth,navs,fileIO,Z,runtime,service,toolbar,container,press,byText,panel,sync,requests,aiReplies,http,remarks,memoCalls,notes,readings,allSettings,allPrefs,sessionOf,folder,
   open:async()=>{await sync();press(container.querySelector('button[data-safe="view"]'));await settle();},
   stop(){service.stop();}};
 }
@@ -1470,5 +1471,106 @@ test('an answer the server stopped partway is kept and marked, not passed off as
  assert.equal(f.sessionOf().data.chat.at(-1).incomplete,'error');
  f.aiReplies.push(cut);f.press(f.byText('Make summary'));await settle(30);
  assert.match(f.panel().querySelector('.sc-ra-summary .sc-ra-note').textContent,/summary stopped partway/);
+ f.stop();
+});
+
+/* ---- round 7: Translate for Zotero as the user has it, captions, copy, following the PDF ---- */
+// The task object Translate for Zotero 2.4.8's api.translate resolves with.
+const t4z=(log,{fail=null}={})=>({translate:async(raw,o)=>{log.push({raw,...o});return fail?{raw,status:'fail',result:fail,service:o.service}:{raw,status:'success',result:'번역:'+raw,service:o.service,langto:o.langto};}});
+const T4Z_PREFS={translateSource:'deeplfree',targetLanguage:'ko-KR'};
+test('Translate for Zotero with its DeepL Free key: named, its Korean target followed, its service used, our share of the month shown',async()=>{
+ const log=[];
+ const f=fixture({prefs:{aiEndpoint:'',aiModel:'',translateTarget:'auto'},pdft:t4z(log),t4zPrefs:T4Z_PREFS});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ assert.match(f.panel().textContent,/Translator: Translate for Zotero \(DeepL Free\)/);
+ assert.match(f.panel().textContent,/Language follows Translate for Zotero/);
+ assert.equal(f.panel().querySelector('.sc-ra-tr .sc-ra-pill-text').textContent,'한국어','an English panel, but Translate for Zotero says Korean');
+ f.press(f.byText('Translate all'));await settle(40);
+ assert.equal(log.length,3);assert.deepEqual([log[0].langto,log[0].service,log[0].pluginID],['ko-KR','deeplfree','style-custom@sungjaeyoon.dev']);
+ assert.match(f.panel().querySelector('.sc-ra-row-card').textContent,/번역:DNA polymerases/);
+ assert.match(f.panel().textContent,/Sent through this panel this month \(characters\): [\d,]+ \/ 500,000/);
+ assert.equal(f.requests.filter(r=>/deepl/.test(r.url)).length,0,'nothing of ours goes to DeepL directly');
+ f.stop();
+});
+test('Translate for Zotero failing: its error is shown, nothing is filed as a translation, the AI is offered to carry on',async()=>{
+ const log=[];
+ const f=fixture({pdft:t4z(log,{fail:'번역 오류: DeepL Free\n\nRequest error: 456'}),t4zPrefs:T4Z_PREFS});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ f.press(f.byText('Translate all'));await settle(30);
+ assert.equal(log.length,1,'stops at the first failure');
+ assert.match(f.panel().textContent,/DeepL quota in Translate for Zotero is used up/);
+ assert.doesNotMatch(f.panel().querySelector('.sc-ra-rows').textContent,/Request error/);
+ assert.equal(f.byText('Continue with another translator').hidden,false);
+ f.stop();
+});
+test('captions are a choice: ticking it adds the figure caption after the paragraphs of its page',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ assert.equal(f.panel().querySelectorAll('.sc-ra-row-card').length,3);
+ const box=f.panel().querySelector('input[data-tr="captions"]');assert.equal(box.getAttribute('data-safe'),'view');assert.equal(box.checked,false);
+ box.checked=true;box.dispatchEvent(new f.win.Event('change'));await settle(15);
+ const rows=[...f.panel().querySelectorAll('.sc-ra-row-card')];
+ assert.equal(rows.length,4);assert.match(rows[2].querySelector('.sc-ra-row-meta').textContent,/^Figure 1 · p\. 3/);
+ assert.equal(f.runtime.cache.readerAssist.trCaptions,true,'remembered');
+ f.stop();
+});
+test('each translated row copies its original and translation; an untranslated row has nothing to copy',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ const copyOf=row=>row.querySelector('button[data-copy]');
+ assert.equal(copyOf(f.panel().querySelector('.sc-ra-row-card')).disabled,true);
+ f.press(f.byText('Translate all'));await settle(30);
+ const b=copyOf(f.panel().querySelector('.sc-ra-row-card'));assert.equal(b.getAttribute('data-safe'),'view');
+ f.press(b);await settle();
+ assert.deepEqual(f.copied,['DNA polymerases drive PCR. Thermal stability limits cycling speed.\n\nKO:DNA polymerases drive PCR. Thermal stability limits cycling speed.']);
+ f.stop();
+});
+test('"원문 함께 보기" opens every original under its translation',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ assert.equal([...f.panel().querySelectorAll('.sc-ra-orig')].some(d=>d.open),false);
+ const box=f.panel().querySelector('input[data-tr="originals"]');box.checked=true;box.dispatchEvent(new f.win.Event('change'));await settle(10);
+ assert.equal([...f.panel().querySelectorAll('.sc-ra-orig')].every(d=>d.open),true);
+ f.stop();
+});
+test('scrolling the PDF marks and brings up the paragraph of the page on screen; unticked, the list stays where it is',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ const here=()=>[...f.panel().querySelectorAll('.sc-ra-row-card[data-here="true"]')].map(r=>r.getAttribute('data-id'));
+ f.core._state.primaryViewStats.pageIndex=3;
+ f.viewDoc.dispatchEvent(new f.viewDoc.defaultView.Event('wheel'));await new Promise(r=>setTimeout(r,450));await settle();
+ assert.deepEqual(here(),['2.0'],'the Results paragraph on page 4');
+ const box=f.panel().querySelector('input[data-tr="sync"]');assert.equal(box.checked,true);
+ box.checked=false;box.dispatchEvent(new f.win.Event('change'));
+ f.core._state.primaryViewStats.pageIndex=0;
+ f.viewDoc.dispatchEvent(new f.viewDoc.defaultView.Event('wheel'));await new Promise(r=>setTimeout(r,450));await settle();
+ assert.deepEqual(here(),['2.0'],'not following');
+ f.stop();
+});
+test('"이 쪽만 번역" sends only the paragraphs on the page on screen, and is the first action',async()=>{
+ const f=fixture({prefs:{deeplApiKey:'abc:fx'}});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ const b=f.byText('This page only');assert.equal(b.getAttribute('data-opens'),'ai');assert.match(b.className,/sc-ra-primary/);
+ f.press(b);await settle(30);
+ const call=f.requests.find(r=>/deepl/.test(r.url)&&r.method==='POST');
+ assert.equal(call.body.text.length,1,'page 3: the Methods paragraph only');assert.match(call.body.text[0],/Libraries were screened/);
+ f.stop();
+ const g=fixture({prefs:{deeplApiKey:'abc:fx'}});g.core._state.primaryViewStats.pageIndex=1;await g.open();
+ g.press(g.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ g.press(g.byText('This page only'));await settle(20);
+ assert.equal(g.requests.filter(r=>/deepl/.test(r.url)&&r.method==='POST').length,0);
+ assert.match(g.panel().textContent,/No body text on this page/);
+ g.stop();
+});
+test('the reader\'s language menu offers Automatic, naming what it resolves to, and picking it stores "auto"',async()=>{
+ const log=[];
+ const f=fixture({prefs:{translateTarget:'DE'},pdft:t4z(log),t4zPrefs:T4Z_PREFS});await f.open();
+ f.press(f.panel().querySelector('[data-tab="translate"]'));await settle(15);
+ const items=[...f.panel().querySelectorAll('.sc-ra-tr .sc-ra-menu-item')];
+ assert.equal(items[0].textContent,'Automatic (한국어)');assert.equal(items[0].getAttribute('aria-checked'),'false');
+ f.press(items[0]);await settle(10);
+ assert.equal(f.allSettings.translateTarget,'auto');
+ assert.equal(f.panel().querySelector('.sc-ra-tr .sc-ra-pill-text').textContent,'한국어');
+ assert.equal(f.panel().querySelector('.sc-ra-tr .sc-ra-menu-item').getAttribute('aria-checked'),'true');
  f.stop();
 });

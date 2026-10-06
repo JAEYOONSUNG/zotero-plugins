@@ -146,6 +146,23 @@ test('the library scan reads page counts from the full-text index and skips miss
 
 /* ---- the guards ------------------------------------------------------------ */
 
+test('Translate for Zotero\'s api.translate is blocked when the reader modules call it, left alone for anyone else, and put back', async () => {
+  let stack = 'at x (file:///p/src/workbench.js:1:1)';
+  const spies = Live.createSpies({stack: () => stack});
+  const calls = [];
+  const api = {translate: async raw => { calls.push(raw); return {status: 'success', result: 'ok'}; }};
+  const original = api.translate;
+  const Z = {HTTP: {request: async () => ({status: 200})}, PDFTranslate: {api}, Items: {}};
+  const installed = Live.guards(spies, {Zotero: Z, runtime: {}, service: null});
+  assert.ok(installed.includes('pdftranslate'));
+  await api.translate('someone else');
+  stack = 'at viaPdfTranslate (jar:file:///x.xpi!/src/paper-translate.js:300:5)';
+  await assert.rejects(api.translate('from the panel'), /blocked by the reader self-check/);
+  assert.deepEqual(calls, ['someone else']);
+  assert.deepEqual(spies.violations.map(v => v.call), ['PDFTranslate.api.translate']);
+  spies.restore(); assert.equal(api.translate, original);
+});
+
 test('a spied call from the reader modules is recorded and swallowed; anyone else\'s goes through', async () => {
   let stack = 'at x (file:///p/src/workbench.js:1:1)';
   const spies = Live.createSpies({stack: () => stack});

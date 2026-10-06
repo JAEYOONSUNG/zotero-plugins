@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import T from '../src/paper-translate.js';
 
 const para=(id,text,extra={})=>({id,text,heading:'Methods',page:3,sectionIndex:0,rects:[],...extra});
-function harness({prefs={deeplApiKey:'abc:fx',translateTarget:'KO'},replies=null,pdf=null,ai=null,usage=null}={}){
+function harness({prefs={deeplApiKey:'abc:fx',translateTarget:'KO'},replies=null,pdf=null,ai=null,usage=null,t4z={},uiKorean=true}={}){
+ let pdftUsage=null;
  const calls=[],sleeps=[];let usageValue=usage;
  const http=async(method,url,options)=>{
   calls.push({method,url,options,body:options.body?JSON.parse(options.body):null});
@@ -14,8 +15,8 @@ function harness({prefs={deeplApiKey:'abc:fx',translateTarget:'KO'},replies=null
  const store=new Map();let saves=0;
  const cache={get:k=>store.get(k),set:(k,v)=>store.set(k,v),save:async()=>{saves++;}};
  const clock={d:new Date('2026-10-15T00:00:00Z')};
- const service=T.create({http,sleep:async ms=>sleeps.push(ms),now:()=>clock.d,pref:k=>prefs[k],cache,usageStore:{get:()=>usageValue,set:v=>{usageValue=v;}},pdfTranslate:()=>pdf,ai,uiKorean:true});
- return {service,calls,sleeps,store,prefs,clock,get usage(){return usageValue;},get saves(){return saves;}};
+ const service=T.create({http,sleep:async ms=>sleeps.push(ms),now:()=>clock.d,pref:k=>prefs[k],cache,usageStore:{get:()=>usageValue,set:v=>{usageValue=v;}},pdfTranslate:()=>pdf,pdfTranslatePref:k=>t4z[k],pdftUsageStore:{get:()=>pdftUsage,set:v=>{pdftUsage=v;}},ai,uiKorean});
+ return {service,calls,sleeps,store,prefs,clock,t4z,get pdftUsage(){return pdftUsage;},get usage(){return usageValue;},get saves(){return saves;}};
 }
 
 test('nothing is sent when the translator is only created',()=>{
@@ -376,4 +377,125 @@ test('the note names the provider of each run of paragraphs',()=>{
  const made=T.noteHTML({title:'T',target:'KO',provider:'DeepL Free · 1, Translate for Zotero · 2',date:'2026-10-05',paragraphs:rows,translations,sources:new Map([['a','DeepL Free'],['b','Translate for Zotero']])});
  assert.match(made.html,/DeepL Free · 1, Translate for Zotero · 2/);
  assert.match(made.html,/KO:Two\.<\/p><p><em>Translate for Zotero<\/em><\/p>/);
+});
+
+/* ---- Translate for Zotero 2.4.8: api.translate(raw,{pluginID,langto,service}) resolves with its task object ---- */
+// The shape read from the 2.4.8 XPI (src/api.ts): the task, with status 'success' or 'fail' and the error text in result.
+const t4zTask=(raw,{status='success',result='',service='deeplfree',langto='ko-KR'}={})=>({id:'x',type:'custom',raw,result,audio:[],service,candidateServices:[],itemId:-1,status,extraTasks:[],silent:true,langto,callerID:'style-custom@sungjaeyoon.dev',processed:true});
+test('Translate for Zotero: a task that failed is an error, never a translation, and nothing is cached',async()=>{
+ const pdf={translate:async raw=>t4zTask(raw,{status:'fail',result:'번역 오류: DeepL Free\n\nRequest error: 403'})};
+ const h=harness({prefs:{translateTarget:'KO'},pdf});
+ const summary=await h.service.translateAll([para('a','One.')]);
+ assert.equal(summary.done,0);assert.equal(summary.stopped,'pdft');assert.match(summary.error.detail,/403/);
+ assert.equal(h.store.size,0,'the error text is not filed as the translation');
+ await assert.rejects(h.service.translateOne(para('a','One.')),e=>e.code==='pdft');
+});
+test('Translate for Zotero: a successful task gives its result; a thrown string (an old version wanting pluginID) is a plain error',async()=>{
+ const seen=[];
+ const pdf={translate:async(raw,o)=>{seen.push(o);return t4zTask(raw,{result:'번역:'+raw});}};
+ const h=harness({prefs:{translateTarget:'KO'},pdf,t4z:{translateSource:'deeplfree',targetLanguage:'ko-KR'}});
+ const out=[];await h.service.translateAll([para('a','One.')],{onParagraph:(p,t)=>out.push(t)});
+ assert.deepEqual(out,['번역:One.']);
+ assert.deepEqual(seen[0],{langto:'ko-KR',pluginID:'style-custom@sungjaeyoon.dev',service:'deeplfree'},'its own configured service, fixed for the run');
+ const bad=harness({prefs:{translateTarget:'KO'},pdf:{translate:async()=>{throw '[Translate for Zotero:api.translate] pluginID is required';}}});
+ const s=await bad.service.translateAll([para('a','One.')]);assert.equal(s.stopped,'pdft');assert.equal(bad.store.size,0);
+});
+test('Translate for Zotero: its configured service names the translator and keys the cache',async()=>{
+ const pdf={translate:async raw=>t4zTask(raw,{result:'K:'+raw})};
+ const h=harness({prefs:{translateTarget:'KO'},pdf,t4z:{translateSource:'deeplfree'}});
+ assert.equal(h.service.providerLabel('pdftranslate'),'Translate for Zotero (DeepL Free)');
+ await h.service.translateAll([para('a','One.')]);
+ assert.equal(h.service.resolved([para('a','One.')]).size,1);
+ h.t4z.translateSource='googleapi';
+ assert.equal(h.service.providerLabel('pdftranslate'),'Translate for Zotero (googleapi)');
+ assert.equal(h.service.resolved([para('a','One.')]).size,0,'a Google translation is not the DeepL one');
+});
+test('auto target follows Translate for Zotero\'s target when it is installed, else the panel language',()=>{
+ const pdf={translate:async raw=>t4zTask(raw)};
+ assert.equal(harness({prefs:{translateTarget:'auto'},pdf,t4z:{targetLanguage:'ja-JP'}}).service.target().code,'JA');
+ assert.equal(harness({prefs:{translateTarget:'auto'},pdf,t4z:{targetLanguage:'ko-KR'},uiKorean:false}).service.target().code,'KO','an English panel with a Korean Translate for Zotero target: Korean');
+ assert.equal(harness({prefs:{translateTarget:'auto'},pdf,t4z:{targetLanguage:'zh-TW'}}).service.target().code,'KO','traditional Chinese is not offered: the panel language');
+ assert.equal(harness({prefs:{translateTarget:'auto'},pdf:null,t4z:{targetLanguage:'ja-JP'}}).service.target().code,'KO','not installed: its leftover pref is ignored');
+ assert.equal(harness({prefs:{translateTarget:'DE'},pdf,t4z:{targetLanguage:'ja-JP'}}).service.target().code,'DE','an explicit choice wins');
+ assert.equal(harness({prefs:{translateTarget:'auto'},pdf,t4z:{targetLanguage:'ja-JP'}}).service.targetOrigin(),'pdftranslate');
+ assert.equal(T.targetOf('auto',true,'en-GB').code,'EN-US');assert.equal(T.targetOf('auto',false,'').code,'EN-US');
+});
+test('Translate for Zotero: characters sent are counted per month, and its DeepL Free limit is named',async()=>{
+ const pdf={translate:async raw=>t4zTask(raw,{result:'K'})};
+ const h=harness({prefs:{translateTarget:'KO'},pdf,t4z:{translateSource:'deeplfree'}});
+ await h.service.translateAll([para('a','Hello there.'),para('b','Again.')]);
+ const u=h.service.pdftUsage();assert.equal(u.chars,'Hello there.'.length+'Again.'.length);assert.equal(u.limit,500000);assert.equal(u.month,'2026-10');
+ h.clock.d=new Date('2026-11-02T00:00:00Z');assert.equal(h.service.pdftUsage().chars,0,'a new month starts at zero');
+ h.t4z.translateSource='googleapi';assert.equal(h.service.pdftUsage().limit,null,'no known limit for another service');
+});
+
+/* ---- protected terms ---- */
+test('protect masks genes, proteins, species and units, longest first, and restore puts them back',()=>{
+ const text='TP53 and IL-6 in Escherichia coli and S. cerevisiae at 5 µM and 10 mg/mL; p53 binds NF-κB and mTORC1.';
+ const m=T.protect(text);
+ for(const term of ['TP53','IL-6','Escherichia coli','S. cerevisiae','5 µM','10 mg/mL','p53','NF-κB','mTORC1'])assert.ok(m.terms.includes(term),term);
+ for(const term of m.terms)assert.ok(!m.text.includes(term),'masked: '+term);
+ assert.doesNotMatch(m.text,/\bcoli\b/);
+ const back=T.restore(m.text.replace(/ and /g,' 그리고 '),m.terms);
+ assert.deepEqual(back.missing,[]);assert.match(back.text,/TP53 그리고 IL-6 in Escherichia coli/);
+ assert.equal(T.protect('The results in Table 2 were clear. A. The cells').terms.length,0,'ordinary words, a list letter and a bare number are left alone');
+ assert.deepEqual(T.protect('sonic hedgehog signalling',['sonic hedgehog']).terms,['sonic hedgehog'],'the reader\'s own terms');
+ assert.deepEqual(T.protect('ERK1/2 phosphorylation in HeLa cells').terms,['ERK1/2','HeLa']);
+});
+test('a placeholder the translator dropped is reported missing, and lower-cased placeholders still come back',()=>{
+ const m=T.protect('BRCA1 and BRCA2 differ.');
+ const [a,b]=m.text.match(/ZQX\d+/g);
+ assert.deepEqual(T.restore(a.toLowerCase()+' 다름',m.terms),{text:'BRCA1 다름',missing:['BRCA2']});
+});
+test('DeepL and Translate for Zotero get masked text and the terms come back; a paragraph that lost a term is sent again unmasked',async()=>{
+ const sent=[];
+ const pdf={translate:async raw=>{sent.push(raw);const dropped=/BRCA2/.test(raw)?'':raw;return t4zTask(raw,{result:/ZQX/.test(raw)&&/differ/.test(raw)?'다름':'번역 '+(dropped||raw)});}};
+ const h=harness({prefs:{translateTarget:'KO'},pdf});
+ const out=new Map();await h.service.translateAll([para('a','TP53 is mutated.'),para('b','BRCA1 and BRCA2 differ.')],{onParagraph:(p,t)=>out.set(p.id,t)});
+ assert.match(sent[0],/^ZQX0 is mutated\.$/);assert.equal(out.get('a'),'번역 TP53 is mutated.');
+ assert.equal(sent.length,3,'the paragraph that lost its terms went again, unmasked');assert.equal(sent[2],'BRCA1 and BRCA2 differ.');
+ assert.equal(out.get('b'),'번역 BRCA1 and BRCA2 differ.');
+ const d=harness();await d.service.translateAll([para('a','TP53 is mutated.')]);
+ assert.equal(d.calls[0].body.text[0],'ZQX0 is mutated.');assert.equal(d.store.size,1);assert.equal([...d.store.values()][0],'KO:TP53 is mutated.');
+});
+test('the AI is not given placeholders (its prompt keeps the names); the reader\'s own term list is a new translation',async()=>{
+ const asked=[];const ai={available:()=>true,translate:async texts=>{asked.push(...texts);return texts.map(t=>'AI:'+t);}};
+ const prefs={translateTarget:'KO'};const h=harness({prefs,ai});
+ await h.service.translateAll([para('a','TP53 is mutated.')]);assert.deepEqual(asked,['TP53 is mutated.']);
+ const d=harness({prefs:{deeplApiKey:'abc:fx',translateTarget:'KO'}});await d.service.translateAll([para('a','Hedgehog binds.')]);
+ assert.equal(d.service.resolved([para('a','Hedgehog binds.')]).size,1);
+ d.prefs.translateProtect='Hedgehog';
+ assert.equal(d.service.resolved([para('a','Hedgehog binds.')]).size,0,'another term list, another translation');
+ await d.service.translateAll([para('a','Hedgehog binds.')]);assert.equal(d.calls.at(-1).body.text[0],'ZQX0 binds.');
+});
+
+/* ---- captions ---- */
+test('captions are left out unless asked for; then each comes after the body paragraphs of its page, labelled',()=>{
+ const structured={captions:[{kind:'figure',label:'Figure 1',text:'Figure 1. Cells.',page:1},{kind:'table',label:'Table 1',text:'Table 1. Data.',page:4}],sections:[{heading:'Intro',page:1,paragraphs:[{sentences:[{text:'A.',page:1}]}]},{heading:'Results',page:4,paragraphs:[{sentences:[{text:'C.',page:4}]},{sentences:[{text:'D.',page:5}]}]}]};
+ assert.equal(T.paragraphsOf(structured).length,3);
+ const list=T.paragraphsOf(structured,{captions:true});
+ assert.deepEqual(list.map(p=>[p.id,p.page,p.text,!!p.caption]),[['0.0',1,'A.',false],['c0',1,'Figure 1. Cells.',true],['1.0',4,'C.',false],['c1',4,'Table 1. Data.',true],['1.1',5,'D.',false]]);
+ assert.equal(list[1].heading,'Figure 1');
+});
+
+/* ---- Astra round 7 ---- */
+test('Translate for Zotero: each paragraph is kept as soon as it is done, so Stop during the fourth keeps the first three',async()=>{
+ let n=0;let release;
+ const pdf={translate:raw=>{n++;if(n===4)return new Promise(r=>{release=r;});return Promise.resolve(t4zTask(raw,{result:'K:'+raw}));}};
+ const h=harness({prefs:{translateTarget:'KO'},pdf});const job=T.token();const shown=[];
+ const run=h.service.translateAll(['One.','Two.','Three.','Four.','Five.'].map((t,i)=>para(String(i),t)),{signal:job,onParagraph:p=>shown.push(p.id)});
+ for(let i=0;i<20&&n<4;i++)await tick();
+ assert.deepEqual(shown,['0','1','2'],'shown one by one');
+ job.cancel();const summary=await run;
+ assert.equal(summary.stopped,'cancelled');assert.equal(summary.done,3);assert.equal(h.store.size,3);
+});
+test('a paragraph that runs over a page break is found from either page; its anchor rectangles are those of its first page',()=>{
+ const structured={sections:[{heading:'Intro',page:1,paragraphs:[{sentences:[{text:'A.',page:1,rects:[[1,700,3,10]]},{text:'B.',page:2,rects:[[1,70,3,10]]}]}]},{heading:'Next',page:2,paragraphs:[{sentences:[{text:'C.',page:2,rects:[[1,300,3,10]]}]}]}]};
+ const [first,second]=T.paragraphsOf(structured);
+ assert.deepEqual(first.pages,[1,2]);assert.deepEqual(first.rects,[[1,700,3,10]],'only page 1 rectangles: the jump lands where the paragraph starts');
+ assert.deepEqual(second.pages,[2,2]);
+ assert.equal(T.firstOnOrAfter([first,second],2),0,'on page 2 the paragraph that carries over is first');
+ assert.deepEqual(T.onPage([first,second],2).map(p=>p.text),['A. B.','C.']);
+ assert.deepEqual(T.onPage([first,second],1).map(p=>p.text),['A. B.']);
+ assert.equal(T.firstOnOrAfter([first,second],3),-1);
 });

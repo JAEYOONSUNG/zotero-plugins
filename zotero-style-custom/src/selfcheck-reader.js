@@ -351,6 +351,10 @@
     add(wrap(Zotero.HTTP, 'request', 'Zotero.HTTP.request', {when: args => !isLocalURL(args[1]) && fromReader(), result: 'reject', detail: args => `${args[0]} ${hostOf(args[1])}`,
       observe: bridge ? (args => bridge.observe(args)) : null}) && 'network');
     for (const name of ['paperSummary', 'chat', 'translateParagraphs', 'complete']) add(wrap(runtime.assist, name, 'assist.' + name, {result: 'reject'}) && 'assist.' + name);
+    // Translate for Zotero sends through its own HTTP calls, after an await, where the stack no longer names the
+    // reader modules: its API is the place to stop a translation from the panel.
+    const t4z = Zotero.PDFTranslate && Zotero.PDFTranslate.api;
+    add(wrap(t4z, 'translate', 'PDFTranslate.api.translate', {when: fromReader, result: 'reject', detail: args => String(args[0] || '').slice(0, 40)}) && 'pdftranslate');
     for (const name of ['edit', 'addReading', 'flush', 'scheduleFlush', 'setSetting', 'importWork', 'queueForReading']) add(wrap(runtime, name, 'runtime.' + name, {when: fromReader, result: 'resolve'}) && 'runtime.' + name);
     add(wrap(runtime.storage, 'write', 'storage.write', {when: fromReader, result: 'resolve'}) && 'storage.write');
     for (const name of ['setRemark', 'createNoteHTML', 'setTags', 'addTag', 'removeTag']) add(wrap(runtime.libraryService, name, 'library.' + name, {when: fromReader, result: 'resolve'}) && 'library.' + name);

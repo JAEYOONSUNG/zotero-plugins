@@ -862,15 +862,46 @@
    ui.trSources=el(doc,'p',{'class':'sc-ra-note',hidden:true},card);
    ui.trEstimate=el(doc,'p',{'class':'sc-ra-note'},card);
    const row=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
-   ui.trPage=button(session,row,{label:'현재 페이지부터',cls:'sc-ra-primary',mark:'ai',onClick:()=>runTranslate(session,'page')});
+   ui.trHere=button(session,row,{label:'이 쪽만 번역',cls:'sc-ra-primary',mark:'ai',onClick:()=>runTranslate(session,'here')});
+   ui.trPage=button(session,row,{label:'현재 페이지부터',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'page')});
    ui.trAll=button(session,row,{label:'전체 번역',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'all')});
    ui.trStop=button(session,row,{label:'중지',cls:'sc-ra-secondary',mark:'view',onClick:()=>{if(session.trJob)session.trJob.cancel();if(session.tr)session.tr.service.cancel();}});ui.trStop.hidden=true;
    ui.trNext=button(session,row,{label:'다른 번역기로 이어서',cls:'sc-ra-secondary',mark:'ai',onClick:()=>runTranslate(session,'resume',{next:true})});ui.trNext.hidden=true;
    const row2=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
    ui.trUsage=button(session,row2,{label:'사용량 새로고침',iconName:'refresh',cls:'sc-ra-link',mark:'network',onClick:()=>refreshUsage(session)});
    ui.trNote=button(session,row2,{label:'노트로 저장',iconName:'note',cls:'sc-ra-link',mark:'note',onClick:()=>saveTranslationNote(session)});
+   // View choices, remembered: captions as rows, the originals open under each translation, the list following the PDF.
+   const opts=el(doc,'div',{'class':'sc-ra-row sc-ra-wrap'},card);
+   const check=(name,label,initial,onChange)=>{
+    const wrap=el(doc,'label',{'class':'sc-ra-check'},opts);
+    const box=el(doc,'input',{type:'checkbox','data-safe':'view','data-tr':name,'aria-label':t(label)},wrap);box.checked=initial;
+    el(doc,'span',{text:t(label)},wrap);
+    box.addEventListener('change',()=>{onChange(box.checked);persistUI();});
+    return box;
+   };
+   ui.trCaptions=check('captions','그림·표 설명도 번역',uiState().trCaptions===true,on=>{uiState().trCaptions=on;if(session.tr)session.tr.paragraphs=[];prepareTranslate(session);});
+   ui.trOriginals=check('originals','원문 함께 보기',uiState().trOriginals===true,on=>{uiState().trOriginals=on;for(const d of ui.trRows.querySelectorAll('.sc-ra-orig'))d.open=on;});
+   ui.trSync=check('sync','PDF와 함께 스크롤',uiState().trSync!==false,on=>{uiState().trSync=on;if(on){session.trHere=null;followPage(session);}});
    ui.trProgress=el(doc,'p',{'class':'sc-ra-note',role:'status'},card);
    ui.trRows=group(el(doc,'div',{'class':'sc-ra-rows'},pane));
+  }
+  /* The list follows the PDF: after the reader scrolls (a wheel, a key, a drag in the page), the paragraph of the
+     page on screen is marked and brought into the panel's view. Only while the translation tab is showing. */
+  function followPage(session){
+   if(session.destroyed||!session.open||session.tab!=='translate'||uiState().trSync===false||!session.tr)return;
+   const page=currentPage(session.reader);if(!page||page===session.trHere)return;
+   const rows=[...session.ui.trRows.querySelectorAll('.sc-ra-row-card')];
+   const index=fromPage(session,session.tr.paragraphs);if(index<0)return;
+   const id=session.tr.paragraphs[index].id;
+   session.trHere=page;
+   for(const row of rows){if(row.getAttribute('data-id')===id)row.setAttribute('data-here','true');else row.removeAttribute('data-here');}
+   const row=rows.find(r=>r.getAttribute('data-id')===id);
+   if(row&&row.scrollIntoView)try{row.scrollIntoView({block:'nearest'});}catch(_){}
+  }
+  function scheduleFollow(session){
+   if(session.followTimer||session.tab!=='translate'||uiState().trSync===false)return;
+   const win=session.doc.defaultView;
+   session.followTimer=win.setTimeout(()=>{session.followTimer=null;followPage(session);},250);
   }
   function translator(session){
    if(session.tr)return session.tr;
@@ -890,6 +921,9 @@
    const service=TR.create({http,now:()=>new Date(),pref:key=>runtime.pref(key,''),cache,
     usageStore:{get:()=>runtime.cache.deeplUsage,set:v=>{runtime.cache.deeplUsage=v;persistUI();}},
     pdfTranslate:()=>Z.PDFTranslate&&Z.PDFTranslate.api,
+    // Translate for Zotero's own settings, read only: which service it is set to, and its target language.
+    pdfTranslatePref:key=>{try{return Z.Prefs&&Z.Prefs.get('extensions.zotero.ZoteroPDFTranslate.'+key,true);}catch(_){return '';}},
+    pdftUsageStore:{get:()=>runtime.cache.pdftUsage,set:v=>{runtime.cache.pdftUsage=v;persistUI();}},
     ai:{available:()=>!!runtime.assist?.available?.(),translate:(texts,o)=>runtime.assist.translateParagraphs(texts,o)},
     uiKorean:runtime.i18n?.isKorean?.()!==false});
    // What is shown comes from the cache under the current settings (service.resolved): switching the language, the
@@ -901,7 +935,7 @@
    const tr=translator(session);
    try{
     const {structured}=await structure(session);
-    tr.paragraphs=TR.paragraphsOf(structured,{pageBase:PAGE_BASE});
+    tr.paragraphs=TR.paragraphsOf(structured,{pageBase:PAGE_BASE,captions:uiState().trCaptions===true});session.trHere=null;
    }catch(error){tr.paragraphs=[];session.ui.trProgress.textContent=describe(error);}
    renderTranslate(session);
   }
@@ -910,13 +944,16 @@
    return TR.providerSpans(paragraphs,found).map(x=>T('{0} · 문단 {1}',service.providerLabel(x.provider),TR.rangeText(x.ranges))).join(', ');
   }
   /* The first paragraph on or after the page on screen; -1 past the last one (the references, the back pages). */
-  const fromPage=(session,paragraphs)=>paragraphs.findIndex(p=>(p.page||0)>=(currentPage(session.reader)||1));
+  const fromPage=(session,paragraphs)=>TR.firstOnOrAfter(paragraphs,currentPage(session.reader)||1);
   const trBusy=session=>!!session.trJob||!!(session.tr&&session.tr.service.busy);
   function renderTranslate(session){
    const ui=session.ui,tr=translator(session),doc=session.doc,service=tr.service;
    const providers=service.providers(),current=service.pickProvider(),target=service.target(),busy=trBusy(session);
-   ui.trTarget.set({items:TR.TARGETS.map(x=>({value:x.code,label:x.label})),current:target.code,label:target.label});
-   ui.trProvider.textContent=current?T('번역기: {0}',service.providerLabel(current))+(providers.length>1?' · '+T('대체: {0}',providers.slice(providers.indexOf(current)+1).map(service.providerLabel).join(', ')||'—'):''):t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣으세요. DeepL 무료 키는 한 달 50만 자까지 쓸 수 있습니다.');
+   // "Automatic" first, naming what it resolves to now; the pill shows the language itself.
+   const chosen=String(runtime.pref('translateTarget','auto')||'auto').toUpperCase(),explicit=TR.TARGETS.some(x=>x.code===chosen);
+   ui.trTarget.set({items:[{value:'auto',label:T('자동 ({0})',service.autoTarget().label)},...TR.TARGETS.map(x=>({value:x.code,label:x.label}))],current:explicit?target.code:'auto',label:target.label});
+   ui.trProvider.textContent=current?T('번역기: {0}',service.providerLabel(current))+(providers.length>1?' · '+T('대체: {0}',providers.slice(providers.indexOf(current)+1).map(service.providerLabel).join(', ')||'—'):'')
+    +(service.targetOrigin()==='pdftranslate'?' · '+t('번역 언어는 Translate for Zotero 설정을 따릅니다'):''):t('번역기가 없습니다. 설정 → 번역·AI에서 DeepL 키를 넣거나 Translate for Zotero를 설치하세요. DeepL 무료 키는 한 달 50만 자까지 쓸 수 있습니다.');
    const usage=service.usage();
    const start=fromPage(session,tr.paragraphs);
    const est=service.estimate(tr.paragraphs,current);
@@ -925,9 +962,10 @@
    ui.trEstimate.textContent=!tr.paragraphs.length?(readingText(session)||t('번역할 본문을 아직 읽지 못했습니다.')):
     T('전체 약 {0}자 · 이미 번역한 {1}문단은 제외',est.chars.toLocaleString(),est.cached)+' · '+T('현재 페이지부터 약 {0}자',pageEst.chars.toLocaleString())
     +(current==='deepl'?' · '+T('이번 달 {0} / {1}자 사용',usage.chars.toLocaleString(),limitText)+(usage.free?'':' · '+t('유료 키')):'')
+    +(current==='pdftranslate'?' · '+pdftLine(service.pdftUsage()):'')
     +(current==='ai'&&est.chars?' · '+(isLocalAI()?T('AI 서버로 약 {0}토큰 (이 Mac에서 실행)',est.tokens.toLocaleString()):viaBridge()?T('AI 브리지로 약 {0}토큰 · {1}의 사용 한도에서 씁니다',est.tokens.toLocaleString(),aiPlace()):T('AI 서버로 약 {0}토큰을 보내고 받습니다. 모델 요금이 붙습니다.',est.tokens.toLocaleString())):'')
     +(current==='deepl'&&!est.fits?' · '+t('전체는 남은 한도를 넘습니다. 한도에 닿으면 거기서 멈추고 번역한 부분은 남습니다.'):'');
-   for(const b of [ui.trPage,ui.trAll])b.disabled=!current||!tr.paragraphs.length||busy;
+   for(const b of [ui.trHere,ui.trPage,ui.trAll])b.disabled=!current||!tr.paragraphs.length||busy;
    ui.trStop.hidden=!busy;ui.trUsage.hidden=!service.providers().includes('deepl');ui.trNote.disabled=!tr.paragraphs.length;
    if(busy)ui.trNext.hidden=true;
    // rows: each paragraph's current translation and the translator that made it
@@ -943,9 +981,12 @@
     meta.textContent=(p.heading||'—')+(p.page?' · p. '+p.page:'');
     meta.addEventListener('click',()=>goToPage(session,p.page,p.rects));
     const body=el(doc,'p',{'class':'sc-ra-tr-text'},row);body.textContent=text||'—';
-    const orig=el(doc,'details',{'class':'sc-ra-orig'},row);el(doc,'summary',{text:hit?t('원문')+' · '+service.providerLabel(hit.provider):t('원문')},orig);el(doc,'p',{'class':'sc-ra-orig-text'},orig).textContent=p.text;
-    const again=button(session,row,{label:'다시 번역',cls:'sc-ra-link',mark:'ai',onClick:()=>retranslate(session,p)});
+    const orig=el(doc,'details',{'class':'sc-ra-orig'},row);if(uiState().trOriginals===true)orig.open=true;el(doc,'summary',{text:hit?t('원문')+' · '+service.providerLabel(hit.provider):t('원문')},orig);el(doc,'p',{'class':'sc-ra-orig-text'},orig).textContent=p.text;
+    const tools=el(doc,'div',{'class':'sc-ra-row sc-ra-row-tools'},row);
+    const again=button(session,tools,{label:'다시 번역',cls:'sc-ra-link',mark:'ai',onClick:()=>retranslate(session,p)});
     again.disabled=busy||!current;
+    const copy=button(session,tools,{title:'원문과 번역 복사',iconName:'copy',cls:'sc-ra-icon',mark:'view',onClick:()=>{const now=found.get(p.id)||translator(session).service.resolved([p],target.code).get(p.id);if(now)copyText(session,p.text+'\n\n'+now.text);}});
+    copy.setAttribute('data-copy','paragraph');copy.disabled=!text;
    });
    setBadge(session,'translate',tr.paragraphs.length?done+'/'+tr.paragraphs.length:0);
    tabstops(session);
@@ -954,12 +995,14 @@
    const tr=translator(session);
    if(code!==tr.service.target().code)return;      // a run for another language: stored in the cache, not shown here
    const row=session.ui.trRows.querySelector('[data-id="'+p.id+'"]');
-   if(row){row.setAttribute('data-state','done');if(provider)row.setAttribute('data-provider',provider);const body=row.querySelector('.sc-ra-tr-text');if(body)body.textContent=text;}
+   if(row){row.setAttribute('data-state','done');if(provider)row.setAttribute('data-provider',provider);const body=row.querySelector('.sc-ra-tr-text');if(body)body.textContent=text;const copy=row.querySelector('[data-copy]');if(copy)copy.disabled=false;}
   }
   // The local bridge uses the Mac's own Claude/ChatGPT accounts: their allowance, not a per-token bill.
   const viaBridge=()=>{try{const st=runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;return !!(st&&st.available&&st.source==='bridge');}catch(_){return false;}};
   const isLocalAI=()=>/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\//i.test(String(runtime.pref('aiEndpoint','')||'').trim());
   const usageLine=u=>T('이번 달 {0} / {1}자 사용',u.chars.toLocaleString(),u.limit===null?t('한도 미확인'):u.limit.toLocaleString());
+  /* Through Translate for Zotero the key is its own: what this panel sent, against DeepL Free's monthly 500,000. */
+  const pdftLine=u=>u.limit?T('이번 달 이 패널에서 보낸 양: {0} / {1}자 (Translate for Zotero의 다른 번역은 빠짐)',u.chars.toLocaleString(),u.limit.toLocaleString()):T('이번 달 이 패널에서 보낸 양: {0}자',u.chars.toLocaleString());
   /* One translation job at a time, whole paragraphs or one paragraph again. The job's token and the busy state are
      made at the click, so Stop works from the first moment: while the paper's text is read, while DeepL's usage is
      asked, and between every batch; each await is followed by a look at the token. */
@@ -985,11 +1028,12 @@
      // language, from where that run began. Nothing already translated is sent (or paid for) twice.
      list=TR.unfinished(tr.paragraphs.slice(session.trStart||0),found);
     }else{
-     const start=mode==='page'?fromPage(session,tr.paragraphs):0;
-     if(start<0){ui.trProgress.textContent=t('이 쪽부터는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.');return;}
+     const start=mode==='page'?fromPage(session,tr.paragraphs):mode==='here'?tr.paragraphs.indexOf(TR.onPage(tr.paragraphs,currentPage(session.reader)||1)[0]):0;
+     if(start<0){ui.trProgress.textContent=mode==='here'?t('이 쪽에는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.'):t('이 쪽부터는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.');return;}
      session.trStart=start;
+     const scope=mode==='here'?TR.onPage(tr.paragraphs,currentPage(session.reader)||1):tr.paragraphs.slice(start);
      // A paragraph another translator already finished is left as it is ("다시 번역" redoes one on purpose).
-     list=tr.paragraphs.slice(start).filter(p=>{const hit=found.get(p.id);return !hit||hit.provider===provider;});
+     list=scope.filter(p=>{const hit=found.get(p.id);return !hit||hit.provider===provider;});
     }
     // DeepL's own count (free to ask) before spending it; a failure here only means the local count is used.
     if(provider==='deepl'){try{await service.refreshUsage({signal:job});}catch(error){if(!job.cancelled)log(error);}}
@@ -997,7 +1041,7 @@
     if(job.cancelled)throw cancelledError();
     summary=await service.translateAll(list,{provider,target:code,signal:job,
      onParagraph:(p,text)=>{if(!session.destroyed)paintParagraph(session,p,text,code,provider);},
-     onProgress:p=>{if(session.destroyed)return;ui.trProgress.textContent=T('번역 {0}/{1}문단 · {2}',p.done,p.total,service.providerLabel(provider))+(provider==='deepl'?' · '+usageLine(service.usage()):'');}}).catch(error=>({provider,done:0,total:0,stopped:error.code||'failed',error}));
+     onProgress:p=>{if(session.destroyed)return;ui.trProgress.textContent=T('번역 {0}/{1}문단 · {2}',p.done,p.total,service.providerLabel(provider))+(provider==='deepl'?' · '+usageLine(service.usage()):provider==='pdftranslate'?' · '+pdftLine(service.pdftUsage()):'');}}).catch(error=>({provider,done:0,total:0,stopped:error.code||'failed',error}));
    }catch(error){
     if(!isCancel(error,job))throw error;
     summary={provider,done:0,total:0,stopped:'cancelled'};
@@ -1008,7 +1052,7 @@
    if(session.destroyed||!summary)return;
    ui.trProgress.textContent=summary.stopped==='cancelled'?T('중지했습니다. {0}문단 번역됨',summary.done):summary.stopped?describe(summary.error)+(summary.error&&summary.error.detail?' ('+summary.error.detail+')':'')+' · '+T('{0}문단 번역됨',summary.done):T('{0}문단 번역을 마쳤습니다.',summary.done);
    renderTranslate(session);
-   if(summary.stopped&&['quota','key','rate','server','failed','shape'].includes(summary.stopped)&&service.nextProvider(provider))ui.trNext.hidden=false;
+   if(summary.stopped&&['quota','key','rate','server','failed','shape','pdft','empty'].includes(summary.stopped)&&service.nextProvider(provider))ui.trNext.hidden=false;
    tabstops(session);
   }
   async function retranslate(session,paragraph){
@@ -1626,7 +1670,7 @@
    (doc.body||doc.documentElement).appendChild(session.ui.root);
    stylesheet().then(css=>{if(session.destroyed||!css)return;const style=doc.createElementNS(HTML,'style');style.setAttribute('data-sc-ra-style','1');style.textContent=css;(doc.head||doc.documentElement).appendChild(style);session.style=style;});
    // Let the panel know the reader's pointer activity, so listening is credited only when the person is not already being counted.
-   session.onActivity=()=>{session.lastActivity=Date.now();};
+   session.onActivity=()=>{session.lastActivity=Date.now();if(session.open&&session.tab==='translate')scheduleFollow(session);};
    for(const name of ACTIVITY)on(session,doc,name,session.onActivity,true);
    session.onShortcut=event=>onShortcut(session,event);
    on(session,doc,'keydown',session.onShortcut,true);
@@ -1650,6 +1694,7 @@
    try{session.player&&session.player.destroy();}catch(_){}
    for(const tok of [session.chatToken,session.summaryToken])try{tok&&tok.cancel();}catch(_){}
    try{session.tr&&session.tr.service.cancel();}catch(_){}
+   if(session.followTimer)try{session.doc.defaultView.clearTimeout(session.followTimer);}catch(_){}session.followTimer=null;
    if(!session.noSave)try{saveNow(session);}catch(_){}
    clearHighlight(session);
    try{session.open=false;applyLayout(session);}catch(_){}

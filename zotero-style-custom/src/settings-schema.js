@@ -1249,11 +1249,11 @@
       "label": "논문 번역 언어",
       "type": "select",
       "default": "auto",
-      "description": "자동은 패널 언어(한국어면 한국어, 영어면 English)를 따릅니다.",
+      "description": "자동은 Translate for Zotero가 설치되어 있으면 그 번역 언어를, 아니면 패널 언어(한국어면 한국어, 영어면 English)를 따릅니다.",
       "options": [
         {
           "value": "auto",
-          "label": "패널 언어를 따름"
+          "label": "자동 (Translate for Zotero 또는 패널 언어)"
         },
         {
           "value": "KO",
@@ -1306,6 +1306,14 @@
           "label": "편한 말투 쪽"
         }
       ]
+    },
+    {
+      "key": "translateProtect",
+      "category": "ai",
+      "label": "번역하지 않을 용어",
+      "type": "textarea",
+      "default": "",
+      "description": "쉼표나 줄바꿈으로 나눠 적습니다 (예: Notch, sonic hedgehog). 문단 번역에서 이 용어는 그대로 둡니다. TP53·IL-6 같은 유전자·단백질 이름, Escherichia coli·E. coli 같은 종 이름, 5 µM·10 mg/mL 같은 단위는 적지 않아도 그대로 둡니다. DeepL과 Translate for Zotero에 적용되며, AI 번역은 지시문으로 같은 규칙을 따릅니다."
     },
     {
       "key": "aiTagsPrompt",

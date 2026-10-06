@@ -166,3 +166,6 @@
 /* listening progress: a quiet track inside the player card */
 .sc-ra-meter{height:4px;border-radius:999px;background:var(--sc-soft2);overflow:hidden;margin:-2px 0 0}
 .sc-ra-meter-fill{display:block;height:100%;width:0;border-radius:999px;background:var(--sc-ink)}
+/* translation rows: the paragraph of the page on screen gets a plain grey ring all round, no edge bar */
+.sc-ra-row-card[data-here="true"]{box-shadow:0 0 0 1.5px var(--sc-muted)}
+.sc-ra-row-tools{display:flex;align-items:center;justify-content:space-between;gap:6px}

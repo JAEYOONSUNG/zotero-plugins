@@ -33,9 +33,19 @@
   {code:'JA',pdft:'ja-JP',ai:'Japanese',label:'日本語',formality:true},{code:'ZH-HANS',pdft:'zh-CN',ai:'Simplified Chinese',label:'中文(简体)',formality:false},
   {code:'DE',pdft:'de-DE',ai:'German',label:'Deutsch',formality:true},{code:'FR',pdft:'fr-FR',ai:'French',label:'Français',formality:true},{code:'ES',pdft:'es-ES',ai:'Spanish',label:'Español',formality:true}
  ];
- const targetOf=(setting,uiKorean)=>{
+ /* Translate for Zotero's own target ("ko-KR", "en-GB", "zh-CN") as one of ours; null for one we do not offer
+    (traditional Chinese is not simplified Chinese). */
+ const targetFromLocale=locale=>{
+  const code=String(locale||'').trim();if(!code)return null;
+  const exact=TARGETS.find(t=>t.pdft.toLowerCase()===code.toLowerCase());if(exact)return exact;
+  const [lang,region='']=code.toLowerCase().split(/[-_]/);
+  if(lang==='zh')return ['','cn','sg','hans'].includes(region)?TARGETS.find(t=>t.code==='ZH-HANS'):null;
+  return TARGETS.find(t=>t.pdft.split('-')[0]===lang)||null;
+ };
+ /* "auto" follows Translate for Zotero's target when it has one we offer, else the panel language. */
+ const targetOf=(setting,uiKorean,external='')=>{
   const wanted=String(setting||'auto').toUpperCase();
-  return TARGETS.find(t=>t.code===wanted)||(uiKorean?TARGETS[0]:TARGETS[1]);
+  return TARGETS.find(t=>t.code===wanted)||targetFromLocale(external)||(uiKorean?TARGETS[0]:TARGETS[1]);
  };
  /* Hash of a source paragraph: the cache key. FNV-1a over UTF-16 units, twice with different seeds. */
  function hash(text){
@@ -46,9 +56,11 @@
  /* The key also carries a revision of the settings that change the result (provider, target, formality, and for the
     AI provider its model and endpoint), never a secret: a new model or a formal register is a new translation. */
  const cacheKey=(provider,target,text,revision='')=>provider+'|'+target+'|'+(revision?revision+'|':'')+hash(clean(text));
- function settingsRevision({provider,target,formality='',model='',endpoint=''}){
+ function settingsRevision({provider,target,formality='',model='',endpoint='',service='',protect=''}){
   const parts=[provider,target,formality&&formality!=='default'?formality:''];
   if(provider==='ai')parts.push(String(model||'').trim(),String(endpoint||'').trim());
+  if(provider==='pdftranslate'&&service)parts.push('service:'+service);
+  if(provider!=='ai'&&protect)parts.push('protect:'+protect);
   return hash(parts.join('\u0001')).slice(0,10);
  }
  /* A cancel token: cancel() runs every registered canceller once; a sleep or a request that sees it cancelled stops. */
@@ -61,23 +73,93 @@
  }
  const cancelledError=()=>{const e=new Error('중지했습니다.');e.code='cancelled';e.own=true;return e;};
 
+ /* ---- protected terms ----------------------------------------------------- */
+ /* DeepL (and Translate for Zotero's services) sometimes translate a gene or protein name, a species or a unit:
+    "Notch" becomes a word, "Escherichia coli" becomes 대장균. Such terms are swapped for placeholders (ZQX0, ZQX1 ...)
+    that a translator passes through as names, and put back afterwards. A placeholder that does not come back is
+    reported, and that text is sent again unmasked rather than shown with a term missing. The AI is told in its
+    prompt to keep the names, so it gets the text as it is. */
+ const GENERA='Escherichia|Saccharomyces|Schizosaccharomyces|Homo|Mus|Rattus|Drosophila|Caenorhabditis|Arabidopsis|Danio|Xenopus|Bacillus|Staphylococcus|Streptococcus|Pseudomonas|Mycobacterium|Salmonella|Candida|Plasmodium|Oryza|Zea|Nicotiana|Listeria|Helicobacter|Vibrio|Clostridium|Clostridioides|Klebsiella|Aspergillus|Neurospora|Chlamydomonas|Medicago|Solanum|Gallus|Sus|Bos|Macaca|Enterococcus|Acinetobacter|Shigella|Yersinia|Legionella|Toxoplasma|Trypanosoma|Leishmania|Physcomitrium|Physcomitrella|Triticum|Glycine|Pan|Canis|Felis|Ovis|Equus|Cryptococcus|Neisseria|Haemophilus|Borrelia|Treponema|Chlamydia|Lactobacillus|Bifidobacterium|Bacteroides|Streptomyces|Corynebacterium|Synechocystis|Ciona|Strongylocentrotus|Hydra|Nematostella|Tetrahymena|Dictyostelium|Pichia|Komagataella';
+ const EPITHET_STOP=/^(?:the|and|of|in|with|for|was|were|is|are|to|from|by|on|at|as|this|that|these|those|an|or|not|but|which|who|we|it|its|has|had|have|be|been|also|than|then|cells?|strains?|species|samples?)$/;
+ const TERM_PATTERNS=[
+  new RegExp('\\b(?:'+GENERA+')\\s+[a-z]{3,}\\b','g'),                                 // Escherichia coli
+  /\b[A-Z]\.\s?[a-z]{3,}\b/g,                                                               // E. coli, S. cerevisiae
+  /(?<![\w.])\d+(?:[.,]\d+)?\s?(?:[µμnpfmk]?(?:M|mol|g|L|Da)|kDa|rpm|°C|U)(?:\/[A-Za-zµμ0-9]+)*(?![A-Za-z])/g, // 5 µM, 10 mg/mL, 37 °C
+  /(?<![\w-])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9\u0370-\u03ff]+)*(?:\/\d+)?(?![\w-])/g        // TP53, IL-6, NF-κB, mTOR, ERK1/2 (filtered below)
+ ];
+ const geneLike=word=>/[A-Z]/.test(word)&&(/\d/.test(word)&&/[A-Za-z]{1,}/.test(word)&&!/^[A-Z]$/.test(word)||/[\u0370-\u03ff]/.test(word)||/[a-z][A-Z]/.test(word))||/^p\d{2,3}$/.test(word);
+ const escapeRe=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ /* The reader's own list: "Notch, sonic hedgehog" (commas, semicolons or lines). */
+ const termList=value=>[...new Set(String(value||'').split(/[,;\n]/).map(clean).filter(x=>x.length>=2))];
+ function protect(text,own=[]){
+  const source=String(text==null?'':text),found=[];
+  const add=(start,end)=>{if(found.some(f=>start<f.end&&end>f.start))return;found.push({start,end,term:source.slice(start,end)});};
+  // the reader's terms first, longest first, as whole words
+  for(const term of [...own].sort((a,b)=>b.length-a.length)){
+   const re=new RegExp('(?<![\\w-])'+escapeRe(term)+'(?![\\w-])','g');let m;
+   while((m=re.exec(source)))add(m.index,m.index+m[0].length);
+  }
+  TERM_PATTERNS.forEach((re,i)=>{
+   re.lastIndex=0;let m;
+   while((m=re.exec(source))){
+    const word=m[0];
+    if(i===0||i===1){const epithet=word.split(/[\s.]+/).pop();if(EPITHET_STOP.test(epithet))continue;}
+    if(i===3&&!geneLike(word))continue;
+    add(m.index,m.index+word.length);
+   }
+  });
+  found.sort((a,b)=>a.start-b.start);
+  if(!found.length)return {text:source,terms:[]};
+  // the same term gets the same placeholder
+  const terms=[],index=new Map();let out='',at=0;
+  for(const f of found){
+   if(!index.has(f.term)){index.set(f.term,terms.length);terms.push(f.term);}
+   out+=source.slice(at,f.start)+'ZQX'+index.get(f.term);at=f.end;
+  }
+  return {text:out+source.slice(at),terms};
+ }
+ function restore(text,terms){
+  if(!terms||!terms.length)return {text:String(text),missing:[]};
+  const seen=new Set();
+  const out=String(text).replace(/ZQX(\d+)/gi,(whole,n)=>{const i=Number(n);if(i<terms.length){seen.add(i);return terms[i];}return whole;});
+  return {text:out,missing:terms.filter((_,i)=>!seen.has(i))};
+ }
+
  /* ---- paragraphs --------------------------------------------------------- */
  /* The body of the paper as paragraphs in reading order: one row per paragraph
-    with its section, page and the rectangle to scroll to. Captions, the
-    references and footnotes are not translated here. */
- function paragraphsOf(structured,{pageBase=0}={}){
+    with its section, page and the rectangle to scroll to. The references and
+    footnotes are not translated here; figure and table captions only when asked,
+    each after the body paragraphs of its page, labelled ("Figure 1"). */
+ function paragraphsOf(structured,{pageBase=0,captions=false}={}){
   const out=[];if(!structured)return out;
   (structured.sections||[]).forEach((section,sectionIndex)=>{
    if(section.kind==='back'||section.kind==='references'||section.back===true)return;
    (section.paragraphs||[]).forEach((paragraph,paragraphIndex)=>{
     const sentences=(paragraph.sentences||[]).filter(s=>s&&clean(s.text));if(!sentences.length)return;
-    const first=sentences.find(s=>Number.isFinite(Number(s.page)));
-    const rects=sentences.flatMap(s=>s.rects||[]).filter(r=>Array.isArray(r)&&r.length>=4);
-    out.push({id:sectionIndex+'.'+paragraphIndex,sectionIndex,heading:clean(section.heading),page:first?Number(first.page)+pageBase:(Number.isFinite(Number(section.page))?Number(section.page)+pageBase:null),rects:rects.slice(0,8),text:clean(sentences.map(s=>s.text).join(' '))});
+    const paged=sentences.filter(s=>Number.isFinite(Number(s.page))),first=paged[0];
+    // The jump goes to where the paragraph starts: rectangles of its first page only (a paragraph that runs over a
+    // page break has rectangles on the next page too, which the reader would place on the first).
+    const rects=(first?paged.filter(s=>Number(s.page)===Number(first.page)):sentences).flatMap(s=>s.rects||[]).filter(r=>Array.isArray(r)&&r.length>=4);
+    const page=first?Number(first.page)+pageBase:(Number.isFinite(Number(section.page))?Number(section.page)+pageBase:null);
+    const last=paged.length?Math.max(...paged.map(s=>Number(s.page)))+pageBase:page;
+    out.push({id:sectionIndex+'.'+paragraphIndex,sectionIndex,heading:clean(section.heading),page,pages:page===null?null:[page,last],rects:rects.slice(0,8),text:clean(sentences.map(s=>s.text).join(' '))});
    });
+  });
+  if(captions)(structured.captions||[]).forEach((c,i)=>{
+   const text=clean(c&&c.text);if(!text)return;
+   const page=Number.isFinite(Number(c.page))?Number(c.page)+pageBase:null;
+   const row={id:'c'+i,sectionIndex:-1,caption:true,heading:clean(c.label)||(c.kind==='table'?'Table':'Figure'),page,pages:page===null?null:[page,page],rects:[],text};
+   const at=page===null?-1:out.findIndex(p=>p.page!==null&&p.page>page);
+   if(at<0)out.push(row);else out.splice(at,0,row);
   });
   return out;
  }
+ /* Pages a paragraph covers: from its first sentence to its last. */
+ const spanOf=p=>Array.isArray(p.pages)?p.pages:[p.page||0,p.page||0];
+ /* The first paragraph that reaches the page or later (one that runs onto it from the page before counts); -1 past the end. */
+ const firstOnOrAfter=(paragraphs,page)=>(paragraphs||[]).findIndex(p=>spanOf(p)[1]>=page);
+ /* The paragraphs with any of their text on the page. */
+ const onPage=(paragraphs,page)=>(paragraphs||[]).filter(p=>{const [a,b]=spanOf(p);return a<=page&&page<=b;});
  /* A paragraph over the limit is cut at sentence ends and put back together. */
  function splitParagraph(text,max=MAX_PARAGRAPH){
   const source=clean(text);if(source.length<=max)return [source];
@@ -120,7 +202,7 @@
  }
 
  /* ---- the translator -------------------------------------------------------- */
- function create({http,sleep=ms=>new Promise(r=>setTimeout(r,ms)),now=()=>new Date(),pref=()=>'',cache=null,usageStore=null,pdfTranslate=()=>null,ai=null,uiKorean=true,retries=3}={}){
+ function create({http,sleep=ms=>new Promise(r=>setTimeout(r,ms)),now=()=>new Date(),pref=()=>'',cache=null,usageStore=null,pdfTranslate=()=>null,pdfTranslatePref=()=>'',pdftUsageStore=null,ai=null,uiKorean=true,retries=3}={}){
   const memory=new Map(),store=cache||{get:k=>memory.get(k),set:(k,v)=>memory.set(k,v),save:async()=>{}};
   let running=null;const tokens=new Set();
   const monthKey=()=>{const d=now();return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0');};
@@ -129,7 +211,20 @@
   const usageLoad=()=>{const u=(usageStore&&usageStore.get&&usageStore.get())||null;return u&&u.month===monthKey()?{...u}:{month:monthKey(),chars:0,limit:defaultLimit(),fromServer:false};};
   const usageSave=u=>{if(usageStore&&usageStore.set)usageStore.set(u);};
   const deeplKey=()=>String(pref('deeplApiKey')||'').trim();
-  const target=()=>targetOf(pref('translateTarget'),uiKorean);
+  const hasPdfTranslate=()=>{const api=pdfTranslate();return !!(api&&typeof api.translate==='function');};
+  const pdftPref=key=>{try{return String(pdfTranslatePref(key)||'').trim();}catch(_){return '';}};
+  // The service Translate for Zotero is set to ("deeplfree"): it answers our requests, so it names the translator.
+  const pdftService=()=>hasPdfTranslate()?pdftPref('translateSource'):'';
+  const pdftTarget=()=>hasPdfTranslate()?pdftPref('targetLanguage'):'';
+  const target=()=>targetOf(pref('translateTarget'),uiKorean,pdftTarget());
+  const autoTarget=()=>targetOf('auto',uiKorean,pdftTarget());
+  /* Where the language came from: the setting, Translate for Zotero's own target, or the panel language. */
+  const targetOrigin=()=>{
+   const wanted=String(pref('translateTarget')||'auto').toUpperCase();
+   if(TARGETS.some(t=>t.code===wanted))return 'setting';
+   return targetFromLocale(pdftTarget())?'pdftranslate':'ui';
+  };
+  const ownTerms=()=>termList(pref('translateProtect'));
   const formality=()=>String(pref('translateFormality')||'');
   /* DeepL, then Translate for Zotero, then the AI endpoint (which may cost per token). */
   const providers=()=>{
@@ -140,11 +235,24 @@
   };
   /* What a job is fixed to when it starts. */
   const settingsFor=(provider,targetCode)=>{
-   const t=TARGETS.find(x=>x.code===targetCode)||target(),f=formality();
-   return {provider,target:t,formality:f,revision:settingsRevision({provider,target:t.code,formality:f,model:pref('aiModel'),endpoint:pref('aiEndpoint')})};
+   const t=TARGETS.find(x=>x.code===targetCode)||target(),f=formality(),service=provider==='pdftranslate'?pdftService():'',own=ownTerms();
+   return {provider,target:t,formality:f,service,own,
+    revision:settingsRevision({provider,target:t.code,formality:f,model:pref('aiModel'),endpoint:pref('aiEndpoint'),service,protect:own.join('\u0001')})};
   };
   const keyFor=(settings,text)=>cacheKey(settings.provider,settings.target.code,text,settings.revision);
-  const providerLabel=id=>({deepl:isFreeKey(deeplKey())?'DeepL Free':'DeepL',pdftranslate:'Translate for Zotero',ai:'AI'}[id]||id);
+  const SERVICE_NAMES={deeplfree:'DeepL Free',deeplpro:'DeepL Pro',deeplcustom:'DeepL'};
+  const providerLabel=id=>{
+   if(id==='pdftranslate'){const s=pdftService();return 'Translate for Zotero'+(s?' ('+(SERVICE_NAMES[s]||s)+')':'');}
+   return {deepl:isFreeKey(deeplKey())?'DeepL Free':'DeepL',ai:'AI'}[id]||id;
+  };
+  /* What this panel sent through Translate for Zotero this month. Its DeepL Free key is its own (we never read it),
+     so DeepL's own count cannot be asked: this is our share only, against the free 500,000 when it is DeepL Free. */
+  const pdftUsage=()=>{
+   const month=monthKey(),u=(pdftUsageStore&&pdftUsageStore.get&&pdftUsageStore.get())||null;
+   const service=pdftService();
+   return {month,chars:u&&u.month===month?Number(u.chars)||0:0,limit:service==='deeplfree'?FREE_LIMIT:null,service};
+  };
+  const addPdftUsage=n=>{if(!pdftUsageStore||!pdftUsageStore.set)return;const u=pdftUsage();pdftUsageStore.set({month:u.month,chars:u.chars+n});};
   /* The usage the panel shows: what this plugin counted this month, or what DeepL said when last asked. */
   const usage=()=>{const u=usageLoad(),limit=Number(u.limit)>0?Number(u.limit):defaultLimit();return {month:u.month,chars:u.chars,limit,remaining:limit===null?null:Math.max(0,limit-u.chars),fromServer:!!u.fromServer,free:isFreeKey(deeplKey())};};
   /* DeepL's own count and limit (free of charge to ask). */
@@ -216,13 +324,29 @@
     check(signal);
     // Translate for Zotero has no way to abort a request: Stop ends our wait at once (the reply, when it comes, is
     // dropped) and no further paragraph is sent. The plugin's own request may still finish in the background.
-    const reply=await orCancel(api.translate(text,{langto:settings.target.pdft,pluginID:'style-custom@sungjaeyoon.dev'}),signal);
+    // 2.4.8: translate(raw, {pluginID, langto, service}) resolves with its task, {status:'success'|'fail', result};
+    // a failed task carries the error text in result, so the status decides, not whether result has text.
+    const options={langto:settings.target.pdft,pluginID:'style-custom@sungjaeyoon.dev'};if(settings.service)options.service=settings.service;
+    let reply;
+    try{reply=await orCancel(Promise.resolve().then(()=>api.translate(text,options)),signal);}
+    catch(error){if(error&&error.code==='cancelled')throw error;throw pdftError(error&&error.message||error);}
     check(signal);
+    if(reply&&typeof reply==='object'&&'status' in reply&&reply.status!=='success')throw pdftError(reply.result);
     const value=typeof reply==='string'?reply:reply&&(reply.result||reply.text||reply.translation);
     if(typeof value!=='string'||!value.trim()){const e=new Error('번역 플러그인이 아무 내용도 보내지 않았습니다.');e.code='empty';e.own=true;throw e;}
+    addPdftUsage(text.length);
     out.push(value.trim());
    }
    return out;
+  }
+  /* Translate for Zotero's error text ("번역 오류: DeepL Free … Request error: 456") as one of ours. */
+  function pdftError(detail){
+   const text=clean(detail).slice(0,200);
+   const make=(code,message)=>{const e=new Error(message);e.code=code;e.own=true;e.detail=text;return e;};
+   if(/\b456\b|quota/i.test(text))return make('quota','Translate for Zotero의 DeepL 한도를 다 썼습니다. 다음 달에 다시 시도하거나 다른 번역기로 이어서 번역하세요.');
+   if(/\b429\b/.test(text))return make('rate','번역 서비스에 요청이 잠시 몰렸습니다. 잠시 후 다시 시도하세요.');
+   if(/\b40[13]\b|secret|key/i.test(text))return make('pdft','Translate for Zotero의 번역 서비스 키가 맞지 않습니다. Translate for Zotero 설정에서 서비스와 키를 확인하세요.');
+   return make('pdft','Translate for Zotero가 번역하지 못했습니다. Translate for Zotero 설정에서 번역 서비스를 확인하세요.');
   }
   async function viaAI(texts,settings,signal){check(signal);const out=await ai.translate(texts,{language:settings.target.ai,signal});check(signal);return out;}
   async function runBatch(settings,texts,signal){
@@ -231,6 +355,22 @@
    if(provider==='pdftranslate')return viaPdfTranslate(texts,settings,signal);
    if(provider==='ai')return viaAI(texts,settings,signal);
    throw new Error('Unknown translation provider');
+  }
+  /* Protected terms go out as placeholders (not to the AI) and come back in place; a text that lost one is sent
+     again as it is. Returns one translation per text. */
+  async function sendTexts(settings,texts,signal){
+   if(settings.provider==='ai')return runBatch(settings,texts,signal);
+   const masked=texts.map(text=>protect(text,settings.own));
+   const out=await runBatch(settings,masked.map(m=>m.text),signal);
+   const again=[];
+   const result=out.map((text,i)=>{const back=restore(text,masked[i].terms);if(back.missing.length)again.push(i);return back.text;});
+   if(again.length){
+    check(signal);
+    const second=await runBatch(settings,again.map(i=>texts[i]),signal);
+    again.forEach((i,k)=>{result[i]=second[k];});
+    result.resent=again.reduce((n,i)=>n+texts[i].length,0);
+   }
+   return result;
   }
   /* DeepL, then Translate for Zotero, then the AI endpoint. After a stop the panel offers the next one. */
   const nextProvider=current=>{const list=providers(),at=list.indexOf(current);return at>=0?list[at+1]||null:list[0]||null;};
@@ -248,9 +388,9 @@
    const signal=linked(outer);tokens.add(signal);
    try{
     check(signal);
-    const parts=splitParagraph(paragraph.text),out=await runBatch(settings,parts,signal);
+    const parts=splitParagraph(paragraph.text),out=await sendTexts(settings,parts,signal);
     check(signal);
-    const text=out.join(' ');store.set(key,text);if(chosen==='deepl')addUsage(clean(paragraph.text).length);await store.save();
+    const text=out.join(' ');store.set(key,text);if(chosen==='deepl')addUsage(clean(paragraph.text).length+(out.resent||0));await store.save();
     return {text,provider:chosen,target:settings.target.code,cached:false};
    }finally{tokens.delete(signal);}
   }
@@ -274,16 +414,19 @@
     const parts=[];for(const p of todo)splitParagraph(p.text).forEach((text,i,all)=>parts.push({paragraph:p,i,n:all.length,text}));
     const results=new Map();
     if(job.cancelled&&todo.length)summary.stopped='cancelled';
-    for(const batch of planBatches(parts.map((part,index)=>({...part,index})))){
+    // Translate for Zotero answers one text at a time and the AI eight per request: batches that size keep every
+    // finished paragraph (shown and cached) when a later one fails or is stopped.
+    const maxCount=chosen==='pdftranslate'?1:chosen==='ai'?8:MAX_BATCH_COUNT;
+    for(const batch of planBatches(parts.map((part,index)=>({...part,index})),{maxCount})){
      if(job.cancelled){summary.stopped='cancelled';break;}
      let out;
-     try{out=await runBatch(settings,batch.map(b=>b.text),job);}
+     try{out=await sendTexts(settings,batch.map(b=>b.text),job);}
      catch(error){
       if(job.cancelled||error.code==='cancelled'){summary.stopped='cancelled';break;}
       summary.error=error;summary.stopped=error.code==='quota'?'quota':error.code||'failed';break;
      }
      if(job.cancelled){summary.stopped='cancelled';break;}
-     if(chosen==='deepl')addUsage(batch.reduce((n,b)=>n+b.text.length,0));
+     if(chosen==='deepl')addUsage(batch.reduce((n,b)=>n+b.text.length,0)+(out.resent||0));
      summary.chars+=batch.reduce((n,b)=>n+b.text.length,0);
      batch.forEach((b,i)=>{
       const entry=results.get(b.paragraph.id)||{parts:[],n:b.n};entry.parts[b.i]=out[i];results.set(b.paragraph.id,entry);
@@ -308,7 +451,7 @@
   }
   /* Stops the run and any single re-translation: the request in flight, a back-off sleep, and everything after. */
   const cancel=()=>{for(const t of [...tokens])t.cancel();};
-  return {providers,providerLabel,pickProvider,nextProvider,usage,refreshUsage,estimate,translateOne,translateAll,cancel,target,formality,resolved,
+  return {providers,providerLabel,pickProvider,nextProvider,usage,pdftUsage,refreshUsage,estimate,translateOne,translateAll,cancel,target,autoTarget,targetOrigin,formality,resolved,
    get busy(){return !!running;},get runningTarget(){return running?running.target:null;},
    cached:(provider,text,targetCode=null)=>store.get(keyFor(settingsFor(provider,targetCode||target().code),text))};
  }
@@ -346,6 +489,6 @@
   return {html:'<div>'+lines.join('')+'</div>',count};
  }
 
- const api={create,hash,cacheKey,settingsRevision,token,deeplEndpoint,usageEndpoint,isFreeKey,buildRequest,deeplError,paragraphsOf,splitParagraph,planBatches,noteHTML,providerSpans,rangeText,unfinished,targetOf,TARGETS,FREE_LIMIT,MAX_PARAGRAPH,MAX_BATCH_COUNT,MAX_BATCH_BYTES,bytes};
+ const api={create,firstOnOrAfter,onPage,protect,restore,termList,targetFromLocale,hash,cacheKey,settingsRevision,token,deeplEndpoint,usageEndpoint,isFreeKey,buildRequest,deeplError,paragraphsOf,splitParagraph,planBatches,noteHTML,providerSpans,rangeText,unfinished,targetOf,TARGETS,FREE_LIMIT,MAX_PARAGRAPH,MAX_BATCH_COUNT,MAX_BATCH_BYTES,bytes};
  root.CustomStylePaperTranslate=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
