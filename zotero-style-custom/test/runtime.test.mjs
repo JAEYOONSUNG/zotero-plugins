@@ -5454,10 +5454,10 @@ test('R9 the hover fill never paints a selected cell; only its outline changes',
   const Cells = require('../src/item-cells.js');
   const css = Cells.hoverCSS(['title']);
   // The hovered cell's box is drawn by ::before so it can be as tall as the row (2026-10-06).
-  assert.match(css, /\.row:not\(\.selected\) \.cell\[data-sc-hover-cell\]::before\{[^}]*background-color:#E3EDFF/);
-  assert.doesNotMatch(css, /\.virtualized-table-body \.row \.cell\[data-sc-hover-cell\](::before)?\{[^}]*background-color/, 'no fill rule that also reaches a selected row');
-  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]::before\{[^}]*box-shadow/);
-  assert.doesNotMatch(css.match(/\.row\.selected \.cell\[data-sc-hover-cell\]::before\{[^}]*\}/)[0], /background-color/);
+  // The hovered box follows :hover in the named column (2026-10-07: a mark on one cell element flickered as Zotero redrew cells).
+  assert.match(css, /\.row:not\(\.selected\):hover \.cell\.title::before[^{]*\{[^}]*background-color:#E3EDFF/);
+  assert.match(css, /\.row\.selected:hover \.cell\.title::before[^{]*\{[^}]*box-shadow/);
+  assert.doesNotMatch(css.match(/[^}\n]*\.row\.selected:hover \.cell\.title::before[^{]*\{[^}]*\}/)[0], /background-color/, 'no fill on a selected row');
 });
 
 test('R9 a zero or legacy citation count is drawn in readable ink, not placeholder grey', async () => {

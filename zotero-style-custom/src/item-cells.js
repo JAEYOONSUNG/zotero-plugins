@@ -40,6 +40,7 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     const esc = escape || (s => s);
     const out = [];
     const dark = [];
+    const hovered = [];
     for (const key of keys) {
       const col = `${TREE}[data-sc-hover-col="${attr(key)}"]`;
       const cls = `.cell.${esc(key)}`;
@@ -49,16 +50,23 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       out.push(`${col} .virtualized-table-header ${cls}{background-color:#E8F0FF;box-shadow:inset 0 -2px 0 #7FAEFF}`);
       dark.push(`${col} .virtualized-table-body .row:not(.selected) ${cls}{background-color:#1E2A3D;box-shadow:0 calc(-1 * var(--sc-hover-pad, 0px)) 0 #1E2A3D,0 var(--sc-hover-pad, 0px) 0 #1E2A3D}`);
       dark.push(`${col} .virtualized-table-header ${cls}{background-color:#22314A;box-shadow:inset 0 -2px 0 #5B8EE6}`);
+      /* The box under the pointer is found by the browser's own :hover, in the column named on the tree.
+         Zotero redraws cells (a reading tick each second, any notifier) and a mark set on one cell
+         element vanished with it, so the box flickered and then stayed off (the user, 2026-10-07). */
+      hovered.push(`${col} .virtualized-table-body .row:hover ${cls}`);
     }
     out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(58,63,75,.045)}`);
     // The fill stays off a selected row: white selected text on this pale blue read at 1.2:1. It keeps only its outline.
     // The hovered cell: a soft rounded box as tall as the row, 3px inside it, drawn behind the cell's content.
     const box = `content:"";position:absolute;left:-2px;right:-2px;top:calc(3px - var(--sc-hover-pad, 0px));bottom:calc(3px - var(--sc-hover-pad, 0px));border-radius:8px;pointer-events:none;z-index:-1`;
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{position:relative;isolation:isolate;overflow:visible}`);
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]::before{${box};background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row.selected .cell[data-sc-hover-cell]::before{${box};box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9)}`);
+    const sel = (suffix, state) => hovered.map(h => h.replace('.row:hover', '.row' + state + ':hover') + suffix).join(',');
+    if (hovered.length) {
+      out.push(`${sel('', '')}{position:relative;isolation:isolate;overflow:visible}`);
+      out.push(`${sel('::before', ':not(.selected)')}{${box};background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
+      out.push(`${sel('::before', '.selected')}{${box};box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9)}`);
+    }
     dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(255,255,255,.04)}`);
-    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]::before{${box};background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
+    if (hovered.length) dark.push(`${sel('::before', ':not(.selected)')}{${box};background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
     return out.join("\n") + `\n@media (prefers-color-scheme: dark){\n${dark.join("\n")}\n}\n`;
   }
 
@@ -271,6 +279,13 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       const out = event => {
         debug.outs++;
         const to = event.relatedTarget;
+        // No target: a tooltip or popup took the pointer, which may still be over the list. Look again
+        // a moment later and keep the highlight while the list is still hovered.
+        if (!to && rootNode && event.isTrusted) {
+          const tree = rootNode;
+          win.setTimeout?.(() => { try { if (!tree.matches?.(':hover')) { pending = null; clear(); } } catch (_) { pending = null; clear(); } }, 120);
+          return;
+        }
         if (!to || !(to.closest?.(TREE))) { pending = null; clear(); }
       };
       const leave = () => { pending = null; clear(); };

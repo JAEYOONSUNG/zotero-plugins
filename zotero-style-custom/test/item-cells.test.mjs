@@ -56,8 +56,8 @@ test('hovering a body cell names its column on the tree, marks the cell, and the
   assert.match(css, /\[data-sc-hover-col="ext-if"\] \.virtualized-table-body \.row:not\(\.selected\) \.cell\.ext-if\{background-color:#F1F6FF;box-shadow:0 calc\(-1 \* var\(--sc-hover-pad, 0px\)\) 0 #F1F6FF/);
   assert.match(css, /\[data-sc-hover-col="ext-if"\] \.virtualized-table-header \.cell\.ext-if\{background-color:#E8F0FF/);
   assert.match(css, /\[data-sc-hover-col="title"\]/, 'a rule for every visible column');
-  assert.match(css, /\.cell\[data-sc-hover-cell\]::before\{[^}]*border-radius:8px[^}]*background-color:#E3EDFF;box-shadow:inset 0 0 0 1\.5px #5B9BFF/);
-  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]::before\{[^}]*box-shadow:inset 0 0 0 1\.5px rgba\(255,255,255,\.9\)/, 'a selected row gets a light outline');
+  assert.match(css, /\.row:not\(\.selected\):hover \.cell\.ext-if::before[^{]*\{[^}]*border-radius:8px[^}]*background-color:#E3EDFF;box-shadow:inset 0 0 0 1\.5px #5B9BFF/);
+  assert.match(css, /\.row\.selected:hover \.cell\.ext-if::before[^{]*\{[^}]*box-shadow:inset 0 0 0 1\.5px rgba\(255,255,255,\.9\)/, 'a selected row gets a light outline');
   assert.match(css, /prefers-color-scheme: dark/);
   // Moving to another column moves the attribute and the mark; leaving clears both.
   document.querySelector('.row .cell.title').dispatchEvent(new window.Event('mouseover', {bubbles: true}));
