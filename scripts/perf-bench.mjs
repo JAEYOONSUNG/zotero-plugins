@@ -239,7 +239,7 @@ export async function openWindow({ locale = "en", latency = 25, libSize = 1200, 
 	const realMemoryIO = ctx.ZotPoPHistory.memoryIO;
 	ctx.ZotPoPHistory.memoryIO = () => realMemoryIO(historyFiles);
 	const code = read("content/ui.js").replace('window.addEventListener("load", init);',
-		'window.addEventListener("load", init); globalThis.__ui = { state, render, renderDetail, sortByColumn, refreshLibraryFlags, rowStats, rowCache, displaySearchResults, runSearch, buildResultContext };');
+		'window.addEventListener("load", init); globalThis.__ui = { state, render, renderDetail, sortByColumn, refreshLibraryFlags, rowStats, rowCache, displaySearchResults, runSearch, buildResultContext, syncWindow, virtualView };');
 	vm.runInContext(patch(code), ctx, { filename: "ui.js" });
 	const t0 = performance.now();
 	for (const fn of listeners.get("load") || []) fn();
@@ -278,7 +278,7 @@ export async function search(w, { keywords = "genome editing", maxResults = 200,
 	const duplicates = [...seen.values()].reduce((s, n) => s + n - 1, 0);
 	return { total, firstRow, requests: requests.length, bySource, duplicates, openAlexUSD: requests.reduce((s, r) => s + openAlexCost(r.url), 0),
 		created: counters.created - created, rowsBuilt: ui.rowStats.built - built, rowsReused: ui.rowStats.reused - reused, trCreated: counters.rows - rows, dbQueries: db.queries.length - dbFrom,
-		shown: w.body().children.length, records: ui.state.records.length, renders, originalRender };
+		shown: ui.state.visible.length, domRows: w.body().children.length, records: ui.state.records.length, renders, originalRender };
 }
 
 const time = (fn, n = 1) => { const t0 = performance.now(); for (let i = 0; i < n; i++) fn(); return (performance.now() - t0) / n; };
@@ -296,10 +296,12 @@ export async function bench() {
 		await sleep(50);
 		const again = await openWindow({ historyFiles: w.historyFiles, prefs: w.prefs });
 		const t0 = performance.now();
-		for (let i = 0; i < 400 && again.body().children.length < 1000; i++) await sleep(5);
+		// Only the rows near the view are built: the restored list is counted in the data, the built rows in the DOM.
+		for (let i = 0; i < 400 && again.ui.state.visible.length < 1000; i++) await sleep(5);
 		out.startupRestoreMs = again.initMs + (performance.now() - t0);
 		out.startupRestoreRequests = again.net.log.length;
-		out.startupRestoreRows = again.body().children.length;
+		out.startupRestoreRows = again.ui.state.visible.length;
+		out.startupRestoreBuilt = again.body().children.length;
 	}
 	for (const max of [200, 1200]) {
 		const w = await openWindow();
@@ -314,7 +316,7 @@ export async function bench() {
 		const filter = w.document.getElementById("filter");
 		c = w.counters.created; b = ui.rowStats.built;
 		const f1 = time(() => { filter.value = "delivery"; ui.render(); });
-		const shownFiltered = w.body().children.length;
+		const shownFiltered = ui.state.visible.length;
 		const f2 = time(() => { filter.value = ""; ui.render(); });
 		out["filter" + max] = { ms: f1, clearMs: f2, shown: shownFiltered, created: w.counters.created - c, built: ui.rowStats.built - b };
 		// Sort by citations, then by year, then back.
@@ -330,6 +332,15 @@ export async function bench() {
 		out["detail" + max].renderWithDetailMs = withDetail;
 		out["detail" + max].createdPerRender = w.counters.created - c;
 		out["detail" + max].contextMs = time(() => ui.buildResultContext(ui.state.records[5]), 5);
+		// Scrolling the whole list a screenful at a time: what each step builds, and how long it takes.
+		{
+			const wrap = w.document.getElementById("table-wrap"), view = ui.virtualView();
+			const before = ui.rowStats.built, c0 = w.counters.created, step = 860, steps = Math.ceil(view.total / step);
+			const t1 = performance.now();
+			for (let k = 1; k <= steps; k++) { wrap.scrollTop = k * step; ui.syncWindow(); }
+			out["scroll" + max] = { steps, msPerStep: (performance.now() - t1) / steps, built: ui.rowStats.built - before, created: w.counters.created - c0, domRows: w.body().children.length };
+			wrap.scrollTop = 0; ui.syncWindow();
+		}
 		// Held-paper lookup: the library pass after a search.
 		const q = w.db.queries.length;
 		out["held" + max] = { ms: time(() => {}), queries: 0 };
@@ -373,18 +384,21 @@ function table(out) {
 	const lines = [];
 	const row = (k, v) => lines.push(k.padEnd(46) + v);
 	row("startup, empty window (ms)", f(out.startupEmptyMs));
-	row("startup, restoring a 1,200-row search (ms)", f(out.startupRestoreMs) + "  requests " + out.startupRestoreRequests + "  rows " + out.startupRestoreRows);
+	row("startup, restoring a 1,200-row search (ms)", f(out.startupRestoreMs) + "  requests " + out.startupRestoreRequests + "  rows " + out.startupRestoreRows + " (built " + out.startupRestoreBuilt + ")");
 	for (const max of [200, 1200]) {
 		const s = out["search" + max];
 		row(`search ${max}: first row / total (ms)`, f(s.firstRow) + " / " + f(s.total));
 		row(`search ${max}: requests (duplicates)`, s.requests + " (" + s.duplicates + ")  OpenAlex $" + s.openAlexUSD.toFixed(4));
 		row(`search ${max}: by endpoint`, JSON.stringify(s.bySource));
 		row(`search ${max}: rows built / reused / elements`, s.rowsBuilt + " / " + s.rowsReused + " / " + s.created);
+		row(`search ${max}: rows in the data / in the DOM`, s.shown + " / " + s.domRows);
 		row(`re-render ${max} (ms, elements, rebuilt)`, f(out["rerender" + max].ms) + ", " + out["rerender" + max].created + ", " + out["rerender" + max].built);
 		row(`filter ${max} (ms / clear ms, elements)`, f(out["filter" + max].ms) + " / " + f(out["filter" + max].clearMs) + ", " + out["filter" + max].created);
 		row(`sort ${max} (ms, elements)`, f(out["sort" + max].ms) + ", " + out["sort" + max].created);
 		row(`detail ${max}: open (ms, elements)`, f(out["detail" + max].openMs) + ", " + out["detail" + max].created);
 		row(`detail ${max}: render while open (ms, elements)`, f(out["detail" + max].renderWithDetailMs) + ", " + out["detail" + max].createdPerRender + "  context " + f(out["detail" + max].contextMs) + " ms");
+		const sc = out["scroll" + max];
+		row(`scroll ${max} top to bottom (ms/step, built)`, f(sc.msPerStep) + " x " + sc.steps + ", " + sc.built + " rows, " + sc.created + " elements, " + sc.domRows + " in DOM");
 		row(`held lookup ${max} (ms, DB queries)`, f(out["held" + max].ms) + ", " + out["held" + max].queries);
 	}
 	row("memory: 8 more 1,200-row searches (MB)", f(out.memory.baseMB) + " -> " + f(out.memory.afterMB) + "  rowCache " + out.memory.rowCache);

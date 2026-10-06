@@ -3829,11 +3829,14 @@
 
 		let tbody = $("results-body");
 		ensureRowDelegation(tbody);
-		syncRows(tbody, list);
-		syncActiveRow();
 		// Rows are two lines tall when any of them carries an affiliation line, one line otherwise,
 		// so the rhythm of the list is the same from the first row to the last.
 		if (list.some(r => state.affLine && affLineNeeded(affLineParts(r), affiliationOf(r)))) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
+		// Only some rows are built: the grid says how many there are, and each row its place (paintRowPlace).
+		$("results-table").setAttribute("aria-rowcount", String(list.length + 1));
+		$("results-head")?.setAttribute?.("aria-rowindex", "1");
+		syncRows(tbody, list);
+		syncActiveRow();
 		applyColumnView();
 		syncFacetChip(); syncPersonChip();
 		syncFilterUI();
@@ -3887,10 +3890,12 @@
 	// Where the keyboard is in the list, for assistive technology: the focused row, read as the active one.
 	function syncActiveRow() {
 		let wrap = $("table-wrap"); if (!wrap) return;
-		let on = state.focusKey != null && state.visible.some(r => r.key === state.focusKey);
+		// Only a row that is built: a reference to a row the window let go points at nothing.
+		let on = state.focusKey != null && rowWindow.keys.has(state.focusKey);
 		if (on) wrap.setAttribute("aria-activedescendant", rowDomId(state.focusKey)); else wrap.removeAttribute("aria-activedescendant");
 	}
-	const rankCells = new WeakMap();
+	const rankCells = new WeakMap(), rowBoxes = new WeakMap();
+	const rowBox = tr => rowBoxes.get(tr) || tr.querySelector("input[type=checkbox]");
 	function paintRowState(tr, r, pick) {
 		let rank = rankCells.get(tr);
 		if (rank && !r.popOriginal && rank.textContent !== String(r.rank)) rank.textContent = String(r.rank);
@@ -3899,30 +3904,13 @@
 		tr.setAttribute("aria-selected", String(state.selected.has(r.key)));
 		tr.classList.toggle("not-person", Boolean(pick && !inPick(pick, r)));
 		tr.classList.toggle("focused", state.focusKey === r.key);
-		let cb = tr.querySelector("input[type=checkbox]");
+		let cb = rowBox(tr);
 		if (cb) cb.checked = state.selected.has(r.key);
 	}
 	function syncRows(tbody, list) {
-		// What every row depends on besides its own paper: a change drops all of them.
-		let scope = [state.affLine, state.colOrder.join(","), uiLocale].join("|");
-		if (scope !== rowCacheScope) { rowCache.clear(); rowCacheScope = scope; }
-		let pick = personPick();
 		rowRecords = new Map();
-		let rows = [];
-		for (let r of list) {
-			rowRecords.set(r.key, r);
-			let sig = rowSignature(r), held = rowCache.get(r.key), tr;
-			if (held && held.sig === sig) { tr = held.tr; rowStats.reused++; paintRowState(tr, r, pick); }
-			else { tr = buildRow(r); rowStats.built++; rowCache.set(r.key, { tr, sig }); }
-			rows.push(tr);
-		}
-		// Settle the rows into place with the fewest moves: a row already in position stays.
-		let cursor = tbody.firstChild;
-		for (let tr of rows) {
-			if (tr === cursor) cursor = cursor.nextSibling;
-			else tbody.insertBefore(tr, cursor);
-		}
-		while (cursor) { let next = cursor.nextSibling; tbody.removeChild ? tbody.removeChild(cursor) : cursor.remove(); cursor = next; }
+		for (let r of list) rowRecords.set(r.key, r);
+		placeWindow(tbody, list);
 		// Rows of results that are no longer in the search are let go; filtered-out ones are kept. While a search
 		// streams, a paper drops out of one page's top N and comes back in the next: its row waits (up to three
 		// times the list) instead of being built again.
@@ -3931,6 +3919,159 @@
 			for (let key of [...rowCache.keys()]) if (!live.has(key)) rowCache.delete(key);
 		}
 	}
+
+	/* ---- only the rows near the viewport are built
+	   1,200 results used to build every row: 2.4 s to the first row and 123k elements. The list is now the
+	   rows around the scroll position (OVERSCAN more on each side) between two spacer bodies whose heights
+	   stand in for the rest. A row's height is measured once it is built; one not built yet is taken at the
+	   running average of the measured ones. When a measurement corrects an estimate above the view, the
+	   scroll position moves by the same amount, so the first visible row stays where the reader saw it.
+	   Everything that reaches rows by the data (keys, selection, CSV, copy) works on state.visible; a key
+	   that lands on a row not built yet scrolls to it first (revealRow). */
+	const OVERSCAN = 8;
+	const rowHeights = new Map();
+	let heightSum = 0;
+	let rowWindow = { start: 0, end: 0, keys: new Set(), layout: null, list: null };
+	function noteRowHeight(key, h) {
+		let old = rowHeights.get(key);
+		if (old === h) return;
+		if (old != null) heightSum -= old;
+		rowHeights.set(key, h); heightSum += h;
+	}
+	// Until a row is measured, the stylesheet's row height (two lines with an affiliation line).
+	const rowEstimate = () => rowHeights.size ? heightSum / rowHeights.size : $("results-table")?.hasAttribute?.("data-aff") ? 48 : 32;
+	function boxHeight(el) {
+		let h = Number(el?.offsetHeight) || 0;
+		if (!h) { try { h = Number(el?.getBoundingClientRect?.()?.height) || 0; } catch (e) { h = 0; } }
+		return h;
+	}
+	function rowLayout(list) {
+		let est = rowEstimate(), tops = new Float64Array(list.length + 1);
+		for (let i = 0; i < list.length; i++) tops[i + 1] = tops[i] + (rowHeights.get(list[i].key) ?? est);
+		return { tops, est, total: tops[list.length] };
+	}
+	// The row at y (row space: 0 is the first row's top), clamped to the list.
+	function rowAt(tops, y) {
+		let lo = 0, hi = tops.length - 2;
+		if (hi < 0) return 0;
+		while (lo < hi) { let mid = (lo + hi + 1) >> 1; if (tops[mid] <= y) lo = mid; else hi = mid - 1; }
+		return lo;
+	}
+	/* What the list shows: the scroll offset and the height below the sticky header. With no layout (a
+	   window not yet shown) the window's own height is taken, so the first draw still builds a screenful. */
+	function listViewport() {
+		let wrap = $("table-wrap");
+		let height = Number(wrap?.clientHeight) || Number(window.innerHeight) || 800;
+		let head = boxHeight($("results-head"));
+		return { wrap, top: Math.max(0, Number(wrap?.scrollTop) || 0), height: Math.max(32, height - head) };
+	}
+	function setSpacer(which, px) {
+		let pad = $("results-pad-" + which); if (!pad) return;
+		let cell = pad.querySelector?.("td");
+		if (!cell) {
+			let tr = document.createElement("tr"); tr.className = "v-spacer";
+			cell = document.createElement("td"); cell.className = "v-cell";
+			tr.appendChild(cell); pad.appendChild(tr);
+		}
+		let span = String(Math.max(1, state.colOrder.length));
+		if (cell.getAttribute("colspan") !== span) cell.setAttribute("colspan", span);
+		let h = Math.max(0, Math.round(px * 100) / 100) + "px";
+		if (cell.style.height !== h) cell.style.height = h;
+	}
+	// A row's place in the data, which the DOM no longer tells: its grid row number, its stripe, whether it ends the list.
+	function paintRowPlace(tr, i, n) {
+		let at = String(i + 2);
+		if (tr.getAttribute("aria-rowindex") !== at) tr.setAttribute("aria-rowindex", at);
+		tr.classList.toggle("alt", i % 2 === 1);
+		tr.classList.toggle("v-end", i === n - 1);
+	}
+	function placeWindow(tbody, list) {
+		// What every row depends on besides its own paper: a change drops all of them.
+		let scope = [state.affLine, state.colOrder.join(","), uiLocale].join("|");
+		if (scope !== rowCacheScope) { rowCache.clear(); rowHeights.clear(); heightSum = 0; rowCacheScope = scope; }
+		let n = list.length, vp = listViewport(), layout = rowLayout(list);
+		// A list shorter than where the view was (a filter, a new search): the view ends at its bottom.
+		let top = Math.min(vp.top, Math.max(0, layout.total - vp.height));
+		let first = rowAt(layout.tops, top), offset = top - layout.tops[first];
+		let start = n ? Math.max(0, first - OVERSCAN) : 0;
+		let end = n ? Math.min(n, rowAt(layout.tops, top + vp.height) + 1 + OVERSCAN) : 0;
+		let pick = personPick();
+		let rows = [], keys = new Set(), at = new Map(), after = layout;
+		let rowFor = i => {
+			let r = list[i];
+			if (at.has(r.key)) return at.get(r.key);
+			let sig = rowSignature(r), held = rowCache.get(r.key), tr;
+			if (held && held.sig === sig) { tr = held.tr; rowStats.reused++; paintRowState(tr, r, pick); }
+			else { tr = buildRow(r); rowStats.built++; rowCache.set(r.key, { tr, sig }); }
+			paintRowPlace(tr, i, n);
+			at.set(r.key, tr);
+			return tr;
+		};
+		/* Built rows are measured and the range worked out again: rows shorter than the guess leave room for
+		   more below. Twice at most; the next scroll settles anything left. */
+		for (let pass = 0; pass < 3; pass++) {
+			rows = []; keys = new Set();
+			for (let i = start; i < end; i++) { rows.push(rowFor(i)); keys.add(list[i].key); }
+			// Settle the rows into place with the fewest moves: a row already in position stays.
+			let cursor = tbody.firstChild;
+			for (let tr of rows) {
+				if (tr === cursor) cursor = cursor.nextSibling;
+				else tbody.insertBefore(tr, cursor);
+			}
+			while (cursor) { let next = cursor.nextSibling; tbody.removeChild ? tbody.removeChild(cursor) : cursor.remove(); cursor = next; }
+			for (let i = 0; i < rows.length; i++) { let h = boxHeight(rows[i]); if (h > 0) noteRowHeight(list[start + i].key, h); }
+			after = rowLayout(list);
+			let fit = n ? Math.min(n, rowAt(after.tops, after.tops[first] + offset + vp.height) + 1 + OVERSCAN) : 0;
+			if (fit <= end) break;
+			end = fit;
+		}
+		setSpacer("top", after.tops[start]);
+		setSpacer("bottom", after.total - after.tops[end]);
+		// The first visible row keeps its place on screen: its top edge moves by what the rows above it were misjudged by.
+		if (n && vp.wrap && vp.top > 0 && top === vp.top) {
+			let want = after.tops[first] + Math.min(offset, Math.max(0, after.tops[first + 1] - after.tops[first] - 1));
+			if (Math.abs(want - vp.top) >= 1) vp.wrap.scrollTop = want;
+		}
+		let changed = start !== rowWindow.start || end !== rowWindow.end || list !== rowWindow.list;
+		rowWindow = { start, end, keys, layout: after, list };
+		return changed;
+	}
+	// The scroll position moved, or the list's height did: build what came into view and let go of what left it.
+	function syncWindow() {
+		let tbody = $("results-body"); if (!tbody) return;
+		let changed = placeWindow(tbody, state.visible);
+		syncActiveRow();
+		if (changed) marquee?.refresh();
+	}
+	let windowFrame = null;
+	function scheduleWindow() {
+		if (windowFrame != null) return;
+		let run = () => { windowFrame = null; syncWindow(); };
+		windowFrame = typeof window.requestAnimationFrame === "function" ? window.requestAnimationFrame(run) : later(run, 16);
+	}
+	// Where the list stands, for the tests and the bench: the built range, the model's heights and the first visible row.
+	function virtualView() {
+		let layout = rowWindow.layout || rowLayout(state.visible), vp = listViewport();
+		return { start: rowWindow.start, end: rowWindow.end, total: layout.total, estimate: layout.est,
+			firstVisible: rowAt(layout.tops, vp.top), rowTop: i => layout.tops[i], built: rowWindow.keys.size };
+	}
+	/* Bring a row into view, building it first if it is not: the keys, the row menu and "show this paper"
+	   reach any row of the data. Scrolled just enough ("nearest"), as before. */
+	function revealRow(key) {
+		let list = state.visible, i = list.findIndex(r => r.key === key);
+		if (i < 0) return null;
+		let vp = listViewport(), layout = rowWindow.list === list && rowWindow.layout || rowLayout(list);
+		let top = layout.tops[i], bottom = layout.tops[i + 1];
+		if (vp.wrap) {
+			if (top < vp.top) vp.wrap.scrollTop = top;
+			else if (bottom > vp.top + vp.height) vp.wrap.scrollTop = Math.max(0, bottom - vp.height);
+		}
+		syncWindow();
+		let tr = rowElement(key);
+		tr?.scrollIntoView?.({ block: "nearest" });
+		return tr;
+	}
+	const rowElement = key => rowWindow.keys.has(key) ? document.querySelector(`#results-body tr[data-key="${CSS.escape(key)}"]`) : null;
 	function rowRecord(el) {
 		let key = el?.closest?.("tr")?.dataset?.key;
 		return key ? rowRecords.get(key) || state.records.find(r => r.key === key) || null : null;
@@ -3938,6 +4079,10 @@
 	function ensureRowDelegation(tbody) {
 		if (!tbody || delegatedBody === tbody) return;
 		delegatedBody = tbody;
+		// Scrolling, a resized window or a moved splitter brings other rows into view.
+		$("table-wrap")?.addEventListener?.("scroll", scheduleWindow, { passive: true });
+		window.addEventListener?.("resize", scheduleWindow);
+		if (typeof ResizeObserver === "function" && $("table-wrap")) { try { new ResizeObserver(scheduleWindow).observe($("table-wrap")); } catch (e) { log("list resize not observed: " + e.message); } }
 		tbody.addEventListener("change", e => {
 			let r = rowRecord(e.target);
 			if (r && e.target.closest?.("input")) toggleSelect(r, e.target.checked);
@@ -3953,8 +4098,22 @@
 				if (kind === "citations" && cell.dataset.cite) { e.stopPropagation(); state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail(); openCitePop(r, cell); return; }
 			}
 			if (e.target.closest("input, a, [role=button]")) return;
+			let from = state.focusKey;
 			state.focusKey = r.key;
 			state.detailKey = r.key;
+			/* Shift-click picks every row from where the range began (the last row clicked or reached) to this one,
+			   by their place in the data: the rows between need not be built. */
+			if (e.shiftKey && !(e.metaKey || e.ctrlKey)) {
+				let list = state.visible, to = list.indexOf(r);
+				if (state.anchorKey == null || !list.some(v => v.key === state.anchorKey)) state.anchorKey = from != null && list.some(v => v.key === from) ? from : r.key;
+				let at = list.findIndex(v => v.key === state.anchorKey);
+				if (state.rangeKeys) for (let key of state.rangeKeys) state.selected.delete(key);
+				state.rangeKeys = list.slice(Math.min(at, to), Math.max(at, to) + 1).map(v => v.key);
+				for (let key of state.rangeKeys) state.selected.add(key);
+				paintRows(); renderDetail();
+				return;
+			}
+			state.anchorKey = null; state.rangeKeys = null;
 			if (e.metaKey || e.ctrlKey) toggleSelect(r, !state.selected.has(r.key));
 			else { paintRows(); renderDetail(); }
 		});
@@ -4041,6 +4200,7 @@
 		cb.setAttribute("aria-label", t("rowTick"));
 		cb.checked = state.selected.has(r.key);
 		c0.appendChild(cb);
+		rowBoxes.set(tr, cb);
 
 		decorateCiteCell(td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : ""), r);
 		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r), 1));
@@ -4110,7 +4270,7 @@
 			tr.classList.toggle("selected", state.selected.has(key));
 			tr.setAttribute?.("aria-selected", String(state.selected.has(key)));
 			tr.classList.toggle("focused", state.focusKey === key);
-			let cb = tr.querySelector("input[type=checkbox]");
+			let cb = rowBox(tr);
 			if (cb) cb.checked = state.selected.has(key);
 		}
 		syncActiveRow();
@@ -5802,7 +5962,7 @@
 		}
 		state.focusKey = state.detailKey = key;
 		render();
-		document.querySelector(`#results-body tr[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: "nearest" });
+		revealRow(key);
 		$("table-wrap").focus({ preventScroll: true });
 	}
 
@@ -5928,7 +6088,8 @@
 	function openRowMenuFromKeyboard() {
 		let r = state.visible.find(row => row.key === state.focusKey);
 		if (!r) return false;
-		let tr = document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`);
+		// The focused row may have been scrolled out of the built window: bring it back to put the menu beside it.
+		let tr = revealRow(r.key);
 		let box = tr?.getBoundingClientRect?.() || { left: 40, bottom: 120 };
 		showCtxMenu(Math.round(box.left + 24), Math.round(box.bottom), r);
 		return true;
@@ -6066,13 +6227,14 @@
 			state.detailKey = r.key;
 			paintRows();
 			renderDetail();
-			document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`)?.scrollIntoView({ block: "nearest" });
+			revealRow(r.key);
 			return;
 		}
 		if (e.key === " " && idx >= 0) {
 			e.preventDefault();
 			let r = state.visible[idx];
 			toggleSelect(r, !state.selected.has(r.key));
+			if (!rowWindow.keys.has(r.key)) revealRow(r.key);
 			return;
 		}
 		if ((e.key === "Backspace" || e.key === "Delete") && idx >= 0) {
@@ -6085,7 +6247,7 @@
 			e.preventDefault();
 			let r = state.visible[e.key === "Home" ? 0 : state.visible.length - 1];
 			state.focusKey = r.key; state.detailKey = r.key; paintRows(); renderDetail();
-			document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`)?.scrollIntoView({ block: "nearest" });
+			revealRow(r.key);
 			return;
 		}
 		if (e.key === "Enter" && idx >= 0) {

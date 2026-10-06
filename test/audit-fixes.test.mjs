@@ -124,7 +124,7 @@ test("a file that appears between the check and the write is retried with the ne
 	assert.ok([...files.values()].includes("other program"), "the other program's file is untouched");
 });
 
-test("1,200 rows: a filter change reuses every row, creates no elements and the list holds a handful of listeners", () => {
+test("1,200 rows: a filter change reuses every built row, creates no elements and the list holds a handful of listeners", () => {
 	const records = Array.from({ length: 1200 }, (_, i) => paper("k" + i, { title: (i % 2 ? "odd " : "even ") + "paper " + i, doi: "10.1000/p" + i,
 		pdfUrl: "http://x/" + i + ".pdf", inLibrary: true, authors: [{ name: "A B" }], venue: "Journal", citations: i }));
 	const ui = uiHarness({ realRows: true, columns: true, importer: { findByTitle: async () => null, getLibraryDOIMap: async () => new Map(records.map(r => [r.doi, 1])), forgetTitleIndex() {} } });
@@ -132,19 +132,22 @@ test("1,200 rows: a filter change reuses every row, creates no elements and the 
 	const measure = () => { let elements = 0, listeners = 0; walk(ui.get("results-body"), n => { if (n.nodeType === 1) { elements++; listeners += n.listenerCount(); } }); return { elements, listeners }; };
 	ui.state.doiMap = new Map(records.map(r => [r.doi, 1]));
 	ui.displaySearchResults(records);
+	// Only the rows near the view are built (virtual-list.test.mjs); the other 1,200 are data.
 	const first = new Set(ui.get("results-body").children);
-	const initial = measure(), created = ui.counts.created;
-	assert.equal(first.size, 1200);
+	const initial = measure();
+	assert.ok(first.size > 0 && first.size <= 60, first.size + " rows built");
 	assert.ok(initial.listeners <= 10, "delegated: " + initial.listeners + " listeners, not 7 per row");
 	ui.get("filter").value = "odd"; ui.render();
-	let rows = ui.get("results-body").children;
-	assert.equal(rows.length, 600);
-	assert.equal(rows.filter(r => first.has(r)).length, 600, "every shown row is a kept one");
+	assert.equal(ui.state.visible.length, 600);
+	// The odd rows were half of the window; the rest of the filtered window is built once.
 	ui.get("filter").value = ""; ui.render();
-	rows = ui.get("results-body").children;
-	assert.equal(rows.length, 1200);
-	assert.equal(rows.filter(r => first.has(r)).length, 1200);
-	assert.equal(ui.counts.created, created, "no element created by two filter changes");
+	const created = ui.counts.created;
+	ui.get("filter").value = "odd"; ui.render();
+	ui.get("filter").value = ""; ui.render();
+	let rows = ui.get("results-body").children;
+	assert.equal(rows.length, first.size);
+	assert.equal(rows.filter(r => first.has(r)).length, first.size, "every shown row is a kept one");
+	assert.equal(ui.counts.created, created, "no element created by two filter changes once each window was seen");
 	assert.deepEqual(measure(), initial);
 });
 
@@ -188,7 +191,8 @@ test("streamed pages are drawn in batches: twenty pages inside one frame cost tw
 	assert.equal(ui.state.records.length, 100, "the data is current");
 	await new Promise(resolve => setTimeout(resolve, 250));
 	assert.equal(draws, 2, "the rest is one trailing draw");
-	assert.equal(ui.get("results-body").children.length, 100);
+	assert.equal(ui.state.visible.length, 100);
+	assert.ok(ui.get("results-body").children.length <= 60, "only the rows near the view are built");
 	finish.resolve([]);
 	await running;
 });

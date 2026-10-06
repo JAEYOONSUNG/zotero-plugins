@@ -404,7 +404,9 @@ input[type=checkbox] { accent-color: var(--pill); }
 	border-bottom: 1px solid var(--border);
 }
 #results-table td { height: var(--row-h); }
-#results-table tbody tr:last-child td { border-bottom: 0; }
+#results-table tbody tr.v-end td { border-bottom: 0; }
+/* Only the rows near the view are built; the two spacer bodies stand in for the rest (ui.js, placeWindow). */
+#results-table > tbody.v-pad > tr > td.v-cell { height: 0; padding: 0; border: 0; background: none; }
 #results-table th:hover { color: var(--text); }
 #results-table th[draggable="true"] { cursor: grab; }
 #results-table th.column-dragging { opacity: .45; cursor: grabbing; }
@@ -452,7 +454,7 @@ input[type=checkbox] { accent-color: var(--pill); }
 	.marquee-text { scroll-behavior: auto; text-overflow: ellipsis; }
 }
 /* hover, focus and selection are fills of the row, rounded at its two ends; no outline, no edge bar */
-#results-table tbody tr:nth-child(even) { background: var(--row-alt); }
+#results-table tbody tr.alt { background: var(--row-alt); }
 #results-table tbody tr:hover, #results-table tbody tr.selected, #results-table tbody tr.focused { background: transparent; outline: 0; }
 #results-table tbody tr:hover:not(.selected):not(.focused) td { background: var(--row-hover); }
 #results-table tbody tr.selected td { background: var(--row-sel); }
@@ -674,7 +676,9 @@ summary::marker { content: ""; }
 #results-table td[data-cite] { cursor: pointer; }
 #results-table td[data-cite]:hover { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 /* the mark sits in its own slot at the cell's right edge, so the digits keep one right edge whether a row has a mark or not */
-#results-table td[data-k=citations], #results-table th[data-sort=citations] { position: relative; padding-right: 24px; }
+#results-table td[data-k=citations], #results-table th[data-sort=citations] { padding-right: 24px; }
+/* The cell holds the mark; the header is already its own containing block by being sticky, and "relative" there unstuck it (the header scrolled away under the rows). */
+#results-table td[data-k=citations] { position: relative; }
 .cite-mark { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 11px; line-height: 16px; }
 .cite-mark.up, .cite-strip-mark.up, .cite-yoy.up { color: var(--ok); }
 .cite-mark.down, .cite-strip-mark.down, .cite-yoy.down { color: var(--warn); }
