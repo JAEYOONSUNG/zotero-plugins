@@ -132,3 +132,13 @@ test("a first author who is also corresponding does not hide the co-correspondin
   // Institutions the sweep must look up include the co-corresponding author's.
   assert.deepEqual(affiliations.institutionsNeeded([{people: [first, co, last]}]).sort(), ["R1", "R2"]);
 });
+
+test("R9 the tier badge and the tier sort read the same institution", () => {
+  const summary = affiliations.summarise([
+    person("A", "first", {ror: "R1", country: "KR"}),
+    person("B", "middle", {ror: "R2", country: "US", corresponding: true}),
+    person("C", "last", {ror: "R3", country: "US", corresponding: true})
+  ], {R1: {name: "One", hIndex: 100}, R2: {name: "Two", hIndex: 500}, R3: {name: "Three", hIndex: 2200}});
+  assert.equal(summary.tier.key, "t1");
+  assert.equal(summary.hIndex, 2200, "the figure behind the badge travels with it");
+});

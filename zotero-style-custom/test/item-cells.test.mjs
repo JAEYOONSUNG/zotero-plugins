@@ -177,7 +177,8 @@ test('the more column registers narrow and visible, and its button opens the ite
   const cell = more.renderCell(1, '', {className: 'ns-more'}, false, document);
   const button = cell.querySelector('button.sc-more');
   assert.ok(button); assert.equal(button.textContent, '⋯'); assert.equal(button.getAttribute('data-opens'), 'menu');
-  assert.equal(button.title, '더 보기');
+  assert.match(button.title, /우클릭|right-click/, 'the tooltip names the right click as well');
+  assert.equal(button.getAttribute('aria-label'), '더 보기');
   button.dispatchEvent(new window.Event('click', {bubbles: true, cancelable: true}));
   await new Promise(r => setTimeout(r, 0));
   assert.deepEqual(events, [['select', 1], ['build'], ['open', 'sc-more', 'after_end']]);
@@ -209,4 +210,25 @@ test('hover clears on what Zotero fires: mouseout to outside the tree, mouseleav
   // A mark left on another cell (a recycled row) is swept too.
   document.querySelector('.row .cell.title').setAttribute('data-sc-hover-cell', '');
   hover(); mouseout(null); clear();
+});
+
+test('R9 with several rows selected, refreshing citations and adding a tag act on every selected paper', async () => {
+  const {document, window} = await page();
+  const rt = fakeRT(window);
+  const a = {id: 7, getField: () => ''}, b = {id: 8, getField: () => ''};
+  const prompts = [];
+  window.Services = {prompt: {prompt: (w, title, text, value) => { prompts.push(text); value.value = 'review'; return true; }}};
+  const calls = [];
+  rt.refreshCitations = async (list, o) => { calls.push(['citations', list.map(i => i.id)]); return {ok: 2, 'not-found': 0, unsupported: 0, error: 0}; };
+  rt.libraryService.addTags = async (ids, tags) => calls.push(['addTags', ids, tags]);
+  const plan = key => Cells.plan({rt, win: window, item: a, items: [a, b], key, text: ''});
+  const cite = plan('citations')[0];
+  assert.match(cite.label, /2/, 'the entry names how many papers it covers');
+  await cite.run();
+  const tag = plan('tags')[0];
+  assert.match(tag.label, /2/);
+  await tag.run();
+  assert.deepEqual(calls, [['citations', [7, 8]], ['addTags', [7, 8], ['review']]]);
+  // One paper keeps the short wording.
+  assert.equal(Cells.plan({rt, win: window, item: a, items: [a], key: 'citations', text: ''})[0].label, '인용 수 새로고침');
 });

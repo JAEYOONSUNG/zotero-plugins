@@ -30,9 +30,14 @@ function fixture() {
     },
     DB: {
       async executeTransaction(fn) {
-        const original = structuredClone(records);
+        const original = structuredClone(records), originalExtras = structuredClone(extras);
         try { await fn(); }
-        catch (error) { records.clear(); for (const [id, tags] of original) records.set(id, tags); throw error; }
+        catch (error) {
+          records.clear(); for (const [id, tags] of original) records.set(id, tags);
+          // The rating lives in Extra, and the database rolls that back too.
+          extras.clear(); for (const [id, extra] of originalExtras) extras.set(id, extra);
+          throw error;
+        }
       }
     }
   };
@@ -50,14 +55,19 @@ function fixture() {
       hasChanged() { return this.pendingTags !== null || this.pendingFields !== null; },
       getTags() { return structuredClone(this.pendingTags ?? this.tags); },
       setTags(tags) { this.pendingTags = structuredClone(tags); },
-      _clearChanged(field) { assert.ok(['tags', 'extra'].includes(field)); if (field === 'tags') this.pendingTags = null; else this.pendingFields = null; },
+      _clearChanged(field) { assert.ok(['tags', 'extra', 'itemData'].includes(field)); if (field === 'tags') this.pendingTags = null; else this.pendingFields = null; },
       async save() {
         if (fail) throw new Error('injected disk failure');
         this.tags = structuredClone(this.pendingTags ?? this.tags); this.pendingTags = null;
         this.fields = {...(this.pendingFields ?? this.fields)}; this.pendingFields = null;
         records.set(id, structuredClone(this.tags)); extras.set(id, this.fields.extra ?? '');
       },
-      async reload() { this.reloadCount++; this.tags = structuredClone(records.get(id)); this.fields = {extra: extras.get(id) ?? ''}; this.pendingFields = null; }
+      // Only the data types asked for, as Zotero's reload does.
+      async reload(types) {
+        this.reloadCount++;
+        if (!types || types.includes('tags')) this.tags = structuredClone(records.get(id));
+        if (!types || types.includes('itemData')) { this.fields = {extra: extras.get(id) ?? ''}; this.pendingFields = null; }
+      }
     };
   }
   const plugin = new Runtime({ Zotero: Z, model: Model, marquee: { attach: () => () => {} }, reading: { attach: () => () => {} }, storage: { read: async () => ({schema:1,items:{}}), write: async () => {} } });
@@ -709,7 +719,7 @@ test('clicking a selected status cell opens a three-state menu with the current 
  const edits=[],said=[];plugin.edit=async(items,change)=>{edits.push([items.map(i=>i.id),change]);};plugin.say=async(w,m)=>{said.push(m);};
  const opened=[];document.createXULElement=tag=>{const n=document.createElement(tag);n.openPopup=(...args)=>opened.push(args);return n;};
  const cell=plugin.renderCell('status',0,'1',{},document);document.body.appendChild(cell);
- assert.match(cell.title,/Click to set: Unread \/ Reading \/ Done|클릭해서 상태 고르기/);
+ assert.match(cell.title,/Click on a selected row to set the status|선택한 행에서 클릭하면 상태를 고릅니다/);
  cell.dispatchEvent(new window.Event('mousedown',{bubbles:true}));cell.dispatchEvent(new window.Event('click',{bubbles:true}));
  assert.equal(edits.length,0,'opening the menu changes nothing');assert.equal(opened.length,1);
  const entries=[...document.querySelectorAll('menupopup menuitem')];
@@ -3324,7 +3334,7 @@ test('an empty reading-time cell says nothing was recorded, not that zero second
   const ref = item(1);
   window.ZoteroPane = {itemsView: {getRow: () => ({ref}), selection: {isSelected: () => false}}};
   // renderCell reads the live value off the item rather than the argument.
-  plugin.value = () => seconds;
+  plugin.value = () => seconds; plugin.displayValue = () => String(seconds);
   let seconds = 0;
   const blank = plugin.renderCell('time', 0, 0, {}, document);
   seconds = 4000;
@@ -5194,4 +5204,241 @@ test('status tag colours: only the old muted /unread, /reading and /done colours
   plugin.Z.Tags = {getColors: () => colors, setColor: async (lib, name, color, position) => set.push([lib, name, color, position])};
   assert.equal(await plugin.brightenStatusTagColors(), 2);
   assert.deepEqual(set, [[1, '/unread', '#2F8CFF', 2], [1, '/reading', '#FFB020', 1]]);
+});
+
+/* Round 9: the item list. */
+test('R9 a star on a selected row rates every selected paper, and clears them only when all already have that rating', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const a = item(1), b = item(2), c = item(3);
+  const ratings = {1: 2, 2: 4, 3: 0};
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref: a}), selection: {isSelected: () => true}}, getSelectedItems: () => [a, b]};
+  plugin.isRegular = () => true; plugin.canEdit = () => true;
+  plugin.value = () => '2'; plugin.state = ref => ({status: 'unread', rating: ratings[ref.id], seconds: 0});
+  const edits = [], said = [];
+  plugin.edit = async (items, patch) => { edits.push([items.map(i => i.id), patch]); for (const i of items) ratings[i.id] = patch.rating; };
+  plugin.say = async (w, m) => { said.push(m); };
+  const press = star => { for (const type of ['mousedown', 'mouseup', 'click']) star.dispatchEvent(new window.Event(type, {bubbles: true})); };
+  const stars = [...plugin.renderCell('rating', 0, '2', {}, document).children];
+  press(stars[1]); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(edits, [[[1, 2], {rating: 2}]], 'the second star on a row rated 2 sets 2 on both, not clears the clicked one');
+  assert.match(said.at(-1) || '', /×2/, 'a change to rows off-screen is said');
+  press(stars[1]); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(edits.at(-1), [[1, 2], {rating: 0}], 'both now have 2, so the same star clears both');
+  // A row outside the selection speaks for itself only.
+  window.ZoteroPane.getSelectedItems = () => [b, c]; edits.length = 0;
+  press([...plugin.renderCell('rating', 0, '0', {}, document).children][4]); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(edits, [[[1], {rating: 5}]]);
+  window.ZoteroPane = undefined;
+});
+
+test('R9 on a row that is not selected, the first click on a file badge, an annotation mark or a link chip only selects the row', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  let selected = false;
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref}), selection: {isSelected: () => selected}}, getSelectedItems: () => [ref]};
+  plugin.isRegular = () => true;
+  const opened = [];
+  plugin.libraryService = {openItem: async (id, o) => { opened.push(id); }};
+  plugin.Z.launchURL = url => opened.push(url);
+  plugin.attachmentKinds = () => [{id: 41, kind: 'supplementary', name: 'si.pdf', read: true, pdf: true}];
+  plugin.annotationDistribution = () => [{attachmentID: 9, pageIndex: 1, count: 1, colors: [['#ffd400', 1]]}];
+  plugin.signalsOf = () => ({status: 'ok', checkedAt: '2026-10-01'});
+  plugin.signalTools = {...plugin.signalTools, badges: () => [{text: 'OA', title: 'open', tone: 'green', url: 'https://example.org/oa'}], sortKey: () => '1'};
+  plugin.value = key => key === 'annotationCount' ? '1' : key === 'signals' ? '1' : 'x';
+  const press = node => { for (const type of ['mousedown', 'mouseup', 'click']) node.dispatchEvent(new window.Event(type, {bubbles: true})); };
+  const targets = () => [
+    plugin.renderCell('files', 0, 'x', {}, document).querySelector('span[style*="cursor"]'),
+    plugin.renderCell('annotationCount', 0, '1', {}, document).querySelector('button'),
+    plugin.renderCell('signals', 0, '1', {}, document).querySelector('span[style*="cursor"]')
+  ];
+  for (const node of targets()) { assert.ok(node, 'the control is drawn'); press(node); }
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(opened, [], 'nothing opens on the click that selects the row');
+  selected = true;
+  for (const node of targets()) press(node);
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(opened, [41, 9, 'https://example.org/oa'], 'on a selected row each one acts');
+  window.ZoteroPane = undefined;
+});
+
+test('R9 the status cell takes the colours of the library\'s /reading, /done and /unread tag dots, the word in readable ink', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const tagged = item(1, {tags: [{tag: '/unread', type: 0}]}), bare = item(2, {tags: []});
+  let ref = tagged;
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  const colours = {'/unread': '#2F8CFF', '/reading': '#FFB020', '/done': '#22C55E'};
+  plugin.Z.Tags = {getColor: (lib, name) => colours[name] ? {color: colours[name], position: 0} : false};
+  const P = plugin.palette(document);
+  const draw = label => { plugin.value = key => key === 'status' ? String({unread: 0, reading: 1, done: 2}[label]) : ''; return plugin.renderCell('status', 0, '', {}, document); };
+  const reading = draw('reading'), done = draw('done');
+  assert.equal(reading.firstChild.style.color.toUpperCase(), '#FFB020', 'the glyph is the dot before the title');
+  assert.equal(done.firstChild.style.color.toUpperCase(), '#22C55E');
+  const Identity = require('../src/journal-identity.js');
+  for (const cell of [reading, done]) {
+    const ink = cell.lastChild.style.color;
+    assert.match(ink, /^#[0-9a-f]{6}$/i);
+    assert.equal(Identity.readable(ink, false), ink, 'the word clears 4.5:1 on white');
+  }
+  assert.notEqual(reading.lastChild.style.color.toUpperCase(), '#FFB020', 'amber text on white would fail contrast');
+  assert.equal(draw('unread').firstChild.style.color.toUpperCase(), '#2F8CFF', 'a paper tagged /unread shows the blue its dot has');
+  ref = bare;
+  assert.equal(draw('unread').firstChild.style.color, P.muted, 'unread with no tag has no dot, so the circle stays neutral');
+  // A library without tag colours keeps the palette.
+  plugin.Z.Tags = {getColor: () => false}; ref = tagged;
+  assert.equal(draw('reading').firstChild.style.color, P.reading);
+  window.ZoteroPane = undefined;
+});
+
+test('R9 painting a screen of cells asks the theme once per window and the tag display setting once per row', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1, {tags: ['a', 'b', 'c', 'd', 'e'].map(tag => ({tag, type: 0}))});
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  let queries = 0;
+  window.matchMedia = () => { queries++; return {matches: false}; };
+  plugin.isRegular = () => true; plugin.value = () => '3';
+  for (let row = 0; row < 40; row++) for (const key of ['rating', 'time', 'tags']) plugin.renderCell(key, row, '3', {}, document);
+  assert.ok(queries <= 1, `matchMedia asked ${queries} times for 120 cells`);
+  let reads = 0; const get = plugin.getSetting.bind(plugin);
+  plugin.getSetting = key => { if (key === 'tagDisplayMode' || key === 'textTagPrefix') reads++; return get(key); };
+  plugin.displayTags(ref);
+  assert.ok(reads <= 2, `the setting was read ${reads} times for five tags`);
+  // The theme still follows the window when it changes.
+  window.matchMedia = () => ({matches: true});
+  assert.equal(plugin.palette(document).dark, true);
+  window.ZoteroPane = undefined; delete window.matchMedia;
+});
+
+test('R9 the more button and the status cell say what a click and a right click do', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  plugin.isRegular = () => true; plugin.value = () => '1';
+  const more = plugin.moreButton(document, 0, ref);
+  assert.match(more.title, /우클릭|right-click/, 'the ⋯ tooltip says a right click on a cell gives that column\'s actions');
+  const status = plugin.renderCell('status', 0, '1', {}, document);
+  assert.match(status.title, /선택한 행|selected row/, 'the status tooltip says the click acts on a selected row');
+  assert.match(status.title, /여러 행|several rows/, 'and on every selected row');
+  window.ZoteroPane = undefined;
+});
+
+test('R9 a Pages cell with no reading record says so instead of staying blank and silent', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  plugin.isRegular = () => true; plugin.value = () => '';
+  const cell = plugin.renderCell('progress', 0, '', {}, document);
+  assert.equal(cell.textContent, '', 'the cell itself stays quiet');
+  assert.match(cell.title, /읽기 기록 없음|No reading record/);
+  window.ZoteroPane = undefined;
+});
+
+test('R9 a bulk rating whose second save fails leaves the first paper\'s cached Extra at the rolled-back rating', async () => {
+  const {plugin, item} = fixture();
+  plugin.active = true;
+  const first = item(1, {extra: 'Rating: 2'}), second = item(2, {extra: 'Rating: 2', fail: true});
+  await assert.rejects(plugin.edit([first, second], {rating: 5}), /disk failure/);
+  assert.equal(first.getField('extra'), 'Rating: 2', 'the database said 2 after the rollback, so the item must too');
+  assert.equal(Model.readState(first.getTags(), first.getField('extra')).rating, 2);
+});
+
+test('R9 a Citations line written after a queued wait keeps what was saved to Extra meanwhile', async () => {
+  const {plugin, item, Z} = fixture(); plugin.active = true;
+  const ref = citationItem(item, 1);   // Extra: Citations: 999 (Old source, 2020-01-01)
+  ref.hasChanged = () => false; ref.isEditable = () => true;
+  ref.setField = (k, v) => { ref.fields[k] = String(v); }; ref.save = async () => {};
+  Z.DB.executeTransaction = async fn => { await fn(); };
+  let release; plugin.queue = new Promise(r => { release = r; });
+  const pending = plugin.syncCitationExtras([{item: ref, count: 123, checkedAt: '2026-10-05T00:00:00Z'}]);
+  // A rating saved while the refresh waited its turn.
+  ref.fields.extra = 'Rating: 5\nMy note line\nCitations: 999 (Old source, 2020-01-01)';
+  release();
+  const out = await pending;
+  assert.equal(out.written, 1);
+  assert.equal(ref.fields.extra, 'Rating: 5\nMy note line\nCitations: 123 (OpenAlex, 2026-10-05)', 'the rating and the note survive');
+});
+
+test('R9 Pages and read time sort unknown last both ways, and the cells still draw the figure', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  let direction = 1;
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref}), getSortDirection: () => direction}};
+  plugin.Z.getMainWindow = () => window;
+  plugin.isRegular = () => true;
+  plugin.pageProgress = () => ({percent: null, total: 0, visited: 0});
+  const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+  const keyed = percent => { plugin.pageProgress = () => ({percent, total: 10, visited: percent / 10}); return plugin.value('progress', ref); };
+  for (direction of [1, -1]) {
+    const rows = [['none', keyed(null)], ['fifty', keyed(50)], ['zero', keyed(0)]];
+    rows.sort((a, b) => collator.compare(a[1], b[1]) * direction);
+    assert.equal(rows.at(-1)[0], 'none', `unknown progress last when sorting ${direction === 1 ? 'up' : 'down'}`);
+    assert.deepEqual(rows.slice(0, 2).map(r => r[0]), direction === 1 ? ['zero', 'fifty'] : ['fifty', 'zero']);
+  }
+  direction = 1;
+  plugin.pageProgress = () => ({percent: 50, total: 10, visited: 5});
+  const cell = plugin.renderCell('progress', 0, plugin.value('progress', ref), {}, document);
+  assert.equal(cell.textContent, '50%');
+  // Read time: fractional seconds compare as numbers, not as text.
+  const time = seconds => { plugin.state = () => ({seconds, status: 'unread', rating: 0}); return plugin.value('time', ref); };
+  assert.ok(collator.compare(time(12.25), time(12.5)) < 0, '12.25 s before 12.5 s');
+  assert.ok(collator.compare(time(9), time(100)) < 0);
+  plugin.state = () => ({seconds: 75, status: 'unread', rating: 0});
+  assert.match(plugin.renderCell('time', 0, plugin.value('time', ref), {}, document).textContent, /1m 15s|1분 15초|75/);
+  window.ZoteroPane = undefined;
+});
+
+test('R9 the Files cell names what is attached: a spreadsheet is not a PDF, and an unclassified file is shown', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  plugin.isRegular = () => true;
+  plugin.attachmentKinds = () => [{id: 5, kind: 'article', name: 'data.xlsx', read: false, pdf: false}];
+  assert.doesNotMatch(plugin.value('files', ref), /PDF/);
+  let cell = plugin.renderCell('files', 0, plugin.value('files', ref), {}, document);
+  assert.doesNotMatch(cell.textContent, /PDF/, 'a lone spreadsheet is not drawn as PDF');
+  assert.match(cell.textContent, /XLSX/);
+  plugin.attachmentKinds = () => [{id: 6, kind: 'unknown', name: 'scan.pdf', read: true, pdf: true}];
+  assert.notEqual(plugin.value('files', ref), '', 'an unclassified file is something, not nothing');
+  cell = plugin.renderCell('files', 0, plugin.value('files', ref), {}, document);
+  assert.match(cell.textContent, /\?/);
+  window.ZoteroPane = undefined;
+});
+
+test('R9 the hover fill never paints a selected cell; only its outline changes', () => {
+  const Cells = require('../src/item-cells.js');
+  const css = Cells.hoverCSS(['title']);
+  assert.match(css, /\.row:not\(\.selected\) \.cell\[data-sc-hover-cell\]\{border-radius:7px;background-color:#E3EDFF/);
+  assert.doesNotMatch(css, /\.virtualized-table-body \.row \.cell\[data-sc-hover-cell\]\{[^}]*background-color/, 'no fill rule that also reaches a selected row');
+  assert.match(css, /\.row\.selected \.cell\[data-sc-hover-cell\]\{border-radius:7px;box-shadow/);
+});
+
+test('R9 a zero or legacy citation count is drawn in readable ink, not placeholder grey', async () => {
+  const {parseHTML} = await import('linkedom');
+  const {document, window} = parseHTML('<html><body></body></html>');
+  const {plugin, item} = fixture();
+  const ref = item(1);
+  window.ZoteroPane = {itemsView: {getRow: () => ({ref})}};
+  plugin.isRegular = () => true; plugin.displayValue = () => '0'; plugin.metrics = () => ({});
+  const P = plugin.palette(document);
+  const cell = plugin.renderCell('citations', 0, '0', {}, document);
+  const Identity = require('../src/journal-identity.js');
+  const ink = cell.firstChild.style.color;
+  assert.notEqual(ink, P.faint);
+  assert.equal(Identity.readable(ink, false), ink, '4.5:1 on white');
+  window.ZoteroPane = undefined;
 });

@@ -139,6 +139,8 @@
       correspondingKnown: picked.correspondingKnown,
       extraCorresponding: picked.others,
       tier: best?.tier || null,
+      // The figure behind that badge, so the tier column sorts by the institution it draws.
+      hIndex: best?.hIndex ?? null,
       // International when the ends of the paper (first and every corresponding
       // author) are in different countries, which is a different thing from a
       // long author list; allCountries carries that wider picture.

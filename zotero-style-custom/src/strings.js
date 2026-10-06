@@ -8,6 +8,16 @@
 (function (root) {
   'use strict';
   const en = {
+ "미확인×{0}": "unknown×{0}",
+ "종류 미확인 {0}개": "{0} of unknown kind",
+ "읽기 기록 없음 · Zotero 리더에서 PDF를 열면 읽은 쪽을 셉니다": "No reading record · pages are counted once the PDF is opened in Zotero's reader",
+ "선택한 행에서 클릭하면 상태를 고릅니다 (여러 행을 선택했으면 모두 바뀝니다)": "Click on a selected row to set the status (with several rows selected, all of them change)",
+ "선택한 행에서 클릭합니다. 여러 행을 선택했으면 모두에 매깁니다.": "Click on a selected row. With several rows selected, all of them are rated.",
+ "별점을 매겼습니다": "Rated",
+ "별점을 지웠습니다": "Rating cleared",
+ "이 행의 메뉴 · 셀을 우클릭하면 그 열의 작업이 맨 위에 나옵니다": "This row's menu · right-click a cell to get that column's actions at the top",
+ "선택한 {0}편 인용 수 새로고침": "Refresh citation counts of {0} selected papers",
+ "선택한 {0}편에 태그 추가…": "Add a tag to {0} selected papers…",
  "이 쪽만 번역": "This page only",
  "이 쪽에는 번역할 본문이 없습니다. 본문이 있는 쪽으로 가거나 ‘전체 번역’을 누르세요.": "No body text on this page to translate. Go to a page with body text, or press ‘Translate all’.",
  "자동 ({0})": "Automatic ({0})",
@@ -2537,7 +2547,6 @@
  "코멘트 {0}건": "{0} comments",
  "클릭하면 별점을 지웁니다": "click to clear the rating",
  "클릭하면 왼쪽 컬렉션 트리에서 이 컬렉션으로 이동합니다": "Click to jump to this collection in the left-hand tree",
- "클릭해서 상태 고르기: 안 읽음 / 읽는 중 / 완료": "Click to set: Unread / Reading / Done",
  "클립보드에 복사했습니다.": "Copied to the clipboard.",
  "탐색": "Explore",
  "태그": "Tags",

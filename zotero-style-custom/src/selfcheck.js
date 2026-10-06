@@ -431,6 +431,44 @@
       return `tooltip "${String(cell.title).split('\n')[0].slice(0, 60)}" · drawing opened ${popups} popups`;
     }));
 
+    /* The status column and the coloured /reading, /done dot before the title tell one story:
+       the glyph is drawn in the tag's own colour and the word in that hue at a readable 4.5:1.
+       Drawn and read; nothing is clicked or written. */
+    results.push(await attempt('the status cell and the title\'s tag dot share one colour', () => {
+      if (!doc) throw new Error('no main window');
+      const hasTag = (paper, name) => { try { return paper.getTags().some(tag => tag.tag === name); } catch (_) { return false; } };
+      const paper = all.find(item => hasTag(item, '/reading') || hasTag(item, '/done'));
+      if (!paper) return 'no paper tagged /reading or /done; not probed';
+      const label = runtime.state(paper).status;
+      const P = runtime.palette(doc);
+      const tone = runtime.statusTone(paper, label, P);
+      if (!tone) return `the library gives /${label} no colour; the column keeps its own palette`;
+      const cell = borrowRow(paper, () => runtime.renderCell('status', 0, runtime.value('status', paper), {className: ''}, doc));
+      const rgb = hex => { const n = parseInt(String(hex).slice(1), 16); return `rgb(${n >> 16 & 255}, ${n >> 8 & 255}, ${n & 255})`; };
+      const same = (drawn, hex) => String(drawn).replace(/\s/g, '').toLowerCase() === rgb(hex).replace(/\s/g, '') || String(drawn).toLowerCase() === String(hex).toLowerCase();
+      if (!same(cell.firstChild && cell.firstChild.style.color, tone.mark)) throw new Error(`glyph ${cell.firstChild && cell.firstChild.style.color} is not the /${label} dot ${tone.mark}`);
+      if (!same(cell.lastChild && cell.lastChild.style.color, tone.ink)) throw new Error(`word ${cell.lastChild && cell.lastChild.style.color} is not the readable ink ${tone.ink}`);
+      if (runtime.journalIdentity.readable(tone.ink, !!P.dark) !== tone.ink) throw new Error(`the word's ink ${tone.ink} is under 4.5:1`);
+      return `/${label} ${tone.mark} · word ${tone.ink} · ${P.dark ? 'dark' : 'light'}`;
+    }));
+
+    /* renderCell runs for every visible cell while the list scrolls; a screen of rows has to draw
+       in a fraction of a frame budget per row. Cells are drawn off-screen and dropped. */
+    results.push(await attempt('a screen of the plugin\'s columns draws quickly (40 rows)', () => {
+      if (!doc) throw new Error('no main window');
+      const keys = ['journalMark', 'if', 'citations', 'status', 'rating', 'time', 'tags', 'files', 'progress', 'more']
+        .filter(key => runtime.featureColumns && runtime.featureColumns.has(key));
+      const sample = all.slice(0, 40);
+      if (!sample.length || !keys.length) return 'nothing to draw';
+      const clock = () => (win && win.performance ? win.performance.now() : Date.now());
+      const started = clock();
+      for (const item of sample) borrowRow(item, () => { for (const key of keys) runtime.renderCell(key, 0, runtime.value(key, item), {className: ''}, doc); });
+      const ms = clock() - started;
+      const said = `${sample.length} rows × ${keys.length} columns in ${Math.round(ms)} ms (${(ms / sample.length).toFixed(1)} ms a row)`;
+      if (ms > 800) throw new Error(said + ' -- scrolling will stutter');
+      return said;
+    }));
+
     results.push(await attempt('hovering a cell sets the hover attributes and leaving clears them', async () => {
       if (!doc || !win) throw new Error('no main window');
       const state = runtime.windows.get(win);

@@ -307,7 +307,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   /* What is registered for one of the plugin's columns. Kept in one place so a change of
      language can register the same column again under its new title. */
   columnOptions(dataKey,label,width) {
-    return {pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','more'].includes(dataKey),...(dataKey==='more'?{fixedWidth:true,noPadding:true,minWidth:28}:{}),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)};
+    return {pluginID:this.id,dataKey,label:this.t(label),width,minWidth:['if','oaCitedness'].includes(dataKey)?56:50,enabledTreeIDs:['main'],hidden:!['journalMark','if','citations','status','rating','time','more'].includes(dataKey),...(dataKey==='more'?{fixedWidth:true,noPadding:true,minWidth:28}:{}),zoteroPersist:['width','hidden','sortDirection','ordinal'],dataProvider:item=>this.isRegular(item)?this.value(dataKey,item):(['if','oaCitedness','citations','time','progress'].includes(dataKey)?this.sortKey(''):''),renderCell:(index,value,column,first,doc)=>this.renderCell(dataKey,index,value,column,doc)};
   }
   /* Item-tree column titles are fixed when a column is registered, and Zotero has no call to
      change one. After a language change each is registered again, immediately (so the tree
@@ -387,7 +387,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if(cells.length){const P=this.palette(win.document);
       for(const cell of cells){const item=this.Z.Items?.get(Number(cell.dataset.itemId));if(!this.isRegular(item))continue;const value=this.state(item);
         if(cell.dataset.styleCustomReading==='time'){cell.textContent=this.formatReadTime(value.seconds);cell.style.color=value.seconds<=0?P.faint:P.text;cell.style.fontWeight=value.seconds>=3600?'590':'';}
-        else if(cell.firstChild&&cell.lastChild){const tone={unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted;cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'완료'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
+        else if(cell.firstChild&&cell.lastChild){const own=this.statusTone(item,value.status,P),tone=own?own.mark:({unread:P.muted,reading:P.reading,done:P.done}[value.status]||P.muted);cell.firstChild.textContent={unread:'\u25cb',reading:'\u25d0',done:'\u25cf'}[value.status]||'\u25cb';cell.firstChild.style.color=tone;cell.lastChild.textContent=value.status==='unread'?'':this.t({reading:'읽는 중',done:'완료'}[value.status]||'');cell.lastChild.style.color=value.status==='unread'?P.muted:own?own.ink:tone;cell.lastChild.style.fontWeight=value.status==='unread'?'400':'590';}}}
       state.workbench?.refreshMetrics?.(itemID);
     }
   }
@@ -661,8 +661,11 @@ var CustomStyleRuntime = class CustomStyleRuntime {
 
       if (key === "status") return String({unread:0,reading:1,done:2}[state.status]);
       if (key === "rating") return String(state.rating);
-      if (key === "time") return String(state.seconds);
-      if (key === "progress") {const p=this.pageProgress(item);return p.percent===null?"":String(p.percent);}
+      /* Sort keys like IF's (see sortKey): Zotero compares text, so "12.25" came
+         after "12.5" and a paper with no reading record sat on top of 0% and
+         50% whenever the list ran highest first. The cell draws displayValue. */
+      if (key === "time") return this.sortKey(this.displayValue(key, item));
+      if (key === "progress") return this.sortKey(this.displayValue(key, item));
       if (["remark","translatedTitle","summary"].includes(key)) return String(this.entry(item)[key]||"");
       if (key === "affiliation") {
         const where = this.affiliationOf(item);
@@ -704,9 +707,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (key === "signals")return this.signalTools.sortKey(this.signalsOf(item));
       if (key === "files") {const kinds=this.attachmentKinds(item);if(!kinds.length)return "";
         const of=want=>kinds.filter(k=>k.kind===want).length;
-        // The sort key is the text, so it has to name every kind the cell draws.
-        return [of('article')?`PDF×${of('article')}`:"",of('supplementary')?`SI×${of('supplementary')}`:"",
-          of('duplicate')?`중복×${of('duplicate')}`:"",of('foreign')?`다른논문×${of('foreign')}`:""]
+        // The sort key is the text, so it has to name every kind the cell draws:
+        // the main files by format (a lone data.xlsx is not "PDF"), and files no verdict could place.
+        return [...this.fileFormats(kinds.filter(k=>k.kind==='article')).map(([label,list])=>`${label}×${list.length}`),of('supplementary')?`SI×${of('supplementary')}`:"",
+          of('duplicate')?`중복×${of('duplicate')}`:"",of('foreign')?`다른논문×${of('foreign')}`:"",of('unknown')?`미확인×${of('unknown')}`:""]
           .filter(Boolean).join(" · ");}
       if (key === "annotationCount")return String((item.getAttachments?.()||[]).reduce((n,id)=>n+(this.Z.Items.get(id)?.deleted?0:(this.Z.Items.get(id)?.getAnnotations?.()||[]).filter(annotation=>!annotation.deleted).length),0));
       if (key.startsWith('field-'))return String(item.getField(key.slice(6))||'');
@@ -766,6 +770,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     return store && typeof store === 'object' && !Array.isArray(store) ? store : (this.cache.fileKinds = {});
   }
 
+  /* The main files grouped by what they are: PDF, or the file's own extension
+     (XLSX, EPUB, HTML), PDF first. */
+  fileFormats(kinds) {
+    const groups = new Map();
+    for (const kind of kinds || []) {
+      const label = kind.pdf ? 'PDF' : (String(kind.name || '').match(/\.([a-z0-9]{1,5})$/i)?.[1] || '').toUpperCase() || this.t('파일');
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(kind);
+    }
+    return [...groups].sort((a, b) => (b[0] === 'PDF') - (a[0] === 'PDF'));
+  }
   attachmentKinds(item) {
     const kinds = [];
     const read = this.fileVerdicts();
@@ -1017,7 +1032,17 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   // Apple-like system palette. Restraint over rainbow: numbers stay monochrome,
   // colour marks only the categorical dimensions (status, rating, IF tier).
   palette(doc) {
-    const dark = !!doc?.defaultView?.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+    /* Asked for every cell of every row while the list scrolls. matchMedia
+       builds a new query object each time; one per window is kept (its
+       `matches` is live, so a theme change is still seen). */
+    const win = doc?.defaultView;
+    let dark = false;
+    if (win && typeof win.matchMedia === 'function') {
+      this.themeQueries ||= new WeakMap();
+      let held = this.themeQueries.get(win);
+      if (!held || held.fn !== win.matchMedia) { held = {fn: win.matchMedia, query: win.matchMedia('(prefers-color-scheme: dark)')}; this.themeQueries.set(win, held); }
+      dark = !!held.query?.matches;
+    }
     // Pastel: the hue stays, the saturation drops to about a third, and the
     // lightness of every colour is chosen so they all land on the same contrast
     // against the surface behind them. Evenness is the point -- in the old set
@@ -1290,7 +1315,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     const item = doc.defaultView?.ZoteroPane?.itemsView?.getRow(index)?.ref;
     if (key === "more") { if (this.isRegular(item)) cell.appendChild(this.moreButton(doc, index, item)); cell.style.justifyContent = "center"; return cell; }
     // Read current data when painting: do not reuse a previously cached empty cell.
-    if (this.isRegular(item)) {value=["if","oaCitedness","citations"].includes(key)?this.displayValue(key,item):this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
+    if (this.isRegular(item)) {value=["if","oaCitedness","citations","time","progress"].includes(key)?this.displayValue(key,item):this.value(key,item);if(['time','status'].includes(key)){cell.dataset.styleCustomReading=key;cell.dataset.itemId=String(item.id);}}
     // A sort key handed in without its row is never drawn as text.
     else if (typeof value === "string" && /^[012]\|/.test(value)) value = "";
     if (value === "") {
@@ -1331,6 +1356,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Blank on purpose: an unfiled paper is not an error, so it says nothing
       // in the cell and only names itself in the tooltip.
       if (key === "collections" && this.isRegular(item)) cell.title = this.t("컬렉션 없음");
+      // Blank as the read-time column is: nothing measured is not 0%.
+      if (key === "progress" && this.isRegular(item)) cell.title = this.t("읽기 기록 없음 · Zotero 리더에서 PDF를 열면 읽은 쪽을 셉니다");
       return cell;
     }
     let label = value;
@@ -1341,7 +1368,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // colours: nothing started is neutral, in progress is a light sage, and
       // finished is the full green. The glyph carries the same progression, so
       // the two reinforce each other instead of each saying something else.
-      const tone = {unread: P.muted, reading: P.reading, done: P.done}[label];
+      const own = this.isRegular(item) ? this.statusTone(item, label, P) : null;
+      const tone = own ? own.mark : {unread: P.muted, reading: P.reading, done: P.done}[label];
       const dot = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
       dot.textContent = {unread: "○", reading: "◐", done: "●"}[label];
       dot.style.cssText = `font-size:11px;line-height:1;color:${tone};`;
@@ -1349,10 +1377,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       // Thirty rows saying "unread" were the column's texture; the hollow circle says it alone.
       // 완료, not 읽음: the panel's own status word, so a paper marked done reads the same everywhere.
       text.textContent = label === "unread" ? "" : this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]);
-      text.style.cssText = `color:${label === "unread" ? P.muted : tone};font-weight:${label === "unread" ? 400 : 590};`;
+      text.style.cssText = `color:${label === "unread" ? P.muted : own ? own.ink : tone};font-weight:${label === "unread" ? 400 : 590};`;
       cell.append(dot, text);
       if (this.isRegular(item)) {
-        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]) + " · " + this.t("클릭해서 상태 고르기: 안 읽음 / 읽는 중 / 완료");
+        cell.title = this.t({unread: "안 읽음", reading: "읽는 중", done: "완료"}[label]) + "\n" + this.t("선택한 행에서 클릭하면 상태를 고릅니다 (여러 행을 선택했으면 모두 바뀝니다)");
         // Why this status, when it is not simply the reader's own tag.
         const why = this.statusWhy(item);
         if (why) cell.title += "\n" + why;
@@ -1372,12 +1400,12 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       label = "★".repeat(rating) + "☆".repeat(5-rating);
       for (let n=1;n<=5;n++) {
         const star = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        star.textContent = n<=rating ? "★" : "☆"; star.title = n===rating ? this.t("클릭하면 별점을 지웁니다") : this.t(`${n}/5로 매기기`); star.setAttribute("role","button");
+        star.textContent = n<=rating ? "★" : "☆"; star.title = (n===rating ? this.t("클릭하면 별점을 지웁니다") : this.t(`${n}/5로 매기기`)) + "\n" + this.t("선택한 행에서 클릭합니다. 여러 행을 선택했으면 모두에 매깁니다."); star.setAttribute("role","button");
         // A filled star is a mark, not text: it can be the light warm colour a
         // star is supposed to be instead of the dark ochre that reads as dirt.
         star.style.cssText = `cursor:pointer;font-size:13px;line-height:1;color:${n<=rating?P.star:P.faint};`;
         const armed = this.guardClick(star, doc, index);
-        star.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); if (this.canEdit(item)) this.edit([item], {rating:n===rating?0:n}).catch(e=>this.Z.logError(e)); });
+        star.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); this.rateFromCell(doc, item, n); });
         cell.appendChild(star);
       }
     } else if (key === "tags" && this.isRegular(item)) {
@@ -1394,7 +1422,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         marker.setAttribute('aria-label',marker.title);marker.tabIndex=-1;marker.style.cssText='border:0;padding:0;min-width:4px;flex:1;height:12px;cursor:pointer;';
         let start=0;const stops=[];for(const[color,count]of page.colors){const end=start+count/page.count*100;stops.push(`${color} ${start}% ${end}%`);start=end;}
         marker.style.background=stops.length===1?page.colors[0][0]:`linear-gradient(0deg,${stops.join(',')})`;
-        marker.addEventListener('click',event=>{event.stopPropagation();this.libraryService.openItem(page.attachmentID,{pageIndex:page.pageIndex}).catch(error=>this.Z.logError(error));});strip.appendChild(marker);
+        const armed=this.guardClick(marker,doc,index);
+        marker.addEventListener('click',event=>{if(!armed())return;event.stopPropagation();this.libraryService.openItem(page.attachmentID,{pageIndex:page.pageIndex}).catch(error=>this.Z.logError(error));});strip.appendChild(marker);
       }
       cell.appendChild(strip);cell.title=this.t(`주석 ${value}개 · ${pages.length}개 페이지에 분포`)+(pages.length>120?' · '+this.t('앞 120개 위치 표시'):'')+'. '+this.t('색 막대를 클릭하면 해당 PDF 페이지로 이동합니다.');
     } else if(['added','modified'].includes(key)&&this.getSetting('dateDisplay')==='relative') {
@@ -1433,18 +1462,21 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       const article = of('article'), si = of('supplementary');
       const duplicate = of('duplicate'), foreign = of('foreign'), unsure = of('unknown');
       const unread = kinds.filter(k => !k.read).length;
-      if (article.length) {
+      for (const [format, files] of this.fileFormats(article)) {
         const plain = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        plain.textContent = article.length > 1 ? `PDF ×${article.length}` : "PDF";
+        plain.textContent = files.length > 1 ? `${format} ×${files.length}` : format;
         plain.style.cssText = `font-size:11px;color:${P.muted};`;
-        plain.title = article.map(k => k.name).join("\n");
+        plain.title = files.map(k => k.name).join("\n");
         cell.appendChild(plain);
       }
       const badge = (label, tone, files, note) => {
         const pill = this.pill(doc, label, tone, P);
         pill.style.cursor = "pointer";
         pill.title = note + "\n" + files.map(k => `${k.name}${k.why ? ` — ${k.why}` : ""}`).join("\n");
+        // Like the status cell and the stars: the first click on a row selects it.
+        const armed = this.guardClick(pill, doc, index);
         pill.addEventListener("click", event => {
+          if (!armed()) return;
           event.stopPropagation();
           this.libraryService.openItem(files[0].id).catch(error => this.Z.logError(error));
         });
@@ -1472,6 +1504,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         duplicate.length ? this.t(`중복 ${duplicate.length}개`) : null,
         foreign.length ? this.t(`다른 논문 ${foreign.length}개`) : null,
         !kinds.length ? this.t("첨부파일 없음") : null,
+        unsure.length ? this.t(`종류 미확인 ${unsure.length}개`) : null,
         unread ? this.t(`${unread}개는 아직 내용을 읽어보지 않았습니다 (우클릭 → 첨부파일 종류 판별)`) : null
       ].filter(Boolean).join(" · ");
       return cell;
@@ -1495,7 +1528,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
         if (badge.url) {
           chip.style.cursor = "pointer";
           chip.style.textDecoration = "underline";
-          chip.addEventListener("click", event => { event.stopPropagation(); this.Z.launchURL?.(badge.url); });
+          const armed = this.guardClick(chip, doc, index);
+          chip.addEventListener("click", event => { if (!armed()) return; event.stopPropagation(); this.Z.launchURL?.(badge.url); });
         }
         cell.appendChild(chip);
       }
@@ -1578,7 +1612,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       number.textContent = legacy ? "~" + label : label;
       // A fixed, right-aligned number column so every bar starts at one x.
       number.style.cssText = `font-variant-numeric:tabular-nums;min-width:3.4em;text-align:right;`
-        + `flex:none;font-weight:${count >= 100 && !legacy ? 590 : 400};color:${count > 0 && !legacy ? P.text : P.faint};`;
+        + `flex:none;font-weight:${count >= 100 && !legacy ? 590 : 400};color:${count > 0 && !legacy ? P.text : P.muted};`;
       cell.appendChild(number);
       /* Grey means "too young to judge", not "few citations".
 
@@ -1647,10 +1681,35 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     }
   }
   displayTags(item) {
+    // The setting is read once per row, not once per tag (it is a preference read and a validation each time).
+    const mode=this.getSetting('tagDisplayMode'),prefix=mode==='prefixed'?this.getSetting('textTagPrefix'):'';
     return item.getTags().filter(t=>!/^\/(unread|reading|done)$/.test(t.tag)&&!/^style-custom:/.test(t.tag)&&!/^[★⭐]+$/.test(t.tag)).map(t=>{
       let color;try{color=this.Z.Tags?.getColor(item.libraryID,t.tag)?.color;}catch(_){}
       return {tag:t.tag,color:/^#[0-9a-f]{6}$/i.test(color||'')?color:null};
-    }).filter(tag=>this.getSetting('tagDisplayMode')==='colored'?!!tag.color:this.getSetting('tagDisplayMode')==='prefixed'?tag.tag.startsWith(this.getSetting('textTagPrefix')):true);
+    }).filter(tag=>mode==='colored'?!!tag.color:mode==='prefixed'?tag.tag.startsWith(prefix):true);
+  }
+  /* The status cell in the colours of the dots Zotero draws before a title for
+     the /unread, /reading and /done tags (brightened in brightenStatusTagColors),
+     so the column and the dot tell one story: amber reading, green done, blue
+     unread. The glyph is the dot's own colour; the word is the same hue at a
+     readable lightness. An unread paper without the /unread tag has no dot, so
+     its circle stays neutral. Null when the library gives the tag no colour. */
+  statusTone(item, status, P) {
+    if (!item || !['unread', 'reading', 'done'].includes(status)) return null;
+    let color = null;
+    try { color = this.Z.Tags?.getColor?.(item.libraryID, '/' + status)?.color; } catch (_) {}
+    if (!/^#[0-9a-f]{6}$/i.test(color || '')) return null;
+    if (status === 'unread') {
+      let tagged = false;
+      try { tagged = (item.getTags?.() || []).some(t => (t?.tag ?? t) === '/unread'); } catch (_) {}
+      if (!tagged) return null;
+    }
+    const dark = !!P?.dark;
+    this.inkMemo ||= new Map();
+    const key = color.toLowerCase() + (dark ? ':d' : ':l');
+    let ink = this.inkMemo.get(key);
+    if (!ink) { ink = this.journalIdentity?.readable ? this.journalIdentity.readable(color, dark) : color; this.inkMemo.set(key, ink); }
+    return {mark: color, ink};
   }
   publicationTags(item) {
     const result=[];const metrics=this.metrics(item);
@@ -4136,6 +4195,19 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     chosen = chosen.filter(ref => this.isRegular(ref));
     return chosen.length > 1 && chosen.some(ref => ref.id === item.id) ? chosen : [item];
   }
+  /* A star in the rating column. Like the status cell, a click on a selected
+     row speaks for every selected row. The same star again clears, but only
+     when every one of them already has that rating; otherwise it sets it. */
+  rateFromCell(doc, item, n) {
+    const win = doc.defaultView;
+    const items = this.rowSelection(doc, item).filter(ref => this.canEdit(ref));
+    if (!items.length) return Promise.resolve();
+    const now = ref => { try { return Number(this.state(ref)?.rating) || 0; } catch (_) { return 0; } };
+    const rating = items.every(ref => now(ref) === n) ? 0 : n;
+    return this.edit(items, {rating})
+      .then(() => { if (items.length > 1) return this.say(win, (rating ? this.t("별점을 매겼습니다") + " · " + "★".repeat(rating) : this.t("별점을 지웠습니다")) + " · ×" + items.length); })
+      .catch(e => { this.Z.logError(e); return this.say(win, e?.message || String(e), {error: true}); });
+  }
   /* Reading status from the item list: a small menu of the three states with
      the current one checked, as a native popup like Zotero's own menus. Where
      a popup cannot be made the click cycles Unread -> Reading -> Done. The
@@ -4165,7 +4237,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     // Each state with the icon its cell shows, so the menu reads like the column.
     const P = this.palette(doc);
     const icon = status => {
-      const colour = status === "done" ? P.done : status === "reading" ? P.reading : P.gray;
+      // The colour the cell and the title's tag dot use for this state.
+      const own = status === "unread" ? null : this.statusTone(items[0], status, P);
+      const colour = own ? own.mark : status === "done" ? P.done : status === "reading" ? P.reading : P.gray;
       const shape = status === "done" ? `<circle cx="8" cy="8" r="5.5" fill="${colour}"/>`
         : status === "reading" ? `<circle cx="8" cy="8" r="5" fill="none" stroke="${colour}" stroke-width="1.5"/><path d="M8 3a5 5 0 0 0 0 10z" fill="${colour}"/>`
         : `<circle cx="8" cy="8" r="5" fill="none" stroke="${colour}" stroke-width="1.5"/>`;
@@ -4191,7 +4265,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   moreButton(doc, index, item) {
     const button = doc.createElementNS("http://www.w3.org/1999/xhtml", "button");
     button.type = "button"; button.className = "sc-more"; button.textContent = "⋯";
-    button.title = this.t("더 보기"); button.setAttribute("aria-label", this.t("더 보기"));
+    button.title = this.t("이 행의 메뉴 · 셀을 우클릭하면 그 열의 작업이 맨 위에 나옵니다"); button.setAttribute("aria-label", this.t("더 보기"));
     button.setAttribute("data-opens", "menu"); button.tabIndex = -1;
     // The menu is for the row (openRowMenu selects an unselected row itself); the press must not reach the list and narrow a multi-selection.
     for (const type of ["mousedown", "mouseup"]) button.addEventListener(type, event => event.stopPropagation());
@@ -4277,6 +4351,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (key === "if") return state.impactFactor != null && Number.isFinite(Number(state.impactFactor)) ? String(state.impactFactor) : "";
     if (key === "oaCitedness") { const estimate = this.journalCitedness(item); return estimate && Number.isFinite(Number(estimate.citedness)) ? String(estimate.citedness) : ""; }
     if (key === "citations") return state.citations == null ? "" : String(state.citations);
+    if (key === "time") return String(Math.max(0, Number(state.seconds) || 0));
+    if (key === "progress") { const p = this.pageProgress(item); return p.percent === null || p.percent === undefined ? "" : String(p.percent); }
     return "";
   }
   /* Zotero compares column values as numeric-aware text (Intl.Collator
@@ -6530,6 +6606,15 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       try {
         await this.Z.DB.executeTransaction(async () => {
           for (const row of todo) {
+            /* Extra as it is now, not as it was before this waited its turn in the
+               queue: a rating or a note saved meanwhile is kept, and only the
+               Citations line is replaced. */
+            if (!this.canEdit(row.item) || row.item.hasChanged?.()) continue;
+            const now = String(row.item.getField("extra") || ""), lines = now.split(/\r?\n/);
+            if (!lines.some(l => owned.test(l))) continue;
+            row.before = now;
+            row.after = [...lines.filter(l => !owned.test(l)), row.line].join("\n").replace(/^\n/, "");
+            if (row.after === now) continue;
             row.item.setField("extra", row.after);
             await row.item.save({notifierData: {styleCustomCitations: true}, skipSelect: true, skipDateModifiedUpdate: true});
             done.push(row);
@@ -7501,13 +7586,14 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             item.setTags(tags);
             // The rating moves to Extra in the same write that drops its tag,
             // so the two can never disagree and no rating exists in neither.
+            let extra = null;
             if (Object.prototype.hasOwnProperty.call(change, 'rating')) {
               const before = String(item.getField('extra') || '');
               const after = this.model.updateExtra(before, {rating: change.rating});
-              if (after !== before) item.setField('extra', after);
+              if (after !== before) { item.setField('extra', after); extra = after; }
             }
             // Capture Zotero's normalized representation, not our input order.
-            touched.push({ item, written: item.getTags() });
+            touched.push({ item, written: item.getTags(), extra });
             await item.save();
           }
         });
@@ -7515,7 +7601,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       catch (error) {
         // The DB transaction rolls back persisted tags, but previous saves may
         // already have updated cached Items. Reload only after the rollback ends.
-        for (const { item, written } of touched) {
+        for (const { item, written, extra } of touched) {
           try {
             const latest = item.getTags();
             const oldByName = new Map(written.map(tag => [tag.tag, tag]));
@@ -7526,7 +7612,13 @@ var CustomStyleRuntime = class CustomStyleRuntime {
             // changes intact after a save fails before _saveData. Clear only
             // that field before reloading the rolled-back database value.
             item._clearChanged("tags");
-            await item.reload(["primaryData", "tags"], true);
+            /* The rating lives in Extra, and the rollback undid that too: an
+               earlier paper's cached Extra still said the new rating. Reloaded
+               only while it still holds what this edit wrote, so an Extra edit
+               made meanwhile by someone else is not thrown away. */
+            const extraToo = extra != null && String(item.getField("extra") || "") === extra;
+            if (extraToo) item._clearChanged("itemData");
+            await item.reload(["primaryData", "tags", ...(extraToo ? ["itemData"] : [])], true);
             // A separate editor can change an earlier item while a later save
             // awaits. Reapply those tag differences as pending edits; do not
             // save them or lose them while undoing this failed transaction.

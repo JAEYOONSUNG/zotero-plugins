@@ -49,10 +49,11 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
       dark.push(`${col} .virtualized-table-header ${cls}{background-color:#22314A;box-shadow:inset 0 -2px 0 #5B8EE6}`);
     }
     out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(58,63,75,.045)}`);
-    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{border-radius:7px;background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
+    // The fill stays off a selected row: white selected text on this pale blue read at 1.2:1. It keeps only its outline.
+    out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]{border-radius:7px;background-color:#E3EDFF;box-shadow:inset 0 0 0 1.5px #5B9BFF}`);
     out.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row.selected .cell[data-sc-hover-cell]{border-radius:7px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9)}`);
     dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected):hover{background-color:rgba(255,255,255,.04)}`);
-    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row .cell[data-sc-hover-cell]{border-radius:7px;background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
+    dark.push(`${TREE}[data-sc-hover-col] .virtualized-table-body .row:not(.selected) .cell[data-sc-hover-cell]{border-radius:7px;background-color:#26385A;box-shadow:inset 0 0 0 1.5px #7FAEFF}`);
     return out.join("\n") + `\n@media (prefers-color-scheme: dark){\n${dark.join("\n")}\n}\n`;
   }
 
@@ -93,6 +94,9 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     const say = message => rt.say(win, message);
     const journalName = () => String(rt.journalRecord?.(item)?.name || "").trim();
     const group = groupOf(key);
+    // Several selected rows: the entries that make sense for many act on all of them and say how many.
+    const many = Array.isArray(items) && items.length > 1 ? items : null;
+    const counted = (label, manyLabel) => many ? {label: rt.t(manyLabel).replace("{0}", String(many.length)), raw: true} : {label};
     if (group === "journal" || group === "metric") {
       const name = journalName();
       if (!name) return [{label: "저널 정보가 없습니다", disabled: true}];
@@ -108,8 +112,8 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
         }});
       }
     } else if (group === "citations") {
-      out.push({label: "인용 수 새로고침", run: async () => {
-        const result = await rt.refreshCitations([item], {force: true});
+      out.push({...counted("인용 수 새로고침", "선택한 {0}편 인용 수 새로고침"), run: async () => {
+        const result = await rt.refreshCitations(many || [item], {force: true});
         say(`인용 수 확인 ${result.ok}개 · 미확인 ${result["not-found"]}개 · 식별자 부족 ${result.unsupported}개 · 조회 오류 ${result.error}개`);
       }});
       out.push({label: "이 논문을 인용한 논문 보기", run: () => rt.openWorkbench(win, "related")});
@@ -128,13 +132,13 @@ ${TREE} .cell .sc-more:hover{background:rgba(255,255,255,.12);color:#F3F4F6}
     } else if (group === "time") {
       out.push({label: "읽기 진행 열기", run: () => rt.openWorkbench(win, "reading")});
     } else if (group === "tags") {
-      out.push({label: "태그 추가…", run: async () => {
+      out.push({...counted("태그 추가…", "선택한 {0}편에 태그 추가…"), run: async () => {
         const prompt = (win.Services || globalThis.Services)?.prompt;
         const value = {value: ""};
         if (!prompt || !prompt.prompt(win, rt.t("태그 추가"), rt.t("추가할 태그 이름"), value, null, {})) return;
         const tag = String(value.value || "").trim();
         if (!tag) return;
-        await rt.libraryService.addTags([item.id], [tag]);
+        await rt.libraryService.addTags((many || [item]).map(ref => ref.id), [tag]);
         await rt.refreshWindows?.();
       }});
       const tags = (rt.displayTags?.(item) || []).slice(0, 25);
