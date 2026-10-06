@@ -492,7 +492,20 @@ var ZotPoPQuery = (function () {
 		return /^10\.\d{4,9}\/\S+$/.test(doi) ? doi : null;
 	}
 
+	/* A search asks for the identity of the same few thousand titles again and again (every merge, every
+	   relevance sort, every streamed page). It is a pure function of the text, so each answer is kept;
+	   the store is emptied when it grows past TITLE_MEMO_MAX rather than aged. */
+	const TITLE_MEMO = new Map(), TITLE_MEMO_MAX = 20000;
 	function titleIdentity(value) {
+		let key = String(value ?? "");
+		let held = TITLE_MEMO.get(key);
+		if (held !== undefined) return held;
+		held = computeTitleIdentity(key);
+		if (TITLE_MEMO.size >= TITLE_MEMO_MAX) TITLE_MEMO.clear();
+		TITLE_MEMO.set(key, held);
+		return held;
+	}
+	function computeTitleIdentity(value) {
 		// Retain scientific superscripts/subscripts before compatibility normalization
 		// flattens them into baseline digits (x², x₂ and x2 are different expressions).
 		let scripted = String(value ?? "")

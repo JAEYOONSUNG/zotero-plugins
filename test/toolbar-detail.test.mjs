@@ -154,7 +154,12 @@ test("dashboard rules in the stylesheet (user direction 2026-10-01, replacing th
 	assert.match(block(".selmenu"), /box-shadow: var\(--pop-shadow\)/);
 	assert.ok(Number(/font-size:\s*([\d.]+)px/.exec(block(".histmenu .histopt .h-meta"))[1]) >= 11);
 	for (const sel of ["input[type=text], input[type=number], input[type=search], select", "button", ".sel-btn"]) assert.match(block(sel), /border-radius:\s*(10px|999px)/, sel);
-	assert.match(css, /\.toolbar \{[^}]*flex-wrap: nowrap/, "the toolbar stays on one line");
+	assert.match(css, /\.toolbar \{[^}]*flex-wrap: nowrap/, "the toolbar stays on one line where it fits");
+	// Below 1440px (the line ran past the edge from 1280 to 1420) the actions take a second row, at the right.
+	const narrow = /@media \(max-width: 1439px\) \{([\s\S]*?)\n\}/.exec(css)?.[1] || "";
+	assert.match(narrow, /\.toolbar \{[^}]*flex-wrap: wrap/);
+	assert.match(narrow, /\.toolbar > \.spacer \{[^}]*flex: 1 0 100%/);
+	assert.match(narrow, /#preview-btn \{[^}]*margin-inline-start: auto/);
 });
 
 // WCAG contrast, from the stylesheet's own tokens.

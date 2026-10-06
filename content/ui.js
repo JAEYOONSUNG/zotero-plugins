@@ -1041,7 +1041,7 @@
 			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile"); open.setAttribute("data-fkey", "open:" + profile.id);
 				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
 			if (profile.openalexId) {
-				let w = watchButton({ openalexId: profile.openalexId, name: profile.name || profile.id, institution: profile.affiliation || profile.lastInstitution?.name || "" }, renderAuthorProfiles);
+				let w = watchButton({ openalexId: profile.openalexId, alsoIds: profile.alsoIds, name: profile.name || profile.id, institution: profile.affiliation || profile.lastInstitution?.name || "" }, renderAuthorProfiles);
 				if (w) { w.classList.add("author-watch"); w.setAttribute("data-fkey", "watch:" + profile.openalexId); actions.appendChild(w); }
 			}
 			let li = linkedInState(profile);
@@ -2067,9 +2067,16 @@
 		$("vsplit").hidden = !on;
 	}
 	function toggleMetrics() { setMetricsVisible($("metrics").hidden); saveLayout(); }
+	/* A hidden detail pane asks the network for nothing (a PubMed abstract, the references behind "cites n of
+	   mine"): walking twenty rows with it folded away sent twenty requests nobody saw. Shown again, it draws
+	   the row it holds, and asks then. */
+	let detailShown = true;
 	function setDetailVisible(on) {
+		let was = detailShown;
+		detailShown = Boolean(on);
 		$("detail").hidden = !on;
 		syncDetailSplitter();
+		if (on && !was) renderDetail();
 	}
 	// The grip belongs to a pane that has a height to drag: not a hidden one, not the one-line hint.
 	function syncDetailSplitter() {
@@ -2536,6 +2543,7 @@
 		};
 	}
 
+	let searchTicket = 0;
 	async function runSearch() {
 		if (searchSurface === "authors") return runAuthorAction("profiles");
 		if (state.importing) return;
@@ -2562,8 +2570,12 @@
 			$("keywords").focus();
 			return;
 		}
+		/* Only the latest request goes: with A running, B and C pressed in turn both waited for A, then B went and
+		   C was dropped, leaving C's words over B's rows. Each request takes a ticket; one overtaken while it waited
+		   steps aside. */
+		let ticket = ++searchTicket;
 		if (state.searching) { state.searchController?.abort(); state.cancelled = true; try { await state.searchDone; } catch (e) {} }
-		if (state.searching) return;
+		if (state.searching || ticket !== searchTicket) return;
 		cancelCacheRestore();
 		saveQuery();
 		savePrefs();
@@ -2636,7 +2648,10 @@
 			state.lastPartial = Boolean(ctx.errors?.length || recs.partial || recs.popProvenance?.complete === false);
 			let pin = await pinFound;
 			if (!pin) pinLook = null;
-			state.priorKeys = pin ? (recs.length > history.SEEN_CAP ? null : await history.baseline(pin.id)) : await prior || null;
+			let priorKeys = pin ? (recs.length > history.SEEN_CAP ? null : await history.baseline(pin.id)) : await prior || null;
+			// Cleared or overtaken while the history was read: these rows are no longer wanted.
+			if (!active()) throw abortError();
+			state.priorKeys = priorKeys;
 			displaySearchResults(recs);
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
@@ -2849,7 +2864,7 @@
 	// reader knows "Science is red, Cell is blue" long before reading the title.
 	function journalIdentity(r) {
 		if (typeof ZotPoPJournalMarks === "undefined" || !r?.venue) return null;
-		let identity = ZotPoPJournalMarks.identify(r.venue, r.publisher);
+		let identity = journalOf(r);
 		if (!identity) return null;
 		/* Both themes' inks travel with the element as custom properties and search.css picks one
 		   with prefers-color-scheme. Choosing by matchMedia at render time left the light ink on a
@@ -3702,7 +3717,24 @@
 		} catch (e) { log("fold button not moved: " + e.message); }
 	}
 
+	/* What one draw works out for many rows at once, kept for that draw only (nothing a row shows changes
+	   inside it): each paper's citation figures and each journal's identity, asked for by the row's
+	   signature, its cells, the sort and the metrics. A streamed 1,200-row search drew every row's figures
+	   three times a frame. */
+	let drawMemo = null;
+	function journalOf(r) {
+		if (!drawMemo) return ZotPoPJournalMarks.identify(r.venue, r.publisher);
+		let key = r.venue + "\u0001" + (r.publisher || "");
+		if (!drawMemo.journals.has(key)) drawMemo.journals.set(key, ZotPoPJournalMarks.identify(r.venue, r.publisher));
+		return drawMemo.journals.get(key);
+	}
 	function render() {
+		let outer = drawMemo == null;
+		if (outer) drawMemo = { figures: new WeakMap(), journals: new Map() };
+		try { drawList(); }
+		finally { if (outer) drawMemo = null; }
+	}
+	function drawList() {
 		if (streamTimer != null) { cancelLater(streamTimer); streamTimer = null; }
 		syncQueryCollapse();
 		if (state.selectedOnly && !state.records.some(r => state.selected.has(r.key))) state.selectedOnly = false;
@@ -3782,8 +3814,9 @@
 	const objectId = o => (o && typeof o === "object" ? (objectIds.get(o) || (objectIds.set(o, ++objectCount), objectCount)) : 0);
 	function rowSignature(r) {
 		let where = affiliationOf(r), row = affColumnRow(where), mark = citeMarkOf(r);
-		let identity = typeof ZotPoPJournalMarks === "undefined" || !r.venue ? null : ZotPoPJournalMarks.identify(r.venue, r.publisher);
-		return JSON.stringify([r.citations, r.citationSource, r.rank, r.popOriginal, r.popRank, r.authorString, r.title, r.titleMarkup,
+		let identity = typeof ZotPoPJournalMarks === "undefined" || !r.venue ? null : journalOf(r);
+		// The rank is not here: it moves on every streamed page, and its one cell is rewritten in place (paintRowState).
+		return JSON.stringify([r.citations, r.citationSource, r.popOriginal, r.popRank, r.authorString, r.title, r.titleMarkup,
 			r.year, r.venue, r.publisher, r.journalIF, r.journalIFSource, r.journalOA2y, r.journalH, r.journalAbbrev, identity?.mark, identity?.known,
 			r.doi, hasPDF(r), r.inLibrary, r.readState, r.isNew, r.retracted, r.status, r.statusClass, r.statusTitle,
 			r.source, r.sources, r.pdfUrl, r.pdfUrls, r.pmcid, r.arxiv,
@@ -3804,7 +3837,10 @@
 		let on = state.focusKey != null && state.visible.some(r => r.key === state.focusKey);
 		if (on) wrap.setAttribute("aria-activedescendant", rowDomId(state.focusKey)); else wrap.removeAttribute("aria-activedescendant");
 	}
+	const rankCells = new WeakMap();
 	function paintRowState(tr, r, pick) {
+		let rank = rankCells.get(tr);
+		if (rank && !r.popOriginal && rank.textContent !== String(r.rank)) rank.textContent = String(r.rank);
 		tr.classList.toggle("in-library", Boolean(r.inLibrary));
 		tr.classList.toggle("selected", state.selected.has(r.key));
 		tr.setAttribute("aria-selected", String(state.selected.has(r.key)));
@@ -3834,8 +3870,10 @@
 			else tbody.insertBefore(tr, cursor);
 		}
 		while (cursor) { let next = cursor.nextSibling; tbody.removeChild ? tbody.removeChild(cursor) : cursor.remove(); cursor = next; }
-		// Rows of results that are no longer in the search are let go; filtered-out ones are kept.
-		if (rowCache.size > state.records.length) {
+		// Rows of results that are no longer in the search are let go; filtered-out ones are kept. While a search
+		// streams, a paper drops out of one page's top N and comes back in the next: its row waits (up to three
+		// times the list) instead of being built again.
+		if (rowCache.size > (state.searching ? 3 : 1) * state.records.length) {
 			let live = new Set(state.records.map(r => r.key));
 			for (let key of [...rowCache.keys()]) if (!live.has(key)) rowCache.delete(key);
 		}
@@ -3953,7 +3991,7 @@
 
 		decorateCiteCell(td("citations", "num", r.citations == null ? "–" : String(r.citations), r.citationSource ? t("citeSource", sourceLabel(r.citationSource)) : ""), r);
 		td("cpy", "num", fmt(ZotPoPMetrics.citesPerYear(r), 1));
-		td("rank", "num", r.popOriginal ? (r.popRank == null ? "–" : String(r.popRank)) : String(r.rank));
+		rankCells.set(tr, td("rank", "num", r.popOriginal ? (r.popRank == null ? "–" : String(r.popRank)) : String(r.rank)));
 		{ let ac = td("authorString", "", r.authorString); ac.dataset.marquee = "authors"; ac.dataset.tipKind = "authors"; }
 
 		let tt = td("title", "title", null); tt.dataset.tipKind = "title";
@@ -4443,7 +4481,14 @@
 	// What OpenAlex counts per year, the last count seen (to say what was added since), and the card that tells it.
 	const hasCite = () => typeof ZotPoPCite !== "undefined";
 	// One index behind the whole card: the total, yearly mean, bars and increment are the yearly series' own (OpenAlex); other indexes are listed apart.
-	const citeFigures = r => hasCite() && r ? ZotPoPCite.figures(r) : { source: r?.citationSource || null, total: r?.citations ?? null, perYear: ZotPoPMetrics.citesPerYear(r || {}), trend: null, others: [] };
+	const computeFigures = r => hasCite() && r ? ZotPoPCite.figures(r) : { source: r?.citationSource || null, total: r?.citations ?? null, perYear: ZotPoPMetrics.citesPerYear(r || {}), trend: null, others: [] };
+	// Inside one draw a row's figures are asked for by its signature, its cells and the metrics: worked out once there.
+	const citeFigures = r => {
+		if (!drawMemo || !r || typeof r !== "object") return computeFigures(r);
+		let held = drawMemo.figures.get(r);
+		if (!held) drawMemo.figures.set(r, held = computeFigures(r));
+		return held;
+	};
 	function citeTrend(r) { return citeFigures(r).trend; }
 	// A paper can be asked about when OpenAlex can find it: by DOI, its own id or PMID.
 	function citeFindable(r) {
@@ -5022,7 +5067,7 @@
 		tip(filed, paths.map(p => p.join(" › ")).join("\n"));
 		filed.hidden = !paths.length;
 		if (paths.length) filed.textContent = t("inCollections") + " " + filed.textContent;
-		if (r.pmid && !r.abstract) { ensureAbstracts([r]); }
+		if (r.pmid && !r.abstract && detailShown) { ensureAbstracts([r]); }
 		paintAbstract(r);
 
 		// Why the row has the status it has, in words: a failure's cause was only in a tooltip.
@@ -5280,7 +5325,8 @@
 	const styleCustom = () => typeof ZotPoPSignals !== "undefined" ? ZotPoPSignals.runtimeOf(Zotero) : null;
 	const canWatch = sc => Boolean(sc && typeof sc.watchAuthor === "function");
 	function watchedRows(sc = styleCustom()) { try { return sc ? sc.watchedAuthors() || [] : []; } catch (e) { return []; } }
-	const isFollowed = (id, sc) => watchedRows(sc).some(row => ZotPoPSignals.shortWork(row.id) === ZotPoPSignals.shortWork(id));
+	// Followed under any of the person's records (Style Custom keeps the others as alsoIds).
+	const isFollowed = (id, sc) => watchedRows(sc).some(row => [row.id, ...(Array.isArray(row.alsoIds) ? row.alsoIds : [])].some(one => ZotPoPSignals.shortWork(one) === ZotPoPSignals.shortWork(id)));
 	state.sigRefs = new Map();
 	state.sigOpen = null;
 	function libraryItemOfKey(key) {
@@ -5295,7 +5341,8 @@
 	async function followAuthor(person) {
 		let sc = styleCustom();
 		if (!canWatch(sc)) return false;
-		let payload = ZotPoPSignals.watchPayload(person, ZotPoPSignals.seenWorksOf(state.records, person.openalexId || person.id));
+		let ids = typeof ZotPoPSignals.authorIdsOf === "function" ? ZotPoPSignals.authorIdsOf(person) : person.openalexId || person.id;
+		let payload = ZotPoPSignals.watchPayload(person, ZotPoPSignals.seenWorksOf(state.records, ids));
 		if (!payload) return false;
 		try { await sc.watchAuthor(payload); setStatus(t("watchAuthorDone", payload.name), "", { transient: true }); return true; }
 		catch (e) { setStatus(t("watchAuthorFail", e.message || String(e)), "err"); return false; }
@@ -5350,7 +5397,7 @@
 			if (citing.length) groups.push({ id: "citedBy", keys: citing, label: t("sigCitedByMine", citing.length), tip: t("sigCitedByMineTip") });
 			let cited = refs?.status === "done" ? ZotPoPSignals.libraryCited(refs.ids, works).filter(k => libraryItemOfKey(k)) : [];
 			if (cited.length) groups.push({ id: "cites", keys: cited, label: t("sigCitesMine", cited.length), tip: t("sigCitesMineTip") });
-			if (!refs) loadReferences(r);
+			if (!refs && detailShown) loadReferences(r);
 			let row = groups.length || refs?.status === "loading" ? line() : null;
 			for (let g of groups) {
 				let open = state.sigOpen && state.sigOpen.key === r.key && state.sigOpen.id === g.id;
@@ -5433,9 +5480,12 @@
 		if (state.heldVersions.has(id)) { let v = state.heldVersions.get(id); return v === true || typeof v === "number"; }
 		if (!to.title || typeof ZotPoPImporter.findByTitle !== "function") return false;
 		state.heldVersions.set(id, null);
+		// An answer about the library this lookup started in: one that arrives after the target changed is dropped.
+		let generation = flagsGeneration, held = state.heldVersions;
+		let current = () => generation === flagsGeneration && held === state.heldVersions;
 		Promise.resolve(ZotPoPImporter.findByTitle(state.libraryID ?? currentTarget().libraryID, to.title, to.year, { doi: to.doi }))
-			.then(found => { state.heldVersions.set(id, typeof found === "number" ? found : Boolean(found)); if (found) again(); })
-			.catch(() => state.heldVersions.set(id, false));
+			.then(found => { if (!current()) return; held.set(id, typeof found === "number" ? found : Boolean(found)); if (found) again(); })
+			.catch(() => { if (current()) held.set(id, false); });
 		return false;
 	}
 	// Opens another row and its detail in this window; a filter that hides it is let go first.

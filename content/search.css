@@ -333,12 +333,20 @@ input[type=checkbox] { accent-color: var(--pill); }
 .note-help { flex: 0 0 auto; }
 .metrics-note-full { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 16px; }
 
-/* ---------------------------------------------------------------- results toolbar: one line at every width */
+/* ---------------------------------------------------------------- results toolbar: one line from 1440px, two below */
 .toolbar { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; min-height: 32px; margin-bottom: 8px; background: transparent; border: 0; white-space: nowrap; }
 .toolbar > * { flex: none; }
 .toolbar > .searchbox { flex: 1 1 144px; min-width: 128px; max-width: 256px; }
 .toolbar > .facet-chip { flex: 0 1 auto; }
 .toolbar > .spacer { flex: 1 1 0; min-width: 0; }
+/* At 1280 (and up to 1420) the line ran past the window's edge and View was cut off. Below 1440 the spacer becomes a line
+   break: finding (search, Filter, Rank by library) on the first row, the actions on what was found (Preview,
+   Deselect, the library filter, Export, View) on the second, kept at the right where they were. */
+@media (max-width: 1439px) {
+	.toolbar { flex-wrap: wrap; row-gap: 4px; }
+	.toolbar > .spacer { flex: 1 0 100%; height: 0; }
+	.toolbar > #preview-btn { margin-inline-start: auto; }
+}
 .searchbox { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 16px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--card); }
 .searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 .searchbox input { border: none; background: transparent; padding: 0; height: auto; width: 100%; min-width: 0; border-radius: 0; }

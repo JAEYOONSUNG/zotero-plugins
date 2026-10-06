@@ -201,3 +201,26 @@ test("a pin's seen set keeps its newest keys when it outgrows one run's cap (ite
 	await h.save({ source: "openalex", query, records: batch("b", 3000) });
 	assert.equal((await h.pins())[0].newCount, 0, "already-seen results are not new");
 });
+
+test("two journals of one name, picked by ISSN, are two searches: neither restores nor overwrites the other", async () => {
+	const society = { keywords: "biofilm", venue: "Microbiology", venues: [{ name: "Microbiology", issns: ["1350-0872"], openalexId: null }] };
+	const pleiades = { keywords: "biofilm", venue: "Microbiology", venues: [{ name: "Microbiology", issns: ["0026-2617"], openalexId: null }] };
+	assert.notEqual(History.signature("multi", society), History.signature("multi", pleiades));
+	assert.equal(History.signature("multi", { keywords: "biofilm", venue: "Microbiology" }), History.signature("multi", { keywords: "biofilm", venue: "Microbiology", venues: [{ name: "Microbiology", issns: [] }] }),
+		"a journal without identifiers keeps the key it always had");
+	const history = History.create({ io: History.memoryIO(new Map()), dir: "h" });
+	await history.save({ source: "multi", query: society, records: [{ key: "s1", title: "Society paper" }] });
+	await history.save({ source: "multi", query: pleiades, records: [{ key: "p1", title: "Pleiades paper" }] });
+	assert.equal((await history.list()).length, 2);
+	assert.equal((await history.get((await history.find("multi", society)).id)).records[0].key, "s1");
+});
+
+test("a pin made before the journal identifiers joined the key still answers its search", async () => {
+	const files = new Map();
+	const query = { keywords: "biofilm", venue: "Microbiology", venues: [{ name: "Microbiology", issns: ["1350-0872"] }] };
+	const legacyId = History.signature("multi", { keywords: "biofilm", venue: "Microbiology" });
+	files.set("h/pins.json", JSON.stringify({ pins: [{ id: legacyId, source: "multi", query, label: "old", seen: ["d:10.1/a"], pinnedAt: "2026-01-01T00:00:00Z" }] }));
+	const history = History.create({ io: History.memoryIO(files), dir: "h" });
+	assert.equal((await history.pinFor("multi", query))?.id, legacyId);
+	assert.equal(await history.pinFor("multi", { ...query, venues: [{ name: "Microbiology", issns: ["0026-2617"] }] }), null, "the other journal is not that pin");
+});

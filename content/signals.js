@@ -15,18 +15,26 @@ var ZotPoPSignals = (() => {
 		return sc && typeof sc.paperWorks === "function" && typeof sc.watchedAuthors === "function" ? sc : null;
 	}
 
-	/* Style Custom's stored works as { key, openalex, doi, checkedAt, complete, refs:Set }, one per library item it has looked up. */
+	/* Style Custom's stored works as { key, openalex, doi, checkedAt, complete, refs:Set }, one per library item it has looked up.
+	   Built once per state of the store: the detail pane asks on every draw, and building it turns every held
+	   paper's reference list (1,145 papers x ~50 ids) into a Set. Style Custom replaces an entry when it
+	   refetches one, so the same entries in the same order mean the same index. */
+	let indexed = null; // { store, entries: [work objects in order], keys, out }
 	function libraryWorks(sc) {
 		let out = [];
 		if (!sc) return out;
 		let store = {};
 		try { store = sc.paperWorks() || {}; } catch (e) { return out; }
+		let keys = Object.keys(store);
+		if (indexed && indexed.store === store && indexed.entries.length === keys.length
+			&& keys.every((key, i) => indexed.keys[i] === key && indexed.entries[i] === store[key])) return indexed.out;
 		for (let [key, work] of Object.entries(store)) {
 			if (!work || work.missing) continue;
 			let list = Array.isArray(work.references) ? work.references : [];
 			// Style Custom keeps at most 500 references per paper: a list that long may have been cut.
 			out.push({ key, openalex: shortWork(work.openalex), doi: String(work.doi || ""), checkedAt: String(work.checkedAt || ""), complete: list.length < REFERENCE_CAP, refs: new Set(list.map(shortWork).filter(Boolean)) });
 		}
+		indexed = { store, keys, entries: keys.map(key => store[key]), out };
 		return out;
 	}
 
@@ -78,22 +86,34 @@ var ZotPoPSignals = (() => {
 	function watchPayload(person, seenWorkIds) {
 		let id = shortAuthor(person?.openalexId || person?.id);
 		if (!/^A\d+$/.test(id)) return null;
-		return { id, name: String(person.name || id), institution: String(person.institution || person.affiliation || ""),
+		let payload = { id, name: String(person.name || id), institution: String(person.institution || person.affiliation || ""),
 			seen: [...new Set((seenWorkIds || []).map(shortWork).filter(w => /^W\d+$/.test(w)))] };
+		// One person on several OpenAlex records (one ORCID, two ids): Style Custom follows them all as one row.
+		let also = [...new Set([...(Array.isArray(person.alsoIds) ? person.alsoIds : []), ...(Array.isArray(person.ids) ? person.ids : [])]
+			.map(shortAuthor).filter(a => /^A\d+$/.test(a) && a !== id))];
+		if (also.length) payload.alsoIds = also;
+		return payload;
+	}
+
+	/* Every OpenAlex id a person is known by: the main one, then the other records. */
+	function authorIdsOf(person) {
+		return [...new Set([person?.openalexId || person?.id, ...(Array.isArray(person?.alsoIds) ? person.alsoIds : []), ...(Array.isArray(person?.ids) ? person.ids : [])]
+			.map(shortAuthor).filter(a => /^A\d+$/.test(a)))];
 	}
 
 	/* The OpenAlex ids of records (in this window's results) that the author wrote. */
 	function seenWorksOf(records, authorId) {
-		let id = shortAuthor(authorId), out = [];
-		if (!id) return out;
+		// One id, or the list of a person's ids.
+		let ids = new Set((Array.isArray(authorId) ? authorId : [authorId]).map(shortAuthor).filter(Boolean)), out = [];
+		if (!ids.size) return out;
 		for (let r of records || []) {
-			let wrote = [...(r.people || []), ...(r.authors || [])].some(p => shortAuthor(p.openalexId) === id);
+			let wrote = [...(r.people || []), ...(r.authors || [])].some(p => ids.has(shortAuthor(p.openalexId)));
 			if (wrote && r.source === "openalex" && /^W\d+$/i.test(r.sourceId || "")) out.push(shortWork(r.sourceId));
 		}
 		return out;
 	}
 
-	return { shortWork, runtimeOf, libraryWorks, libraryCiting, libraryCited, followedIn, readingState, watchPayload, seenWorksOf };
+	return { shortWork, runtimeOf, libraryWorks, libraryCiting, libraryCited, followedIn, readingState, watchPayload, seenWorksOf, authorIdsOf };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPSignals;

@@ -48,6 +48,8 @@ test("rowSignature changes whenever a field buildRow reads changes", async () =>
 	ui.buildRow(spy);
 	ui.rowSignature(spy);
 	for (const k of ["key", "authors", "people"]) read.delete(k);
+	// The rank is rewritten on every draw of a kept row (perf-r16: "a row whose rank moves ... is kept").
+	read.delete("rank");
 	// Read only on hover or click, but part of what the row stands for (the source badge, the opened PDF).
 	for (const k of ["source", "sources"]) read.add(k);   // identity / covered by the people summary below
 	assert.ok(read.size > 15, "the spy saw the fields: " + [...read].join(","));

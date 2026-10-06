@@ -59,6 +59,16 @@ var ZotPoPHistory = (function () {
 					: part.split(/(\b(?:AND|OR|NOT|ANDNOT)\b)/).map(token => /^(AND|OR|NOT|ANDNOT)$/.test(token) ? token : token.toLowerCase()).join("")).join("")
 				: text.toLowerCase();
 		}
+		/* Journals picked from the list are named by their ISSNs and OpenAlex ids, not their names alone: the
+		   Society's and Pleiades' "Microbiology" are one name and two journals, and searched one after the other
+		   they shared one key, so the second restored the first one's papers and saving it overwrote them.
+		   A query without picked identifiers keeps the key it always had. */
+		if (query.engine !== "pop" && Array.isArray(query.venues)) {
+			let ids = [...new Set(query.venues.flatMap(v => v && typeof v === "object"
+				? [v.openalexId ? "oa:" + String(v.openalexId).trim().toUpperCase() : null, ...(Array.isArray(v.issns) ? v.issns.map(i => "issn:" + String(i).trim().toUpperCase()) : [])]
+				: []).filter(Boolean))].sort();
+			if (ids.length) out.venueIds = ids;
+		}
 		return out;
 	}
 	/* A yearly citation series kept without the time it was read (saved before that was recorded) was read no
@@ -246,8 +256,9 @@ var ZotPoPHistory = (function () {
 		}
 		async function pinFor(source, query) {
 			await writes;
-			let id = signature(source, query);
-			return (await loadPins()).find(p => p.id === id && p.source === source) || null;
+			let id = signature(source, query), normalized = JSON.stringify(normalizeQuery(query));
+			// A pin made before picked journals' identifiers joined the key keeps its old id: its own query says what it is.
+			return (await loadPins()).find(p => p.source === source && (p.id === id || (p.query && JSON.stringify(normalizeQuery(p.query)) === normalized))) || null;
 		}
 		async function pin(id, { filters = null, label = "" } = {}) {
 			let entry = await get(id);

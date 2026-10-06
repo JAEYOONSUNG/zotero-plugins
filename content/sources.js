@@ -65,11 +65,26 @@ var ZotPoPSources = (function () {
 		return [...new Set(normalizedText(value).split(/\s+/).filter(w => w.length > 2 && !KEYWORD_STOPWORDS.has(w)))];
 	}
 
+	/* Every streamed page re-checks every record found so far, so one search normalised the same titles
+	   and abstracts dozens of times. Each field is normalised once per search (keyed by the text itself,
+	   which the copies a merge makes share) and the store is emptied when the search ends. */
+	const FIELD_TEXT = new Map(), FIELD_TEXT_MAX = 40000;
+	function normalizedField(value) {
+		if (!value) return "";
+		let held = FIELD_TEXT.get(value);
+		if (held !== undefined) return held;
+		held = normalizedText(value);
+		if (FIELD_TEXT.size >= FIELD_TEXT_MAX) FIELD_TEXT.clear();
+		FIELD_TEXT.set(value, held);
+		return held;
+	}
+
 	function matchesKeywords(terms, record) {
 		if (terms.length < 2) return true;
 		// Title and abstract only. Matching the journal name is what let a fracture-mechanics
 		// paper in on the word "engineering", and it is a weak signal for what a paper is about.
-		let hay = normalizedText([record.title, record.abstract].filter(Boolean).join(" "));
+		// Read field by field: a term has no space in it, so it can never span the two.
+		let hay = [normalizedField(record.title), normalizedField(record.abstract)].filter(Boolean).join(" ");
 		if (!hay) return true;
 		// One distinctive term is enough: this removes provider noise without second-guessing
 		// which of the user's words the relevant paper happens to use.
@@ -350,6 +365,15 @@ var ZotPoPSources = (function () {
 		return rec;
 	}
 
+	/* Retry-After is seconds or an HTTP date (RFC 9110). A date was read as NaN and the retry came 1.5 s later,
+	   asking a server that had said when to come back. Milliseconds to wait, 0 when it says nothing usable. */
+	function retryAfterMs(value, now = Date.now()) {
+		if (value == null || value === "") return 0;
+		let text = String(value).trim();
+		if (/^\d+(?:\.\d+)?$/.test(text)) return Number(text) * 1000;
+		let at = Date.parse(text);
+		return Number.isFinite(at) ? Math.max(0, at - now) : 0;
+	}
 	async function withRetry(fn, { tries = 4, delay = 1500, retryOn = [429, 500, 502, 503, 504] } = {}, ctx = {}) {
 		let lastErr;
 		for (let i = 0; i < tries; i++) {
@@ -369,8 +393,7 @@ var ZotPoPSources = (function () {
 				if (isQuotaError(e) && /openalex\.org/i.test(String(e.url || ""))) ctx.openAlexSpent = true;
 				if (isQuotaError(e) || (!retryOn.includes(e.status) && !transientTransport) || i === tries - 1) throw e;
 				// A provider that says how long to wait knows better than a fixed backoff.
-				let after = Number(e.retryAfter ?? e.headers?.["retry-after"] ?? e.headers?.["Retry-After"]);
-				let asked = Number.isFinite(after) && after > 0 ? Math.min(after * 1000, 30000) : 0;
+				let asked = Math.min(retryAfterMs(e.retryAfter ?? e.headers?.["retry-after"] ?? e.headers?.["Retry-After"]), 30000);
 				await sleep(Math.max(delay * (i + 1), asked), ctx);
 			}
 		}
@@ -515,10 +538,24 @@ var ZotPoPSources = (function () {
 		return !/\b(AND|OR|NOT)\b|[()";]/i.test(String(value || "").trim());
 	}
 
+	/* A typed journal or author is resolved to OpenAlex ids before the search itself, each time at the search
+	   price ($0.001, ten filter lookups). The answer is kept for LOOKUP_TTL, so the same journal or author
+	   searched again, or the same search run twice, pays for the search alone. A failed lookup is not kept. */
+	const LOOKUP_TTL = 24 * 3600 * 1000, LOOKUP_MAX = 200;
+	const OPENALEX_LOOKUPS = new Map();
+	async function openAlexLookup(path, http, ctx, now = Date.now()) {
+		let held = OPENALEX_LOOKUPS.get(path);
+		if (held && now - held.at < LOOKUP_TTL) return held.data;
+		let data = await withRetry(() => http.getJSON("https://api.openalex.org/" + path + openAlexAuth(ctx)), {}, ctx);
+		OPENALEX_LOOKUPS.delete(path);
+		if (OPENALEX_LOOKUPS.size >= LOOKUP_MAX) OPENALEX_LOOKUPS.delete(OPENALEX_LOOKUPS.keys().next().value);
+		OPENALEX_LOOKUPS.set(path, { at: now, data });
+		return data;
+	}
+
 	async function openAlexAuthorFilter(name, http, ctx) {
-		let url = "https://api.openalex.org/authors?search=" + enc(name)
-			+ "&per-page=25&select=id,display_name,display_name_alternatives,works_count,last_known_institutions" + openAlexAuth(ctx);
-		let data = await withRetry(() => http.getJSON(url), {}, ctx);
+		let data = await openAlexLookup("authors?search=" + enc(name)
+			+ "&per-page=25&select=id,display_name,display_name_alternatives,works_count,last_known_institutions", http, ctx);
 		let ids = [], matched = [];
 		if ((data.meta?.count || 0) > 25) warn(ctx, "openalex", "Only the first 25 author profiles were checked; use an OpenAlex author ID or ORCID to disambiguate.");
 		for (let a of data.results || []) {
@@ -587,7 +624,7 @@ var ZotPoPSources = (function () {
 		}
 		else if (q.venue?.trim()) {
 			// Resolve the venue to an OpenAlex source id first
-			let s = await withRetry(() => http.getJSON("https://api.openalex.org/sources?search=" + enc(q.venue.trim()) + "&per-page=5" + openAlexAuth(ctx)), {}, ctx);
+			let s = await openAlexLookup("sources?search=" + enc(q.venue.trim()) + "&per-page=5", http, ctx);
 			let candidates = s.results || [];
 			let name = normalizedText(q.venue);
 			let exact = candidates.filter(x => [x.display_name, x.abbreviated_title, ...(x.alternate_titles || [])]
@@ -2635,9 +2672,13 @@ var ZotPoPSources = (function () {
 		// Native relevance scores have different scales. Fuse source ranks instead,
 		// counting each source once, with no citation-count tie breaker.
 		let score = r => Object.values(r.sourceRanks || {}).reduce((sum, rank) => sum + 1 / (60 + rank), 0);
+		// Worked out once per record, not twice per comparison: a comparator that read the title's identity
+		// spent 2 n log n of them on every sort of every streamed page.
+		let keys = new Map();
+		for (let r of records) if (!keys.has(r)) keys.set(r, { match: exact && Query.titleIdentity(r.titleMarkup || r.title) === exact ? 1 : 0, score: fused ? score(r) : 0 });
 		return records.sort((a, b) => {
-			let match = r => exact && Query.titleIdentity(r.titleMarkup || r.title) === exact ? 1 : 0;
-			return match(b) - match(a) || (fused ? score(b) - score(a) : 0);
+			let ka = keys.get(a), kb = keys.get(b);
+			return kb.match - ka.match || (fused ? kb.score - ka.score : 0);
 		});
 	}
 
@@ -2811,6 +2852,7 @@ var ZotPoPSources = (function () {
 	// source's displayed top N. Small searches overfetch threefold; large ones
 	// add at most 200 candidates per provider instead of imposing a 200-row cap.
 
+	const STREAM_GAP = 120;
 	const poolFor = max => Math.min(PAGE_WALK_LIMIT, Math.max(30, Math.min((max || 200) * 3, (max || 200) + 200)));
 
 	async function searchCombined(q, http, ctx, sources, preprintsOnly = false) {
@@ -2829,7 +2871,17 @@ var ZotPoPSources = (function () {
 			if (preprintsOnly) for (let r of records) r.itemType = "preprint";
 			return linkPreprintVersions(sortSearchResults(records, q, true).slice(0, q.maxResults || 200));
 		};
-		let publish = () => publishResults(snapshot(), q, ctx);
+		/* Each source reports every page, and each report merged and sorted the whole pool again (four sources,
+		   1,400 rows each, for a 1,200-row search). Pages that arrive within STREAM_GAP of the last snapshot
+		   wait for one snapshot of them all; the first is shown at once, and none is left behind at the end. */
+		let pending = null, lastAt = -Infinity;
+		let publishNow = () => { if (pending) { clearTimeout(pending); pending = null; } lastAt = Date.now(); publishResults(snapshot(), q, ctx); };
+		let publish = () => {
+			if (!ctx.onResults || pending) return;
+			let wait = STREAM_GAP - (Date.now() - lastAt);
+			if (wait <= 0 || typeof setTimeout !== "function") publishNow();
+			else pending = setTimeout(() => { pending = null; publishNow(); }, wait);
+		};
 		await Promise.allSettled(sources.map(async (source, index) => {
 			let sub = Object.assign({}, ctx, {
 				enrichCitations: false,
@@ -2861,6 +2913,8 @@ var ZotPoPSources = (function () {
 				ctx.onProgress?.(`${done}/${sources.length}`, done, sources.length);
 			}
 		}));
+		// Whatever waited is shown now, before the refill and the citation counts take their time.
+		if (pending) publishNow();
 		ctx.errors = errors;
 		throwIfCancelled(ctx);
 		if (!succeeded) throw Object.assign(new Error("All search sources failed: " + errors.join(" / ")), { errors });
@@ -2891,6 +2945,7 @@ var ZotPoPSources = (function () {
 			}
 			merged = matchingRecords(mergeRecords(lists), q);
 		}
+		if (pending) publishNow();
 		if (preprintsOnly) for (let r of merged) r.itemType = "preprint";
 		// Citation enrichment can change which records belong in the top N.
 		// For relevance/date it cannot, so enrich only the chosen results there.
@@ -2923,7 +2978,7 @@ var ZotPoPSources = (function () {
 		return mergeRecords([records]);
 	}
 
-	async function search(sourceKey, query, http, ctx = {}) {
+	async function runSearch(sourceKey, query, http, ctx = {}) {
 		if (query?.engine === "pop") return searchPoPExact(sourceKey, query, ctx);
 		if (query?.engine && query.engine !== "direct") throw new Error("Unknown search engine: " + query.engine);
 		let src = SOURCES[sourceKey];
@@ -2989,9 +3044,13 @@ var ZotPoPSources = (function () {
 		publishResults(recs, query, ctx, true);
 		return recs;
 	}
+	async function search(sourceKey, query, http, ctx = {}) {
+		try { return await runSearch(sourceKey, query, http, ctx); }
+		finally { FIELD_TEXT.clear(); }
+	}
 
 	return {
-		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, parseCountsByYear, seriesSeen, refreshOpenAlexWork, fetchPubMedAbstracts, parsePubMedAbstracts, fetchReferencedWorks, clearWorkCache: () => { WORK_CACHE.clear(); REF_CACHE.clear(); }, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
+		SOURCES, POP_SOURCES, search, normalizePoPExactRecords, scholarProfile, scholarAuthors, scholarCitedBy, parseScholarProfilePage, parseScholarAuthorsPage, parseScholarPage, scholarWall, filterRecords: matchingRecords, normalizeVenues, venueExpression, makeRecord, dedupe, mergeRecords, linkPreprintVersions, pubmedYear, searchableSurname, interleave, openAlexAbstract, openAlexAuthorFilter, openAlexAuth, isPlainAuthorQuery, isQuotaError, keywordTerms, matchesKeywords, proxify, needsProxy, viaProxy, proxyLandingURL, epmcQuery, normalizeDOI, parseName, resolveDOIByTitle, withRetry, retryAfterMs, enrichFromOpenAlex, enrichJournalMetrics, enrichInstitutions, parseCountsByYear, seriesSeen, refreshOpenAlexWork, fetchPubMedAbstracts, parsePubMedAbstracts, fetchReferencedWorks, clearWorkCache: () => { WORK_CACHE.clear(); REF_CACHE.clear(); OPENALEX_LOOKUPS.clear(); }, exportCaches, importCaches, checkCitations, journalStats, pdfCandidates,
 		titleSimilarity, parseScholarPage, normalizePoPRecords, pubmedTerm, gsQuery, stripTags, decodeEntities
 	};
 })();

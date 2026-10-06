@@ -240,3 +240,46 @@ test("translated abstract note: a child note headed with the language, only when
 		assert.equal(saved.length, 1);
 	}
 });
+
+test("watch payload: one person on several OpenAlex records keeps the other ids (alsoIds), so Style Custom follows them as one", () => {
+	const payload = Signals.watchPayload({ openalexId: "A5", alsoIds: ["https://openalex.org/a7", "A5", "junk"], ids: ["A9", "A7"], name: "Ana" }, []);
+	assert.deepEqual(payload.alsoIds, ["A7", "A9"], "short, upper-case, without the main id, junk or repeats");
+	assert.equal("alsoIds" in Signals.watchPayload({ openalexId: "A5", name: "Ana" }, []), false, "a single record sends no empty list");
+	// The works already listed under any of the person's records count as seen.
+	const recs = [{ source: "openalex", sourceId: "W1", people: [{ openalexId: "A5" }] }, { source: "openalex", sourceId: "W2", people: [{ openalexId: "A7" }] }];
+	assert.deepEqual(Signals.seenWorksOf(recs, ["A5", "A7"]), ["W1", "W2"]);
+});
+
+test("following from a profile card hands Style Custom every OpenAlex id the card holds", async () => {
+	const watched = [];
+	const ui = uiHarness({ realRows: true, zotero: { StyleCustom: { paperWorks: () => ({}), watchedAuthors: () => watched, watchAuthor: async p => { watched.push(p); return p; } } } });
+	ui.state.records = [{ key: "a", source: "openalex", sourceId: "W2", people: [{ openalexId: "A7" }] }];
+	assert.equal(await ui.followAuthor({ openalexId: "A5", alsoIds: ["A7"], name: "Ana" }), true);
+	assert.deepEqual(watched[0].alsoIds, ["A7"]);
+	assert.deepEqual(watched[0].seen, ["W2"], "a work listed under the other record is already seen");
+});
+
+test("a person followed under another of their OpenAlex records shows as followed", () => {
+	const ui = uiHarness({ realRows: true, zotero: { StyleCustom: { paperWorks: () => ({}), watchedAuthors: () => [{ id: "A5", alsoIds: ["A7"], name: "Ana" }], watchAuthor: async p => p } } });
+	ui.state.records = [paper("p", { source: "openalex", sourceId: "W1", people: [{ name: "Ana", openalexId: "A7", position: "first" }] })];
+	ui.state.detailKey = "p";
+	ui.renderSignals(ui.state.records[0]);
+	const pressed = ui.get("d-signals").querySelectorAll("button").filter(b => b.getAttribute("aria-pressed") === "true");
+	assert.equal(pressed.length, 1);
+});
+
+test("the library's reference index is built once and rebuilt only when Style Custom's store changes", () => {
+	const store = Object.fromEntries(Array.from({ length: 1200 }, (_, k) => ["1:K" + k, { openalex: "W" + k, references: Array.from({ length: 50 }, (_, j) => "W" + (k + j)) }]));
+	const sc = { paperWorks: () => store };
+	const first = Signals.libraryWorks(sc);
+	assert.equal(first.length, 1200);
+	assert.ok(Signals.libraryWorks(sc) === first, "an unchanged store answers from the index already built");
+	store["1:K5"] = { openalex: "W5", references: ["W9999"] };
+	const second = Signals.libraryWorks(sc);
+	assert.ok(second !== first, "a replaced entry rebuilds");
+	assert.deepEqual(Signals.libraryCiting("W9999", second), ["1:K5"]);
+	delete store["1:K6"];
+	assert.equal(Signals.libraryWorks(sc).length, 1199, "a removed entry rebuilds");
+	store["1:K7"] = { missing: true };
+	assert.equal(Signals.libraryWorks(sc).length, 1198);
+});
