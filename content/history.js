@@ -61,6 +61,16 @@ var ZotPoPHistory = (function () {
 		}
 		return out;
 	}
+	/* A yearly citation series kept without the time it was read (saved before that was recorded) was read no
+	   later than the search was saved: it is stamped with that, so the years since show as unknown, not zero.
+	   A series that carries its own time keeps it. */
+	function stampSeries(records, savedAt) {
+		let ms = Date.parse(savedAt || "");
+		if (!Number.isFinite(ms)) return;
+		let to = new Date(ms).getFullYear();
+		for (let r of records) if (r && Array.isArray(r.citesByYear) && r.citesByYear.length && !(r.citesByYearSeen && Number.isInteger(r.citesByYearSeen.to)))
+			r.citesByYearSeen = { at: ms, from: to - 9, to };
+	}
 	function signature(source, query) {
 		let text = JSON.stringify([String(source || ""), normalizeQuery(query)]);
 		return fnv(text) + fnv(text.split("").reverse().join(""));
@@ -164,6 +174,7 @@ var ZotPoPHistory = (function () {
 			if (!source || !Array.isArray(records) || !records.length && !profiles.length) return null;
 			let id = signature(source, query);
 			let savedAt = now().toISOString();
+			stampSeries(records, savedAt);
 			let keys = keysOf(records);
 			let body = JSON.stringify({ version: 1, id, source, query, savedAt, partial, keys, records });
 			if (body.length > maxBytes) return null;
@@ -207,6 +218,7 @@ var ZotPoPHistory = (function () {
 			try {
 				let parsed = JSON.parse(await io.readText(path(id + ".json")));
 				if (parsed?.version !== 1 || !Array.isArray(parsed.records)) return null;
+				stampSeries(parsed.records, parsed.savedAt);
 				return parsed;
 			}
 			catch (_) {

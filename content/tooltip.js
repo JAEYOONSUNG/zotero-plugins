@@ -150,7 +150,13 @@ var ZotPoPTip = (function () {
 			if (!found) { hide(); return; }
 			show(found, { cursor: null });
 		}
-		function key(e) { if (e.key === "Escape" && (shown || timer)) hide(); }
+		/* Escape takes down a card on screen and is used up by it: the same press used to close the card and stop
+		   the search behind it. A card still waiting to appear is cancelled without using the key. */
+		function key(e) {
+			if (e.key !== "Escape") return;
+			if (shown) { hide(); e.preventDefault?.(); e.stopPropagation?.(); }
+			else if (timer) hide();
+		}
 		/* A cell whose text overflows rolls sideways while the pointer rests on it (marquee.js moves its
 		   scrollLeft), and that is a scroll event too: the card closed the moment the title began to roll.
 		   Only a scroll that moves the anchor itself -- the table, the page -- closes it. */

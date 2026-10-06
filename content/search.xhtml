@@ -71,9 +71,9 @@
 			<label class="field narrow"><span data-i18n="maxResults"></span><input id="author-max-results" type="number" min="1" max="2000" value="1000"/></label>
 			<div class="author-actions"><button id="author-search-btn" type="submit" class="primary icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-search"/></svg><span data-i18n="findAuthorProfiles"></span></button><button id="author-name-btn" type="button" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-user"/></svg><span data-i18n="authorNamePapers"></span></button><button id="author-stop-btn" type="button" class="icon-text" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-stop"/></svg><span data-i18n="stop"></span></button><button id="author-history-btn" type="button" class="icon-text" aria-haspopup="menu" aria-expanded="false"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-history"/></svg><span data-i18n="history"></span></button></div>
 		</form>
-		<div class="author-helprow"><p id="author-help" class="author-help"></p><button id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" aria-label="?" data-i18n-title="metricsMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-help"/></svg></button></div>
+		<div class="author-helprow"><p id="author-help" class="author-help"></p><button id="author-help-toggle" type="button" class="ghost note-help" aria-expanded="false" aria-controls="author-help-more" data-i18n-aria="metricsMore" data-i18n-title="metricsMore"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-help"/></svg></button></div>
 		<p id="author-help-more" class="author-help author-help-more" hidden="hidden"></p>
-		<div id="author-profiles" class="author-profiles" aria-live="polite"></div>
+		<div id="author-profiles" class="author-profiles" role="region" data-i18n-aria="authorProfilesLabel"></div>
 	</section>
 	<form id="query-form" class="query glass" onsubmit="return false;">
 		<div class="field grow2 keep">
@@ -168,7 +168,7 @@
 			<p data-i18n="combinedSourcesHelp"></p>
 		</details>
 	</form>
-	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><span class="spacer"></span><button id="banner-action" type="button" class="primary" hidden="hidden"></button><button id="banner-close" type="button" class="banner-close">×</button></div>
+	<div id="banner" class="banner" hidden="hidden"><span id="banner-text"></span><span class="spacer"></span><button id="banner-action" type="button" class="primary" hidden="hidden"></button><button id="banner-close" type="button" class="banner-close" data-i18n-title="bannerClose" data-i18n-aria="bannerClose">×</button></div>
 
 	<div id="main">
 		<aside id="metrics" class="glass">
@@ -206,12 +206,12 @@
 				<span class="searchbox">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic muted"><use href="#ic-search"/></svg>
 					<input id="filter" type="search" data-i18n-ph="filterPh" data-i18n-title="filterTip"/>
-					<button id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" aria-label="clear" hidden="hidden">×</button>
+					<button id="filter-clear" type="button" class="filter-clear" data-i18n-title="filterClear" data-i18n-aria="filterClear" hidden="hidden">×</button>
 				</span>
 				<button id="filter-btn" type="button" class="icon-text filter-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="filter-pop" data-i18n-title="filterBtnTip" data-i18n-aria="filterBtn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-filter"/></svg><span data-i18n="filterBtn"></span><span id="filter-count" class="filter-count" hidden="hidden"></span></button>
 				<button id="related-btn" type="button" class="icon-text related-btn" aria-pressed="false" data-i18n-title="relButtonTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-library"/></svg><span id="related-label"></span></button>
-				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" aria-label="clear">×</button></span>
-				<span id="person-chip" class="facet-chip" hidden="hidden"><span id="person-text"></span><button id="person-clear" type="button" class="filter-clear" data-i18n-title="personClear" aria-label="clear">×</button></span>
+				<span id="facet-chip" class="facet-chip" hidden="hidden"><span id="facet-text"></span><button id="facet-clear" type="button" class="filter-clear" data-i18n-title="facetClear" data-i18n-aria="facetClear">×</button></span>
+				<span id="person-chip" class="facet-chip" hidden="hidden"><span id="person-text"></span><button id="person-clear" type="button" class="filter-clear" data-i18n-title="personClear" data-i18n-aria="personClear">×</button></span>
 				<span class="spacer"></span>
 				<button id="preview-btn" type="button" class="icon-text preview-action" data-i18n-title="previewTip" disabled="disabled"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-pdf"/></svg><span data-i18n="previewAction"></span></button>
 				<button id="select-none" type="button" data-i18n-title="selNoneTip" class="icon-text"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="ic"><use href="#ic-close"/></svg><span data-i18n="selNone"></span></button>
@@ -225,14 +225,14 @@
 				<button id="view-btn" type="button" class="menu-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-title="viewTip"><span data-i18n="viewMenu"></span></button>
 			</div>
 			<div id="filter-chips" class="filter-chips" role="list" data-i18n-aria="filterChipsLabel" hidden="hidden"></div>
-			<div class="table-wrap" id="table-wrap" tabindex="0">
-				<table id="results-table">
+			<div class="table-wrap" id="table-wrap" tabindex="0" role="group" data-i18n-aria="resultsLabel">
+				<table id="results-table" role="grid" aria-multiselectable="true" data-i18n-aria="resultsLabel">
 					<colgroup id="cols">
 						<col data-k="chk"/><col data-k="title"/><col data-k="authorString"/><col data-k="affiliation"/><col data-k="year"/><col data-k="venue"/><col data-k="citations"/><col data-k="cpy"/><col data-k="journalIF"/><col data-k="journalOA2y"/><col data-k="pdf"/><col data-k="inLibrary"/><col data-k="status"/><col data-k="rank"/><col data-k="country"/><col data-k="tier"/><col data-k="doi"/>
 					</colgroup>
 					<thead>
 						<tr id="results-head">
-							<th class="chk" data-k="chk"><input id="chk-all" type="checkbox" data-i18n-title="chkAllTip"/></th>
+							<th class="chk" data-k="chk"><input id="chk-all" type="checkbox" data-i18n-title="chkAllTip" data-i18n-aria="chkAllTip"/></th>
 							<th data-sort="title"><span data-i18n="thTitle"></span><span class="rz"></span></th>
 							<th data-sort="authorString"><span data-i18n="thAuthors"></span><span class="rz"></span></th>
 							<th data-sort="affiliation" data-i18n-title="thInstTip"><span data-i18n="thInst"></span><span class="rz"></span></th>
@@ -327,7 +327,8 @@
 		<button id="import-opts-toggle" type="button" class="ghost import-opts-toggle" aria-expanded="false" aria-controls="import-opts"></button>
 		<div id="statusbar">
 			<span id="status" role="status" aria-live="polite"></span>
-			<progress id="progress" max="100" value="0" hidden="hidden"></progress>
+			<span id="sr-alert" class="sr-only" role="alert" aria-live="assertive"></span>
+			<progress id="progress" max="100" value="0" hidden="hidden" data-i18n-aria="progressLabel"></progress>
 		</div>
 		<span id="selected-count"></span>
 		<button id="selected-only" type="button" aria-pressed="false" hidden="hidden"></button>

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import Authors from "../content/authors.js";
 import I18N from "../content/i18n.js";
-import { uiHarness } from "./helpers/search-ui-harness.mjs";
+import { uiHarness, mockElement } from "./helpers/search-ui-harness.mjs";
 
 // Valid ORCID iDs (ISO 7064 11,2 check digit) from a running number.
 function orcidOf(n) {
@@ -144,4 +144,26 @@ test("the paging strings exist in English and Korean", () => {
 	for (const k of ["authorNextPeople", "authorNextLoading", "authorNextTip", "authorNextLoaded"])
 		for (const lang of ["en", "ko"]) assert.ok(k in I18N.STRINGS[lang], `${lang}: ${k}`);
 	assert.match(I18N.STRINGS.en.authorNextLoaded(1, 16), /1 more person/);
+});
+
+test("the window, by keyboard: pressing load-more keeps focus on it while loading, then hands it to the first new person; redraws keep the focused control", async () => {
+	const { ui, urls } = await window();
+	const shown = ui.authorSessions.combined.profiles.length, n = urls.length;
+	const host = ui.get("author-profiles");
+	assert.equal(host.getAttribute("aria-live"), null, "the whole list is not a live region; the status line says what changed");
+	nextButton(ui).focus();
+	nextButton(ui).emit("click");
+	const loading = nextButton(ui);
+	assert.equal(loading.getAttribute("aria-disabled"), "true", "loading: marked, not disabled, so focus stays");
+	assert.equal(mockElement.active, loading, "focus stays on the button while the page loads");
+	for (let i = 0; i < 100 && urls.length < n + 3; i++) await new Promise(r => setTimeout(r, 2));
+	await new Promise(r => setTimeout(r, 10));
+	const first = ui.authorSessions.combined.profiles[shown];
+	assert.equal(mockElement.active?.getAttribute("data-fkey"), "load:" + first.id, "the keyboard lands on the first new person");
+	// a redraw (a follow, a summary) keeps whatever control had focus
+	const some = host.querySelectorAll("button.author-load")[1];
+	some.focus(); ui.renderAuthorProfiles();
+	assert.equal(mockElement.active.getAttribute("data-fkey"), some.getAttribute("data-fkey"));
+	assert.notEqual(mockElement.active, some, "a new node, found again by its key");
+	assert.ok(host.querySelector("article").getAttribute("aria-label"), "each card is named by the person");
 });

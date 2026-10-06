@@ -4,13 +4,32 @@
  * arrived since the previous look. Pure and environment-agnostic (Zotero window and Node).
  *
  * Years are [{ year, n }]. A count that OpenAlex leaves out (zero years) is zero from the paper's
- * publication year on, and unknown before it.
+ * publication year on, and unknown before it. A series carries when it was read and which years that
+ * answer covered ({ at, from, to }, from seriesSeen): a year after it was read, or before the years
+ * OpenAlex lists, is unknown ({ n: null, unknown: true }), never zero. A saved search reopened a year
+ * later says so instead of showing the year since as no citations at all.
  */
 var ZotPoPCite = (function () {
 	"use strict";
 
 	const WINDOW = 10;
 	const VISIT_GAP = 6 * 3600 * 1000;
+
+	/* When a yearly series was read and the years that answer covers: OpenAlex lists the last ten calendar
+	   years, the one it was read in still running. { at (ms), from, to } or null for an unusable time. */
+	function seriesSeen(at) {
+		let ms = Number(at);
+		if (!Number.isFinite(ms) || ms <= 0) return null;
+		let to = new Date(ms).getFullYear();
+		return { at: ms, from: to - WINDOW + 1, to };
+	}
+	// The coverage a record's series was stored with; a series with none was read now (a live answer).
+	function coverageOf(seen, now) {
+		let cy = now.getFullYear();
+		let to = seen && seen.to != null ? Number(seen.to) : NaN, from = seen && seen.from != null ? Number(seen.from) : NaN;
+		if (!Number.isInteger(to)) return { from: cy - WINDOW + 1, to: cy, at: null };
+		return { from: Number.isInteger(from) ? from : to - WINDOW + 1, to: Math.min(to, cy), at: Number.isFinite(Number(seen.at)) ? Number(seen.at) : null };
+	}
 
 	function yearMap(list, upTo) {
 		let map = new Map();
@@ -23,33 +42,41 @@ var ZotPoPCite = (function () {
 
 	/* The shape of one paper's citations: the last ten calendar years (the current one partial), the last
 	   two full years against each other, the peak, the yearly average. Null when there is no yearly data.
-	   input: { byYear, year (publication year), citations (total) }. */
+	   input: { byYear, year (publication year), citations (total), seen ({ at, from, to }) }. The last two
+	   full years are the two before the year the series was read, so an old series compares its own years. */
 	function trend(input, now = new Date()) {
 		let cy = now.getFullYear();
-		let map = yearMap(input && input.byYear, cy);
+		let cover = coverageOf(input && input.seen, now);
+		let map = yearMap(input && input.byYear, cover.to);
 		if (!map.size) return null;
 		let pub = Number.isInteger(input.year) ? input.year : null;
 		let first = Math.min(...map.keys());
 		let start = Math.max(cy - WINDOW + 1, pub != null ? Math.min(pub, first) : first);
 		start = Math.min(start, cy);
 		let years = [];
-		for (let y = start; y <= cy; y++) years.push({ year: y, n: map.get(y) ?? 0, partial: y === cy });
+		for (let y = start; y <= cy; y++) {
+			if (y > cover.to || (y < cover.from && !map.has(y))) years.push({ year: y, n: null, unknown: true, partial: false });
+			else years.push({ year: y, n: map.get(y) ?? 0, partial: y === cover.to });
+		}
 		let at = y => { let found = years.find(e => e.year === y); return found ? found.n : null; };
-		let last = at(cy - 1), prev = at(cy - 2);
+		let lastYear = cover.to - 1, prevYear = cover.to - 2;
+		let last = at(lastYear), prev = at(prevYear);
 		let yoy = last != null && prev != null && prev > 0 ? Math.round((last - prev) / prev * 100) : null;
 		let direction = last != null && prev != null ? (last > prev ? "up" : last < prev ? "down" : "flat") : null;
 		let peak = null;
 		// The peak is read over every year on record from publication on; only the chart is windowed.
-		for (let [y, n] of [...map].sort((a, b) => a[0] - b[0])) if ((pub == null || y >= pub) && n > 0 && (!peak || n > peak.n)) peak = { year: y, n, partial: y === cy };
+		for (let [y, n] of [...map].sort((a, b) => a[0] - b[0])) if ((pub == null || y >= pub) && n > 0 && (!peak || n > peak.n)) peak = { year: y, n, partial: y === cover.to };
 		let total = Number.isFinite(Number(input.citations)) ? Number(input.citations) : null;
 		return {
-			years, max: Math.max(1, ...years.map(e => e.n)),
-			current: { year: cy, n: at(cy) ?? 0 },
-			last: last == null ? null : { year: cy - 1, n: last },
-			prev: prev == null ? null : { year: cy - 2, n: prev },
+			years, max: Math.max(1, ...years.map(e => e.n || 0)),
+			current: { year: cy, n: cover.to < cy ? null : at(cy) ?? 0 },
+			last: last == null ? null : { year: lastYear, n: last },
+			prev: prev == null ? null : { year: prevYear, n: prev },
 			yoy, direction, peak,
-			recent: years.reduce((a, e) => a + e.n, 0),
-			perYear: total != null && pub != null ? total / Math.max(1, cy - pub) : null
+			recent: years.reduce((a, e) => a + (e.n || 0), 0),
+			perYear: total != null && pub != null ? total / Math.max(1, cy - pub) : null,
+			// The series was read in an earlier year: the years since are unknown, and the card says when it was read.
+			seen: cover.to < cy ? { at: cover.at, to: cover.to } : null
 		};
 	}
 
@@ -63,34 +90,42 @@ var ZotPoPCite = (function () {
 		for (let [key, value] of Object.entries(rec.citationsBy || {})) if (value != null && Number.isFinite(Number(value))) by[key] = Number(value);
 		let headline = rec.citationSource || rec.source;
 		if (rec.citations != null && Number.isFinite(Number(rec.citations)) && headline && by[headline] == null) by[headline] = Number(rec.citations);
-		let hasSeries = yearMap(rec.citesByYear, now.getFullYear()).size > 0;
+		let hasSeries = yearMap(rec.citesByYear, coverageOf(rec.citesByYearSeen, now).to).size > 0;
 		let source = hasSeries ? "openalex" : headline || null;
 		let total = source && by[source] != null ? by[source] : null;
 		let cy = now.getFullYear(), pub = Number.isInteger(rec.year) ? rec.year : null;
 		return {
 			source, total,
 			perYear: total != null && pub != null ? total / Math.max(1, cy - pub) : null,
-			trend: hasSeries ? trend({ byYear: rec.citesByYear, year: rec.year, citations: total }, now) : null,
+			trend: hasSeries ? trend({ byYear: rec.citesByYear, year: rec.year, citations: total, seen: rec.citesByYearSeen }, now) : null,
 			others: Object.entries(by).filter(([key]) => key !== source).sort((x, y) => y[1] - x[1]).map(([key, n]) => ({ source: key, n }))
 		};
 	}
 
 	/* The whole result set's citations per year: each paper's yearly counts added up, over the papers that
-	   have them. { years, papers, of } or null when none does. */
+	   have them. A year is added up only over the papers whose series covers it; a year none covers is
+	   unknown, and one only some cover is marked short ({ short: true }) and kept out of the change.
+	   { years, papers, of, yoy } or null when none does. */
 	function sumByYear(records, now = new Date()) {
-		let cy = now.getFullYear(), sum = new Map(), papers = 0;
+		let cy = now.getFullYear(), sum = new Map(), covered = new Map(), papers = 0;
 		for (let r of records || []) {
-			let map = yearMap(r && r.citesByYear, cy);
+			let cover = coverageOf(r && r.citesByYearSeen, now);
+			let map = yearMap(r && r.citesByYear, cover.to);
 			if (!map.size) continue;
 			papers++;
-			for (let [y, n] of map) if (y > cy - WINDOW) sum.set(y, (sum.get(y) || 0) + n);
+			for (let y = Math.max(cy - WINDOW + 1, cover.from); y <= cover.to; y++) { covered.set(y, (covered.get(y) || 0) + 1); sum.set(y, (sum.get(y) || 0) + (map.get(y) || 0)); }
 		}
 		if (!papers) return null;
 		let years = [];
-		for (let y = cy - WINDOW + 1; y <= cy; y++) years.push({ year: y, n: sum.get(y) || 0, partial: y === cy });
-		let at = y => years.find(e => e.year === y).n;
-		let yoy = at(cy - 2) > 0 ? Math.round((at(cy - 1) - at(cy - 2)) / at(cy - 2) * 100) : null;
-		return { years, max: Math.max(1, ...years.map(e => e.n)), papers, of: (records || []).length, yoy };
+		for (let y = cy - WINDOW + 1; y <= cy; y++) {
+			let c = covered.get(y) || 0;
+			if (!c) years.push({ year: y, n: null, unknown: true, partial: false });
+			else years.push({ year: y, n: sum.get(y) || 0, partial: y === cy, ...(c < papers ? { short: true } : {}) });
+		}
+		let at = y => years.find(e => e.year === y);
+		let a = at(cy - 1), b = at(cy - 2);
+		let yoy = a.n != null && b.n != null && !a.short && !b.short && b.n > 0 ? Math.round((a.n - b.n) / b.n * 100) : null;
+		return { years, max: Math.max(1, ...years.map(e => e.n || 0)), papers, of: (records || []).length, yoy };
 	}
 
 	/* Last count seen per paper: { c, at } now, { p, pAt } at the look before. A look within six hours of the
@@ -147,7 +182,7 @@ var ZotPoPCite = (function () {
 		return { load, observe, delta, flush, get: key => map.get(key) || null, get size() { return map.size; }, keys: () => [...map.keys()] };
 	}
 
-	return { trend, figures, sumByYear, createSnapshots, WINDOW, VISIT_GAP };
+	return { trend, figures, sumByYear, seriesSeen, createSnapshots, WINDOW, VISIT_GAP };
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = ZotPoPCite;

@@ -28,6 +28,7 @@
 	--chip: rgba(20, 22, 30, 0.06);
 	--row-hover: rgba(20, 22, 30, 0.04);
 	--row-sel: rgba(20, 22, 30, 0.07);
+	--row-focus: rgba(20, 22, 30, 0.15);
 	--row-alt: transparent;
 	/* the one dark ink: primary buttons, the pressed segment, checkbox fill; links and dots are this family */
 	--accent: #15171c;
@@ -82,6 +83,7 @@
 		--chip: rgba(255, 255, 255, 0.09);
 		--row-hover: rgba(255, 255, 255, 0.05);
 		--row-sel: rgba(255, 255, 255, 0.10);
+		--row-focus: rgba(255, 255, 255, 0.16);
 		--row-alt: transparent;
 		--accent: #ececf1;
 		--accent-ink: #ececf1;
@@ -129,9 +131,15 @@ input[type=text], input[type=number], input[type=search], select {
 input::placeholder { color: var(--muted); opacity: 1; text-overflow: ellipsis; }
 input { text-overflow: ellipsis; }
 input:hover, select:hover { border-color: var(--accent); }
-input:focus, select:focus, button:focus-visible, .sel-btn:focus-visible, summary:focus-visible {
+input:focus, select:focus {
 	outline: none; border-color: var(--accent);
 	box-shadow: 0 0 0 3px var(--ring);
+}
+/* The keyboard's place on a button, a disclosure or a focusable row is a solid 2px ring in the ink colour, 2px
+   off the control: it reads against the card, the canvas and a dark primary pill alike (the old 22% halo was
+   about 1.6:1 against white). A pointer press shows none. */
+button:focus-visible, .sel-btn:focus-visible, summary:focus-visible, [tabindex]:not(.table-wrap):not(.cite-pop):not([role="menuitem"]):not([role="menuitemradio"]):not([role="menuitemcheckbox"]):focus-visible, a:focus-visible {
+	outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none;
 }
 select { appearance: none; }
 /* Zotero's own sheets (loaded after this one, same specificity) give html buttons "margin: 0 -2px -1px; max-height: 25px",
@@ -374,6 +382,9 @@ input[type=checkbox] { accent-color: var(--pill); }
    keyboard position is the focused row, which darkens while the table has keyboard focus. */
 .table-wrap:focus-visible { outline: none; }
 .table-wrap:focus-visible #results-table tbody tr.focused td { background: var(--row-sel) linear-gradient(var(--chip), var(--chip)); }
+/* With the keyboard in the list the focused row is a clearly darker fill (twice the selection's), never a ring:
+   a ring on a row half under the header or the fade showed only its curved sides. */
+.table-wrap:focus-visible #results-table tbody tr.focused td { background: var(--row-focus); }
 #results-table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
 #results-table th, #results-table td {
 	padding: 0 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -624,6 +635,9 @@ summary::marker { content: ""; }
 .tr-bar.on { min-height: 3px; }
 .tr-col.partial .tr-bar { opacity: .18; }
 .tr-col.peak .tr-bar { background: var(--text); opacity: .7; }
+/* a year the saved series does not cover: an empty dashed slot, never a zero bar */
+.tr-col.unknown .tr-bar { height: 100% !important; background: transparent; border: 1px dashed var(--border-strong); border-bottom: 0; opacity: 1; }
+.spark-b.unknown { background: transparent; opacity: 1; }
 .tr-col.peak .tr-v { color: var(--text); font-weight: 600; }
 .tr-bars.compact { gap: 3px; }
 .tr-bars.compact .tr-wrap { height: 48px; }
@@ -694,6 +708,9 @@ label.cb { display: flex; align-items: center; gap: 8px; height: 32px; padding: 
 }
 .ctxmenu div { padding: 4px 12px; border-radius: var(--r-row); cursor: pointer; white-space: nowrap; }
 .ctxmenu div:hover { background: var(--row-sel); color: var(--text); }
+/* The item the keyboard is on in any in-page menu: the solid dark pill of the chosen segment, not a 7% grey. */
+.ctxmenu [role="menuitem"]:focus, .tbmenu .selopt:focus { outline: none; background: var(--seg-on); color: var(--seg-on-ink); }
+.histmenu .histopt:focus-visible, .histmenu .histclear:focus-visible { outline: none; background: var(--row-focus); color: var(--text); }
 .ctxmenu div.disabled { opacity: .38; pointer-events: none; }
 .ctxmenu hr, .tbmenu hr, .histmenu hr { border: none; border-top: 1px solid var(--border); margin: 4px; }
 .selmenu {
@@ -932,3 +949,38 @@ input[type=checkbox]:indeterminate { background-image: url("data:image/svg+xml,%
 #empty { flex-direction: column; }
 #empty .empty-filters { color: var(--muted); }
 #empty .empty-reset { pointer-events: auto; margin-top: 4px; }
+
+/* ---------------------------------------------------------------- keyboard shortcut list (? or View → Keyboard shortcuts) */
+.keys-help { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(20, 22, 30, 0.28); }
+.keys-card { width: 520px; max-width: 100%; max-height: calc(100vh - 32px); overflow-y: auto; padding: 16px 24px 16px; background: var(--menu-bg); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--r-card); box-shadow: var(--pop-shadow); }
+.keys-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.keys-title { margin: 0; font-size: 14px; line-height: 22px; font-weight: 600; }
+.keys-list { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; align-items: baseline; }
+.keys-list dt { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.keys-list dd { margin: 0; font-size: 12px; line-height: 18px; color: var(--text); }
+.keys-list kbd { display: inline-block; min-width: 20px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-tint); font: 500 11px/18px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; color: var(--text); }
+.keys-foot { margin: 12px 0 0; font-size: 11px; line-height: 16px; color: var(--muted); }
+/* text for screen readers only (the alert region) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------------------------------------------------------------- reduced motion, more contrast, forced colours */
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+}
+/* macOS "Increase contrast": the muted ink and the hairlines step up; the faint selection fills become visible. */
+@media (prefers-contrast: more) {
+	:root { --muted: #3f434b; --border: rgba(20, 22, 30, 0.28); --border-strong: rgba(20, 22, 30, 0.55); --row-sel: rgba(20, 22, 30, 0.14); --ring: rgba(20, 22, 30, 0.55); }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+	:root { --muted: #cfd1d8; --border: rgba(255, 255, 255, 0.28); --border-strong: rgba(255, 255, 255, 0.55); --row-sel: rgba(255, 255, 255, 0.18); --ring: rgba(255, 255, 255, 0.6); }
+}
+/* Windows High Contrast and other forced palettes drop backgrounds and shadows: focus, the focused and
+   selected rows, the chosen segment and the bars are drawn with system colours instead. */
+@media (forced-colors: active) {
+	input:focus, select:focus, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+	#results-table tbody tr.selected td { background: Highlight; color: HighlightText; forced-color-adjust: none; }
+	.table-wrap:focus-visible #results-table tbody tr.focused { outline: 2px solid CanvasText; }
+	.search-modes button[aria-pressed="true"], .lib-filter button[aria-pressed="true"], .tbmenu .selopt:focus, .ctxmenu [role="menuitem"]:focus { outline: 2px solid Highlight; }
+	.tr-bar.on, .spark-b.on { background: CanvasText; forced-color-adjust: none; }
+	.keys-help { background: Canvas; }
+}

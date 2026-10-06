@@ -299,9 +299,17 @@
 	// Timers by whichever global has them: the window in Zotero, none in the test sandbox.
 	const later = (fn, ms) => (typeof setTimeout === "function" ? setTimeout(fn, ms) : typeof window !== "undefined" && window.setTimeout ? window.setTimeout(fn, ms) : null);
 	const cancelLater = id => { if (id == null) return; if (typeof clearTimeout === "function") clearTimeout(id); else if (typeof window !== "undefined" && window.clearTimeout) window.clearTimeout(id); };
+	/* A failure is said at once to a screen reader (the alert region); the status line itself is polite.
+	   The region is emptied first so the same failure twice is said twice. */
+	function announce(text) {
+		let box = $("sr-alert"); if (!box) return;
+		box.textContent = "";
+		if (text) later(() => { box.textContent = String(text); }, 30);
+	}
 	function setStatus(msg, cls, options = {}) {
 		if (statusRevert != null) { cancelLater(statusRevert); statusRevert = null; }
 		$("status").textContent = msg;
+		if (cls === "err" && !options.transient) announce(msg);
 		// one line in the footer; the whole text is in the hover card when it is cut
 		tip($("status"), String(msg || "").length > 48 ? msg : "");
 		$("statusbar").classList.toggle("err", cls === "err");
@@ -323,6 +331,8 @@
 		tip($("banner-text"), options.tip || "");
 		// A banner that reports a failure wears the attention colour; one that offers a hint stays plain.
 		$("banner").classList.toggle("warn", Boolean(options.warn));
+		// The banner appears out of a hidden box, which assistive technology does not announce by itself.
+		if (options.warn) announce(text);
 		// A banner can carry one verb: what to do about what it says.
 		bannerAction = action && typeof action.run === "function" ? action : null;
 		let btn = $("banner-action");
@@ -422,14 +432,23 @@
 		$("author-name-btn").addEventListener("click", () => runAuthorAction("name-papers"));
 		$("author-stop-btn").addEventListener("click", stopOperation);
 		$("author-help-toggle")?.addEventListener("click", () => { state.authorHelpOpen = !state.authorHelpOpen; updateAuthorHint(); });
-		$("author-history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
+		$("author-history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(e.detail === 0); });
+		$("author-history-btn").addEventListener("keydown", e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if ($("histmenu").hidden) toggleHistoryMenu(true); else historyItems()[0]?.focus?.(); } });
 		wireVenueBox();
 		$("query-form").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
 		$("query-form").addEventListener("input", cancelCacheRestore);
 		$("query-form").addEventListener("change", cancelCacheRestore);
 		$("stop-btn").addEventListener("click", stopOperation);
 		$("clear-btn").addEventListener("click", clearAll);
-		$("history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(); });
+		// A press from the keyboard has no pointer (detail 0): the menu opens with the first search focused.
+		$("history-btn").addEventListener("click", e => { e.stopPropagation(); toggleHistoryMenu(e.detail === 0); });
+		$("history-btn").addEventListener("keydown", e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if ($("histmenu").hidden) toggleHistoryMenu(true); else historyItems()[0]?.focus?.(); } });
+		$("histmenu").addEventListener("keydown", onHistoryMenuKey);
+		// Tab past the last row (or back before the first) leaves the menu: it closes rather than float behind.
+		if (typeof document.addEventListener === "function") document.addEventListener("focusin", e => {
+			let menu = $("histmenu");
+			if (!menu.hidden && !menu.contains?.(e.target) && e.target !== $("history-btn") && e.target !== $("author-history-btn")) closeHistoryMenu();
+		});
 		$("banner-close").addEventListener("click", hideBanner);
 		$("banner-action")?.addEventListener("click", () => { if (bannerAction) bannerAction.run(); });
 		// A beat after the last key, not per key: with a thousand rows every
@@ -465,6 +484,7 @@
 			$(id).addEventListener("keydown", e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (openTbMenu?.btn === $(id)) openTbMenu.nodes[0]?.focus(); else open(true); } });
 		}
 		$("tbmenu").addEventListener("keydown", onToolbarMenuKey);
+		$("ctxmenu").addEventListener("keydown", onCtxMenuKey);
 		$("d-tr-run")?.addEventListener("click", runTranslate);
 		$("d-tr-copy")?.addEventListener("click", copyTranslation);
 		$("d-tr-orig")?.addEventListener("click", () => { state.trHideOrig = state.trHideOrig !== true; let r = detailRecord(); if (r) renderTranslate(r); });
@@ -547,6 +567,7 @@
 		let btn = selButton(sel);
 		btn?.setAttribute("aria-expanded", "false");
 		btn?.removeAttribute("aria-activedescendant");
+		btn?.removeAttribute("aria-controls");
 		openSel = null;
 	}
 
@@ -571,6 +592,9 @@
 		let menu = document.createElement("div");
 		menu.className = "selmenu";
 		menu.setAttribute("role", "listbox");
+		if (sel.id) { menu.id = sel.id + "-list"; btn.setAttribute("aria-controls", menu.id); }
+		let named = btn.getAttribute("aria-labelledby");
+		if (named) menu.setAttribute("aria-labelledby", named.split(" ")[0]);
 		let items = [];
 		for (let i = 0; i < sel.options.length; i++) {
 			let o = sel.options[i];
@@ -640,6 +664,14 @@
 		let label = document.createElement("span");
 		label.className = "sel-label";
 		btn.appendChild(label);
+		/* The field's own caption names the button ("Engine, Direct"), as it named the select it stands in for:
+		   <label for=…> or the caption span of a wrapping <label>. */
+		if (sel.id) {
+			btn.id = sel.id + "-btn"; label.id = sel.id + "-value";
+			let caption = null;
+			try { caption = document.querySelector(`label[for="${CSS.escape(sel.id)}"]`) || sel.closest?.("label")?.querySelector?.("span"); } catch (e) { caption = null; }
+			if (caption) { if (!caption.id) caption.id = sel.id + "-caption"; btn.setAttribute("aria-labelledby", caption.id + " " + label.id); }
+		}
 		let caret = document.createElement("span");
 		caret.className = "sel-caret";
 		btn.appendChild(caret);
@@ -913,8 +945,24 @@
 		if (state_.target) Zotero.launchURL(state_.target.url);
 		renderAuthorProfiles();
 	}
+	/* The cards are drawn again on every change (a summary opened, more people, a follow): the control that
+	   had the keyboard is found again by its data-fkey and keeps it, instead of focus falling to the page.
+	   After "more people" the keyboard goes to the first new person (authorView.focusNext). */
 	function renderAuthorProfiles() {
-		let host = $("author-profiles"), session = authorSessions[activeAuthorProvider]; host.textContent = "";
+		let host = $("author-profiles"), session = authorSessions[activeAuthorProvider];
+		let had = document.activeElement && host.contains?.(document.activeElement) ? document.activeElement.getAttribute?.("data-fkey") : null;
+		host.textContent = "";
+		try { drawAuthorProfiles(host, session); }
+		finally {
+			let want = authorView.focusNext || had;
+			if (want) {
+				let found = host.querySelector?.(`[data-fkey="${CSS.escape(want)}"]`);
+				if (found) { found.focus?.(); if (want === authorView.focusNext) authorView.focusNext = null; }
+				else if (had) host.querySelector?.('[data-fkey^="load:"]')?.focus?.();
+			}
+		}
+	}
+	function drawAuthorProfiles(host, session) {
 		let isChosen = profile => Boolean(session.profile && profile.id === session.profile.id && profile.name === session.profile.name);
 		// Profiles with no papers anywhere wait behind "more" while better matches exist.
 		let weak = session.profiles.filter(profile => profile.weak && !isChosen(profile));
@@ -922,6 +970,8 @@
 		for (let profile of session.profiles) {
 			if (folded && profile.weak && !isChosen(profile)) continue;
 			let card = document.createElement("article"); card.className = "author-profile";
+			// Read as the person's name, so "Load publications" inside it is heard with whose they are.
+			card.setAttribute("aria-label", profile.name || profile.id || t("authorNameUnverified"));
 			let chosen = isChosen(profile);
 			if (chosen) card.classList.add("selected");
 			let orcid = orcidIdOf(profile);
@@ -974,24 +1024,25 @@
 				info.appendChild(node);
 			}
 			if (orcid) {
-				let toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "ghost author-sum-toggle"; toggle.setAttribute("aria-expanded", String(summaryOpen));
+				let toggle = document.createElement("button"); toggle.type = "button"; toggle.className = "ghost author-sum-toggle"; toggle.setAttribute("aria-expanded", String(summaryOpen)); toggle.setAttribute("data-fkey", "sum:" + orcid);
 				toggle.appendChild(iconNode(summaryOpen ? "ic-chevron-up" : "ic-chevron-down")); let label = document.createElement("span"); label.textContent = t(summaryOpen ? "authorSummaryHide" : "authorSummary"); toggle.appendChild(label);
 				toggle.addEventListener("click", () => toggleOrcidSummary({ id: orcid })); info.appendChild(toggle);
 				if (summaryOpen) info.appendChild(renderOrcidSummary({ id: orcid }));
 			}
 			let actions = document.createElement("div"); actions.className = "author-profile-actions";
 			if (profile.id) { let load = document.createElement("button"); load.type = "button"; load.className = "author-load"; load.textContent = t("authorLoadWorks"); load.disabled = state.searching || state.importing;
+				load.setAttribute("data-fkey", "load:" + profile.id);
 				if (chosen) load.classList.add("primary");
 				load.addEventListener("click", () => runAuthorAction("publications", profile)); actions.appendChild(load); }
-			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile");
+			if (/^https:\/\//i.test(profile.url || "")) { let open = document.createElement("button"); open.type = "button"; open.textContent = t("authorOpenProfile"); open.setAttribute("data-fkey", "open:" + profile.id);
 				open.addEventListener("click", () => Zotero.launchURL(profile.url)); actions.appendChild(open); }
 			if (profile.openalexId) {
 				let w = watchButton({ openalexId: profile.openalexId, name: profile.name || profile.id, institution: profile.affiliation || profile.lastInstitution?.name || "" }, renderAuthorProfiles);
-				if (w) { w.classList.add("author-watch"); actions.appendChild(w); }
+				if (w) { w.classList.add("author-watch"); w.setAttribute("data-fkey", "watch:" + profile.openalexId); actions.appendChild(w); }
 			}
 			let li = linkedInState(profile);
 			if (li.target) {
-				let linkedin = document.createElement("button"); linkedin.type = "button"; linkedin.className = "author-linkedin";
+				let linkedin = document.createElement("button"); linkedin.type = "button"; linkedin.className = "author-linkedin"; linkedin.setAttribute("data-fkey", "li:" + profile.id);
 				linkedin.appendChild(iconNode("ic-linkedin")); let label = document.createElement("span"); label.textContent = t("authorLinkedIn"); linkedin.appendChild(label);
 				tip(linkedin, t(li.tipKey)); linkedin.addEventListener("click", () => openLinkedIn(profile, linkedin)); actions.appendChild(linkedin);
 			}
@@ -1001,7 +1052,7 @@
 			card.appendChild(info); card.appendChild(actions); host.appendChild(card);
 		}
 		if (weak.length && (folded || authorView.showAll)) {
-			let more = document.createElement("button"); more.type = "button"; more.className = "ghost author-more";
+			let more = document.createElement("button"); more.type = "button"; more.className = "ghost author-more"; more.setAttribute("data-fkey", "more");
 			more.textContent = folded ? t("authorMoreProfiles", weak.length) : t("authorFewerProfiles");
 			more.addEventListener("click", () => { authorView.showAll = !authorView.showAll; renderAuthorProfiles(); }); host.appendChild(more);
 		}
@@ -1009,11 +1060,13 @@
 		   this is pressed (OpenAlex is metered), and says how many each service still has. */
 		if (session.profiles.length && typeof ZotPoPAuthors !== "undefined" && ZotPoPAuthors.hasMorePeople?.(session.paging)) {
 			let next = document.createElement("button"); next.type = "button"; next.className = "author-more author-next";
-			next.setAttribute("data-opens", "network");
+			next.setAttribute("data-opens", "network"); next.setAttribute("data-fkey", "next");
 			let loading = Boolean(authorView.moreController);
 			next.textContent = loading ? t("authorNextLoading") : t("authorNextPeople", session.profiles.length, peopleTotals(session.paging));
 			tip(next, t("authorNextTip"));
-			next.disabled = loading || state.searching || state.importing;
+			// While the next page loads the button stays focusable (aria-disabled, not disabled), so the keyboard is not dropped.
+			if (loading) next.setAttribute("aria-disabled", "true");
+			next.disabled = !loading && (state.searching || state.importing);
 			next.addEventListener("click", () => loadMoreProfiles());
 			host.appendChild(next);
 		}
@@ -1036,6 +1089,9 @@
 			let out = await ZotPoPAuthors.moreProfiles(provider, input, session.profiles, session.paging, http, ctx);
 			if (!active()) return;
 			session.profiles = [...session.profiles, ...out.added]; session.paging = out.paging ? { ...out.paging, input } : null;
+			// The keyboard that asked for more goes to the first person it brought.
+			let keyboardAsked = document.activeElement?.getAttribute?.("data-fkey") === "next";
+			if (keyboardAsked && out.added[0]?.id) authorView.focusNext = "load:" + out.added[0].id;
 			// New cards are shown as they are: a weak one is not hidden behind "more" after the user asked for more.
 			if (out.added.some(c => c.weak)) authorView.showAll = true;
 			setStatus(t("authorNextLoaded", out.added.length, session.profiles.length));
@@ -1628,21 +1684,41 @@
 		if (pinned) setStatus(t("pinPinned"), "", { transient: true });
 	}
 
-	function closeHistoryMenu() {
+	// returnFocus: closed from the keyboard (Escape), so the keyboard goes back to the button that opened it.
+	function closeHistoryMenu(returnFocus = false) {
 		let menu = $("histmenu");
 		if (menu.hidden) return;
+		let inside = Boolean(document.activeElement && menu.contains?.(document.activeElement));
 		menu.hidden = true;
 		menu.textContent = "";
 		$("history-btn").setAttribute("aria-expanded", "false");
 		$("author-history-btn").setAttribute("aria-expanded", "false");
+		if (returnFocus || inside) $(searchSurface === "authors" ? "author-history-btn" : "history-btn")?.focus?.();
 	}
 
-	async function toggleHistoryMenu() {
-		if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
+	// focusFirst: opened from the keyboard (Enter, Space or an arrow on the button), so the first saved search takes the keyboard.
+	async function toggleHistoryMenu(focusFirst = false) {
+		if (!$("histmenu").hidden) { closeHistoryMenu(focusFirst); return; }
 		closeSelMenu();
 		closeToolbarMenu();
 		hideCtxMenu();
 		await openHistoryMenu();
+		if (focusFirst) historyItems()[0]?.focus?.();
+	}
+	// The rows of the history menu the arrows move between: saved and pinned searches and "forget all".
+	const historyItems = () => [...($("histmenu").querySelectorAll?.('[role="menuitem"]') || [])];
+	/* Up and Down move between the rows (over the headings and rules between them), Home and End go to
+	   the ends, Escape closes and hands the keyboard back to the button. Tab reaches a row's own actions. */
+	function onHistoryMenuKey(e) {
+		let items = historyItems();
+		if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeHistoryMenu(true); return; }
+		if (!items.length) return;
+		let row = e.target?.closest?.('[role="menuitem"]'), i = items.indexOf(row);
+		let go = n => { e.preventDefault(); e.stopPropagation(); items[(n + items.length) % items.length]?.focus?.(); };
+		if (e.key === "ArrowDown") go(i + 1);
+		else if (e.key === "ArrowUp") go(i < 0 ? items.length - 1 : i - 1);
+		else if (e.key === "Home") go(0);
+		else if (e.key === "End") go(items.length - 1);
 	}
 
 	// Whole calendar days between a saved time and now, so "yesterday" means the day before.
@@ -1698,8 +1774,7 @@
 		d.tabIndex = 0;
 		d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(p.id, { pin: p }); });
 		d.addEventListener("keydown", ev => {
-			if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); d.click(); }
-			else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); (ev.key === "ArrowDown" ? d.nextElementSibling : d.previousElementSibling)?.focus?.(); }
+			if (ev.target === d && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); d.click(); }
 		});
 		return d;
 	}
@@ -1765,8 +1840,7 @@
 			d.tabIndex = 0;
 			d.addEventListener("click", ev => { ev.stopPropagation(); closeHistoryMenu(); openHistoryEntry(e.id); });
 			d.addEventListener("keydown", ev => {
-				if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); d.click(); }
-				else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); (ev.key === "ArrowDown" ? d.nextElementSibling : d.previousElementSibling)?.focus?.(); }
+				if (ev.target === d && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); d.click(); }
 			});
 			menu.appendChild(d);
 		}
@@ -1777,6 +1851,8 @@
 			clear.className = "histclear";
 			clear.setAttribute("role", "menuitem");
 			clear.setAttribute("data-writes", "history");
+			clear.tabIndex = 0;
+			clear.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); clear.click(); } });
 			let clearLabel = document.createTextNode(t("historyClear"));
 			clear.appendChild(iconNode("ic-clear")); clear.appendChild(clearLabel);
 			// Every saved result goes at once and cannot come back, so the first press only asks.
@@ -1815,12 +1891,13 @@
 		let { btn } = openTbMenu, menu = $("tbmenu");
 		menu.hidden = true;
 		menu.textContent = "";
-		btn.setAttribute("aria-expanded", "false");
+		if (btn !== $("table-wrap")) btn.setAttribute("aria-expanded", "false");
 		openTbMenu = null;
 		if (returnFocus) btn.focus();
 	}
 	// items: { label, title, run, disabled, check, radio } or "-" for a rule; check makes it a checkable item.
-	function openToolbarMenu(btn, items, label, focusFirst = false) {
+	// anchor: where the menu hangs when that is not the button focus returns to (the sort menu from the table).
+	function openToolbarMenu(btn, items, label, focusFirst = false, anchor = null) {
 		if (openTbMenu?.btn === btn) { closeToolbarMenu(true); return; }
 		closeToolbarMenu();
 		closeSelMenu();
@@ -1849,13 +1926,15 @@
 			acts.push(act);
 		}
 		menu.hidden = false;
-		if (typeof btn.getBoundingClientRect === "function") {
-			let r = btn.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+		let at = anchor || btn;
+		if (typeof at.getBoundingClientRect === "function") {
+			let r = at.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
 			let below = window.innerHeight - r.bottom - 8;
 			menu.style.top = (h > below && r.top > below ? Math.max(6, r.top - h - 3) : r.bottom + 3) + "px";
 			menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - w - 6)) + "px";
 		}
-		btn.setAttribute("aria-expanded", "true");
+		// The table, when the sort menu opens from it, is where focus returns, not a menu button.
+		if (btn !== $("table-wrap")) btn.setAttribute("aria-expanded", "true");
 		openTbMenu = { btn, nodes, acts };
 		if (focusFirst) nodes[0]?.focus();
 	}
@@ -1898,6 +1977,9 @@
 			{ label: t("affLineToggle"), title: t("affLineTip"), check: state.affLine, run: () => { state.affLine = !state.affLine; saveLayout(); render(); } },
 			{ label: t("metricsToggle"), title: t("metricsTip"), check: !$("metrics").hidden, run: toggleMetrics },
 			{ label: t("detailToggle"), title: t("detailTip"), check: !$("detail").hidden, run: toggleDetail },
+			"-",
+			{ label: t("sortMenu"), title: t("sortMenuTip"), run: () => openSortMenu(false) },
+			{ label: t("keysMenu"), title: t("keysMenuTip"), run: () => openKeysHelp($("view-btn")) },
 			"-",
 			{ heading: "Language / 언어" },
 			{ label: "English", check: language === "en", radio: true, run: () => setLanguage("en") },
@@ -2132,6 +2214,34 @@
 		for (let th of document.querySelectorAll("#results-table th")) th.classList.remove("column-dragging", "column-drop-before", "column-drop-after");
 	}
 
+	// A column's sort: the same column again turns the order round; a new one starts from its natural end.
+	function sortByColumn(key) {
+		if (state.sortKey === key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+		else { state.sortKey = key; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "journalOA2y", "tier"].includes(key) ? "desc" : "asc"; }
+		render();
+	}
+	/* The headers are pressed with the mouse; from the keyboard the same sorts are a menu (S in the list, or
+	   View → Sort by), listing the columns on screen with the current one checked and its direction said. */
+	function sortMenuItems() {
+		let items = [];
+		for (let th of document.querySelectorAll("#results-table th[data-sort]")) {
+			let key = th.dataset.sort;
+			// A column the view hides has no width; one the window has not laid out yet (no offsetWidth) counts as shown.
+			if (typeof th.offsetWidth === "number" && th.offsetWidth === 0) continue;
+			let name = String(th.querySelector?.("span")?.textContent || th.textContent || key).trim() || key;
+			let on = state.sortKey === key;
+			items.push({ label: on ? name + "  " + (state.sortDir === "asc" ? "\u2191" : "\u2193") : name, title: on ? t(state.sortDir === "asc" ? "sortNowAsc" : "sortNowDesc") : "", check: on, radio: true, run: () => sortByColumn(key) });
+		}
+		return items;
+	}
+	function openSortMenu(fromTable = false) {
+		let items = sortMenuItems();
+		if (!items.length) return;
+		let sorted = document.querySelector("#results-table th.sorted-asc, #results-table th.sorted-desc");
+		if (fromTable) openToolbarMenu($("table-wrap"), items, t("sortMenu"), true, sorted || $("results-head") || null);
+		else openToolbarMenu($("view-btn"), items, t("sortMenu"), true);
+	}
+
 	function setupColumnOrder() {
 		let headers = [...document.querySelectorAll("#results-table th")];
 		for (let th of headers) {
@@ -2147,9 +2257,7 @@
 			th.addEventListener("click", e => {
 				if (e.target.closest?.(".rz")) return;
 				if (columnDrag || Date.now() < suppressColumnClickUntil) { e.preventDefault(); e.stopPropagation(); return; }
-				if (state.sortKey === key) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-				else { state.sortKey = key; state.sortDir = ["citations", "cpy", "year", "inLibrary", "pdf", "journalIF", "journalOA2y", "tier"].includes(key) ? "desc" : "asc"; }
-				render();
+				sortByColumn(key);
 			});
 			th.addEventListener("dragstart", e => {
 				if (columnDragBlocked || e.target.closest?.(".rz") || !e.dataTransfer) { e.preventDefault(); return; }
@@ -3632,6 +3740,7 @@
 		let tbody = $("results-body");
 		ensureRowDelegation(tbody);
 		syncRows(tbody, list);
+		syncActiveRow();
 		// Rows are two lines tall when any of them carries an affiliation line, one line otherwise,
 		// so the rhythm of the list is the same from the first row to the last.
 		if (list.some(r => state.affLine && affLineNeeded(affLineParts(r), affiliationOf(r)))) $("results-table").setAttribute("data-aff", ""); else $("results-table").removeAttribute("data-aff");
@@ -3681,9 +3790,19 @@
 			r.related && [r.related.score, r.related.c1, r.related.c2, r.related.c3, r.related.c3w, r.related.held, r.related.unrankable, r.related.lowConf]]);
 	}
 	// The parts of a row that follow the selection, not the paper: set on every draw, reused row or not.
+	/* The row's id, which the table points at as the active row (aria-activedescendant), so a screen reader
+	   says the paper the arrows reached; any character a key may hold is spelled out, so two keys never share one. */
+	const rowDomId = key => "row-" + String(key).replace(/[^\w-]/g, c => "_" + c.charCodeAt(0).toString(16));
+	// Where the keyboard is in the list, for assistive technology: the focused row, read as the active one.
+	function syncActiveRow() {
+		let wrap = $("table-wrap"); if (!wrap) return;
+		let on = state.focusKey != null && state.visible.some(r => r.key === state.focusKey);
+		if (on) wrap.setAttribute("aria-activedescendant", rowDomId(state.focusKey)); else wrap.removeAttribute("aria-activedescendant");
+	}
 	function paintRowState(tr, r, pick) {
 		tr.classList.toggle("in-library", Boolean(r.inLibrary));
 		tr.classList.toggle("selected", state.selected.has(r.key));
+		tr.setAttribute("aria-selected", String(state.selected.has(r.key)));
 		tr.classList.toggle("not-person", Boolean(pick && !inPick(pick, r)));
 		tr.classList.toggle("focused", state.focusKey === r.key);
 		let cb = tr.querySelector("input[type=checkbox]");
@@ -3791,6 +3910,8 @@
 	function buildRow(r) {
 		let tr = document.createElement("tr");
 		tr.dataset.key = r.key;
+		tr.id = rowDomId(r.key);
+		tr.setAttribute("aria-selected", String(state.selected.has(r.key)));
 		if (r.inLibrary) tr.classList.add("in-library");
 		if (state.selected.has(r.key)) tr.classList.add("selected");
 		{ let pick = personPick(); if (pick && !inPick(pick, r)) tr.classList.add("not-person"); }
@@ -3821,6 +3942,7 @@
 		let c0 = td("chk", "chk");
 		let cb = document.createElement("input");
 		cb.type = "checkbox"; cb.tabIndex = -1;
+		cb.setAttribute("aria-label", t("rowTick"));
 		cb.checked = state.selected.has(r.key);
 		c0.appendChild(cb);
 
@@ -3890,10 +4012,12 @@
 		for (let tr of document.querySelectorAll("#results-body tr")) {
 			let key = tr.dataset.key;
 			tr.classList.toggle("selected", state.selected.has(key));
+			tr.setAttribute?.("aria-selected", String(state.selected.has(key)));
 			tr.classList.toggle("focused", state.focusKey === key);
 			let cb = tr.querySelector("input[type=checkbox]");
 			if (cb) cb.checked = state.selected.has(key);
 		}
+		syncActiveRow();
 		updateCounts();
 	}
 
@@ -4368,16 +4492,18 @@
 	function citeBars(years, max, compact) {
 		let box = fel("div", "tr-bars" + (compact ? " compact" : ""));
 		box.setAttribute("role", "img");
-		box.setAttribute("aria-label", years.map(y => t("citeYearLine", y.year, y.n)).join(", "));
-		let top = Math.max(0, ...years.map(y => y.n));
+		// A year the series never covered (read before it began, or after it was saved) is unknown: a "?", not a zero bar.
+		let line = y => y.n == null ? t("citeYearUnknown", y.year) : t("citeYearLine", y.year, y.n) + (y.short ? " (" + t("citeYearShort") + ")" : "");
+		box.setAttribute("aria-label", years.map(line).join(", "));
+		let top = Math.max(0, ...years.map(y => y.n || 0));
 		for (let y of years) {
-			let col = fel("div", "tr-col" + (y.partial ? " partial" : "") + (top > 0 && y.n === top ? " peak" : ""));
-			if (!compact) col.appendChild(fel("span", "tr-v", citeShort(y.n)));
+			let col = fel("div", "tr-col" + (y.n == null ? " unknown" : "") + (y.partial ? " partial" : "") + (top > 0 && y.n === top ? " peak" : ""));
+			if (!compact) col.appendChild(fel("span", "tr-v", y.n == null ? "?" : citeShort(y.n)));
 			let wrap = fel("div", "tr-wrap"), bar = fel("span", "tr-bar" + (y.n > 0 ? " on" : ""));
-			bar.style.height = Math.round(y.n / Math.max(1, max) * 100) + "%";
+			bar.style.height = Math.round((y.n || 0) / Math.max(1, max) * 100) + "%";
 			wrap.appendChild(bar); col.appendChild(wrap);
 			if (!compact) col.appendChild(fel("span", "tr-y", String(y.year)));
-			else tip(col, t("citeYearLine", y.year, y.n) + (y.partial ? " (" + t("citeInProgress") + ")" : ""));
+			else tip(col, line(y) + (y.partial ? " (" + t("citeInProgress") + ")" : ""));
 			box.appendChild(col);
 		}
 		return box;
@@ -4386,8 +4512,8 @@
 		let box = fel("span", "spark");
 		box.setAttribute("aria-hidden", "true");
 		for (let y of tr.years) {
-			let b = fel("span", "spark-b" + (y.partial ? " partial" : "") + (y.n > 0 ? " on" : ""));
-			b.style.height = Math.round(y.n / Math.max(1, tr.max) * 100) + "%";
+			let b = fel("span", "spark-b" + (y.n == null ? " unknown" : "") + (y.partial ? " partial" : "") + (y.n > 0 ? " on" : ""));
+			b.style.height = Math.round((y.n || 0) / Math.max(1, tr.max) * 100) + "%";
 			box.appendChild(b);
 		}
 		return box;
@@ -4454,7 +4580,10 @@
 			let sect = fel("div", "cite-sect");
 			sect.appendChild(fel("div", "cite-h", t("citeSectionYears")));
 			sect.appendChild(citeBars(tr.years, tr.max, false));
-			if (tr.years.some(y => y.partial)) sect.appendChild(fel("div", "cite-foot", t("citeYearPartial", tr.current.year)));
+			let running = tr.years.find(y => y.partial);
+			if (running && !tr.seen) sect.appendChild(fel("div", "cite-foot", t("citeYearPartial", running.year)));
+			// A series read in an earlier year (a saved search reopened): when, and that the years since are not counted here.
+			if (tr.seen) sect.appendChild(fel("div", "cite-foot", t("citeSeriesAsOf", tr.seen.at ? citeDate(tr.seen.at) : String(tr.seen.to), tr.seen.to)));
 			box.appendChild(sect);
 		}
 		// What the bars cannot say: the change against the year before, and what was added since the last look.
@@ -4536,8 +4665,8 @@
 		noteOpenAlexSpent(cctx);
 		let st;
 		if (res.ok) {
-			let changed = res.citations !== r.citations || (res.citesByYear && JSON.stringify(res.citesByYear) !== JSON.stringify(r.citesByYear));
-			if (res.citesByYear) r.citesByYear = res.citesByYear;
+			let changed = res.citations !== r.citations || (res.citesByYear && (JSON.stringify(res.citesByYear) !== JSON.stringify(r.citesByYear) || res.citesByYearSeen?.to !== r.citesByYearSeen?.to));
+			if (res.citesByYear) { r.citesByYear = res.citesByYear; r.citesByYearSeen = res.citesByYearSeen || null; }
 			(r.citationsBy ||= {}).openalex = res.citations;
 			if (r.citationSource === "openalex" || r.citations == null || res.citations > r.citations) { r.citations = res.citations; r.citationSource = "openalex"; }
 			if (snapshots && key) { snapshots.observe(key, res.citations, Number.isFinite(res.at) ? res.at : undefined); snapshots.flush().catch(e => log("saving citation snapshots failed: " + e.message)); }
@@ -4558,6 +4687,7 @@
 		if (!sum) return;
 		box.appendChild(fel("div", "tr-title", t("metricsTrend")));
 		box.appendChild(citeBars(sum.years, sum.max, true));
+		if (sum.years.some(y => y.n == null || y.short)) box.appendChild(fel("div", "tr-note", t("metricsTrendGaps")));
 		let ends = fel("div", "yr-ends");
 		ends.appendChild(fel("span", "", String(sum.years[0].year))); ends.appendChild(fel("span", "", String(sum.years[sum.years.length - 1].year)));
 		box.appendChild(ends);
@@ -5376,14 +5506,21 @@
 	}
 
 	// ------------------------------------------------------------ context menu
+	/* A row's menu: the right button, or from the keyboard the context-menu key or Shift+F10 on the focused
+	   row. It is a menu to assistive technology, its items are reached with the arrows and run with Enter or
+	   Space, and Escape or Tab closes it and gives the keyboard back to the results. */
 	function showCtxMenu(x, y, r) {
 		let menu = $("ctxmenu");
 		menu.textContent = "";
+		menu.setAttribute("role", "menu");
+		menu.setAttribute("aria-label", t("ctxMenuLabel", r.title || ""));
 		let add = (label, fn, disabled) => {
 			let d = document.createElement("div");
 			d.textContent = label;
-			if (disabled) d.className = "disabled";
-			else d.addEventListener("click", () => { hideCtxMenu(); fn(); });
+			d.setAttribute("role", "menuitem");
+			d.tabIndex = -1;
+			if (disabled) { d.className = "disabled"; d.setAttribute("aria-disabled", "true"); }
+			else d.addEventListener("click", () => { hideCtxMenu(true); fn(); });
 			menu.appendChild(d);
 		};
 		add(state.selected.has(r.key) ? t("ctxDeselect") : t("ctxSelect"), () => toggleSelect(r, !state.selected.has(r.key)));
@@ -5405,18 +5542,101 @@
 		let w = menu.offsetWidth, h = menu.offsetHeight;
 		menu.style.left = Math.min(x, window.innerWidth - w - 6) + "px";
 		menu.style.top = Math.min(y, window.innerHeight - h - 6) + "px";
+		// The first item takes focus either way, so the arrows work after a right-click too.
+		ctxItems()[0]?.focus?.();
 	}
-	function hideCtxMenu() { $("ctxmenu").hidden = true; }
+	const ctxItems = () => [...($("ctxmenu").querySelectorAll?.('[role="menuitem"]') || [])].filter(d => d.getAttribute("aria-disabled") !== "true");
+	function onCtxMenuKey(e) {
+		let items = ctxItems(), i = items.indexOf(document.activeElement);
+		let go = n => { e.preventDefault(); e.stopPropagation(); items[(n + items.length) % items.length]?.focus?.(); };
+		if (e.key === "ArrowDown") go(i + 1);
+		else if (e.key === "ArrowUp") go(i < 0 ? items.length - 1 : i - 1);
+		else if (e.key === "Home") go(0);
+		else if (e.key === "End") go(items.length - 1);
+		else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); items[i]?.click?.(); }
+		else if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); hideCtxMenu(true); }
+	}
+	// returnFocus: the keyboard goes back to the results table, where the row is still the focused one.
+	function hideCtxMenu(returnFocus = false) {
+		let menu = $("ctxmenu");
+		if (menu.hidden) return;
+		let inside = Boolean(document.activeElement && menu.contains?.(document.activeElement));
+		menu.hidden = true;
+		if (returnFocus || inside) $("table-wrap")?.focus?.({ preventScroll: true });
+	}
+	// The context-menu key or Shift+F10 on the focused row opens its menu beside the row.
+	function openRowMenuFromKeyboard() {
+		let r = state.visible.find(row => row.key === state.focusKey);
+		if (!r) return false;
+		let tr = document.querySelector(`#results-body tr[data-key="${CSS.escape(r.key)}"]`);
+		let box = tr?.getBoundingClientRect?.() || { left: 40, bottom: 120 };
+		showCtxMenu(Math.round(box.left + 24), Math.round(box.bottom), r);
+		return true;
+	}
 
 	// ------------------------------------------------------------ keyboard
+	/* Every shortcut of the window, in one list: the overlay (? or View → Keyboard shortcuts) is drawn from it,
+	   so a key added to onKeyDown is listed by adding it here. Mod is ⌘ on a Mac, Ctrl elsewhere. */
+	const SHORTCUTS = [
+		["Mod+Enter", "keyRunSearch"], ["Mod+F", "keyFilter"], ["\u2193", "keyFilterToList"],
+		["\u2191 \u2193  PgUp PgDn  Home End", "keyMove"], ["Shift+\u2191 \u2193", "keyExtend"], ["Space", "keyTick"],
+		["Mod+A", "keySelectAll"], ["Delete", "keyUntick"], ["Mod+Delete", "keyUntickAll"],
+		["Enter", "keyOpen"], ["P", "keyPreview"], ["S", "keySort"], ["Shift+F10", "keyRowMenu"],
+		["Mod+C", "keyCopyCite"], ["Shift+Mod+C", "keyCopyDoi"], ["Esc", "keyEscape"], ["Mod+W", "keyClose"], ["?", "keyHelp"]
+	];
+	const isMacKeys = () => { try { return Boolean(Zotero.isMac); } catch (e) { return false; } };
+	const keyLabel = keys => keys.replace(/Mod\+/g, isMacKeys() ? "\u2318" : "Ctrl+").replace(/Shift\+/g, isMacKeys() ? "\u21e7" : "Shift+");
+	let keysHelp = null; // { el, opener }
+	function closeKeysHelp(returnFocus = true) {
+		if (!keysHelp) return;
+		let { el, opener } = keysHelp;
+		keysHelp = null;
+		el.remove ? el.remove() : el.parentNode?.removeChild(el);
+		if (returnFocus) { if (opener?.focus && opener.isConnected !== false) opener.focus(); else $("table-wrap")?.focus?.(); }
+	}
+	function openKeysHelp(opener = document.activeElement) {
+		if (keysHelp) { closeKeysHelp(true); return; }
+		closeToolbarMenu(); closeSelMenu(); closeHistoryMenu(); hideCtxMenu();
+		let el = fel("div", "keys-help");
+		el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "keys-help-title");
+		let card = fel("div", "keys-card");
+		let head = fel("div", "keys-head");
+		let title = fel("h2", "keys-title", t("keysTitle")); title.id = "keys-help-title";
+		let close = fel("button", "ghost icon-btn small keys-close"); close.type = "button";
+		close.setAttribute("aria-label", t("keysClose")); close.setAttribute("data-safe", "view"); tip(close, t("keysClose"));
+		close.appendChild(iconNode("ic-close"));
+		close.addEventListener("click", () => closeKeysHelp(true));
+		head.appendChild(title); head.appendChild(close); card.appendChild(head);
+		let list = fel("dl", "keys-list");
+		for (let [keys, what] of SHORTCUTS) {
+			let dt = fel("dt", ""), dd = fel("dd", "", t(what));
+			for (let part of keyLabel(keys).split(/(\s{2,})/)) { if (/^\s+$/.test(part)) dt.appendChild(document.createTextNode(" ")); else if (part) dt.appendChild(fel("kbd", "", part)); }
+			list.appendChild(dt); list.appendChild(dd);
+		}
+		card.appendChild(list);
+		card.appendChild(fel("p", "keys-foot", t("keysFoot")));
+		el.appendChild(card);
+		// A press on the dimmed backdrop closes it; Tab stays on the one button inside.
+		el.addEventListener("mousedown", e => { if (e.target === el) closeKeysHelp(true); });
+		el.addEventListener("keydown", e => {
+			if (e.key === "Escape" || e.key === "?") { e.preventDefault(); e.stopPropagation(); closeKeysHelp(true); }
+			else if (e.key === "Tab") { e.preventDefault(); close.focus(); }
+		});
+		(document.body || document).appendChild(el);
+		keysHelp = { el, opener };
+		close.focus();
+	}
 	function onKeyDown(e) {
+		// A key a menu, a list or a card has already handled is theirs: it does not also move the result rows.
+		if (e.defaultPrevented) return;
 		let mod = e.metaKey || e.ctrlKey;
 		if (e.key === "Escape") {
+			if (keysHelp) { closeKeysHelp(true); return; }
 			if (state.filterOpen) { closeFilterPop(true); return; }
 			if (openTbMenu) { closeToolbarMenu(true); return; }
 			if (openSel) { closeSelMenu(); return; }
-			if (!$("histmenu").hidden) { closeHistoryMenu(); return; }
-			if (!$("ctxmenu").hidden) { hideCtxMenu(); return; }
+			if (!$("histmenu").hidden) { closeHistoryMenu(true); return; }
+			if (!$("ctxmenu").hidden) { hideCtxMenu(true); return; }
 			if (state.searching) { stopOperation(); return; }
 			if (state.importing) {
 				// One Esc, pressed to dismiss something that had already closed, used
@@ -5438,6 +5658,7 @@
 		// Keys typed into a form field belong to that field, Cmd/Ctrl+A included: hijacking
 		// it made select-all in the query boxes select every result row instead.
 		if (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+		if (e.key === "?" && !mod && !e.altKey) { e.preventDefault(); openKeysHelp(document.activeElement); return; }
 		// Enter and Space on a focused button press that button (the statistics basis, say), not the focused result row.
 		if (/^button$/i.test(document.activeElement?.tagName || "") && (e.key === "Enter" || e.key === " ")) return;
 		/* Row keys belong to the table. Focus in the paper's detail (its buttons, the folded metadata) or on a
@@ -5445,6 +5666,9 @@
 		   do not pick, switch or untick result rows. */
 		let active = document.activeElement, detail = $("detail");
 		if (!mod && active && active !== detail && (detail?.contains?.(active) || /^(summary|a)$/i.test(active.tagName || ""))) return;
+		// Nor inside a popup or on a control that opens one: there the arrows walk its own items.
+		if (!mod && active && active !== $("table-wrap") && active.closest?.('[role="menu"], [role="listbox"], [role="dialog"], [aria-haspopup]')) return;
+		if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && state.focusKey != null) { if (openRowMenuFromKeyboard()) e.preventDefault(); return; }
 		if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); selectVisible(true); return; }
 		if (mod && e.key.toLowerCase() === "c") {
 			// Text the reader selected (a sentence of the abstract) is copied as text, by the platform.
@@ -5458,6 +5682,7 @@
 			return;
 		}
 		if (!mod && !e.altKey && e.key.toLowerCase() === "p") { e.preventDefault(); togglePreview(); return; }
+		if (!mod && !e.altKey && e.key.toLowerCase() === "s" && state.visible.length) { e.preventDefault(); openSortMenu(true); return; }
 		if (!state.visible.length) return;
 		let idx = state.visible.findIndex(r => r.key === state.focusKey);
 		if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "PageDown" || e.key === "PageUp") {
