@@ -119,11 +119,12 @@ var ZotPoPFilters = (function () {
 	function typeOf(r) {
 		let t = r.itemType || "journalArticle";
 		if (t === "preprint" || r.preprintServer) return "preprint";
+		// OpenAlex files errata, editorials, front matter, peer-review reports and datasets as journal items: they are not
+		// articles, and counted as such they joined the article-only h-index and paper count. Read before the title:
+		// "Correction: A systematic review of ..." is a correction, not a review.
+		if (t !== "book" && t !== "bookSection" && NOT_ARTICLES.has(String(r.workType || "").toLowerCase())) return "other";
 		if (String(r.workType || "").toLowerCase() === "review" || (["journalArticle", "conferencePaper"].includes(t) && REVIEW_TITLE.test(r.title || ""))) return "review";
 		if (t === "book" || t === "bookSection") return "book";
-		// OpenAlex files errata, editorials, front matter, peer-review reports and datasets as journal items: they are not
-		// articles, and counted as such they joined the article-only h-index and paper count.
-		if (NOT_ARTICLES.has(String(r.workType || "").toLowerCase())) return "other";
 		if (t === "journalArticle" || t === "conferencePaper") return "article";
 		return "other";
 	}

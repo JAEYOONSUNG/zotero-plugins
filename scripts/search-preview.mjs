@@ -179,6 +179,8 @@ export async function buildPreview({ locale = "en" } = {}) {
 		get() { const i = this.options.findIndex(o => o.getAttribute("value") === this.value); return i < 0 ? 0 : i; },
 		set(i) { this._value = this.options[i]?.getAttribute("value") ?? ""; } });
 
+	// A fresh sources.js per build: its caches (citations, referenced works) must not carry over from an earlier build in the same process.
+	for (const key of Object.keys(require_.cache)) if (key.startsWith(path.join(root, "content") + path.sep)) delete require_.cache[key];
 	const Sources = require_(path.join(root, "content/sources.js"));
 	const recs = records(Sources);
 	// A later run of the same search finds one more paper: the row the re-run marks as new.
@@ -824,7 +826,7 @@ export async function buildPreview({ locale = "en" } = {}) {
 	ctx.Zotero.PDFTranslate = installed;
 	trace.signals = signals;
 	trace.translateNote = translateNote;
-	return { pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, authorsPick, combinedPage: trace.combinedPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors };
+	return { pinsMenuPage, pinResultsPage, pdfPage, retractedPage, signalsPage, tipTitle, tipAff, tipJournal, tipAuthors, tipCases, results, detail, facet, importPage, historyPage, rerun, authorsLookup, authorsPage, authorsPick, combinedPage: trace.combinedPage, orcidLookup, orcidSummary, orcidWorks, unfolded, filtersPage, journalsPage, longSpanPage, citePage, translatedPage, trace, rows: rows.length, netCalls, stubbed, errors, locale };
 }
 
 export function checkPreview(out) {
@@ -864,7 +866,9 @@ export function checkPreview(out) {
 	if (t.columns.statusAttr) problems.push("status column shown before any status");
 	if (!t.menu.open || t.menu.expanded !== "true" || t.menu.labels.length !== 10 || !same(t.menu.roles, ["menuitemradio", "menuitemradio", "menuitemcheckbox", "menuitemcheckbox", "menuitemcheckbox", "menuitem", "menuitem", "menuitemradio", "menuitemradio", "menuitemradio"])) problems.push("the View menu should open with two radio items, three checkable items, Sort by, Keyboard shortcuts and the three languages; got " + JSON.stringify(t.menu));
 	if (!t.menu.closed || !t.menu.closedByOutsideClick) problems.push("a menu should close after a choice and on an outside click");
-	if (!same(t.menu.reopened, ["false", "true", "true", "true", "true", null, null, "true", "false", "false"])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
+	// the last three items are the languages: the one the window runs in is checked
+	const langChecked = out.locale === "ko" ? ["false", "true", "false"] : ["true", "false", "false"];
+	if (!same(t.menu.reopened, ["false", "true", "true", "true", "true", null, null, ...langChecked])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
 	if (t.menu.export.length < 2) problems.push("the Export menu should offer copy and save");
 	if (!/전체 12 \/ 미보유 11 \/ 보유 1|All 12 \/ Not in library 11 \/ In library 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
 	if (!/4 \/ .* 4 \/ .* 0$/.test(t.library.withFacet)) problems.push("the library counts should follow the author facet; got " + t.library.withFacet);

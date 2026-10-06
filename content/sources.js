@@ -140,8 +140,20 @@ var ZotPoPSources = (function () {
 		if (r.source === "pubmed" || (!r.abstract && (r.sources || []).includes("pubmed"))) return true;
 		return !r.abstract && ABSTRACT_OPTIONAL.has(r.source);
 	}
+	/* A journal picked from the list carries its ISSNs, and a record that carries ISSNs is its paper only when
+	   one of them is the journal's: the Society's "Microbiology" (1350-0872) and Pleiades' (0026-2617) share a
+	   name. A record without an ISSN, or a journal typed by name, is matched by name. */
+	const issnKey = v => String(v || "").replace(/[^\dx]/gi, "").toLowerCase();
+	function matchesPickedVenues(r, venues) {
+		let mine = [r.issn, ...(r.issns || [])].map(issnKey).filter(Boolean);
+		return venues.map(v => typeof v === "string" ? { name: v } : v || {}).some(v => Array.isArray(v.issns) && v.issns.length && mine.length ? v.issns.some(i => mine.includes(issnKey(i))) : Query.matchesVenue(v.name, r));
+	}
+	// The one journal a query names by its ISSNs, or null: what Europe PMC and PubMed are asked for instead of its name.
+	const pickedByIssn = q => q.venues?.length === 1 && q.venues[0].issns?.length ? q.venues[0] : null;
 	function matchingRecords(records, query = {}) {
 		query = query || {};
+		let venues = Query && Array.isArray(query.venues) && query.venues.length && query.venue ? query.venues : null;
+		if (venues) query = Object.assign({}, query, { venue: "" });
 		// Scholar's bylines/journal names are snippets and can be truncated. Its
 		// fielded query has already constrained these fields; absence in a snippet
 		// cannot disprove a match. Never fill that missing metadata from the query.
@@ -157,6 +169,7 @@ var ZotPoPSources = (function () {
 			// and no other box narrows it.
 			if (query.identifier) return recordHasIdentifier(r, query.identifier);
 			if (Query && !Query.matchesRecord(r, query)) return false;
+			if (venues && !matchesPickedVenues(r, venues)) return false;
 			// The server matched on fields this record does not carry (PubMed's esummary has no
 			// abstract, and its Text Word search reads abstract and MeSH). Absence is not evidence.
 			if (serverMatchedUnseen(r)) return true;
@@ -721,6 +734,25 @@ var ZotPoPSources = (function () {
 	   (citationsBy), and the higher one is the headline, as when the two indexes' records merge. */
 	const ASKED = new WeakSet();
 	const placedPeople = people => (people || []).some(p => p.institutionId || p.country);
+	/* The labs of a placed list (OpenAlex's) laid over a record's own people. A list at least as long replaces
+	   it, as before. A shorter one (OpenAlex stops at 100 authorships) never cuts the byline: each person keeps
+	   their place, a matching name takes the placed lab where it has one, and the rest keep what their source said. */
+	const surnameOf = name => String(name || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().split(/[\s,]+/).filter(Boolean).pop() || "";
+	function overlayPeople(own, placed) {
+		if (!own?.length || placed.length >= own.length) return placed;
+		let used = new Set();
+		return own.map((p, i) => {
+			let j = placed[i] && !used.has(i) && surnameOf(placed[i].name) === surnameOf(p.name) ? i
+				: placed.findIndex((q, k) => !used.has(k) && surnameOf(q.name) === surnameOf(p.name));
+			if (j < 0) return p;
+			used.add(j);
+			let q = placed[j];
+			return q.institutionId || q.country
+				? { ...p, institution: q.institution || p.institution, institutionId: q.institutionId, country: q.country, institutionH: q.institutionH ?? p.institutionH ?? null,
+					openalexId: q.openalexId || p.openalexId || null, orcid: p.orcid || q.orcid || null, corresponding: Boolean(p.corresponding || q.corresponding) }
+				: p;
+		});
+	}
 	async function enrichFromOpenAlex(records, http, ctx, { complete = false } = {}) {
 		// Several records can legitimately share a DOI: compatibleIdentity keeps copies apart
 		// when their other identifiers conflict. Keyed one-per-DOI, all but the last lost
@@ -759,7 +791,7 @@ var ZotPoPSources = (function () {
 						if (!r.workType && w.type) r.workType = w.type;
 						if (!r.citesByYear) { r.citesByYear = parseCountsByYear(w.counts_by_year); if (r.citesByYear) r.citesByYearSeen = seriesSeen(); }
 						// The labs and countries, where the record's own source named none.
-						if (!placedPeople(r.people)) { let people = openAlexPeople(w.authorships); if (placedPeople(people)) r.people = people; }
+						if (!placedPeople(r.people)) { let people = openAlexPeople(w.authorships); if (placedPeople(people)) r.people = overlayPeople(r.people, people); }
 						if (!r.pdfUrl) r.pdfUrl = w.best_oa_location?.pdf_url || w.open_access?.oa_url || null;
 						for (let l of w.locations || []) if (l.is_oa && l.pdf_url && !r.pdfUrls.includes(l.pdf_url)) r.pdfUrls.push(l.pdf_url);
 						if (r.pdfUrl && !r.pdfUrls.includes(r.pdfUrl)) r.pdfUrls.unshift(r.pdfUrl);
@@ -1178,6 +1210,8 @@ var ZotPoPSources = (function () {
 		"journal-article": "journalArticle", "proceedings-article": "conferencePaper", "posted-content": "preprint",
 		book: "book", monograph: "book", "edited-book": "book", "book-chapter": "bookSection", dissertation: "thesis", report: "report"
 	};
+	// Kinds of item that are not papers, whichever index says so.
+	const NOTICE_TYPES = new Set(["paratext", "erratum", "editorial", "peer-review", "dataset", "retraction", "standard", "reference-entry", "supplementary-materials", "grant"]);
 	const CROSSREF_NOT_PAPERS = new Set(["standard", "dataset", "peer-review", "grant", "reference-entry"]);
 	const CROSSREF_JOURNALS = new Map();
 	async function crossrefJournal(venue, http, ctx) {
@@ -1558,7 +1592,8 @@ var ZotPoPSources = (function () {
 		if (q.keywords?.trim()) parts.push(pubmedFieldQuery(q.keywords, "Text Word", dropped));
 		if (q.title?.trim()) parts.push(pubmedFieldQuery(q.title, "ti", dropped));
 		if (q.authors?.trim()) parts.push(Query.compileAuthors(q.authors, name => name + "[au]", { binaryNot: true }));
-		if (q.venue?.trim()) parts.push('"' + q.venue.trim() + '"[ta]');
+		if (pickedByIssn(q)) parts.push(pickedByIssn(q).issns.map(i => '"' + i + '"[is]').join(" OR "));
+		else if (q.venue?.trim()) parts.push('"' + q.venue.trim() + '"[ta]');
 		if (q.yearFrom || q.yearTo) parts.push((q.yearFrom || "1800") + ":" + (q.yearTo || "3000") + "[dp]");
 		return parts.length === 1 ? parts[0] : parts.map(grouped).join(" AND ");
 	}
@@ -1969,7 +2004,8 @@ var ZotPoPSources = (function () {
 		if (q.authors?.trim()) {
 			parts.push(Query.compileAuthors(q.authors, epmcAuthorAtom));
 		}
-		if (q.venue?.trim()) {
+		if (pickedByIssn(q) && !preprintsOnly) parts.push(pickedByIssn(q).issns.map(i => 'ISSN:"' + i.replace(/"/g, "") + '"').join(" OR "));
+		else if (q.venue?.trim()) {
 			let v = q.venue.trim().replace(/"/g, "");
 			parts.push(preprintsOnly ? '(PUBLISHER:"' + v + '" OR JOURNAL:"' + v + '")' : 'JOURNAL:"' + v + '"');
 		}
@@ -2017,6 +2053,8 @@ var ZotPoPSources = (function () {
 			venue: r.journalInfo?.journal?.title || r.journalTitle || publisher || (isPreprint ? "Preprint" : ""),
 			publisher,
 			issn: r.journalInfo?.journal?.issn || r.journalInfo?.journal?.essn || null,
+			// Both numbers: a journal picked by its electronic ISSN is checked against them.
+			issns: [r.journalInfo?.journal?.issn, r.journalInfo?.journal?.essn].filter(Boolean),
 			doi: r.doi,
 			pmid: r.pmid || null,
 			pmcid: r.pmcid || null,
@@ -2754,7 +2792,8 @@ var ZotPoPSources = (function () {
 		if (!a.year && b.year) a.year = b.year;
 		if (!a.publicationDate && b.publicationDate) a.publicationDate = b.publicationDate;
 		if (!a.venue && b.venue) a.venue = b.venue;
-		if (!a.workType && b.workType) a.workType = b.workType;
+		// An index that names the item a correction, editorial or the like knows more than one that files it as an article.
+		if (b.workType && (!a.workType || (NOTICE_TYPES.has(String(b.workType).toLowerCase()) && /^(article|journal-article|review)$/i.test(a.workType)))) a.workType = b.workType;
 		// One source saying "retracted" is enough: a missed retraction costs more than a false flag.
 		if (b.retracted) a.retracted = true;
 		if (!a.publisher && b.publisher) a.publisher = b.publisher;
@@ -2794,7 +2833,7 @@ var ZotPoPSources = (function () {
 		// The source that knows the labs and countries wins; a longer list of bare
 		// affiliation strings is not a richer one.
 		let placed = people => (people || []).some(p => p.institutionId || p.country);
-		if (b.people && (!a.people || (placed(b.people) && !placed(a.people)))) a.people = b.people;
+		if (b.people && (!a.people || (placed(b.people) && !placed(a.people)))) a.people = overlayPeople(a.people, b.people);
 		// Each index's own count is kept beside the headline one, so a statistic can be read from one index alone.
 		let by = a.citationsBy || (a.citationsBy = {});
 		for (let rec of [a, b]) {
@@ -3022,7 +3061,8 @@ var ZotPoPSources = (function () {
 		// For relevance/date it cannot, so enrich only the chosen results there.
 		if (q.sort !== "citations") merged = sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
 		else if (ctx.enrichCitations !== false) {
-			await enrichFromOpenAlex(merged, http, ctx);
+			// Every candidate is completed first: OpenAlex's count can lift a paper another index under-counted into the top N.
+			await enrichFromOpenAlex(merged, http, ctx, { complete: true });
 			merged = sortSearchResults(merged, q, true).slice(0, q.maxResults || 200);
 		}
 		// The rows shown, and only those, are completed from OpenAlex where another index found them.

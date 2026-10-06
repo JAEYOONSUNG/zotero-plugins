@@ -54,3 +54,8 @@ test("search preview: library filter counts, Export/View menus, version lines an
 	assert.equal(trace.single.after.selected, "선택 1편");
 	assert.equal(netCalls, 0);
 });
+
+test("search preview: every check passes in Korean too (the View menu's checked language follows the window)", async () => {
+	const out = await buildPreview({ locale: "ko" });
+	assert.deepEqual(checkPreview(out), []);
+});

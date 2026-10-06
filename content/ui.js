@@ -1596,6 +1596,7 @@
 		   list that was on screen and the restored rows kept only their DOI matches: a held paper found by
 		   its title read as new, with no reading state or collections. */
 		await refreshLibraryFlags();
+		if (!active()) return false;
 		let captured = new Date(entry.savedAt).toLocaleString(t.locale || undefined);
 		setStatus(t("historyRestored", records.length));
 		showBanner(t("historyRestoredNotice", captured, Boolean(entry.partial))
@@ -1613,15 +1614,20 @@
 	}
 
 	// Bring a recent search back: its boxes, its source, and its results, from disk.
+	/* Each restore of a saved search or pin takes a ticket; a search, a clear or another restore takes a newer
+	   one. A restore overtaken while it waited (the library lookup, the pin's seen set) applies nothing more: an
+	   older pin's filters once landed on the newer search's rows and hid them. */
+	let restoreTicket = 0;
 	async function openHistoryEntry(id, { pin = null, rerun = false } = {}) {
 		if (state.searching || state.importing || !history) return;
 		cancelCacheRestore();
+		let mine = ++restoreTicket;
 		let entry = await history.get(id);
 		// A pin outlives its stored result: running it again needs only the pin itself.
 		if (!entry && pin && rerun) entry = { query: pin.query, source: pin.source, records: [], savedAt: pin.lastRun || pin.pinnedAt };
 		if (!entry) { setStatus(t(pin ? "pinGone" : "historyMissing"), "err"); return; }
 		if (state.searching || state.importing) return;
-		let stillMine = () => !state.searching && !state.importing;
+		let stillMine = () => mine === restoreTicket && !state.searching && !state.importing;
 		let query = entry.query || {};
 		if (query.mode === "author") {
 			await switchSearchMode("authors");
@@ -1659,10 +1665,11 @@
 		if (!pin) { await showHistoryEntry(entry, stillMine); return; }
 		let tooMany = entry.records.length > history.SEEN_CAP;
 		let baseline = tooMany ? null : await history.baseline(pin.id);
-		if (!await showHistoryEntry(entry, stillMine, baseline)) return;
+		if (!await showHistoryEntry(entry, stillMine, baseline) || !stillMine()) return;
 		restorePinFilters(pin);
 		if (tooMany) { setStatus(t("pinTooMany")); return; }
 		await history.markSeen(pin.id, entry.records);
+		if (!stillMine()) return;
 		setStatus(t("pinShown", state.records.filter(r => r.isNew).length));
 	}
 	function restorePinFilters(pin) {
@@ -2576,6 +2583,7 @@
 		let ticket = ++searchTicket;
 		if (state.searching) { state.searchController?.abort(); state.cancelled = true; try { await state.searchDone; } catch (e) {} }
 		if (state.searching || ticket !== searchTicket) return;
+		restoreTicket++;
 		cancelCacheRestore();
 		saveQuery();
 		savePrefs();
@@ -2616,6 +2624,7 @@
 		// Read while the search runs; the rows are marked when the final list is drawn.
 		let prior = Promise.resolve(history?.previousKeys(sourceKey, q)).catch(() => null);
 		let pinFound = Promise.resolve(history?.pinFor(sourceKey, q)).catch(() => null);
+		let flagsAsked = false;
 		let ctx = {
 			email: PREF("email") || "",
 			s2ApiKey: PREF("s2ApiKey") || "",
@@ -2653,6 +2662,7 @@
 			if (!active()) throw abortError();
 			state.priorKeys = priorKeys;
 			displaySearchResults(recs);
+			flagsAsked = true;
 			await refreshLibraryFlags();
 			if (!active()) throw abortError();
 			let partial = state.lastPartial;
@@ -2723,6 +2733,10 @@
 			setProgress(null);
 			render();
 			saveCaches();
+			/* Stopped or failed before the library was asked: the rows kept are asked now, so a paper held by its
+			   title (no DOI match) reads as held, with its reading state, in the filters and the CSV. */
+			if (!flagsAsked && state.records.length && !state.searchController)
+				Promise.resolve(refreshLibraryFlags()).catch(err => log("library flags after a stopped search: " + err.message));
 		}
 	}
 
@@ -2774,6 +2788,9 @@
 		}
 		for (let r of records) {
 			let id = found.get(r);
+			// A ranked row the library holds now says so at once; one no longer held waits for a re-rank, unscored.
+			if (r.related && id && !r.related.held) relatedNowHeld(r, id);
+			else if (r.related?.held && !id) r.related = null;
 			r.inLibrary = Boolean(id);
 			// A row that is not held here must not keep the item id of another library.
 			if (id) r.libraryItemID = id;
@@ -2800,6 +2817,7 @@
 	}
 
 	function clearAll() {
+		restoreTicket++;
 		cancelCacheRestore();
 		if (state.searching) {
 			state.cancelled = true;
@@ -5096,6 +5114,12 @@
 		catch (_) { /* first run, or a damaged file: the lookups simply happen again */ }
 		return store;
 	}
+	// The one store, loaded once whoever asks first (the ranking or the detail).
+	function relatedStore() {
+		let rel = state.related;
+		if (rel.store) return Promise.resolve(rel.store);
+		return rel.storeLoading ||= loadRelatedStore().then(store => rel.store ||= store);
+	}
 	async function saveRelatedStore(store) {
 		if (!cacheIO) return;
 		try { await cacheIO.writeText(dataPath("related.json"), JSON.stringify(store.export())); }
@@ -5222,7 +5246,19 @@
 	}
 	/* What a finished ranking was worked out against: the library and how many of its papers were known.
 	   The same list against the same library is sorted again without a second pass over 1,200 papers. */
-	const relatedBasis = () => currentTarget().libraryID + "|" + (state.doiMap?.size || 0);
+	/* By the library's contents, not its size: one paper deleted and another saved left the count, and the stale
+	   ranking, as they were. A fingerprint of the held item ids, worked out again only when the map changes. */
+	let basisMemo = { map: null, size: -1, sig: "" };
+	function doiMapSignature(map) {
+		if (!map) return "0";
+		if (basisMemo.map !== map || basisMemo.size !== map.size) {
+			let sum = 0, mix = 0;
+			for (let [doi, id] of map) { let n = Number(id) || 0; sum = (sum + n) % 2147483647; mix = (mix + Math.imul(n ^ doi.length, 2654435761)) | 0; }
+			basisMemo = { map, size: map.size, sig: map.size + ":" + sum + ":" + (mix >>> 0) };
+		}
+		return basisMemo.sig;
+	}
+	const relatedBasis = () => currentTarget().libraryID + "|" + doiMapSignature(state.doiMap);
 	/* One ranking job at a time, tied to a library and a generation. A library switch, the window closing or
 	   a cancel bumps the generation; whatever an older job still delivers is dropped. */
 	function cancelRelated({ clear = false } = {}) {
@@ -5276,7 +5312,7 @@
 		let cctx = { openAlexApiKey: String(PREF("openAlexApiKey") || ""), log, openAlexSpent: openAlexHeld(), signal: controller.signal, isCancelled: () => job.generation !== rel.generation };
 		let out = null;
 		try {
-			rel.store = rel.store || await loadRelatedStore();
+			rel.store = await relatedStore();
 			out = await ZotPoPRelated.rank({ held, http, ctx: cctx, store: rel.store, sources: ZotPoPSources,
 				results: records.map(r => ({ key: r.key, source: r.source, sourceId: r.sourceId, doi: r.doi, title: r.title, year: r.year, family: r.authors?.[0]?.lastName || "", publishedAs: r.publishedAs, preprintOf: r.preprintOf,
 					// Held as the row says (a copy without a DOI is found by title and year): flagged, not ranked.
@@ -5371,9 +5407,20 @@
 		let sc = styleCustom();
 		if (!sc || state.sigRefs.has(r.key) || openAlexHeld() || !ZotPoPSignals.libraryWorks(sc).length) return;
 		state.sigRefs.set(r.key, { status: "loading" });
-		let cctx = { email: PREF("email") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log, openAlexSpent: openAlexHeld() };
-		let got = await ZotPoPSources.fetchReferencedWorks(r, http, cctx).catch(() => ({ ok: false }));
-		noteOpenAlexSpent(cctx);
+		/* One reference cache for both: the list "Rank by my library" fetched for this paper (kept 30 days on disk)
+		   answers here without a request, and a list fetched here is kept for the next ranking. */
+		let store = await relatedStore().catch(() => null);
+		let doi = r.doi && ZotPoPSources.normalizeDOI ? ZotPoPSources.normalizeDOI(r.doi) : null;
+		let ownId = r.source === "openalex" && /^W\d+$/.test(r.sourceId || "") ? r.sourceId : null;
+		let known = store ? (doi && store.getDoi(doi)) || (ownId && store.getId(ownId)) || null : null;
+		let got;
+		if (known && Array.isArray(known.refs)) got = { ok: true, cached: true, id: known.id || ownId, ids: known.refs.slice() };
+		else {
+			let cctx = { email: PREF("email") || "", openAlexApiKey: PREF("openAlexApiKey") || "", log, openAlexSpent: openAlexHeld() };
+			got = await ZotPoPSources.fetchReferencedWorks(r, http, cctx).catch(() => ({ ok: false }));
+			noteOpenAlexSpent(cctx);
+			if (got.ok && store && got.id) store.putWork({ id: got.id, doi: doi || null, referenced_works: got.ids }, ZotPoPSources);
+		}
 		state.sigRefs.set(r.key, got.ok ? { status: "done", id: got.id, ids: got.ids } : { status: "failed" });
 		if (detailRecord() === r) renderSignals(r);
 	}

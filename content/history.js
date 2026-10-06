@@ -209,7 +209,12 @@ var ZotPoPHistory = (function () {
 				for (let e of dropped) await io.remove(path(e.id + ".json")).catch(() => {});
 				await writeIndex();
 				// What this run turned up that the pin has not shown yet, for the menu to say.
-				let pin = pinList.find(p => p.id === id);
+				/* A pin saved under an older key (before picked journals' identifiers joined it) is the same search:
+				   it moves to this run's id, so opening it shows this run, and keeps the old id as an alias for a
+				   window that read it before this save. */
+				let normalized = JSON.stringify(normalizeQuery(query));
+				let pin = pinList.find(p => p.id === id) || pinList.find(p => p.source === source && p.query && JSON.stringify(normalizeQuery(p.query)) === normalized);
+				if (pin && pin.id !== id) { pin.formerIds = [...new Set([...(pin.formerIds || []), pin.id])]; pin.id = id; }
 				if (pin) { pin.newCount = newAmong(records, pin.seen); pin.lastRun = savedAt; pin.partial = Boolean(partial); await writePins(); }
 				return id;
 			});
@@ -275,13 +280,15 @@ var ZotPoPHistory = (function () {
 				return record;
 			});
 		}
+		// A pin by its id, or by an id it had before it moved to a newer key.
+		const pinIs = id => p => p.id === id || (Array.isArray(p.formerIds) && p.formerIds.includes(id));
 		async function unpin(id) {
-			return serial(async () => { await loadPins(); pinList = pinList.filter(p => p.id !== id); await writePins(); });
+			return serial(async () => { await loadPins(); pinList = pinList.filter(p => !pinIs(id)(p)); await writePins(); });
 		}
 		// What a run is compared against: the keys already shown, or null when there are none.
 		async function baseline(id) {
 			await writes;
-			let found = (await loadPins()).find(p => p.id === id);
+			let found = (await loadPins()).find(pinIs(id));
 			return found && found.seen.length ? new Set(found.seen) : null;
 		}
 		// The results were looked at: their keys join the seen set. They never replace it, so a short,
@@ -290,7 +297,7 @@ var ZotPoPHistory = (function () {
 			if (!Array.isArray(records) || !records.length || records.length > SEEN_CAP) return null;
 			return serial(async () => {
 				await loadPins();
-				let found = pinList.find(p => p.id === id);
+				let found = pinList.find(pinIs(id));
 				if (!found) return null;
 				let before = new Set(found.seen), fresh = keysOf(records, SEEN_CAP).filter(k => !before.has(k));
 				found.seen = found.seen.concat(fresh).slice(-SEEN_STORE_CAP);

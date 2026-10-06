@@ -109,3 +109,22 @@ test("clearing an active query aborts it and prevents old results from repopulat
 	assert.equal(ui.get("search-btn").disabled, false);
 	assert.equal(ui.errors.length, 0);
 });
+
+test("round 20: a stopped search still asks the library about the rows it kept (held by title, reading state)", async () => {
+	let flagged = 0;
+	const pending = deferred();
+	const ui = uiHarness({ refreshLibraryFlags: async () => { flagged++; }, request: (_m, _u, options) => {
+		options.cancellerReceiver(() => pending.reject(new Error("Request cancelled")));
+		return pending.promise;
+	}, search: async (_source, _query, http, ctx) => {
+		ctx.onResults([paper("kept")], { final: false });
+		await http.getJSON("https://example.org/search", {}, ctx.signal);
+		return [];
+	} });
+	const running = ui.runSearch();
+	ui.stopOperation();
+	await running;
+	await new Promise(r => setTimeout(r, 0));
+	assert.equal(ui.get("status").textContent, "searchStopped|1", "the status still says it was stopped");
+	assert.equal(flagged, 1);
+});

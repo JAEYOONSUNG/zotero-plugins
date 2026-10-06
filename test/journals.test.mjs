@@ -159,3 +159,38 @@ test("the history menu names picked journals, not the expression the search ran 
 	// two searches over different journals are different searches
 	assert.notEqual(History.signature?.("multi", { venue: q.venue }) ?? q.venue, History.signature?.("multi", { venue: "Cell" }) ?? "Cell");
 });
+
+// Round 20: a journal picked from the list is named by its ISSNs on Europe PMC and PubMed too, and what comes back
+// is checked against them. The Society's "Microbiology" (1350-0872) is not Pleiades' (0026-2617).
+test("round 20: Europe PMC and PubMed ask for a picked journal by its ISSNs, not its bare name", () => {
+	const picked = Sources.normalizeVenues([{ name: "Microbiology", issns: ["1350-0872", "1465-2080"] }]);
+	const q = { keywords: "biofilm", venue: "Microbiology", venues: picked };
+	const epmc = Sources.epmcQuery(q, false);
+	assert.match(epmc, /ISSN:"1350-0872" OR ISSN:"1465-2080"/);
+	assert.doesNotMatch(epmc, /JOURNAL:/);
+	const pubmed = Sources.pubmedTerm(q);
+	assert.match(pubmed, /"1350-0872"\[is\] OR "1465-2080"\[is\]/);
+	assert.doesNotMatch(pubmed, /\[ta\]/);
+	// typed by name only: unchanged
+	assert.match(Sources.epmcQuery({ keywords: "biofilm", venue: "Microbiology" }, false), /JOURNAL:"Microbiology"/);
+	assert.match(Sources.pubmedTerm({ keywords: "biofilm", venue: "Microbiology" }), /"Microbiology"\[ta\]/);
+	// several picked journals are asked one at a time (perJournal), each by its own ISSNs
+	assert.match(Sources.epmcQuery({ keywords: "x", venue: "Cell", venues: [{ name: "Cell", issns: ["0092-8674"] }] }, false), /ISSN:"0092-8674"/);
+});
+
+test("round 20: what comes back for a picked journal is checked by ISSN when the record has one", () => {
+	const venues = Sources.normalizeVenues([{ name: "Microbiology", issns: ["1350-0872", "1465-2080"] }]);
+	const q = { venue: "Microbiology", venues };
+	const recs = [
+		{ key: "society", title: "A", venue: "Microbiology", issn: "1350-0872" },
+		{ key: "society-e", title: "B", venue: "Microbiology", issns: ["1465-2080"] },
+		{ key: "pleiades", title: "C", venue: "Microbiology", issn: "0026-2617", issns: ["0026-2617", "1608-3237"] },
+		{ key: "no-issn", title: "D", venue: "Microbiology" },
+		{ key: "other", title: "E", venue: "Microbiology Spectrum", issn: "2165-0497" }
+	];
+	assert.deepEqual(Sources.filterRecords(recs, q).map(r => r.key), ["society", "society-e", "no-issn"]);
+	// several journals: any of them, each by its ISSNs where it has them, by name where it has none
+	const two = Sources.normalizeVenues([{ name: "Microbiology", issns: ["1350-0872"] }, { name: "Cell" }]);
+	const q2 = { venue: Sources.venueExpression(two), venues: two };
+	assert.deepEqual(Sources.filterRecords([...recs, { key: "cell", title: "F", venue: "Cell", issn: "0092-8674" }], q2).map(r => r.key), ["society", "no-issn", "cell"]);
+});

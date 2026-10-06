@@ -230,3 +230,57 @@ test("the status says how much of the library could be compared", async () => {
 	assert.match(w.ui.tipContent(Object.assign(w.ui.get("results-body").querySelectorAll("tr").find(tr => tr.dataset.key === "D").querySelector(".rel-chip")), "related"), /relCoverage\|4\|5/);
 	assert.equal(d.related.band, "none");
 });
+
+test("round 20: the library changed without changing size (one paper removed, a ranked result added): held at once, re-rank offered", async () => {
+	let map = new Map(heldRows().map(h => [h.doi, h.itemID]));
+	const importer = { getReadingStates: async () => new Map(), getCollectionPaths: async () => new Map(), getLibraryDOIMap: async () => new Map(map), forgetTitleIndex() {}, findByTitle: async () => null };
+	const w = await loaded({ importer });
+	w.ui.get("related-btn").emit("click"); await settle(w.ui);
+	const a = w.ui.state.records.find(r => r.key === "A");
+	assert.equal(a.related.band, "strong");
+	assert.match(w.ui.get("related-label").textContent, /relBack/);
+	// Held 1 deleted, A saved from the browser: still four DOIs.
+	a.doi = "10.1000/a";
+	map = new Map([...heldRows().slice(1).map(h => [h.doi, h.itemID]), ["10.1000/a", 99]]);
+	await w.ui.refreshLibraryFlags();
+	assert.equal(a.inLibrary, true);
+	assert.equal(a.related.held, true, "the ranked row that is held now says so, not 'strong'");
+	assert.match(w.ui.get("related-label").textContent, /relRerank|relRankNew/, "the ranking is stale: the library's contents changed");
+	assert.equal(w.ui.state.records.find(r => r.key === "H").related, null, "Held 1, deleted, is unscored until the re-rank");
+});
+
+test("round 20: a held paper swapped for another outside the results (same count) still makes the ranking stale", async () => {
+	let map = new Map(heldRows().map(h => [h.doi, h.itemID]));
+	const importer = { getReadingStates: async () => new Map(), getCollectionPaths: async () => new Map(), getLibraryDOIMap: async () => new Map(map), forgetTitleIndex() {}, findByTitle: async () => null };
+	const w = await loaded({ importer });
+	await w.ui.refreshLibraryFlags();
+	w.ui.get("related-btn").emit("click"); await settle(w.ui);
+	assert.match(w.ui.get("related-label").textContent, /relBack/);
+	map = new Map([...heldRows().slice(0, 3).map(h => [h.doi, h.itemID]), ["10.1000/elsewhere", 55]]);
+	await w.ui.refreshLibraryFlags();
+	assert.equal(w.ui.state.doiMap.size, 4);
+	assert.match(w.ui.get("related-label").textContent, /relRerank/);
+});
+
+test("round 20: the detail's 'cites n of mine' reuses the references the ranking already fetched, and the ranking reuses the detail's", async () => {
+	const requests = [];
+	const items = new Map(heldRows().map(h => [h.itemID, h.title]));
+	const ui = uiHarness({
+		realRows: true,
+		search: async () => resultRows().map((r, i) => paper(r.key, { ...r, rank: i + 1, citations: 100 - i })),
+		sources: { withRetry: Sources.withRetry, isQuotaError: Sources.isQuotaError, openAlexAuth: Sources.openAlexAuth, fetchReferencedWorks: Sources.fetchReferencedWorks, normalizeDOI: Sources.normalizeDOI },
+		zotero: { Items: { get: id => items.has(id) ? { id, getField: f => f === "title" ? items.get(id) : "" } : null, getByLibraryAndKey: () => null },
+			StyleCustom: { paperWorks: () => ({ "1:LIB1": { openalex: "W1", references: [] } }), watchedAuthors: () => [] } },
+		request: async (_m, url) => { requests.push(url); return { response: await mockOpenAlex(table()).http.getJSON(url), status: 200 }; }
+	});
+	await ui.runSearch(); ui.wireEvents();
+	ui.state.doiMap = new Map(heldRows().map(h => [h.doi, h.itemID]));
+	ui.get("related-btn").emit("click"); await settle(ui);
+	const a = ui.state.records.find(r => r.key === "A");
+	const before = requests.length;
+	ui.state.detailKey = a.key;
+	ui.renderSignals(a);
+	await new Promise(r => setTimeout(r, 10));
+	assert.equal(requests.length, before, "no second request for A's references");
+	assert.deepEqual(ui.state.sigRefs.get("A").ids.slice().sort(), ["W1", "W101", "W2"]);
+});

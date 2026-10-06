@@ -188,3 +188,25 @@ test("UI: re-running a pin restores its saved filters as opening it does (item 1
 	await ui.openHistoryEntry(pin.id, { pin, rerun: true });
 	assert.equal(ui.get("filter").value, "alpha-filter");
 });
+
+test("UI round 20: a pin opened, then overtaken by a new search while its library lookup waits, applies no filters or status to the new rows", async () => {
+	let results = recs("a", "b"), gate = null;
+	const ui = uiHarness({ search: async () => results.map(r => ({ ...r })), refreshLibraryFlags: () => gate ? gate.promise : Promise.resolve() });
+	await ui.runSearch();
+	const [entry] = await ui.history.list();
+	await ui.history.pin(entry.id, { filters: { text: "alpha-filter", rules: [] } });
+	ui.get("filter").value = "";
+	const pin = (await ui.history.pins())[0];
+	let release; gate = { promise: new Promise(r => { release = r; }) };
+	const opening = ui.openHistoryEntry(pin.id, { pin });
+	for (let i = 0; i < 20 && !ui.state.records.length; i++) await new Promise(r => setTimeout(r, 0));
+	await new Promise(r => setTimeout(r, 0));
+	gate = null;
+	results = recs("z");
+	await ui.runSearch();
+	release();
+	await opening;
+	assert.equal(ui.get("filter").value, "", "the old pin's filter is not laid over the new search");
+	assert.deepEqual(ui.state.records.map(r => r.key), ["z"]);
+	assert.doesNotMatch(ui.get("status").textContent, /pinShown/);
+});

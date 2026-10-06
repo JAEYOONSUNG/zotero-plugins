@@ -224,3 +224,25 @@ test("a pin made before the journal identifiers joined the key still answers its
 	assert.equal((await history.pinFor("multi", query))?.id, legacyId);
 	assert.equal(await history.pinFor("multi", { ...query, venues: [{ name: "Microbiology", issns: ["0026-2617"] }] }), null, "the other journal is not that pin");
 });
+
+test("round 20: re-running a pin made before the journal identifiers joined the key updates that pin, and its seen set follows it", async () => {
+	const files = new Map();
+	const query = { keywords: "biofilm", venue: "Microbiology", venues: [{ name: "Microbiology", issns: ["1350-0872"] }] };
+	const legacyId = History.signature("multi", { keywords: "biofilm", venue: "Microbiology" });
+	const newId = History.signature("multi", query);
+	assert.notEqual(legacyId, newId);
+	files.set("h/pins.json", JSON.stringify({ pins: [{ id: legacyId, source: "multi", query, label: "old", seen: ["d:10.1/a"], pinnedAt: "2026-01-01T00:00:00Z", newCount: 0 }] }));
+	const history = History.create({ io: History.memoryIO(files), dir: "h" });
+	const pin = await history.pinFor("multi", query);
+	const run = [{ key: "x:a", doi: "10.1/a", title: "A" }, { key: "x:b", doi: "10.1/b", title: "B" }];
+	assert.equal(await history.save({ source: "multi", query, records: run }), newId);
+	let [after] = await history.pins();
+	assert.equal(after.newCount, 1, "the run is counted against the pin's seen set");
+	assert.equal((await history.get(after.id))?.records.length, 2, "opening the pin shows this run, not the old saved one");
+	// The window still holds the id it read before the save.
+	assert.ok(await history.baseline(pin.id), "the old id still finds the baseline");
+	assert.deepEqual(await history.markSeen(pin.id, run), { added: 1 }, "the old id still marks the run as seen");
+	assert.equal((await history.pins())[0].newCount, 0);
+	await history.unpin(pin.id);
+	assert.equal((await history.pins()).length, 0, "and unpins it");
+});
