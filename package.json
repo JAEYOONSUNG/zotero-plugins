@@ -1,6 +1,6 @@
 {
   "name": "zotpop",
-  "version": "0.55.0",
+  "version": "0.56.0",
   "license": "MIT",
   "private": true,
   "description": "Publish or Perish-style literature search and import for Zotero",

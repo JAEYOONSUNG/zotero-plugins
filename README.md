@@ -137,7 +137,7 @@ Settings → Style Custom, in eleven categories (Columns, Views and panels, Read
 
 ### Self-check
 
-Runs only when `extensions.style-custom.selfCheck` is set (it then clears itself): up to 62 checks, 55 by default, against the real library; the report is written to `<Zotero data folder>/style-custom-selfcheck.json`. No window is opened. One of them lays out every tab of the panel in Zotero itself, at the panel's real size and in both densities, and lists anything that overflows its box, wraps where it should not or overlaps other text in `style-custom-layout.json`.
+Runs only when `extensions.style-custom.selfCheck` is set (it then clears itself): up to 64 checks, 57 by default, against the real library; the report is written to `<Zotero data folder>/style-custom-selfcheck.json`. No window is opened. One of them lays out every tab of the panel in Zotero itself, at the panel's real size and in both densities, and lists anything that overflows its box, wraps where it should not or overlaps other text in `style-custom-layout.json`.
 
 ---
 
