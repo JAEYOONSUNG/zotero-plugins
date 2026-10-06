@@ -44,6 +44,10 @@
 	// Localised string lookup; replaced in init() once the pref is read.
 	let t = ZotPoPI18N.make("en");
 	let uiLocale = "en";
+	// A source's raw failure ("HTTP 503 · api.openalex.org") as a sentence in the window's language: the service, what happened, what to do.
+	const explain = message => typeof ZotPoPI18N.explainError === "function" ? ZotPoPI18N.explainError(String(message ?? ""), t.locale || "en") : String(message ?? "");
+	const explainList = errors => [...new Set(errors.map(explain))].join(" / ");
+	const progressText = message => typeof ZotPoPI18N.localizeProgress === "function" ? ZotPoPI18N.localizeProgress(String(message ?? ""), t.locale || "en") : String(message ?? "");
 
 	// Source labels that should follow the UI language rather than the API's own name
 	const SOURCE_LABEL_KEYS = { multi: "srcMulti", preprint: "srcPreprint", europepmc: "srcEuropePMC", scholar: "srcScholar" };
@@ -271,7 +275,7 @@
 			// XHR yields null rather than throwing when a body is not JSON — a captive portal
 			// or an API maintenance page. Name it, instead of a TypeError deep in an adapter.
 			if (xhr.response === null) {
-				let err = new Error(t("notJSON", url.split("?")[0]));
+				let err = new Error(t("notJSON", ZotPoPI18N.serviceOf ? ZotPoPI18N.serviceOf(url) : url.split("?")[0]));
 				err.status = xhr.status;
 				throw err;
 			}
@@ -288,7 +292,7 @@
 				xhr = await Zotero.HTTP.request("POST", url, { headers: Object.assign({ Accept: "application/json" }, headers), body: JSON.stringify(body), responseType: "json", timeout: 90000, errorDelayMax: 0 });
 			}
 			catch (e) { throw httpError(e, url); }
-			if (xhr.response === null) throw new Error(t("notJSON", url.split("?")[0]));
+			if (xhr.response === null) throw new Error(t("notJSON", ZotPoPI18N.serviceOf ? ZotPoPI18N.serviceOf(url) : url.split("?")[0]));
 			return xhr.response;
 		}
 	};
@@ -1000,8 +1004,8 @@
 				let stats = document.createElement("div"); stats.className = "badges author-profile-stats";
 				let add = (text, hint) => { let chip = document.createElement("span"); chip.className = "badge"; chip.textContent = text; if (hint) tip(chip, hint); stats.appendChild(chip); };
 				let hTip = profile.hIndexes?.length ? t("authorHProfilesTip", profile.hIndexes.map(x => x.openalexId + ": " + (x.hIndex ?? "?")).join(", ")) : "";
-				if (profile.worksCount != null) add(t("authorStatWorks", Number(profile.worksCount).toLocaleString(t.locale || undefined)), hTip);
-				if (profile.citations != null) add(t("authorStatCited", Number(profile.citations).toLocaleString(t.locale || undefined)));
+				if (profile.worksCount != null) add(t("authorStatWorks", Number(profile.worksCount)), hTip);
+				if (profile.citations != null) add(t("authorStatCited", Number(profile.citations)));
 				if (profile.hIndex != null) add(t("authorStatH", profile.hIndex));
 				info.appendChild(stats);
 			}
@@ -1095,12 +1099,12 @@
 			// New cards are shown as they are: a weak one is not hidden behind "more" after the user asked for more.
 			if (out.added.some(c => c.weak)) authorView.showAll = true;
 			setStatus(t("authorNextLoaded", out.added.length, session.profiles.length));
-			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
+			if (ctx.errors.length) showBanner(t("partialFail", explainList(ctx.errors)), null, { warn: true });
 			// The saved people list grows with it, so reopening this search from history shows them all.
 			if (session.action === "profiles" && $("author-input").value === input) await history?.save({ source: "author:" + provider, query: { ...authorQuery("profiles"), authorProfile: session.profile, authorProfiles: session.profiles, authorPaging: session.paging }, records: [], partial: false });
 		}
 		catch (error) {
-			if (active() && error?.name !== "AbortError") { setStatus(t("searchFailed", error.message || error), "err"); }
+			if (active() && error?.name !== "AbortError") { setStatus(t("searchFailed", explain(error.message || error)), "err"); }
 		}
 		finally {
 			noteOpenAlexSpent(ctx); saveCaches();
@@ -1186,7 +1190,7 @@
 		let ctx = { signal: controller.signal, isCancelled: () => controller.signal.aborted, errors: [], scholarInputKind: q.authorInputKind || "auto", DOMParser: window.DOMParser,
 			email: String(PREF("email") || ""), openAlexApiKey: String(PREF("openAlexApiKey") || ""), openAlexSpent: openAlexHeld(),
 			popSearchSource: typeof ZotPoPPoPBridge !== "undefined" && ZotPoPPoPBridge.searchSource ? (source, query, context) => ZotPoPPoPBridge.searchSource(source, query, context) : undefined,
-			onProgress: (msg, n, total) => { if (active()) { setStatus(msg); setProgress(n, total); } },
+			onProgress: (msg, n, total) => { if (active()) { setStatus(progressText(msg)); setProgress(n, total); } },
 			onResults: records => { if (active()) { received = records; defaultSort(records); displaySearchResults(records, { stream: true }); } }, log };
 		/* The list's own order is set once, by the first batch (or the final list when nothing streamed):
 		   a column the reader sorts by while the rest streams in stays sorted. An ORCID person's papers
@@ -1219,7 +1223,7 @@
 				showBanner(t(action === "name-papers" ? "authorNameUnverified" : q.authorProvider === "combined" ? (result.authorProvenance?.via === "openalex" ? "authorCombinedViaOpenAlex" : "authorOrcidViaOrcid") : q.authorProvider === "orcid" ? (result.authorProvenance?.via === "openalex" ? "authorOrcidViaOpenAlex" : "authorOrcidViaOrcid") : "popModeNoticeShort")
 					+ (result.authorProvenance?.truncated ? " " + t("authorLimited", result.length, result.authorProvenance.totalGroups) : ""), null, popNotice ? { tip: t("popModeNotice") } : {});
 			}
-			if (ctx.errors.length) showBanner(t("partialFail", ctx.errors.join(" / ")), null, { warn: true });
+			if (ctx.errors.length) showBanner(t("partialFail", explainList(ctx.errors)), null, { warn: true });
 			await history?.save({ source: "author:" + q.authorProvider, query: { ...q, authorProfile: session.profile, authorProfiles: session.profiles, authorPaging: session.paging || null },
 				records: stripDisplayFields(received), partial: Boolean(received.partial || ctx.errors.length) });
 			saveAuthorPreferences();
@@ -1232,10 +1236,10 @@
 			// A profile lookup that hit Google's login wall: the paper search by
 			// name is still open, so run it rather than leave an empty table.
 			else if (action === "profiles" && q.authorProvider === "scholar" && error.reason === "login" && q.authorInputKind !== "profile" && !/https?:\/\//i.test(input)) {
-				fallbackToName = true; setStatus(t("searchFailed", error.message || error), "err");
+				fallbackToName = true; setStatus(t("searchFailed", explain(error.message || error)), "err");
 			}
-			else if (error.wall) { setStatus(t("searchFailed", error.message || error), "err"); scholarWallBanner(error, () => runAuthorAction(action, profile)); }
-			else { setStatus(t("searchFailed", error.message || error), "err"); showBanner(t("searchFailed", error.message || error), null, { warn: true }); }
+			else if (error.wall) { setStatus(t("searchFailed", explain(error.message || error)), "err"); scholarWallBanner(error, () => runAuthorAction(action, profile)); }
+			else { let text = t("searchFailed", explain(error.message || error)); setStatus(text, "err"); showBanner(text, null, { warn: true }); }
 		} finally {
 			if (state.searchController === controller || !state.searchController) { state.searching = false; state.searchController = null;
 				$("author-search-btn").disabled = false; $("author-name-btn").disabled = false; $("author-stop-btn").disabled = true; $("search-btn").disabled = false;
@@ -2616,7 +2620,7 @@
 			isCancelled: () => controller.signal.aborted,
 			onProgress: (msg, n, total) => {
 				if (!active()) return;
-				setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total);
+				msg = progressText(msg); setStatus(msg); $("busy-text").textContent = msg; setProgress(n, total);
 			},
 			onResults: records => { if (active()) displaySearchResults(records, { stream: true }); },
 			log,
@@ -2654,7 +2658,8 @@
 				// A bare "HTTP 429" from OpenAlex is its exhausted daily budget, which the user
 				// can actually fix; say so instead of showing the status code alone.
 				let quota = ctx.errors.some(m => /openalex/i.test(m) && /429|budget|credit/i.test(m));
-				showBanner(t("partialFail", ctx.errors.join(" / ")) + (quota ? " " + t("openAlexQuota") : ""), null, { warn: true });
+				let listed = explainList(ctx.errors);
+				showBanner(t("partialFail", listed) + (quota && !listed.includes(t("openAlexQuota")) ? " " + t("openAlexQuota") : ""), null, { warn: true });
 			}
 			if (!recs.length && !partial) setStatus(t("noResults", label));
 			else if (!partial && q.sort === "date" && q.venue.trim()) setStatus(t("journalFeed", q.venue.trim(), recs.length));
@@ -2678,7 +2683,7 @@
 				// No source answered because there was no connection: say that, not the network layer's words.
 				let offline = !quota && (e?.offline || (networkFailures > netBefore && !(Number(e?.status) > 0))
 					|| (typeof navigator !== "undefined" && navigator?.onLine === false));
-				let text = quota ? t("openAlexQuota") : offline ? t("searchOffline") : t("searchFailed", e.message || e);
+				let text = quota ? t("openAlexQuota") : offline ? t("searchOffline") : t("searchFailed", explain(e.message || e));
 				state.lastPartial = true;
 				let received = state.records.length;
 				if (received) rememberSearch(sourceKey, q, state.records, true);
@@ -4096,7 +4101,8 @@
 			if (keys.length % 2 && key === null) b.className = "wide";
 			// The chip names the index; the qualifier in parentheses is in its tooltip.
 			let full = key ? (ZotPoPSources.SOURCES?.[key]?.label || key) : t("metricsBasisMax");
-			b.textContent = key ? String(full).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : full;
+			// "Highest per paper" did not fit its half of the tray; the chip says "Highest", the tooltip the rest.
+			b.textContent = key ? String(full).replace(/\s*[(（][^)）]*[)）]\s*$/, "") : t("metricsBasisMaxShort");
 			tip(b, full);
 			b.setAttribute("aria-pressed", String((state.metricsBasis || null) === key));
 			b.addEventListener("click", () => {
@@ -4716,7 +4722,7 @@
 	// The request already in the air for this paper's PMID, if any: Translate waits on it instead of reporting "no abstract".
 	const abstractInFlight = r => (r && r.pmid ? abstractFlights.get(String(r.pmid)) : null) || null;
 	function paintAbstract(r) {
-		$("d-abstract").textContent = r.abstract || (abstractBusy.has(r.key) ? t("abstractLoading") : t("noAbstract"));
+		$("d-abstract").textContent = r.abstract || (abstractBusy.has(r.key) ? t("abstractLoading") : abstractFailed.has(r.key) ? t("abstractLoadFailed") : t("noAbstract"));
 		renderTranslate(r);
 	}
 
@@ -5244,7 +5250,7 @@
 		if (out) {
 			let reason = out.reason;
 			if (!out.ok) {
-				if (reason === "empty-library" || reason === "no-known-held") showBanner(t("relNeedsLibrary"), null, { warn: true });
+				if (reason === "empty-library" || reason === "no-known-held") showBanner(t(reason === "no-known-held" ? "relNoReferences" : "relNeedsLibrary"), null, { warn: true });
 				else setStatus(t(reason === "budget" ? "relBudget" : "relFailed"), "err");
 			}
 			else {

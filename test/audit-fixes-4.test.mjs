@@ -16,8 +16,8 @@ test("CSV: first and corresponding author each carry their own institution, coun
 	const at = name => row[head.indexOf(name)];
 	assert.equal(head.length, row.length);
 	assert.equal(I18N.STRINGS.ko.csvHead.length, head.length, "Korean header has the same columns");
-	assert.deepEqual([at("FirstAuthorInstitution"), at("FirstAuthorCountry"), at("FirstAuthorHIndex")], ["Lab Alpha", "US", "100"]);
-	assert.deepEqual([at("CorrespondingInstitution"), at("CorrespondingCountry"), at("CorrespondingHIndex")], ["Lab Beta", "KR", "2300"]);
+	assert.deepEqual([at("FirstAuthorInstitution"), at("FirstAuthorCountry"), at("FirstAuthorInstitutionHIndex")], ["Lab Alpha", "US", "100"]);
+	assert.deepEqual([at("CorrespondingInstitution"), at("CorrespondingCountry"), at("CorrespondingInstitutionHIndex")], ["Lab Beta", "KR", "2300"]);
 	assert.ok(!lines[1].includes('"US/KR"'), "no joined country list next to one institution");
 });
 

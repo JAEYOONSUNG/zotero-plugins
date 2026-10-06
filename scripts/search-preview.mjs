@@ -866,7 +866,7 @@ export function checkPreview(out) {
 	if (!t.menu.closed || !t.menu.closedByOutsideClick) problems.push("a menu should close after a choice and on an outside click");
 	if (!same(t.menu.reopened, ["false", "true", "true", "true", "true", null, null, "true", "false", "false"])) problems.push("the reopened View menu should show Columns: all as chosen; got " + t.menu.reopened);
 	if (t.menu.export.length < 2) problems.push("the Export menu should offer copy and save");
-	if (!/전체 12 \/ 미보유 11 \/ 보유 1|All 12 \/ Not owned 11 \/ Owned 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
+	if (!/전체 12 \/ 미보유 11 \/ 보유 1|All 12 \/ Not in library 11 \/ In library 1/.test(t.library.start)) problems.push("the library filter should start at 12 / 11 / 1; got " + t.library.start);
 	if (!/4 \/ .* 4 \/ .* 0$/.test(t.library.withFacet)) problems.push("the library counts should follow the author facet; got " + t.library.withFacet);
 	if (!same(t.library.facetNew.rows.slice().sort(), ["10", "7", "8", "9"])) problems.push("Jenna's not-owned rows should be 7-10; got " + t.library.facetNew.rows);
 	if (t.library.facetNew.selected !== t.facet.selected) problems.push("changing the library filter should keep the checks");
@@ -922,7 +922,7 @@ export function checkPreview(out) {
 	}
 	{
 		const g = t.signals || {};
-		if (g.hidden || !/(내 문헌 2편이 이 논문을 인용|2 of my papers cite this)/.test(g.text || "") || !/(이 논문이 내 문헌 2편을 인용|This cites 2 of my papers)/.test(g.text || "")) problems.push("the detail should say 1 of my papers cite it and it cites 2 of mine (LIBA/LIBC cite W9001, the reference list holds LIBA and LIBB); got " + g.text);
+		if (g.hidden || !/(내 논문 2편이 이 논문을 인용|2 of my papers cite this)/.test(g.text || "") || !/(이 논문이 내 논문 2편을 인용|This cites 2 of my papers)/.test(g.text || "")) problems.push("the detail should say 1 of my papers cite it and it cites 2 of mine (LIBA/LIBC cite W9001, the reference list holds LIBA and LIBB); got " + g.text);
 		if (!/(관심 저자 참여|Followed author): Jonas Park/.test(g.text || "")) problems.push("the followed author's chip is missing; got " + g.text);
 		if (g.refRequests !== 1) problems.push("opening the detail should cost one referenced_works request; got " + g.refRequests);
 		if (!same(g.list, ["Repair-stage markers in regenerating tissue", "Spatial cell-state methods compared"]) && !same(g.list, ["Repair-stage markers in regenerating tissue", "A field guide to atlas-scale sampling"])) problems.push("the count should open a list of library titles; got " + JSON.stringify(g.list));

@@ -198,7 +198,7 @@ test("both locales word the new controls, and the PDF and column tips say what i
 	}
 	const ko = I18N.make("ko"), en = I18N.make("en");
 	assert.equal(ko("libAll") + " / " + ko("libNew") + " / " + ko("libOwned"), "전체 / 미보유 / 보유");
-	assert.equal(en("libAll") + " / " + en("libNew") + " / " + en("libOwned"), "All / Not owned / Owned");
+	assert.equal(en("libAll") + " / " + en("libNew") + " / " + en("libOwned"), "All / Not in library / In library");
 	for (const t of [ko, en]) {
 		assert.match(t("evPdf") + t("thPdfClickTip"), /후보|candidate/i);
 		assert.match(t("evPdf"), /후보|candidate/i);
