@@ -1732,7 +1732,8 @@
    }else if(moving)for(const node of viewContainers(session))if(node.style)try{node.style.setProperty('transition',SLIDE_PROPS);}catch(_){}
    if(session.appliedWidth!==w){
     const was=session.appliedWidth||0;
-    if(!was&&w>0)noteZoom(session);
+    if(!was&&w>0&&!session.zoomAdjusted)noteZoom(session);
+    session.fitPending=w>0;
     session.appliedWidth=w;refit(session);
     // Once the view has its new width: a page that fitted before is fitted again, and closing puts the zoom back.
     try{session.doc.defaultView.setTimeout(()=>{if(!session.destroyed)fitPage(session,w>0);},(moving?SLIDE_MS:0)+120);}catch(_){}
@@ -1741,7 +1742,10 @@
    }
    tabstops(session);
    // Measured once the slide (and Zotero's own resize after it) has settled.
-   if(w>0)try{const win=session.doc.defaultView;if(session.columnTimer)win.clearTimeout(session.columnTimer);session.columnTimer=win.setTimeout(()=>{session.columnTimer=null;if(!session.destroyed&&session.open)checkColumn(session,occupied(session));},SLIDE_MS+600);}catch(_){}
+   if(w>0)try{const win=session.doc.defaultView;if(session.columnTimer)win.clearTimeout(session.columnTimer);session.columnTimer=win.setTimeout(()=>{session.columnTimer=null;if(session.destroyed||!session.open)return;
+    // Only after a width of ours changed: a zoom the reader set themselves while the panel stood still is theirs.
+    if(session.fitPending){session.fitPending=false;fitPage(session,true);}
+    checkColumn(session,occupied(session));},SLIDE_MS+600);}catch(_){}
   }
   /* A set zoom (a number, not page-width or auto, which pdf.js refits by itself) leaves the page as wide as it was:
      on a large screen it ran on under the narrowed view's edge and seemed not to move at all. When the page fitted
@@ -1760,15 +1764,24 @@
    const z=zoomState(session);
    session.zoomBefore=z&&!NAMED_ZOOM.test(z.value)?{value:z.value,scale:z.scale,fitted:z.page>0&&z.page<=z.room}:null;
   }
+  /* The frame is narrower; the paper in it has to be too. A named zoom (page width, auto) is simply set again,
+     which makes pdf.js lay the pages out for the width they now have. A fixed zoom is brought down by as much as
+     the view lost, so the page that fitted the window still fits beside the panel. Closing puts the zoom back,
+     unless the reader has changed it meanwhile. */
   function fitPage(session,open){
-   const z=zoomState(session);if(!z)return;
+   const z=zoomState(session);if(!z||!(z.room>0))return;
    if(open){
-    const b=session.zoomBefore;if(!b||!b.fitted||NAMED_ZOOM.test(z.value)||!(z.page>z.room)||!(z.room>0))return;
+    if(NAMED_ZOOM.test(z.value)){try{z.pv.currentScaleValue=z.value;}catch(error){log(error);}return;}
+    if(!(z.page>z.room-1))return;
     const MARGIN=24,scale=Math.max(0.25,z.scale*(z.room-MARGIN)/z.page);
-    try{z.pv.currentScale=scale;session.zoomAdjusted={from:b.value,to:scale};}catch(error){log(error);}
+    if(Math.abs(scale-z.scale)<1e-3)return;
+    // The zoom to come back to is the one from before the panel opened, or this one when that was never noted.
+    const from=session.zoomAdjusted?session.zoomAdjusted.from:(session.zoomBefore&&session.zoomBefore.value)||z.value;
+    try{z.pv.currentScale=scale;session.zoomAdjusted={from,to:scale};}catch(error){log(error);}
    }else{
     const a=session.zoomAdjusted;session.zoomAdjusted=null;session.zoomBefore=null;
-    if(a&&Math.abs(z.scale-a.to)<1e-3)try{z.pv.currentScaleValue=a.from;}catch(error){log(error);}
+    if(!a)return;
+    if(Math.abs(z.scale-a.to)<1e-2)try{z.pv.currentScaleValue=a.from;}catch(error){log(error);}
    }
   }
   /* Opening and closing slide: the panel comes in from the right edge as the view's edge moves left with it,
@@ -1822,8 +1835,10 @@
     const key=line.replace(/^\S+ /,'');
     if(session.columnReport!==key){session.columnReport=key;Z.Prefs.set('extensions.style-custom.readerColumnLast',line,true);}
     // Written as a file too: a pref is only flushed now and then, and this is the one thing a reader reports.
-    try{const io=runtime.io||(typeof IOUtils!=='undefined'?IOUtils:null);
-     if(io&&io.writeUTF8&&!guard&&!session.probing)io.writeUTF8(Z.DataDirectory.dir+'/style-custom-reader-layout.txt',line+'\n',{mode:'append',tmpPath:null}).catch(()=>{});}catch(_){}
+    try{
+     const io=root.IOUtils||view.IOUtils||runtime.io,paths=root.PathUtils||view.PathUtils||runtime.paths;
+     if(io&&paths&&!guard&&!session.probing)io.writeUTF8(paths.join(Z.DataDirectory.dir,'style-custom-reader-layout.txt'),line+'\n',{mode:'append'}).catch(error=>log(error));
+    }catch(error){log(error);}
     /* Still under the panel after the slide: the way that was measured as working does not hold once Zotero has
        laid the reader out again. Try the next one and measure again. */
     if(under&&w>0&&!session.pushRetry){

@@ -469,6 +469,47 @@
       return said;
     }));
 
+    results.push(await attempt('every column in the list takes the hover, not only the first', async () => {
+      /* The reader saw the tint let go as the pointer reached the columns on the right. Each visible column is
+         hovered in turn and its cell's own painted colour is read: a mark that sets no colour is the same as no
+         mark at all, so the measure here is what the eye sees, not what the attributes say. */
+      if (!doc || !win) throw new Error('no main window');
+      const state = runtime.windows.get(win);
+      if (!state || !state.cellsCleanup) throw new Error('the cell hover handlers are not attached');
+      if (runtime.getSetting && !runtime.getSetting('hoverColumn')) return 'the hover tint is switched off in settings; nothing to probe';
+      // A selected row keeps its own colour on purpose, so the probe needs a row that is not selected.
+      const row = [...doc.querySelectorAll('#zotero-items-tree .virtualized-table-body .row')].find(r => !r.classList.contains('selected'));
+      if (!row) return 'no unselected row in the list; not probed';
+      if (doc.hidden) return 'the window is hidden, so animation frames do not run; hover not probed';
+      const tree = row.closest('#zotero-items-tree');
+      const columns = (() => { try { return (win.ZoteroPane.itemsView.tree._getVisibleColumns() || []).map(c => c.dataKey); } catch (ignored) { return []; } })();
+      const wait = ms => new Promise(resolve => win.setTimeout(resolve, ms));
+      const paint = node => { try { return String(win.getComputedStyle(node).backgroundColor || ''); } catch (ignored) { return ''; } };
+      const cells = [...row.querySelectorAll('.cell')];
+      if (!cells.length) return 'the row has no cells; not probed';
+      const plain = cells.map(paint);
+      const bad = [], lit = [];
+      try {
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells[i];
+          const name = columns.find(k => cell.classList.contains(k)) || [...cell.classList].filter(c => c !== 'cell' && c !== 'first-column' && c !== 'no-padding')[0] || '(no class)';
+          cell.dispatchEvent(new win.MouseEvent('mouseover', {bubbles: true, cancelable: true, buttons: 0}));
+          for (let waited = 0; waited < 400 && !cell.hasAttribute('data-sc-hover-cell'); waited += 50) await wait(50);
+          if (!cell.hasAttribute('data-sc-hover-cell')) { bad.push(`${name}: no mark`); continue; }
+          if (!tree.getAttribute('data-sc-hover-col')) { bad.push(`${name}: the tree did not name the column`); continue; }
+          await wait(30);
+          const now = paint(cell);
+          if (now === plain[i]) bad.push(`${name}: marked but still ${now || 'unpainted'}`);
+          else lit.push(name);
+        }
+      } finally {
+        for (const cell of cells) cell.removeAttribute('data-sc-hover-cell');
+        if (tree) tree.removeAttribute('data-sc-hover-col');
+      }
+      if (bad.length) throw new Error(`${bad.length} of ${cells.length} columns do not light up: ` + bad.join(' | '));
+      return `all ${cells.length} visible columns light up (${lit.slice(0, 10).join(', ')}${lit.length > 10 ? ' +' + (lit.length - 10) : ''})`;
+    }));
+
     results.push(await attempt('hovering a cell sets the hover attributes and leaving clears them', async () => {
       if (!doc || !win) throw new Error('no main window');
       const state = runtime.windows.get(win);

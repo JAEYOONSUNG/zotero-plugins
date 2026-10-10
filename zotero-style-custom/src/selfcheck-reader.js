@@ -753,6 +753,38 @@
           detail: (problems.length ? problems.join(' ; ') + ' · ' : '') + `view ${r(a0.left)}–${r(a0.right)} → ${r(a1.left)}–${r(a1.right)}, page ${r(p0.left)}–${r(p0.right)} → ${r(p1.left)}–${r(p1.right)}, panel from ${r(pr.left)} · zoom ${zoomBefore.toFixed(3)}, back to ${zoomAfter.toFixed(3)} on close`};
       });
 
+      await check('fit: a page-width zoom is laid out again for the narrowed view', async () => {
+        /* What the reader had: a named zoom, where pdf.js decides the page size from the width of the view. The
+           view narrows for the panel; unless pdf.js is told to lay the pages out again, the page keeps the size
+           it had for the full width and its outer column is cut off at the panel. */
+        const v = viewer(); if (!v) throw new Error('no pdf.js viewer');
+        const keep = String(v.currentScaleValue);
+        const frame = () => { try { return reader._internalReader._primaryView._iframe; } catch (ignored) { return null; } };
+        const area = () => { const f = frame(); return f ? rectOf(f) : null; };
+        const pageAt = () => { const b = pageBox(1), fr = area(); return b && b.rect && fr ? {left: fr.left + b.rect.left, right: fr.left + b.rect.right} : null; };
+        /* A hidden window lays nothing out: pdf.js would work out "page width" from a container of no width.
+           Nothing is set in that case, and the step says so instead of waiting for a page that never appears. */
+        const first = pageAt();
+        if (!first || !(first.right - first.left > 1)) return {pass: true, detail: 'page 1 is not laid out (the reader is hidden); the page-width fit was not probed'};
+        try { v.currentScaleValue = 'page-width'; } catch (ignored) {}
+        await sleep(500);
+        const a0 = area(), p0 = pageAt();
+        if (!p0 || !(p0.right - p0.left > 1)) { try { v.currentScaleValue = keep; } catch (ignored) {} return {pass: true, detail: 'the page lost its size under a page-width zoom (the reader is hidden); not probed'}; }
+        handle.slide(true); handle.open();
+        await sleep(1400);
+        const a1 = area(), p1 = pageAt(), pr = rectOf(handle.panel());
+        handle.close(); await sleep(900); handle.slide(false);
+        try { v.currentScaleValue = keep; } catch (ignored) {}
+        await sleep(200);
+        if (!a0 || !a1 || !p0 || !p1 || !pr) throw new Error('nothing to measure');
+        const r = x => Math.round(x), problems = [];
+        if (a1.right > pr.left + 2) problems.push(`the view still reaches ${r(a1.right)}px, under the panel from ${r(pr.left)}px`);
+        if (p1.right > a1.right + 1) problems.push(`the page reaches ${r(p1.right)}px, past the narrowed view's edge at ${r(a1.right)}px: it was not laid out again`);
+        if (p1.right - p1.left >= p0.right - p0.left - 4) problems.push(`the page is still ${r(p1.right - p1.left)}px wide (was ${r(p0.right - p0.left)}px): it did not shrink with the view`);
+        return {pass: !problems.length, data: {a0, a1, p0, p1},
+          detail: (problems.length ? problems.join(' ; ') + ' · ' : '') + `page-width: view ${r(a0.right - a0.left)} → ${r(a1.right - a1.left)}px, page ${r(p0.right - p0.left)} → ${r(p1.right - p1.left)}px, ends at ${r(p1.right)} with the panel from ${r(pr.left)}`};
+      });
+
       await check('follow-along: the mark lies on the sentence in the text layer', async () => {
         if (!extraction) throw new Error('no extraction');
         const unit = extraction.units.find(u => Array.isArray(u.rects) && u.rects.length && handle.pageNumberOf(u));
