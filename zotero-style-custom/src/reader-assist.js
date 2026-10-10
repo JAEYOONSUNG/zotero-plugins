@@ -223,7 +223,8 @@
      if((await io().stat(file)).size>16*1024*1024)return null;
      const value=JSON.parse(await io().readUTF8(file));
      // A read is a use: the cache drops the least recently used papers. A self-check's read is not a use and writes nothing.
-     if(touch)try{if(io().setModificationTime)await io().setModificationTime(file);}catch(_){}
+     // A live check counts every write anyone makes, including the touch of a reader the user left open.
+     if(touch&&!guard)try{if(io().setModificationTime)await io().setModificationTime(file);}catch(_){}
      return value;
     }catch(error){log(error);return null;}
    },
@@ -1159,18 +1160,121 @@
    proc.runwAsync(args,args.length,{observe(subject,topic){let status=-1;try{if(topic==='process-finished')status=proc.exitValue;}catch(_){}onexit(status);}});
    return {kill(){try{proc.kill();}catch(_){}}};
   }
+  /* ---- natural voices ----
+     1. The voice chosen in Zotero's own Read Aloud, for a language that has one: Zotero's server, the account's
+        credits (about two free hours of standard voices), the same voice and the same quota as the reader's ▶.
+     2. Supertonic 3 on this Mac through the AI bridge (bridge/tts): free, no quota. It also takes over for the rest
+        of the paper when Zotero's credits run out or its server cannot be reached.
+     3. The system voices (speechSynthesis, then `say`), below. */
+  const QUOTA=/quota|limit/;
+  // Voices the bridge or Zotero speaks (an audio element), as opposed to the system's own speech queue.
+  const NATURAL_KINDS=['zotero','supertonic','kokoro'];
+  function zoteroVoiceIDs(){
+   let map={};try{map=JSON.parse(String(Z.Prefs.get('reader.readAloudVoices')||'{}'))||{};}catch(_){}
+   const out={};
+   for(const [lang,v] of Object.entries(map)){const id=v&&(v.voice||v.tierVoices&&(v.tierVoices.standard||v.tierVoices.premium));if(typeof id==='string'&&/^[\w-]+$/.test(id))out[lang]=id;}
+   return out;
+  }
+  let bridgeVoiceCheck=null;
+  async function bridgeVoices(){
+   if(bridgeVoiceCheck&&Date.now()-bridgeVoiceCheck.at<60000)return bridgeVoiceCheck.value;
+   let value=null;
+   try{
+    const config=runtime.assist&&typeof runtime.assist.bridge==='function'?await runtime.assist.bridge():null;
+    if(config){
+     const r=await Z.HTTP.request('GET',config.base+'/v1/audio/voices',{headers:{Authorization:'Bearer '+config.token},responseType:'json',timeout:4000,successCodes:false,errorDelayMax:0});
+     const body=r&&r.status===200?r.response:null;
+     if(body&&body.available&&Array.isArray(body.models)&&body.models.length)value={config,models:body.models};
+    }
+   }catch(_){value=null;}
+   bridgeVoiceCheck={at:Date.now(),value};return value;
+  }
+  async function naturalEngine(session){
+   const win=Z.getMainWindow?Z.getMainWindow():null;
+   if(!win||typeof win.Audio!=='function'||typeof win.Blob!=='function')return null;
+   let zotero={};
+   try{if(await Z.Sync.Data.Local.getAPIKey())zotero=zoteroVoiceIDs();}catch(_){zotero={};}
+   const bridge=await bridgeVoices();
+   const voices=[];
+   for(const [lang,id] of Object.entries(zotero))voices.push({voiceURI:`zotero:${lang}:${id}`,name:t('Zotero 읽어주기'),lang,localService:false,default:true,model:'zotero'});
+   // Every local model the bridge has, for every language it speaks: one entry each, named by its model.
+   for(const model of bridge?bridge.models:[]){
+    for(const lang of model.langs&&model.langs.length?model.langs:['en'])for(const v of model.voices||[])
+     voices.push({voiceURI:`${model.id}:${lang}:${v.id}`,name:`${model.label} · ${v.id}${v.style?' ('+v.style+')':''}`,lang,localService:true,default:!zotero[lang]&&v.id===model.default,model:model.id});
+   }
+   if(!voices.length)return null;
+   const modelIDs=(bridge?bridge.models:[]).map(m=>m.id);
+   const toURL=(blob,playbackRate=1)=>{const url=win.URL.createObjectURL(blob);return {url,playbackRate,release(){try{win.URL.revokeObjectURL(url);}catch(_){}}};};
+   const local=({text,lang,model,voice,rate})=>{
+    let cancel=null,aborted=false;
+    const {config}=bridge;const code=String(lang||'en').toLowerCase().split(/[-_]/)[0];
+    const promise=Promise.resolve(Z.HTTP.request('POST',config.base+'/v1/audio/speech',{headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token},
+     body:JSON.stringify({input:text,lang:code,model:model||modelIDs[0]||'',voice:voice||'',speed:rate}),responseType:'arraybuffer',timeout:60000,successCodes:false,errorDelayMax:0,
+     cancellerReceiver:fn=>{cancel=fn;if(aborted)fn();}})).then(r=>{
+      if(!r||r.status!==200||!r.response)throw Object.assign(new Error('이 Mac의 음성 모델이 응답하지 않습니다 ('+(r&&r.status)+'). 터미널에서 bridge/install.sh를 다시 실행해 보세요.'),{own:true});
+      return toURL(new win.Blob([r.response],{type:'audio/wav'}));
+     });
+    return {promise,abort(){aborted=true;try{cancel&&cancel();}catch(_){}}};
+   };
+   const remote=({text,voice,rate})=>{
+    let aborted=false;
+    const promise=(async()=>{
+     let result=null;
+     const face=typeof session.reader._getReadAloudRemoteInterface==='function'?session.reader._getReadAloudRemoteInterface(win):null;
+     if(face&&face.getAudio)result=await face.getAudio({text},{id:voice});
+     else{const client=Z.Sync.Runner.getAPIClient({apiKey:await Z.Sync.Data.Local.getAPIKey()});result=await client.getReadAloudAudio({text},voice);}
+     if(aborted)throw Object.assign(new Error('cancelled'),{code:'cancelled'});
+     if(!result||!result.audio)throw Object.assign(new Error(String(result&&result.error||'unknown')),{zotero:true});
+     return toURL(result.audio,rate);
+    })();
+    return {promise,abort(){aborted=true;}};
+   };
+   const synth=({text,lang,voiceURI,rate})=>{
+    const [kind,voiceLang,id]=String(voiceURI||'').split(':');
+    const code=voiceLang||lang;
+    if(kind==='zotero'&&!session.zoteroVoiceOff){
+     const job=remote({text,voice:id,rate});
+     if(!bridge)return job;
+     // Out of credits or offline: this piece and the rest of the paper are read by a model on this Mac.
+     let inner=null;
+     const promise=job.promise.catch(error=>{
+      if(!error||!error.zotero)throw error;
+      if(!session.zoteroVoiceOff){session.zoteroVoiceOff=QUOTA.test(error.message)?'quota':'error';try{renderPlayer(session);}catch(_){}}
+      inner=local({text,lang:code,model:'',voice:'',rate});return inner.promise;
+     });
+     return {promise,abort(){job.abort();inner&&inner.abort();}};
+    }
+    if(bridge&&modelIDs.includes(kind))return local({text,lang:code,model:kind,voice:id,rate});
+    if(bridge)return local({text,lang:code,model:'',voice:'',rate});
+    return remote({text,voice:id,rate});
+   };
+   return RA.audioEngine({synth,makeAudio:url=>new win.Audio(url),voices});
+  }
+  /* Every engine this Mac can offer, in one list, so the panel's voice menu holds them all and switching from
+     one model to another does not start the paper over. A live self-check speaks nothing and sends nothing, so
+     it gets the system voices alone. */
   async function pickEngine(session){
    const win=session.reader._iframeWindow||session.doc.defaultView;
+   const parts=[];
+   if(!guard){
+    try{const natural=await naturalEngine(session);if(natural&&natural.available())parts.push({kinds:NATURAL_KINDS.slice(),engine:natural});}catch(error){log(error);}
+   }
    const speech=RA.speechEngine(win);
-   if(speech.available())return speech;
-   // Voices load late in Gecko: give them a moment, as the reader's own read-aloud does.
-   try{
-    if(win.speechSynthesis&&win.speechSynthesis.addEventListener)await new Promise(resolve=>{const done=()=>resolve();win.speechSynthesis.addEventListener('voiceschanged',done,{once:true});win.setTimeout(done,1500);});
-   }catch(_){}
-   if(speech.available())return speech;
+   if(!speech.available()){
+    // Voices load late in Gecko: give them a moment, as the reader's own read-aloud does.
+    try{
+     if(win.speechSynthesis&&win.speechSynthesis.addEventListener)await new Promise(resolve=>{const done=()=>resolve();win.speechSynthesis.addEventListener('voiceschanged',done,{once:true});win.setTimeout(done,1500);});
+    }catch(_){}
+   }
+   const system=speech.available()?speech:await sayFallback(win);
+   if(system)parts.push({kinds:['system'],engine:system,fallback:true});
+   if(!parts.length)throw new Error('이 컴퓨터에서 쓸 수 있는 음성이 없습니다. 시스템 설정 → 접근성 → 음성 콘텐츠에서 음성을 내려받으세요.');
+   return parts.length===1?parts[0].engine:RA.multiEngine(parts);
+  }
+  async function sayFallback(win){
    const mac=Z.isMac||/Mac/i.test(String(win.navigator&&win.navigator.platform||''));
    if(mac&&typeof io()?.exists==='function'&&await io().exists('/usr/bin/say').catch(()=>false))return RA.sayEngine({spawn:spawnSay});
-   throw new Error('이 컴퓨터에서 쓸 수 있는 음성이 없습니다. 시스템 설정 → 접근성 → 음성 콘텐츠에서 음성을 내려받으세요.');
+   return null;
   }
   async function ensurePlayer(session){
    if(session.player)return session.player;
@@ -1206,9 +1310,15 @@
    session.preparing=true;showReading(session);
    try{return await session.playerPromise;}finally{session.playerPromise=null;session.preparing=false;if(!session.destroyed&&session.ui)renderPlayer(session);}
   }
+  /* The menu holds every voice of every engine for the paper's language, the models grouped and named, so the
+     reader can hear the same paragraph in another one without losing their place. */
+  const ENGINE_ORDER=['zotero','supertonic','kokoro','system'];
+  const engineOf=v=>{const kind=String(v&&v.voiceURI||'').split(':')[0];return NATURAL_KINDS.includes(kind)?kind:'system';};
   function fillVoices(session,voices,lang,current){
    const same=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith(lang));
-   const items=[{value:'',label:t('자동')},...(same.length?same:voices).slice(0,60).map(v=>({value:v.voiceURI,label:v.name+(v.lang?' · '+v.lang:'')}))];
+   const list=(same.length?same:voices).slice();
+   list.sort((a,b)=>ENGINE_ORDER.indexOf(engineOf(a))-ENGINE_ORDER.indexOf(engineOf(b)));
+   const items=[{value:'',label:t('자동')},...list.slice(0,120).map(v=>({value:v.voiceURI,label:engineOf(v)==='system'?t('시스템')+' · '+v.name:v.name}))];
    const saved=setting(voiceKey(lang),'');
    session.ui.voice.set({items,current:saved&&items.some(i=>i.value===saved)?saved:'',label:current?current.name:t('목소리')});
   }
@@ -1532,6 +1642,73 @@
      second is not remembered and undoes itself when the room comes back. */
   const isFolded=session=>!!(session.collapsed||session.autoFolded);
   const occupied=session=>!session.open?0:isFolded(session)?RAIL_WIDTH:panelWidth(session);
+  /* Making the paper's own frame narrower, so the panel stands beside it instead of over it.
+     inset-inline-end is what Zotero's context pane uses, and it only narrows a view that is positioned; a view
+     laid out in flow ignores it and the paper stays under the panel, which is what the reader saw. So each way
+     is applied and then measured, and the first one that really moves the view's right edge is kept for the
+     session; the measurement runs again when the slide has settled, in case the first answer was the animation. */
+  const PUSH_PROPS=['inset-inline-end','margin-inline-end','width','max-width'];
+  const PUSH_WAYS=[
+   {name:'inset',props:{'inset-inline-end':w=>w+'px'}},
+   {name:'margin',props:{'margin-inline-end':w=>w+'px'}},
+   {name:'width',props:{'width':w=>`calc(100% - ${w}px)`,'max-width':w=>`calc(100% - ${w}px)`}}
+  ];
+  function rememberLayout(session,node){
+   if(!session.layoutOriginal)session.layoutOriginal=new Map();
+   if(session.layoutOriginal.has(node))return;
+   const saved={};
+   for(const prop of PUSH_PROPS)saved[prop]={value:node.style.getPropertyValue(prop),priority:typeof node.style.getPropertyPriority==='function'?node.style.getPropertyPriority(prop):''};
+   session.layoutOriginal.set(node,saved);
+  }
+  function restoreLayout(session,node,props){
+   const saved=session.layoutOriginal&&session.layoutOriginal.get(node);if(!saved)return;
+   for(const prop of props){const o=saved[prop];if(o&&o.value)node.style.setProperty(prop,o.value,o.priority);else node.style.removeProperty(prop);}
+  }
+  function applyWay(session,way,w){
+   for(const node of viewContainers(session)){
+    if(!node.style)continue;
+    rememberLayout(session,node);
+    restoreLayout(session,node,PUSH_PROPS.filter(prop=>!(prop in way.props)));
+    for(const prop of Object.keys(way.props))node.style.setProperty(prop,way.props[prop](w),'important');
+   }
+  }
+  /* Whether every view container now ends at or before the panel: true, false, or null when nothing in this
+     document can be measured (a reader that has not been laid out yet), where the first way is kept. */
+  function pushedAside(session,w){
+   const total=docWidth(session);let seen=false;
+   if(!(total>0))return null;
+   for(const node of viewContainers(session)){
+    const r=rectOf(node);if(!r||!(r.width>0))continue;
+    seen=true;if(r.right>total-w+2)return false;
+   }
+   return seen?true:null;
+  }
+  /* The ways in the order to try: the one that worked for this session first. */
+  const pushOrder=session=>{
+   const at=session.pushWay?PUSH_WAYS.findIndex(way=>way.name===session.pushWay):-1;
+   return at>0?[PUSH_WAYS[at],...PUSH_WAYS.filter((_,i)=>i!==at)]:PUSH_WAYS;
+  };
+  /* Narrow the view to leave w for the panel, trying each way until the measurement agrees. While the slide runs
+     the measured edge is still on its way, so the transition is put on only after a way has been chosen. */
+  function pushViews(session,w,{measure=true}={}){
+   if(!(w>0)){
+    for(const node of viewContainers(session))if(node.style)restoreLayout(session,node,PUSH_PROPS);
+    session.layoutOriginal=null;session.pushedWidth=0;return true;
+   }
+   for(const node of viewContainers(session))if(node.style)try{node.style.removeProperty('transition');}catch(_){}
+   let ok=false;
+   for(const way of pushOrder(session)){
+    applyWay(session,way,w);
+    const told=measure?pushedAside(session,w):true;
+    // Nothing to measure: the first way stays, and checkColumn looks again once the reader has been laid out.
+    if(told===null){session.pushWay=session.pushWay||way.name;ok=true;break;}
+    if(told){session.pushWay=way.name;ok=true;break;}
+   }
+   // None of them could be shown to work: keep the way Zotero's own context pane uses and let checkColumn look again.
+   if(!ok){session.pushWay=null;applyWay(session,PUSH_WAYS[0],w);}
+   session.pushedWidth=w;session.pushOK=ok;
+   return ok;
+  }
   function applyLayout(session,open){
    if(open!==undefined)session.open=!!open;
    session.autoFolded=!!(session.open&&!session.collapsed&&maxPanelWidth(session)<MIN_WIDTH);
@@ -1542,16 +1719,17 @@
    root_.setAttribute('data-collapsed',String(isFolded(session)));
    try{root_.style.setProperty('--sc-ra-w',(isFolded(session)?RAIL_WIDTH:panelWidth(session))+'px');}catch(_){}
    if(session.ui.railExpand)session.ui.railExpand.title=session.autoFolded?t('창이 좁아 접어 두었습니다. 창을 넓히면 다시 펼쳐집니다.'):t('패널 펼치기');
-   for(const node of viewContainers(session)){
-    if(!node.style)continue;
-    if(!session.layoutOriginal)session.layoutOriginal=new Map();
-    const priority=()=>typeof node.style.getPropertyPriority==='function'?node.style.getPropertyPriority('inset-inline-end'):'important';
-    if(!session.layoutOriginal.has(node))session.layoutOriginal.set(node,{value:node.style.getPropertyValue('inset-inline-end'),priority:priority()});
-    if(moving)node.style.setProperty('transition',`inset-inline-end ${SLIDE_MS}ms ${SLIDE_EASE}`);
-    if(w>0){if(node.style.getPropertyValue('inset-inline-end')!==w+'px'||priority()!=='important')node.style.setProperty('inset-inline-end',w+'px','important');}
-    else{const o=session.layoutOriginal.get(node);if(o.value)node.style.setProperty('inset-inline-end',o.value,o.priority);else node.style.removeProperty('inset-inline-end');}
-   }
-   if(w===0)session.layoutOriginal=null;
+   pushViews(session,w);
+   /* The way had to be chosen with no transition on, or the measurement would have read the animation instead of
+      the result. Now that it is known, the edge is put back where it started and sent to its place again, this
+      time with the transition: the paper's frame narrows as the panel slides in, like one door. */
+   if(moving&&w>0){
+    const way=PUSH_WAYS.find(x=>x.name===session.pushWay)||PUSH_WAYS[0];
+    applyWay(session,way,0);
+    for(const node of viewContainers(session))rectOf(node);                 // the reflow that makes 0 the start
+    for(const node of viewContainers(session))if(node.style)try{node.style.setProperty('transition',SLIDE_PROPS);}catch(_){}
+    applyWay(session,way,w);
+   }else if(moving)for(const node of viewContainers(session))if(node.style)try{node.style.setProperty('transition',SLIDE_PROPS);}catch(_){}
    if(session.appliedWidth!==w){
     const was=session.appliedWidth||0;
     if(!was&&w>0)noteZoom(session);
@@ -1596,6 +1774,7 @@
   /* Opening and closing slide: the panel comes in from the right edge as the view's edge moves left with it,
      like a sliding door, and goes back the same way. Reduced motion: no slide. */
   const SLIDE_MS=240,SLIDE_EASE='cubic-bezier(.2,.8,.2,1)';
+  const SLIDE_PROPS=`inset-inline-end ${SLIDE_MS}ms ${SLIDE_EASE}, margin-inline-end ${SLIDE_MS}ms ${SLIDE_EASE}, width ${SLIDE_MS}ms ${SLIDE_EASE}, max-width ${SLIDE_MS}ms ${SLIDE_EASE}`;
   // A window that cannot say (no matchMedia) gets no slide: it opens and closes at once.
   const reducedMotion=session=>{try{const w=session.doc.defaultView;return typeof w.matchMedia!=='function'||!!w.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(_){return true;}};
   function slidePanel(session,root_,moving){
@@ -1639,9 +1818,22 @@
      if(pv){scale=`${pv.currentScaleValue}`;const pg=c&&c.querySelector('.page');if(pg){const r=pg.getBoundingClientRect();pageNote=` page=${Math.round(frame.left+r.left)}..${Math.round(frame.left+r.right)} inner=${Math.round(c.clientWidth)} scroll=${Math.round(c.scrollLeft)}`;}}}}catch(_){}
     if(frame)rows.push(`iframe right=${Math.round(frame.right)} w=${Math.round(frame.width)} style.w=${(()=>{try{return waive(coreOf(session.reader)._primaryView)._iframe.style.width||'-';}catch(_){return '?';}})()} zoom=${scale}${pageNote}`);
     const under=!nodes.length||nodes.some(node=>{const r=node.getBoundingClientRect();return r.width>0&&r.right>total-w+2;})||!!(frame&&frame.width>0&&frame.right>total-w+2);
-    const line=`${new Date().toISOString()} ${under?'UNDER':'beside'} total=${Math.round(total)} panel=${w} ${rows.join(' | ')||'no view container'}`;
+    const line=`${new Date().toISOString()} ${under?'UNDER':'beside'} total=${Math.round(total)} panel=${w} way=${session.pushWay||'none'} ${rows.join(' | ')||'no view container'}`;
     const key=line.replace(/^\S+ /,'');
     if(session.columnReport!==key){session.columnReport=key;Z.Prefs.set('extensions.style-custom.readerColumnLast',line,true);}
+    // Written as a file too: a pref is only flushed now and then, and this is the one thing a reader reports.
+    try{const io=runtime.io||(typeof IOUtils!=='undefined'?IOUtils:null);
+     if(io&&io.writeUTF8&&!guard&&!session.probing)io.writeUTF8(Z.DataDirectory.dir+'/style-custom-reader-layout.txt',line+'\n',{mode:'append',tmpPath:null}).catch(()=>{});}catch(_){}
+    /* Still under the panel after the slide: the way that was measured as working does not hold once Zotero has
+       laid the reader out again. Try the next one and measure again. */
+    if(under&&w>0&&!session.pushRetry){
+     session.pushRetry=true;
+     const tried=session.pushWay;
+     session.pushWay=PUSH_WAYS[(Math.max(0,PUSH_WAYS.findIndex(way=>way.name===tried))+1)%PUSH_WAYS.length].name;
+     for(const node of nodes)if(node.style)try{node.style.removeProperty('transition');}catch(_){}
+     if(pushViews(session,w))refit(session,20);
+     view.setTimeout(()=>{session.pushRetry=false;if(!session.destroyed&&session.open)checkColumn(session,occupied(session));},300);
+    }else if(!under)session.pushRetry=false;
    }catch(_){}
   }
   /* pdf.js fits "page width" and "auto" again only when it hears a resize: say so to each view, after layout. */

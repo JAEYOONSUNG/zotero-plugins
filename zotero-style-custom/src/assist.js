@@ -283,7 +283,9 @@ Do not invent findings; where the abstracts are silent, say so. Preserve numbers
   function stop(){active=false;cancel();jobs.clear();}
   // An explicit look, for callers that can wait (the self-check, a settings page opening).
   async function refresh(){if(explicitEndpoint())return status();await detectBridge().catch(()=>null);return status();}
-  return {run,chat,paperSummary,translateParagraphs,available,status,refresh,cancel,stop};
+  /* The local bridge's address and token, for the read-aloud voices it also serves (reader-assist.js). */
+  async function bridge(){const config=await detectBridge();return config?{port:config.port,token:config.token,base:`http://127.0.0.1:${config.port}`}:null;}
+  return {run,chat,paperSummary,translateParagraphs,available,status,refresh,cancel,stop,bridge};
  }
  const api={create,endpoint,bridgeConfig,BRIDGE_LABEL};root.CustomStyleAssist=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

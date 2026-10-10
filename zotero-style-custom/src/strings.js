@@ -8,6 +8,10 @@
 (function (root) {
   'use strict';
   const en = {
+ "Zotero 읽어주기": "Zotero Read Aloud",
+ "이 Mac의 음성 모델이 응답하지 않습니다 (": "The speech model on this Mac did not answer (",
+ "). 터미널에서 bridge/install.sh를 다시 실행해 보세요.": "). Run bridge/install.sh again in Terminal.",
+ "시스템": "System",
  "제목 불러오기 ({0}편)": "Load titles ({0})",
  "미확인×{0}": "unknown×{0}",
  "종류 미확인 {0}개": "{0} of unknown kind",

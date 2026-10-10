@@ -3,6 +3,7 @@
 #
 #   bridge/install.sh              install or update, start now and at every login
 #   bridge/install.sh --uninstall  stop it and remove the agent, the copy and the token
+#   bridge/install.sh --no-voices  skip the read-aloud voices (Supertonic 3, about 420 MB)
 #
 # The bridge listens on 127.0.0.1 only and answers with the claude / codex
 # command-line tools you are already logged in to. Nothing needs sudo.
@@ -33,6 +34,9 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
+VOICES=1
+[[ "${1:-}" == "--no-voices" ]] && VOICES=0
+
 NODE="${NODE:-$(command -v node || true)}"
 [[ -z "$NODE" && -x /opt/homebrew/bin/node ]] && NODE=/opt/homebrew/bin/node
 [[ -z "$NODE" && -x /usr/local/bin/node ]] && NODE=/usr/local/bin/node
@@ -50,6 +54,30 @@ mkdir -p "$SUPPORT" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
 chmod 700 "$SUPPORT"
 install -m 600 "$HERE/ai-bridge.mjs" "$SUPPORT/ai-bridge.mjs"
 touch "$LOG"; chmod 600 "$LOG"
+
+# Read-aloud voices: Supertonic 3 (Supertone) with onnxruntime-node, in $SUPPORT/tts. The model is pinned to
+# one revision and downloaded once; a rerun only refreshes the two scripts.
+if [[ "$VOICES" == 1 ]]; then
+  TTS="$SUPPORT/tts"
+  REV=aafc6e32416a594460b32413efc49d7fe4ce6d46
+  BASE="https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/$REV"
+  mkdir -p "$TTS/assets/onnx" "$TTS/assets/voice_styles"
+  install -m 644 "$HERE/tts/speech.mjs" "$HERE/tts/supertonic.mjs" "$HERE/tts/kokoro.mjs" \
+                 "$HERE/tts/supertonic-helper.mjs" "$HERE/tts/LICENSE-supertonic" "$TTS/"
+  printf '%s\n' '{"name":"style-custom-voices","private":true,"type":"module","dependencies":{"onnxruntime-node":"1.30.0","kokoro-js":"1.2.1"}}' > "$TTS/package.json"
+  NPM="$(dirname "$NODE")/npm"; [[ -x "$NPM" ]] || NPM="$(command -v npm || true)"
+  if [[ ! -d "$TTS/node_modules/onnxruntime-node" || ! -d "$TTS/node_modules/kokoro-js" ]]; then
+    if [[ -n "$NPM" ]]; then (cd "$TTS" && PATH="$(dirname "$NODE"):$PATH" "$NPM" install --omit=dev --no-audit --no-fund --silent) || echo "npm install failed; read-aloud keeps the system voices." >&2
+    else echo "npm was not found; read-aloud keeps the system voices." >&2; fi
+  fi
+  for f in onnx/duration_predictor.onnx onnx/text_encoder.onnx onnx/vector_estimator.onnx onnx/vocoder.onnx onnx/tts.json onnx/unicode_indexer.json \
+           voice_styles/F1.json voice_styles/F2.json voice_styles/F3.json voice_styles/F4.json voice_styles/F5.json \
+           voice_styles/M1.json voice_styles/M2.json voice_styles/M3.json voice_styles/M4.json voice_styles/M5.json; do
+    [[ -s "$TTS/assets/$f" ]] && continue
+    echo "Downloading voices: $f"
+    curl -fsSL --retry 3 -o "$TTS/assets/$f.part" "$BASE/$f" && mv "$TTS/assets/$f.part" "$TTS/assets/$f" || { rm -f "$TTS/assets/$f.part"; echo "Could not download $f; read-aloud keeps the system voices." >&2; break; }
+  done
+fi
 
 xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 cat > "$PLIST" <<EOF
@@ -90,6 +118,7 @@ for _ in $(seq 1 50); do
     PORT="$("$NODE" -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).port))' "$SUPPORT/bridge.json" 2>/dev/null || true)"
     if [[ -n "$PORT" ]] && curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
       echo "Style Custom AI bridge is running on 127.0.0.1:$PORT with:$found"
+      [[ "$VOICES" == 1 && -s "$SUPPORT/tts/assets/onnx/vocoder.onnx" ]] && echo "Read-aloud voices: Supertonic 3 (local)."
       echo "Zotero finds it by itself while 'AI 서버 주소' is left empty."
       echo "Remove it with: $HERE/install.sh --uninstall"
       exit 0

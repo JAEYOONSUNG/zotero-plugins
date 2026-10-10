@@ -12,7 +12,10 @@
    times and status only. Each CLI runs with no tools, no MCP servers, no hooks,
    no user instructions and no saved session, in an empty working directory.
 
-   No dependencies. Node 18+. */
+   Read-aloud voices (optional): when install.sh has put the Supertonic model in
+   <support>/tts, POST /v1/audio/speech turns a sentence into a WAV on this Mac.
+
+   No dependencies (the voices bring their own, in <support>/tts). Node 18+. */
 import http from 'node:http';
 import {spawn} from 'node:child_process';
 import crypto from 'node:crypto';
@@ -21,7 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const HOME = os.homedir();
 const SUPPORT = process.env.STYLE_CUSTOM_BRIDGE_DIR || path.join(HOME, 'Library', 'Application Support', 'StyleCustomBridge');
 const CONFIG = path.join(SUPPORT, 'bridge.json');
@@ -33,6 +36,8 @@ const MAX_QUEUE = 16;
 const QUIET_MS = Number(process.env.STYLE_CUSTOM_BRIDGE_QUIET_MS) || 300000;   // inactivity, not total
 const MAX_BODY = 2 * 1024 * 1024;
 const MAX_PROMPT_CHARS = 400000;
+const TTS_DIR = path.join(SUPPORT, 'tts');
+const MAX_SPEECH_CHARS = 1200;
 
 /* ---------- binaries ---------- */
 function which(name, envName) {
@@ -359,6 +364,47 @@ async function completions(req, res, config, started, meta) {
   }
 }
 
+/* ---------- read-aloud voices ---------- */
+let speech = null;
+async function speechModule() {
+  if (speech) return speech;
+  if (!fs.existsSync(path.join(TTS_DIR, 'speech.mjs'))) return null;
+  const mod = await import(path.join(TTS_DIR, 'speech.mjs'));
+  if (!(await mod.installed(TTS_DIR))) return null;
+  speech = {mod, engine: mod.create(TTS_DIR)};
+  return speech;
+}
+async function voices(res, meta) {
+  const s = await speechModule().catch(() => null);
+  meta.status = 200;
+  if (!s) return sendJSON(res, 200, {available: false, models: []});
+  const models = await s.engine.list().catch(() => []);
+  return sendJSON(res, 200, {available: models.length > 0, models});
+}
+/* {input, lang, voice, speed} -> audio/wav. Text is never logged, only its length and the time taken. */
+async function speak(req, res, meta) {
+  let body;
+  try { body = JSON.parse(await readBody(req)); }
+  catch (error) { meta.status = error.status || 400; return fail(res, meta.status, 'Body must be JSON'); }
+  const input = String(body && body.input || '').replace(/\s+/g, ' ').trim();
+  if (!input) { meta.status = 400; return fail(res, 400, 'Nothing to say'); }
+  if (input.length > MAX_SPEECH_CHARS) { meta.status = 413; return fail(res, 413, 'Text too long for one request'); }
+  const s = await speechModule().catch(() => null);
+  if (!s) { meta.status = 501; return fail(res, 501, 'Read-aloud voices are not installed; run bridge/install.sh', 'not_installed'); }
+  const ticket = ticketFor(res);
+  meta.inChars = input.length;
+  try {
+      const {audio, seconds} = await s.engine.say({model: String(body.model || ''), text: input, lang: String(body.lang || 'en').toLowerCase().split(/[-_]/)[0], voice: String(body.voice || ''), rate: Number(body.speed) || 1});
+    if (ticket.aborted) { meta.status = 499; return; }
+    meta.status = 200; meta.audioMs = Math.round(seconds * 1000);
+    res.writeHead(200, {'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store', 'x-audio-seconds': seconds.toFixed(3)});
+    res.end(audio);
+  } catch (error) {
+    meta.status = 500; meta.error = String(error && error.message || error).slice(0, 60);
+    fail(res, 500, 'Speech failed', 'server_error');
+  }
+}
+
 async function handle(req, res, config, started, meta) {
   const host = String(req.headers.host || '').toLowerCase();
   if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host) || (/:\d+$/.test(host) && Number(host.split(':').pop()) !== config.port)) { meta.status = 403; return fail(res, 403, 'Host not allowed', 'forbidden'); }
@@ -375,6 +421,8 @@ async function handle(req, res, config, started, meta) {
     return sendJSON(res, 200, {object: 'list', data});
   }
   if (req.method === 'POST' && meta.path === '/v1/chat/completions') return completions(req, res, config, started, meta);
+  if (req.method === 'GET' && meta.path === '/v1/audio/voices') return voices(res, meta);
+  if (req.method === 'POST' && meta.path === '/v1/audio/speech') return speak(req, res, meta);
   meta.status = 404; fail(res, 404, 'Not found', 'not_found');
 }
 
@@ -399,7 +447,13 @@ function main() {
   server.headersTimeout = 30000;
   server.keepAliveTimeout = 5000;
   server.on('error', error => { log({event: 'listen-error', code: error.code, port: config.port}); process.exitCode = 1; setTimeout(() => process.exit(1), 2000); });
-  server.listen(config.port, '127.0.0.1', () => log({event: 'start', version: VERSION, port: config.port, providers: providers().join('+') || 'none', node: process.version}));
+  server.listen(config.port, '127.0.0.1', () => {
+    log({event: 'start', version: VERSION, port: config.port, providers: providers().join('+') || 'none', node: process.version});
+    // Load the voices now, so the first sentence a reader asks for is not also the one that waits for the model.
+    speechModule().then(async s => { if (!s) return null; const models = await s.engine.list(); await s.engine.warm(); return models; })
+      .then(models => models && log({event: 'voices-ready', models: models.map(m => m.id + ':' + m.voices.length).join('+')}))
+      .catch(error => log({event: 'voices-error', error: String(error && error.message || error).slice(0, 60)}));
+  });
   const stop = () => { server.close(); setTimeout(() => process.exit(0), 500).unref(); };
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
 }

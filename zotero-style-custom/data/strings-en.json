@@ -2924,5 +2924,9 @@
  "[그림 주석]": "[image annotation]",
  "[필기 주석]": "[ink annotation]",
  "바구니 주석": "Basket annotations",
- "바구니 주석이 있는 문헌을 찾지 못했습니다. 주석 탭에서 문헌에 딸린 주석을 바구니에 담은 뒤 다시 누르세요.": "No paper with basket annotations was found. Add annotations that belong to a paper in the Annotations tab, then press again."
+ "바구니 주석이 있는 문헌을 찾지 못했습니다. 주석 탭에서 문헌에 딸린 주석을 바구니에 담은 뒤 다시 누르세요.": "No paper with basket annotations was found. Add annotations that belong to a paper in the Annotations tab, then press again.",
+ "Zotero 읽어주기": "Zotero Read Aloud",
+ "이 Mac의 음성 모델이 응답하지 않습니다 (": "The speech model on this Mac did not answer (",
+ "). 터미널에서 bridge/install.sh를 다시 실행해 보세요.": "). Run bridge/install.sh again in Terminal.",
+ "시스템": "System"
 }

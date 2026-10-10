@@ -345,6 +345,86 @@
    pause(){this.cancel();},resume(){}};
  }
 
+ /* Natural voices made on this Mac by the local bridge (Supertonic 3, bridge/tts). Every piece is sent for
+    synthesis the moment it is queued, so while one plays the next is being made (the player queues a sentence when
+    the one before it starts), and the pieces are played in order with an audio element, which can pause anywhere.
+      synth({text,lang,voiceURI,rate}) -> {promise: Promise<{url, release(), playbackRate?}>, abort()}
+      makeAudio(url) -> an HTMLAudioElement-like object (play() -> Promise, pause(), events playing/ended/error)
+    A voice whose server cannot take a speed (Zotero's) is played faster instead: playbackRate keeps the pitch. */
+ function audioEngine({synth,makeAudio,voices:list=[]}){
+  let queue=[],current=null,epoch=0,paused=false;
+  const drop=item=>{try{item.job&&item.job.abort();}catch(_){}try{item.result&&item.result.release();}catch(_){}};
+  function pump(){
+   if(current||paused||!queue.length)return;
+   const item=queue[0];
+   if(!item.result)return;          // still being made; its promise calls pump() again
+   queue.shift();
+   const audio=makeAudio(item.result.url),mine=epoch;current={item,audio};
+   if(item.result.playbackRate&&item.result.playbackRate!==1)try{audio.playbackRate=item.result.playbackRate;}catch(_){}
+   let started=false;
+   const finish=()=>{if(!current||current.audio!==audio)return;current=null;try{item.result.release();}catch(_){}};
+   audio.addEventListener('playing',()=>{if(mine!==epoch||started)return;started=true;item.utt.onstart&&item.utt.onstart();});
+   audio.addEventListener('ended',()=>{if(mine!==epoch)return;finish();item.utt.onend&&item.utt.onend();pump();});
+   audio.addEventListener('error',()=>{if(mine!==epoch)return;finish();item.utt.onerror&&item.utt.onerror('audio-failed');});
+   try{const p=audio.play();if(p&&typeof p.catch==='function')p.catch(error=>{if(mine!==epoch||paused)return;finish();item.utt.onerror&&item.utt.onerror(String(error&&error.name||'audio-failed'));});}
+   catch(error){finish();item.utt.onerror&&item.utt.onerror(String(error&&error.message||error));}
+  }
+  return {name:'natural',supportsPause:true,
+   available(){return typeof synth==='function'&&typeof makeAudio==='function'&&list.length>0;},
+   voices(){return list.slice();},
+   speak(utt){
+    const item={utt,job:null,result:null},mine=epoch;queue.push(item);
+    try{item.job=synth({text:utt.text,lang:utt.lang,voiceURI:utt.voiceURI||'',rate:utt.rate||1});}
+    catch(error){queue=queue.filter(x=>x!==item);utt.onerror&&utt.onerror(String(error&&error.message||error));return;}
+    item.job.promise.then(result=>{
+     if(mine!==epoch||!queue.includes(item)){try{result.release();}catch(_){}return;}
+     item.result=result;pump();
+    },error=>{
+     if(mine!==epoch||!queue.includes(item))return;
+     epoch++;queue.forEach(x=>x!==item&&drop(x));queue=[];
+     utt.onerror&&utt.onerror(String(error&&error.message||error||'speech-failed'));
+    });
+   },
+   cancel(){
+    epoch++;paused=false;const old=queue;queue=[];old.forEach(drop);
+    if(current){const {audio,item}=current;current=null;try{audio.pause();}catch(_){}try{audio.removeAttribute&&audio.removeAttribute('src');audio.load&&audio.load();}catch(_){}try{item.result.release();}catch(_){}}
+   },
+   owns(){return !!current||queue.length>0;},
+   busy(){return !!current||queue.length>0;},
+   pause(){paused=true;if(current)try{current.audio.pause();}catch(_){}},
+   resume(){paused=false;if(current){try{const p=current.audio.play();if(p&&p.catch)p.catch(()=>{});}catch(_){}}else pump();}};
+ }
+
+ /* Several engines behind one, so a voice from any of them can be chosen without starting over: the voice's
+    name says who speaks it ("supertonic:en:F3", "system:<uri>"). Only one speaks at a time, and a cancel
+    reaches them all, so changing voice mid-paragraph stops the engine that was speaking.
+    The system voices keep their own names, so a voice chosen before any model was installed still works: the
+    part marked `fallback` speaks any name that no other part claims.
+      parts: [{kinds:['supertonic','kokoro'], engine, fallback}] */
+ function multiEngine(parts){
+  const list=(Array.isArray(parts)?parts:[]).filter(p=>p&&p.engine&&(typeof p.engine.available!=='function'||p.engine.available()));
+  const partFor=uri=>{const kind=String(uri||'').split(':')[0];return list.find(p=>p.kinds.includes(kind))||list.find(p=>p.fallback)||list[0]||null;};
+  let active=null;
+  const tagged=(part,v)=>({...v,engine:part.kinds[0]});
+  return {
+   get name(){return (active||list[0]||{engine:{}}).engine.name||'voices';},
+   get supportsPause(){return active?active.engine.supportsPause!==false:true;},
+   available(){return list.length>0;},
+   voices(){const out=[];for(const part of list)for(const v of part.engine.voices()||[])out.push(tagged(part,v));return out;},
+   speak(utt){
+    const part=partFor(utt.voiceURI);if(!part){utt.onerror&&utt.onerror('no-engine');return;}
+    if(active&&active!==part)try{active.engine.cancel();}catch(_){}
+    active=part;
+    part.engine.speak(utt);
+   },
+   cancel(){for(const part of list)try{part.engine.cancel();}catch(_){}},
+   owns(){return !!active&&(typeof active.engine.owns!=='function'||active.engine.owns());},
+   busy(){return !!active&&(typeof active.engine.busy!=='function'||active.engine.busy());},
+   pause(){if(active&&active.engine.pause)active.engine.pause();},
+   resume(){if(active&&active.engine.resume)active.engine.resume();}
+  };
+ }
+
  /* ---- composing what is read -------------------------------------------- */
  const sentencesOf=entry=>{
   if(!entry)return [];
@@ -594,6 +674,6 @@
   for(let i=Math.max(0,from);i<list.length;i++){const m=sayable(list[i]).match(/\S+/g);words+=m?m.length:0;}
   return Math.round(words/(SAY_WPM*clamp(rate,RATE_MIN,RATE_MAX,1))*60);
  }
- const api={create,speechEngine,speechText,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,paperLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
+ const api={create,speechEngine,audioEngine,multiEngine,speechText,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,paperLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
  root.CustomStyleReadAloud=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
