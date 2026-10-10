@@ -52,7 +52,8 @@ git add updates/ README.md
 git commit -q -m "Release:$RELEASED" -m "${NOTES:-The update feeds name the new files and their hashes.}"
 for TAG in $TAGS; do git tag -f "$TAG"; done
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-git push -q origin "$BRANCH" "HEAD:main" $TAGS
+# On main, "HEAD:main" names the same ref twice and git refuses the whole push.
+if [ "$BRANCH" = main ]; then git push -q origin main $TAGS; else git push -q origin "$BRANCH" "HEAD:main" $TAGS; fi
 while IFS="$(printf '\t')" read -r TAG XPI TITLE; do
 	gh release create "$TAG" "$XPI" -R "$REPO" --title "$TITLE" --notes "${NOTES:-See the commit history for what changed.}" --target main >/dev/null
 	echo "Released $TITLE: $XPI"
