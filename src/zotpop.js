@@ -41,8 +41,8 @@ Zotero.ZotPoP = {
 				if (await IOUtils.exists(local)) registry = JSON.parse(await IOUtils.readUTF8(local));
 			}
 			if (!registry) {
-				let response = await Zotero.HTTP.request("GET", rootURI + "content/journal-registry.json", { responseType: "json" });
-				registry = response && response.response;
+				// Zotero 10's HTTP.request throws on jar: URLs; a channel reads the packaged file.
+				registry = JSON.parse(await Zotero.File.getResourceAsync(rootURI + "content/journal-registry.json"));
 			}
 			if (registry && Zotero.ZotPoPJournalMarks && Zotero.ZotPoPJournalMarks.loadRegistry) {
 				Zotero.ZotPoPJournalMarks.loadRegistry(registry);
@@ -70,8 +70,8 @@ Zotero.ZotPoP = {
 	async createUpdater() {
 		let Updater = typeof PluginUpdater !== "undefined" ? PluginUpdater : null;
 		if (!Updater || !this.id || !this.rootURI) return null;
-		let manifest = await Zotero.HTTP.request("GET", this.rootURI + "manifest.json", { responseType: "json" });
-		let updateURL = manifest?.response?.applications?.zotero?.update_url;
+		let manifest = JSON.parse(await Zotero.File.getResourceAsync(this.rootURI + "manifest.json"));
+		let updateURL = manifest?.applications?.zotero?.update_url;
 		if (!/^https:\/\//.test(String(updateURL || ""))) return null;
 		return Updater.create({
 			id: this.id, version: this.version, updateURL, appVersion: Zotero.version,
