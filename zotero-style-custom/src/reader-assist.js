@@ -1276,6 +1276,34 @@
    if(mac&&typeof io()?.exists==='function'&&await io().exists('/usr/bin/say').catch(()=>false))return RA.sayEngine({spawn:spawnSay});
    return null;
   }
+  /* The voices are in the menu before anything is read: an engine knows its voices without the paper's text,
+     so the panel can offer them (and the models behind them) as soon as it opens. */
+  async function ensureVoices(session){
+   if(session.player||session.voicesPromise||session.destroyed||guard)return session.voicesPromise;
+   session.voicesPromise=(async()=>{
+    const engine=session.engine||await pickEngine(session);
+    if(session.destroyed||session.player)return;
+    session.engine=engine;
+    const voices=engine.voices()||[];
+    const lang=session.langCode||'en';
+    const chosen=RA.pickVoice(voices,lang,String(setting(voiceKey(lang),'')||''));
+    fillVoices(session,voices,lang,chosen);
+    noteVoices(session,voices,lang,chosen);
+   })().catch(error=>{log(error);}).finally(()=>{session.voicesPromise=null;});
+   return session.voicesPromise;
+  }
+  /* What the voice menu ended up holding, beside the layout report: which engines answered and with how many
+     voices, so the menu can be checked without opening it. */
+  function noteVoices(session,voices,lang,chosen){
+   try{
+    const counts={};
+    for(const v of voices){const kind=String(v.voiceURI||'').split(':')[0],id=NATURAL_KINDS.includes(kind)?kind:'system';counts[id]=(counts[id]||0)+1;}
+    const shown=voices.filter(v=>String(v.lang||'').toLowerCase().startsWith(lang)).length;
+    const line=`${new Date().toISOString()} voices lang=${lang} menu=${shown||voices.length} chosen=${chosen?chosen.name:'-'} `+
+     Object.entries(counts).map(([k,n])=>k+'='+n).join(' ');
+    writeReport(session,'voices',line);
+   }catch(error){log(error);}
+  }
   async function ensurePlayer(session){
    if(session.player)return session.player;
    if(session.playerPromise)return session.playerPromise;
@@ -1283,7 +1311,7 @@
    const alive=()=>{if(session.destroyed)throw Object.assign(new Error('The reader was closed'),{closed:true});};
    session.playerPromise=(async()=>{
     const {structured}=await structure(session);alive();
-    const engine=await pickEngine(session);alive();
+    const engine=session.engine||await pickEngine(session);alive();
     const filters=session.filters||{captions:false,references:false};
     // Everything is composed once; the player's own switches decide what is read.
     const units=RA.composeUnits(structured,{captions:true,references:true},tools(session));
@@ -1526,7 +1554,11 @@
     const vwin=viewerWindow(session.reader),bus=vwin&&vwin.PDFViewerApplication&&vwin.PDFViewerApplication.eventBus;
     if(!bus||typeof bus.on!=='function')return;
     const raw=coreOf(session.reader)?._primaryView?._iframeWindow;
-    const fn=contentFunction(()=>{try{redrawMarks(session);}catch(error){log(error);}},raw);
+    const fn=contentFunction(()=>{
+     try{redrawMarks(session);}catch(error){log(error);}
+     // The first page pdf.js paints is the first moment a deferred fit can be measured.
+     try{if(session.open&&session.fitPending){session.fitPending=false;fitPage(session,true);}}catch(error){log(error);}
+    },raw);
     for(const name of ['pagerendered','textlayerrendered'])bus.on(name,fn);
     session.renderWatch={bus,fn};
    }catch(error){log(error);}
@@ -1769,7 +1801,9 @@
      the view lost, so the page that fitted the window still fits beside the panel. Closing puts the zoom back,
      unless the reader has changed it meanwhile. */
   function fitPage(session,open){
-   const z=zoomState(session);if(!z||!(z.room>0))return;
+   const z=zoomState(session);
+   // A reader restored into a window that is not on screen lays nothing out: fit it when pdf.js first paints.
+   if(!z||!(z.room>0)||!(z.page>0)){if(open&&session.open)session.fitPending=true;return;}
    if(open){
     if(NAMED_ZOOM.test(z.value)){try{z.pv.currentScaleValue=z.value;}catch(error){log(error);}return;}
     if(!(z.page>z.room-1))return;
@@ -1820,6 +1854,19 @@
   /* The user saw the panel lying over the paper in a reader where the self-check found it beside it. When the
      view still reaches under the panel, what was found is left in a pref (readable without a window), once per
      change, for the next report. */
+  /* One small file beside the self-check reports, rewritten (not appended) each time, holding the last layout
+     measurement and the last voice list. Zotero's own file API is used: IOUtils is not a global in every window
+     this runs in, and a write that quietly fails leaves nothing to look at. */
+  const reportLines={};
+  function writeReport(session,key,line){
+   try{
+    if(guard||session.probing)return;
+    reportLines[key]=line;
+    const text=Object.keys(reportLines).sort().map(k=>reportLines[k]).join('\n')+'\n';
+    const where=Z.DataDirectory.dir+'/style-custom-reader-layout.txt';
+    Promise.resolve(Z.File.putContentsAsync(where,text)).catch(error=>log(error));
+   }catch(error){log(error);}
+  }
   function checkColumn(session,w){
    try{
     const total=docWidth(session),nodes=viewContainers(session),view=session.doc.defaultView;
@@ -1835,10 +1882,7 @@
     const key=line.replace(/^\S+ /,'');
     if(session.columnReport!==key){session.columnReport=key;Z.Prefs.set('extensions.style-custom.readerColumnLast',line,true);}
     // Written as a file too: a pref is only flushed now and then, and this is the one thing a reader reports.
-    try{
-     const io=root.IOUtils||view.IOUtils||runtime.io,paths=root.PathUtils||view.PathUtils||runtime.paths;
-     if(io&&paths&&!guard&&!session.probing)io.writeUTF8(paths.join(Z.DataDirectory.dir,'style-custom-reader-layout.txt'),line+'\n',{mode:'append'}).catch(error=>log(error));
-    }catch(error){log(error);}
+    writeReport(session,'layout',line);
     /* Still under the panel after the slide: the way that was measured as working does not hold once Zotero has
        laid the reader out again. Try the next one and measure again. */
     if(under&&w>0&&!session.pushRetry){
@@ -1906,7 +1950,7 @@
    // The toolbar button may belong to a toolbar that was redrawn since: never let it stop the panel from opening.
    try{if(session.toolbarState)session.toolbarState.panel.setAttribute('aria-pressed',String(session.open));}catch(_){session.toolbarState=null;}
    if(remember&&!session.probing){uiState().open=session.open;persistUI();}
-   if(session.open){showTab(session,validTab(session.tab||uiState().tab));ensureReady(session);}
+   if(session.open){showTab(session,validTab(session.tab||uiState().tab));ensureReady(session);ensureVoices(session);}
   }
   function paintTab(session,id){
    for(const[name,pane]of Object.entries(session.ui.panes))pane.hidden=name!==id;
