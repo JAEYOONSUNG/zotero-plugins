@@ -164,6 +164,16 @@
       }
       try{paintCards(win,state);paintRail(win,state);}catch(error){report(error);}
       try{runtime.readerAssist?.sync(win,[...available],tabHost(win)?.Zotero_Tabs?.selectedID);}catch(error){report(error);}
+      /* A reader whose toolbar was drawn before this plugin listened (a tab restored at startup) never asked for our
+         buttons: Zotero renders the toolbar's custom sections once. They are added the way Zotero adds them, in a
+         div.section of their own; a later redraw by Zotero asks the hook again and replaces them. */
+      for(const reader of available){
+        try{
+          const doc=reader._iframeWindow?.document,box=doc?.querySelector('.toolbar .custom-sections');
+          if(!box||box.querySelector('.sc-toolbar-group'))continue;
+          toolbarHook({reader,doc,append:(...nodes)=>{const section=doc.createElement('div');section.className='section';section.append(...nodes);box.append(section);}});
+        }catch(error){report(error);}
+      }
       for(const[reader,control]of state.toolbars)if(!available.has(reader)){control.remove();state.toolbars.delete(reader);}
       for(const header of state.backlinkHeaders)if(!available.has(header.reader)||!header.node.isConnected){header.remove();state.backlinkHeaders.delete(header);}
       if(state.backlinkRevision!==backlinkRevision){state.backlinkRevision=backlinkRevision;for(const header of state.backlinkHeaders)header.reload();}

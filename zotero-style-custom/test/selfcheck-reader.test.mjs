@@ -371,7 +371,8 @@ function readerFixture({bridge = null} = {}) {
     writeUTF8: async p => writes.push(p), setModificationTime: async p => touched.push(p), makeDirectory: async () => {}, remove: async () => {}};
   const css = fs.readFileSync(new URL('../content/reader-assist.css', import.meta.url), 'utf8');
   const Z = {Items: {get: id => id === 11 ? attachment : id === 10 ? parent : null}, DataDirectory: {dir: '/data'}, logError() {}, Reader: {_readers: [reader]}, isMac: true,
-    HTTP: {request: async (method, url, options) => /chat\/completions/.test(url) && bridge ? bridge.request(method, url, options) : ({response: css, status: 200})}};
+    HTTP: {request: async (method, url, options) => /chat\/completions/.test(url) && bridge ? bridge.request(method, url, options) : ({response: css, status: 200})},
+    File: {getResourceAsync: async () => css}};
   const runtime = {cache: {readerAssist: {open: true, tab: 'translate'}}, dirty: false, rootURI: 'file:///plugin/', io, paths: {join: (...p) => p.join('/'), homeDir: '/home'}, i18n: {isKorean: () => false}, t: I18N.t,
     pref: (k, d) => d, getSetting: k => k === 'aiLanguage' ? 'Korean' : undefined, setSetting: async () => {}, scheduleFlush() {}, assist: {available: () => false}};
   if (bridge) runtime.assist = Assist.create({Zotero: Z, runtime});

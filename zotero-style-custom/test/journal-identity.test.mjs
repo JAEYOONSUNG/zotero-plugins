@@ -427,13 +427,14 @@ const hexOf = value => {
   return m ? journals.hslToHex(Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100) : value;
 };
 
-// data/journal-registry.json is gitignored (licensed export): without it this test says so and skips, never fails a clean checkout.
-const REGISTRY_FILE = new URL("../data/journal-registry.json", import.meta.url);
-const REGISTRY_SKIP = existsSync(REGISTRY_FILE) ? false : "data/journal-registry.json is absent (gitignored licensed export); skipping the full-registry colour walk";
+// data/journal-registry.json is gitignored (licensed export). Without it the walk runs over the openly licensed
+// registry the plugin ships (journal-registry.open.json), so a clean checkout still checks every badge it would draw.
+const REGISTRY_FILE = [new URL("../data/journal-registry.json", import.meta.url), new URL("../data/journal-registry.open.json", import.meta.url)].find(f => existsSync(f));
+const REGISTRY_SKIP = REGISTRY_FILE ? false : "neither data/journal-registry.json nor the open registry is present; skipping the full-registry colour walk";
 test("every journal in the registry has a badge, ink and fill that reach 4.5:1 in light and dark, and badges keep their original 9px", {skip: REGISTRY_SKIP}, () => {
-  journals.loadRegistry(JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")));
+  journals.loadRegistry(JSON.parse(readFileSync(REGISTRY_FILE, "utf8")));
   const names = new Set([...Object.keys(journals.JOURNAL_COLOURS), ...Object.keys(journals.JOURNAL_HUES)]);
-  for (const row of JSON.parse(readFileSync(new URL("../data/journal-registry.json", import.meta.url), "utf8")).journals) names.add(row.title);
+  for (const row of JSON.parse(readFileSync(REGISTRY_FILE, "utf8")).journals) names.add(row.title);
   assert.ok(names.size > 20000, "the whole registry is walked, not a sample");
   const seen = new Set(), failures = [];
   for (const name of names) {

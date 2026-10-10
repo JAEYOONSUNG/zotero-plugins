@@ -10,11 +10,12 @@ async function boot({failJCR=false,invalidJCR=false,licensed=null}={}){
   Prefs:{get:k=>prefs.get(k),set:(k,v)=>prefs.set(k,v),registerObserver:(k,fn)=>{const id=next++;observers.set(id,{k,fn});return id;},unregisterObserver:id=>observers.delete(id)},
   ItemTreeManager:{registerColumn:c=>{assert.equal(typeof c.width,'string');const id=c.pluginID+'-'+c.dataKey;columns.set(id,c);return id;},unregisterColumn:id=>columns.delete(id)},
   PreferencePanes:{register:async()=> 'pane',unregister(){}},Notifier:{registerObserver:()=> 'item-observer',unregisterObserver(){}},
-  HTTP:{request:async(method,url)=>{assert.equal(method,'GET');const name=url.split('/').at(-1);assert.ok(['if-catalog.json','journal-registry.json','journal-catalog.json','manifest.json'].includes(name));
-   if(name==='manifest.json')return {response:JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'))};
+  // Packaged files are read through a channel: Zotero 10's HTTP.request throws on jar: URLs.
+  File:{getResourceAsync:async url=>{const name=url.split('/').at(-1);assert.ok(['if-catalog.json','journal-registry.json','journal-catalog.json','manifest.json'].includes(name));
+   if(name==='manifest.json')return fs.readFileSync(path.join(root,'manifest.json'),'utf8');
    if(name==='journal-catalog.json'&&failJCR)throw new Error('packaged catalog unavailable');
-   if(name==='journal-catalog.json'&&invalidJCR)return {response:{schemaVersion:1,source:{provider:'OpenAlex'}}};
-   return {response:JSON.parse(fs.readFileSync(shipped(name),'utf8'))};}}
+   if(name==='journal-catalog.json'&&invalidJCR)return JSON.stringify({schemaVersion:1,source:{provider:'OpenAlex'}});
+   return fs.readFileSync(shipped(name),'utf8');}}
  };
  // The archive carries the openly licensed build of each table; a reader's own
  // licensed copy, when they have placed one, is read from the data directory.

@@ -41,9 +41,10 @@ async function startup({ id, version, rootURI }) {
     const journalData = async (localName, shippedName = localName) => {
       const local = await localJournalData(localName);
       if (local) { journalLayers[localName] = "local"; return local; }
-      const response = await Zotero.HTTP.request("GET", rootURI + "data/" + shippedName, { responseType: "json" });
+      // Zotero 10's HTTP.request throws on jar: URLs (nsIURI.username); a channel reads the packaged file.
+      const shipped = JSON.parse(await Zotero.File.getResourceAsync(rootURI + "data/" + shippedName));
       journalLayers[localName] = "shipped";
-      return response.response;
+      return shipped;
     };
     const catalog = await journalData("if-catalog.json");
     // The registry combines the metric with OpenAlex subject paths. Optional for older

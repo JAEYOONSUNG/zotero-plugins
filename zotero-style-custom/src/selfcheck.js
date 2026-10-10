@@ -615,8 +615,19 @@
           const q = box.getBoundingClientRect(), range = win.document.createRange(); range.selectNodeContents(node);
           for (const r of range.getClientRects()) { const over = Math.max(q.left - r.left, r.right - q.right, q.top - r.top, r.bottom - q.bottom); if (r.width > 1 && over > 1.5) { note('text escape · "' + node.textContent.trim().slice(0, 24) + '" out of ' + label(box), where); break; } }
         }
+        /* A box floating over the page with its own opaque background (the selection bar) covers the rows that
+           scroll behind it: that is occlusion, not two things drawn on top of each other. What matters there is
+           that the page keeps room under the bar, so its last row can be scrolled clear of it. */
+        const overlayOf = el => { const bar = el.closest('#style-custom-workbench > .sc-selection-bar'); if (!bar) return null; const s = style(bar); return (s.position === 'absolute' || s.position === 'fixed') && !/^rgba\([^)]*,\s*0\)$|^transparent$/.test(s.backgroundColor) ? bar : null; };
+        for (const bar of rootEl.querySelectorAll(':scope > .sc-selection-bar')) {
+          if (!shown(bar)) continue;
+          const scroller = rootEl.querySelector('.sc-body'); if (!scroller || scroller.scrollHeight <= scroller.clientHeight + 1) continue;
+          const room = parseFloat(style(scroller).paddingBottom) || 0, need = bar.getBoundingClientRect().height + (parseFloat(style(bar).bottom) || 0);
+          if (room + 1 < need) note(`the floating bar hides the end of the list · ${Math.round(room)}px of room under ${Math.round(need)}px of bar`, where);
+        }
         for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
           const a = texts[i], b = texts[j]; if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+          const oa = overlayOf(a.el), ob = overlayOf(b.el); if (oa !== ob && (oa || ob)) continue;
           const x = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left), y = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
           if (x > 3 && y > 3) note('overlap · ' + label(a.el) + ' ⟷ ' + label(b.el), where);
         }
@@ -686,6 +697,40 @@
       const {checked, lost} = await scrollKeepCheck({bench, runtime, wait: ms => new Promise(resolve => win.setTimeout(resolve, ms))});
       if (lost.length) throw new Error(lost.join(' | '));
       return checked.join(' · ') || 'no tab long enough to scroll';
+    }));
+
+    results.push(await attempt('a second double-click on any column edge leaves the column where the first put it', async () => {
+      /* The user reported a fit that keeps growing or shrinking by the same
+         amount at every double-click. Every edge is fitted twice; the second
+         must not move it. The layout is put back afterwards. */
+      const state = runtime.windows.get(win);
+      if (!state?.columnFit) throw new Error('column fit not attached');
+      const tree = win.ZoteroPane?.itemsView?.tree, visible = tree?._getVisibleColumns?.() || [];
+      const root = win.document.getElementById(tree.props.id);
+      const keyOf = node => [...node.classList].find(n => !['resizer', 'draggable', 'react-draggable'].includes(n) && !n.startsWith('react-draggable-'));
+      const cell = key => root.querySelector(`.virtualized-table-header .cell.${win.CSS.escape(key)}`);
+      const layout = {};
+      for (const c of visible) { const node = cell(c.dataKey); if (node && !c.fixedWidth) layout[c.dataKey] = node.getBoundingClientRect().width; }
+      const edges = [...root.querySelectorAll('.virtualized-table-header .resizer')]
+        .map(node => ({ node, i: visible.findIndex(c => c.dataKey === keyOf(node)) - 1 }))
+        .filter(({ i }) => i >= 0 && !visible[i].fixedWidth && !visible[i].staticWidth);
+      const pause = () => new Promise(resolve => win.setTimeout(resolve, 150));
+      const drift = [], seen = [];
+      try {
+        for (const { node, i } of edges) {
+          const key = visible[i].dataKey;
+          const said = [];
+          const press = async () => { root.querySelector(`.virtualized-table-header .resizer.${win.CSS.escape(keyOf(node))}`)?.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true, view: win })); await pause(); said.push(String(state.columnFit.last).replace(/^style-custom\\@sungjaeyoon\\.dev-/, '').replace(/ \(content.*$/, '') + (state.tableRoll?.rolling ? ' rolled' : ' flat')); return cell(key)?.getBoundingClientRect().width || 0; };
+          const first = await press(), second = await press(), third = await press();
+          const label = key.replace(/^style-custom@sungjaeyoon\.dev-/, '');
+          seen.push(`${label} ${Math.round(first)}`);
+          if (Math.abs(second - first) > 1 || Math.abs(third - second) > 1) drift.push(`${label} ${Math.round(first)} → ${Math.round(second)} → ${Math.round(third)} [${said.join(' / ')}]`);
+        }
+      } finally {
+        try { tree._columns.onResize(layout, true); runtime.rollTable?.(win, state); } catch (error) { Zotero.logError(error); }
+      }
+      if (drift.length) throw new Error(drift.join(' | '));
+      return `${edges.length} edges steady: ${seen.join(' · ')}`;
     }));
 
     results.push(await attempt('a double-click on a column edge fits the column to its content', async () => {

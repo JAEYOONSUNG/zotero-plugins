@@ -2767,6 +2767,24 @@ test('dragging a column edge changes the column to its left only; the columns af
   assert.equal(resized.at(-1)[0].venue, 36);
 });
 
+test('Zotero 10 column rules (calc with the padding kept in) are read as the widths on screen', () => {
+  const {plugin} = fixture();
+  // Zotero 10 onResize: flex-basis calc(var(--extra-width, 0px) + Wpx), the first column's
+  // icon room taken out of W; a static column keeps its plain min-width.
+  const rules = {title: {flexBasis: 'calc(var(--extra-width, 0px) + 276px)'}, year: {minWidth: '60px'}, venue: {flexBasis: 'calc(var(--extra-width, 0px) + 200px'}};
+  const columns = [{dataKey: 'title', width: 284}, {dataKey: 'year', staticWidth: true, width: 60}, {dataKey: 'venue', width: 184}];
+  const tree = {firstColumnExtraWidth: 24, _getVisibleColumns: () => columns,
+    _columns: {_stylesheet: {sheet: {cssRules: [{style: rules.title}, {style: rules.year}, {style: rules.venue}]}}, _columnStyleMap: {title: 0, year: 1, venue: 2}}};
+  const widths = plugin.storedWidths({CSS: {escape: s => s}}, tree);
+  assert.deepEqual(Object.fromEntries(widths), {title: 300, year: 60, venue: 200}, 'not the stored widths, which Zotero 10 keeps 16 px short');
+  // Zotero 9's plain basis is still read as before.
+  rules.venue.flexBasis = '184px';
+  assert.equal(plugin.storedWidths({CSS: {escape: s => s}}, tree).get('venue'), 200);
+  // A basis shrunk below the cell's 30 px min-width is drawn at 30 and counted at 30.
+  rules.venue.flexBasis = 'calc(var(--extra-width, 0px) + 14px)';
+  assert.equal(plugin.storedWidths({CSS: {escape: s => s}}, tree).get('venue'), 30);
+});
+
 test('the tree draws the italics and subscripts of a title instead of its tags', async () => {
   const {parseHTML} = await import('linkedom');
   const {document, window} = parseHTML('<html><body><div class="row"><span class="cell title"><span class="cell-text">x</span></span></div></body></html>');

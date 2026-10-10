@@ -529,8 +529,10 @@ test('the panel never builds markup from paper or model text, and never reads an
  assert.doesNotMatch(assist,/userEmail|citationEmail/);
 });
 
-test('a real paper runs through the whole chain: sections, reading order, chunks, a budgeted summary input, paragraphs with 1-based pages',()=>{
- const pages=JSON.parse(fs.readFileSync(new URL('./fixtures/paper-text/nature.json',import.meta.url),'utf8')).pages;
+// The fixture is a local extraction of one of the library's own PDFs (gitignored), as in paper-text.test.mjs.
+const NATURE=new URL('./fixtures/paper-text/nature.json',import.meta.url);
+test('a real paper runs through the whole chain: sections, reading order, chunks, a budgeted summary input, paragraphs with 1-based pages',{skip:fs.existsSync(NATURE)?false:'test/fixtures/paper-text/nature.json is absent (a local extraction, gitignored)'},()=>{
+ const pages=JSON.parse(fs.readFileSync(NATURE,'utf8')).pages;
  const structured=PT.structure({pages,meta:{}});
  assert.ok(structured.sections.length>=3);
  const units=RA.composeUnits(structured,{},PT);

@@ -77,6 +77,8 @@
 .sc-ra-seg{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--sc-soft)}
 .sc-ra-seg-btn{flex:1 1 auto;min-width:0;height:26px;border:0;border-radius:999px;padding:0 6px;font-size:12px;background:transparent;color:var(--sc-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .sc-ra-seg-btn[aria-pressed="true"]{background:var(--sc-pill);color:var(--sc-pill-ink);font-weight:600}
+.sc-ra-lang{align-self:flex-start;margin-block-end:var(--sc-row-gap)}
+.sc-ra-lang .sc-ra-seg-btn{flex:0 0 auto;padding:0 12px}
 .sc-ra-more{justify-content:space-between}
 .sc-ra-why{margin-top:-2px}
 .sc-ra-why summary{font-size:12px;color:var(--sc-muted);cursor:pointer;width:max-content;max-width:100%}

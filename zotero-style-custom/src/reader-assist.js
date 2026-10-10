@@ -400,7 +400,7 @@
   /* ---- styles ------------------------------------------------------------ */
   function stylesheet(){
    if(!cssPromise)cssPromise=Promise.resolve().then(async()=>{
-    try{const r=await Z.HTTP.request('GET',runtime.rootURI+'content/reader-assist.css',{responseType:'text',successCodes:[200,0]});return String(r.response??r.responseText??'');}
+    try{return String(await Z.File.getResourceAsync(runtime.rootURI+'content/reader-assist.css'));}
     catch(error){log(error);return '';}
    });
    return cssPromise;
@@ -577,6 +577,12 @@
    ui.summaryMemo=button(session,ui.summaryActions,{title:'메모에 넣기',iconName:'note',cls:'sc-ra-icon',mark:'memo',onClick:()=>toMemo(session,summaryEntry(session)?.text||'',t('AI 요약'))});
    ui.summaryNoteSave=button(session,ui.summaryActions,{title:'하위 노트로 저장',iconName:'noteAdd',cls:'sc-ra-icon',mark:'note',onClick:()=>{const e=summaryEntry(session);return toNote(session,{heading:t('AI 요약'),text:e?.text||'',by:e?.by,model:e?.model});}});
    ui.summaryAgain=button(session,ui.summaryActions,{title:'다시 만들기',iconName:'refresh',cls:'sc-ra-icon',mark:'ai',onClick:()=>runSummary(session,{force:true})});
+   // The language the summary is written in, switchable here; each language keeps its own summary.
+   const langs=el(doc,'div',{'class':'sc-ra-seg sc-ra-lang',role:'group','aria-label':t('출력 언어')},card);ui.summaryLang={};
+   for(const[id,label]of [['English','English'],['Korean','한국어']]){
+    const b=el(doc,'button',{type:'button','class':'sc-ra-seg-btn','data-writes':'cache','data-lang':id,'aria-pressed':'false',title:t('AI 요약·대화를 이 언어로 씁니다')},langs);b.textContent=label;ui.summaryLang[id]=b;
+    b.addEventListener('click',event=>{event.stopPropagation();setSummaryLanguage(session,id);});
+   }
    ui.summaryBody=el(doc,'div',{'class':'sc-ra-md'},card);
    ui.summaryStart=button(session,card,{label:'요약 만들기',cls:'sc-ra-primary',mark:'ai',onClick:()=>runSummary(session,{})});
    ui.summaryNote=el(doc,'p',{'class':'sc-ra-note'},card);
@@ -644,8 +650,13 @@
   const NO_AI='설정에서 AI 서버 주소와 모델을 먼저 입력하세요. 이 Mac의 Claude·ChatGPT 계정을 쓰려면 bridge/install.sh로 AI 브리지를 설치하세요.';
   /* Where a press sends the paper: the bridge's account, or the server's host. */
   const aiPlace=()=>{try{const s=runtime.assist&&typeof runtime.assist.status==='function'?runtime.assist.status():null;if(!s||!s.available)return '';return s.source==='bridge'?byLabel(s.provider||'claude'):String(s.label||'');}catch(_){return '';}};
+  function setSummaryLanguage(session,lang){
+   if(session.summaryState==='loading'||language()===lang)return;
+   Promise.resolve(runtime.setSetting('aiLanguage',lang,{apply:false})).then(()=>{if(!session.destroyed)renderSummary(session);}).catch(log);
+  }
   function renderSummary(session){
    const ui=session.ui,entry=summaryEntry(session),state=session.summaryState||'idle';
+   for(const[id,b]of Object.entries(ui.summaryLang||{})){b.setAttribute('aria-pressed',String(language()===id));b.disabled=state==='loading';}
    const configured=!!runtime.assist?.available?.();
    ui.summaryBody.replaceChildren();ui.summaryNote.textContent='';
    const has=!!entry&&state!=='loading';
@@ -1218,8 +1229,14 @@
    const run=action==='toggle'?togglePlay(session):withPlayer(session,p=>p[action]());
    Promise.resolve(run).catch(error=>{log(error);say(session,describe(error),true);});
   }
-  /* Zotero 9's own Read Aloud (always on, the toolbar's #read-aloud) speaks through the same queue. */
-  const builtInState=reader=>{try{return coreOf(reader)?._state?.readAloudState||null;}catch(_){return null;}};
+  /* Zotero 9's own Read Aloud (always on, the toolbar's #read-aloud) speaks through the same queue. Zotero 10 keeps
+     active and paused on its read-aloud manager, not in the reader's state; without them a playing Zotero voice was
+     never seen and ours would start over it. */
+  const builtInState=reader=>{try{
+   const core=coreOf(reader),st=core?._state?.readAloudState;if(!st)return null;
+   if('active' in st)return st;
+   const m=core._readAloudManager;return m?{...st,active:!!m.active,paused:!!m.paused}:st;
+  }catch(_){return null;}};
   const builtInPlaying=reader=>{const st=builtInState(reader);return !!(st&&st.active&&!st.paused);};
   function stopBuiltIn(reader){
    const core=coreOf(reader);
@@ -1519,7 +1536,9 @@
    if(open!==undefined)session.open=!!open;
    session.autoFolded=!!(session.open&&!session.collapsed&&maxPanelWidth(session)<MIN_WIDTH);
    const w=occupied(session),root_=session.ui.root;
-   root_.hidden=!session.open;
+   // A self-check probe measures where the panel ends up, so it opens without the slide.
+   const moving=session.appliedWidth!==undefined&&session.appliedWidth!==w&&(session.allowSlide||(!session.probing&&!probing))&&!reducedMotion(session);
+   slidePanel(session,root_,moving);
    root_.setAttribute('data-collapsed',String(isFolded(session)));
    try{root_.style.setProperty('--sc-ra-w',(isFolded(session)?RAIL_WIDTH:panelWidth(session))+'px');}catch(_){}
    if(session.ui.railExpand)session.ui.railExpand.title=session.autoFolded?t('창이 좁아 접어 두었습니다. 창을 넓히면 다시 펼쳐집니다.'):t('패널 펼치기');
@@ -1528,15 +1547,105 @@
     if(!session.layoutOriginal)session.layoutOriginal=new Map();
     const priority=()=>typeof node.style.getPropertyPriority==='function'?node.style.getPropertyPriority('inset-inline-end'):'important';
     if(!session.layoutOriginal.has(node))session.layoutOriginal.set(node,{value:node.style.getPropertyValue('inset-inline-end'),priority:priority()});
+    if(moving)node.style.setProperty('transition',`inset-inline-end ${SLIDE_MS}ms ${SLIDE_EASE}`);
     if(w>0){if(node.style.getPropertyValue('inset-inline-end')!==w+'px'||priority()!=='important')node.style.setProperty('inset-inline-end',w+'px','important');}
     else{const o=session.layoutOriginal.get(node);if(o.value)node.style.setProperty('inset-inline-end',o.value,o.priority);else node.style.removeProperty('inset-inline-end');}
    }
    if(w===0)session.layoutOriginal=null;
-   if(session.appliedWidth!==w){session.appliedWidth=w;refit(session);}
+   if(session.appliedWidth!==w){
+    const was=session.appliedWidth||0;
+    if(!was&&w>0)noteZoom(session);
+    session.appliedWidth=w;refit(session);
+    // Once the view has its new width: a page that fitted before is fitted again, and closing puts the zoom back.
+    try{session.doc.defaultView.setTimeout(()=>{if(!session.destroyed)fitPage(session,w>0);},(moving?SLIDE_MS:0)+120);}catch(_){}
+    // Again once the slide has ended and the view's edge is where it stays.
+    if(moving){refit(session,SLIDE_MS+40);clearSlide(session);}
+   }
    tabstops(session);
+   // Measured once the slide (and Zotero's own resize after it) has settled.
+   if(w>0)try{const win=session.doc.defaultView;if(session.columnTimer)win.clearTimeout(session.columnTimer);session.columnTimer=win.setTimeout(()=>{session.columnTimer=null;if(!session.destroyed&&session.open)checkColumn(session,occupied(session));},SLIDE_MS+600);}catch(_){}
+  }
+  /* A set zoom (a number, not page-width or auto, which pdf.js refits by itself) leaves the page as wide as it was:
+     on a large screen it ran on under the narrowed view's edge and seemed not to move at all. When the page fitted
+     the view before the panel opened and does not fit the narrower one, the zoom is brought down by as much as
+     the view lost; closing the panel restores it, unless the reader changed it in the meantime. */
+  function zoomState(session){
+   try{
+    const app=waive(viewerWindow(session.reader)?.PDFViewerApplication),pv=app&&waive(app.pdfViewer),c=pv&&waive(pv.container);
+    if(!pv||!c)return null;
+    const page=c.querySelector('.page');const width=page?page.getBoundingClientRect().width:0;
+    return {pv,value:String(pv.currentScaleValue),scale:Number(pv.currentScale)||0,page:width,room:Number(c.clientWidth)||0};
+   }catch(_){return null;}
+  }
+  const NAMED_ZOOM=/^(?:page-width|page-fit|auto|page-actual)$/;
+  function noteZoom(session){
+   const z=zoomState(session);
+   session.zoomBefore=z&&!NAMED_ZOOM.test(z.value)?{value:z.value,scale:z.scale,fitted:z.page>0&&z.page<=z.room}:null;
+  }
+  function fitPage(session,open){
+   const z=zoomState(session);if(!z)return;
+   if(open){
+    const b=session.zoomBefore;if(!b||!b.fitted||NAMED_ZOOM.test(z.value)||!(z.page>z.room)||!(z.room>0))return;
+    const MARGIN=24,scale=Math.max(0.25,z.scale*(z.room-MARGIN)/z.page);
+    try{z.pv.currentScale=scale;session.zoomAdjusted={from:b.value,to:scale};}catch(error){log(error);}
+   }else{
+    const a=session.zoomAdjusted;session.zoomAdjusted=null;session.zoomBefore=null;
+    if(a&&Math.abs(z.scale-a.to)<1e-3)try{z.pv.currentScaleValue=a.from;}catch(error){log(error);}
+   }
+  }
+  /* Opening and closing slide: the panel comes in from the right edge as the view's edge moves left with it,
+     like a sliding door, and goes back the same way. Reduced motion: no slide. */
+  const SLIDE_MS=240,SLIDE_EASE='cubic-bezier(.2,.8,.2,1)';
+  // A window that cannot say (no matchMedia) gets no slide: it opens and closes at once.
+  const reducedMotion=session=>{try{const w=session.doc.defaultView;return typeof w.matchMedia!=='function'||!!w.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(_){return true;}};
+  function slidePanel(session,root_,moving){
+   const win=session.doc.defaultView,rtl=(()=>{try{return (session.doc.documentElement.getAttribute('dir')||'ltr')==='rtl';}catch(_){return false;}})();
+   const away=`translateX(${rtl?'-':''}100%)`;
+   if(session.slideHide){try{win.clearTimeout(session.slideHide);}catch(_){}session.slideHide=null;}
+   if(session.open){
+    const wasHidden=root_.hidden;root_.hidden=false;
+    if(moving&&wasHidden){
+     root_.style.transition='none';root_.style.transform=away;
+     void root_.getBoundingClientRect();
+     root_.style.transition=`transform ${SLIDE_MS}ms ${SLIDE_EASE}`;root_.style.transform='';
+    }
+    else root_.style.transform='';
+   }
+   else if(moving&&!root_.hidden){
+    root_.style.transition=`transform ${SLIDE_MS}ms ${SLIDE_EASE}`;root_.style.transform=away;
+    session.slideHide=win.setTimeout(()=>{session.slideHide=null;if(!session.open){root_.hidden=true;root_.style.transform='';}},SLIDE_MS);
+   }
+   else{root_.hidden=true;root_.style.transform='';}
+  }
+  function clearSlide(session){
+   const win=session.doc.defaultView;
+   if(session.slideClear)try{win.clearTimeout(session.slideClear);}catch(_){}
+   session.slideClear=win.setTimeout(()=>{session.slideClear=null;
+    for(const node of viewContainers(session))try{node.style.removeProperty('transition');}catch(_){}
+    try{session.ui.root.style.removeProperty('transition');}catch(_){}
+   },SLIDE_MS+60);
+  }
+  /* The user saw the panel lying over the paper in a reader where the self-check found it beside it. When the
+     view still reaches under the panel, what was found is left in a pref (readable without a window), once per
+     change, for the next report. */
+  function checkColumn(session,w){
+   try{
+    const total=docWidth(session),nodes=viewContainers(session),view=session.doc.defaultView;
+    const rows=nodes.map(node=>{const r=node.getBoundingClientRect(),cs=view.getComputedStyle(node);return `${node.id?'#'+node.id:'.'+String(node.className||'').split(/\s+/)[0]} right=${Math.round(r.right)} w=${Math.round(r.width)} pos=${cs.position} inset=${node.style.getPropertyValue('inset-inline-end')||'-'}/${cs.insetInlineEnd||cs.right} disp=${cs.display}`;});
+    // The view's own iframe and its first visible page, in this document's coordinates, and pdf.js's zoom.
+    let frame=null,pageNote='',scale='';
+    try{const core=coreOf(session.reader),v=core&&waive(core._primaryView),fr=v&&v._iframe;if(fr){frame=fr.getBoundingClientRect();
+     const app=waive(waive(fr.contentWindow).PDFViewerApplication),pv=app&&waive(app.pdfViewer),c=pv&&waive(pv.container);
+     if(pv){scale=`${pv.currentScaleValue}`;const pg=c&&c.querySelector('.page');if(pg){const r=pg.getBoundingClientRect();pageNote=` page=${Math.round(frame.left+r.left)}..${Math.round(frame.left+r.right)} inner=${Math.round(c.clientWidth)} scroll=${Math.round(c.scrollLeft)}`;}}}}catch(_){}
+    if(frame)rows.push(`iframe right=${Math.round(frame.right)} w=${Math.round(frame.width)} style.w=${(()=>{try{return waive(coreOf(session.reader)._primaryView)._iframe.style.width||'-';}catch(_){return '?';}})()} zoom=${scale}${pageNote}`);
+    const under=!nodes.length||nodes.some(node=>{const r=node.getBoundingClientRect();return r.width>0&&r.right>total-w+2;})||!!(frame&&frame.width>0&&frame.right>total-w+2);
+    const line=`${new Date().toISOString()} ${under?'UNDER':'beside'} total=${Math.round(total)} panel=${w} ${rows.join(' | ')||'no view container'}`;
+    const key=line.replace(/^\S+ /,'');
+    if(session.columnReport!==key){session.columnReport=key;Z.Prefs.set('extensions.style-custom.readerColumnLast',line,true);}
+   }catch(_){}
   }
   /* pdf.js fits "page width" and "auto" again only when it hears a resize: say so to each view, after layout. */
-  function refit(session){
+  function refit(session,delay=0){
    const win=session.doc.defaultView;if(!win||!win.setTimeout)return;
    win.setTimeout(()=>{
     if(session.destroyed)return;
@@ -1544,13 +1653,16 @@
     for(const view of [core&&core._primaryView,core&&core._secondaryView]){
      try{
       const w=view&&view._iframeWindow;if(!w)continue;
+      /* Zotero 10 pins the view's iframe at a pixel width and re-measures it only from its own ResizeObserver;
+         the paper stayed where it was and the panel cut it off. Its own resize sets the iframe to the container. */
+      try{const v=waive(view);if(typeof v._resizeIframeImmediate==='function'&&v._iframe&&v._container&&Math.abs(v._iframe.getBoundingClientRect().width-v._container.clientWidth)>1)v._resizeIframeImmediate();}catch(error){log(error);}
       if(typeof w.dispatchEvent==='function'&&w.Event)w.dispatchEvent(new w.Event('resize'));
       const app=waive(waive(w).PDFViewerApplication),pv=app&&waive(app.pdfViewer);
       const scale=pv&&pv.currentScaleValue;
       if(typeof scale==='string'&&/^(?:page-width|page-fit|auto|page-actual)$/.test(scale))pv.currentScaleValue=scale;
      }catch(error){log(error);}
     }
-   },0);
+   },delay);
   }
   function setCollapsed(session,collapsed,{remember=true}={}){
    session.collapsed=!!collapsed;applyLayout(session);
@@ -1883,7 +1995,8 @@
        const r=node.getBoundingClientRect();
        if(r.width>0&&r.right>rootRect.right+1&&!node.closest('.sc-ra-menu'))found.push(`${node.tagName.toLowerCase()}.${node.className||''} pokes out ${Math.round(r.right-rootRect.right)}px to the right`);
       }
-      if(node.tagName==='BUTTON'&&node.getBoundingClientRect){const r=node.getBoundingClientRect();if(r.width>0&&(r.height<22||r.width<22))found.push(`button "${clean(node.textContent||node.getAttribute('aria-label')).slice(0,20)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);}
+      // A page link inside a sentence (.sc-ra-cite) is an inline target, sized by the line it sits in (WCAG 2.5.8 exempts it).
+      if(node.tagName==='BUTTON'&&node.getBoundingClientRect&&!(node.classList&&node.classList.contains('sc-ra-cite'))){const r=node.getBoundingClientRect();if(r.width>0&&(r.height<22||r.width<22))found.push(`button "${clean(node.textContent||node.getAttribute('aria-label')).slice(0,20)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);}
       if(style.overflowX==='hidden'&&node.scrollWidth>node.clientWidth+1&&node.clientWidth>0&&!/sc-ra-(sentence|row-meta|pill-text|progress|tab-text|status)/.test(node.className||''))found.push(`${node.tagName.toLowerCase()}.${node.className||''} clips its text (${node.scrollWidth}>${node.clientWidth})`);
      }
      result.tabs[id]=found.length;result.problems.push(...found.map(x=>id+': '+x));
@@ -1954,6 +2067,8 @@
     open(){setOpen(session,true,{remember:false});setCollapsed(session,false,{remember:false});},
     collapse(on=true){setCollapsed(session,on,{remember:false});},
     close(){setOpen(session,false,{remember:false});},
+    /* The slide is off for a probe; the push check turns it on to measure what the reader sees. */
+    slide(on){session.allowSlide=!!on;},
     showTab(id){session.tab=validTab(id);paintTab(session,session.tab);if(session.tab==='translate')renderTranslate(session);},
     /* Inline inset of each view container: the value and priority the panel must give back exactly. */
     layout:()=>viewContainers(session).map(node=>({id:node.id?'#'+node.id:'.'+String(node.className||'').split(/\s+/)[0],value:node.style?node.style.getPropertyValue('inset-inline-end'):'',priority:node.style&&typeof node.style.getPropertyPriority==='function'?node.style.getPropertyPriority('inset-inline-end'):''})),

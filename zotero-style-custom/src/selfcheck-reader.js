@@ -665,7 +665,11 @@
           const tr = rectOf(toolbar);
           for (const b of group.querySelectorAll('button')) { const br = rectOf(b); if (br && tr && (br.top < tr.top - 1 || br.bottom > tr.bottom + 1)) r.problems.push(`reader toolbar buttons: "${truncate(b.getAttribute('aria-label'), 20)}" leaves the toolbar vertically`); }
           rows.push(r);
-        } else rows.push({name: 'reader toolbar buttons', found: false, problems: ['reader toolbar buttons: not mounted in the reader toolbar']});
+        } else {
+          // Zotero renders the toolbar (and asks plugins for their buttons) only once the tab has been drawn.
+          const drawn = !!handle.doc.querySelector('.toolbar');
+          rows.push({name: 'reader toolbar buttons', found: false, problems: [drawn ? 'reader toolbar buttons: the toolbar is drawn but ours are not in it' : 'reader toolbar buttons: the reader has not drawn its toolbar yet (a background tab in a hidden window), so nothing could be mounted']});
+        }
         data.rows = rows.map(r => ({name: r.name, found: r.found, count: r.count || 0, problems: r.problems.length}));
         for (const r of rows) problems.push(...r.problems);
         // The play button's icon on its filled background.
@@ -713,6 +717,42 @@
           detail: problems.length ? problems.join(' ; ') : `inset ${before.layout.map(l => `${l.id}=${JSON.stringify(l.value)}${l.priority ? ' !' + l.priority : ''}`).join(', ') || 'none'} restored, zoom ${value} ${scale}`};
       });
 
+      await check('push: at a fixed zoom, the slide moves the page over with the view', async () => {
+        /* What the reader sees: a set zoom (not page-width, which refits by itself), the panel sliding in, and the page
+           re-centred in the narrower view once the slide is over. Measured in the reader's own coordinates. */
+        const v = viewer(); if (!v) throw new Error('no pdf.js viewer');
+        const keep = String(v.currentScaleValue);
+        const frame = () => { try { return reader._internalReader._primaryView._iframe; } catch (ignored) { return null; } };
+        const area = () => { const f = frame(); return f ? rectOf(f) : null; };
+        const pageAt = () => { const b = pageBox(1), fr = area(); return b && b.rect && fr ? {left: fr.left + b.rect.left, right: fr.left + b.rect.right} : null; };
+        // A set zoom at which the page fills 90% of the full view: it fits now and would not fit beside the panel.
+        { const fr = area(), pg = pageAt(), scale = Number(v.currentScale) || 1;
+          try { v.currentScale = fr && pg ? scale * 0.9 * fr.width / (pg.right - pg.left) : scale; } catch (ignored) {} }
+        await sleep(400);
+        const a0 = area(), p0 = pageAt(), zoomBefore = Number(v.currentScale);
+        handle.slide(true); handle.open();
+        await sleep(1200);
+        const a1 = area(), p1 = pageAt(), pr = rectOf(handle.panel());
+        // The middle of what pdf.js lays pages out in, while the panel is open: the view less its vertical scrollbar.
+        const inner1 = (() => { try { const c = vdoc().getElementById('viewerContainer'); return c ? Number(c.clientWidth) || 0 : 0; } catch (ignored) { return 0; } })();
+        handle.close(); await sleep(900); handle.slide(false);
+        const zoomAfter = Number(v.currentScale);
+        try { v.currentScaleValue = keep; } catch (ignored) {}
+        await sleep(200);
+        if (!a0 || !a1 || !p0 || !p1 || !pr) throw new Error('nothing to measure: ' + JSON.stringify({a0: !!a0, a1: !!a1, p0: !!p0, p1: !!p1, panel: !!pr}));
+        const r = x => Math.round(x), problems = [];
+        if (a1.right > pr.left + 2) problems.push(`the view still reaches ${r(a1.right)}px, under the panel from ${r(pr.left)}px`);
+        const width = p1.right - p1.left, room = a1.right - a1.left;
+        // pdf.js's page border and shadow are not even on both sides: a few pixels off the middle is still centred.
+        const inner = inner1 || room;
+        if (width <= inner - 4) { const want = a1.left + inner / 2, got = (p1.left + p1.right) / 2; if (Math.abs(want - got) > 8) problems.push(`the page centre is at ${r(got)}px, not in the middle of the view (${r(want)}px)`); }
+                if (Math.abs((p1.left + p1.right) - (p0.left + p0.right)) < 2 && Math.abs(a1.right - a0.right) > 20) problems.push('the page did not move although the view narrowed');
+        if (p1.left < a1.left - 1 || p1.right > a1.right + 1) problems.push(`the page (${r(p1.left)}–${r(p1.right)}) does not fit the narrowed view (${r(a1.left)}–${r(a1.right)}) although it fitted the full one`);
+        if (Math.abs(zoomAfter - zoomBefore) > 1e-3) problems.push(`closing left the zoom at ${zoomAfter.toFixed(3)}, not ${zoomBefore.toFixed(3)}`);
+        return {pass: !problems.length, data: {a0, a1, p0, p1, panel: pr},
+          detail: (problems.length ? problems.join(' ; ') + ' · ' : '') + `view ${r(a0.left)}–${r(a0.right)} → ${r(a1.left)}–${r(a1.right)}, page ${r(p0.left)}–${r(p0.right)} → ${r(p1.left)}–${r(p1.right)}, panel from ${r(pr.left)} · zoom ${zoomBefore.toFixed(3)}, back to ${zoomAfter.toFixed(3)} on close`};
+      });
+
       await check('follow-along: the mark lies on the sentence in the text layer', async () => {
         if (!extraction) throw new Error('no extraction');
         const unit = extraction.units.find(u => Array.isArray(u.rects) && u.rects.length && handle.pageNumberOf(u));
@@ -725,7 +765,11 @@
           for (let i = 0; i < 50 && !spans.length; i++) { await sleep(100); box = pageBox(page); spans = textSpans(box && box.el); }
         }
         if (!box || !box.el) throw new Error(`page ${page} has no element`);
-        if (!spans.length) throw new Error(`page ${page}'s text layer has no spans (not rendered)`);
+        if (!spans.length) {
+          // A hidden Zotero (started in the background) paints no page at all: say so, it is not the overlay's fault.
+          let hidden = false; try { hidden = !!(box.el.ownerDocument && box.el.ownerDocument.hidden); } catch (ignored) {}
+          throw new Error(`page ${page}'s text layer has no spans (not rendered${hidden ? ': the reader is hidden, pdf.js paints nothing until Zotero is shown' : ''})`);
+        }
         const pad = paddingBox(box.el);
         const o = handle.overlay(unit, extraction.sizes);
         const px = percentToPx(o.boxes, pad);

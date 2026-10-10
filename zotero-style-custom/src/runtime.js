@@ -257,8 +257,9 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   async createUpdater() {
     const Updater = globalThis.PluginUpdater;
     if (!Updater || !this.id || !this.rootURI) return null;
-    const manifest = await this.Z.HTTP.request('GET', this.rootURI + 'manifest.json', { responseType: 'json' });
-    const updateURL = manifest?.response?.applications?.zotero?.update_url;
+    // Zotero 10's HTTP.request throws on jar: URLs; a channel reads the packaged file.
+    const manifest = JSON.parse(await this.Z.File.getResourceAsync(this.rootURI + 'manifest.json'));
+    const updateURL = manifest?.applications?.zotero?.update_url;
     if (!/^https:\/\//.test(String(updateURL || ''))) return null;
     return Updater.create({
       id: this.id, version: this.version, updateURL, appVersion: this.Z.version,
@@ -7518,61 +7519,87 @@ var CustomStyleRuntime = class CustomStyleRuntime {
                again and IF grew at every double-click. Such a box is
                measured by its content, like a clipped one. */
             const stretched = inner && (inner.display === 'block' || inner.display === 'flex' || px(inner.flexGrow) > 0 || box >= (el.clientWidth || 0) - 1 - px(style?.paddingLeft) - px(style?.paddingRight));
+            /* An auto margin (the IF figure pushed to the right edge) resolves
+               to the cell's free space: counted, each fit added that space and
+               the column grew by the same amount at every double-click. */
+            const margin = side => (/auto/.test(node.style?.[side] || '') || /auto/.test(node.style?.[side === 'marginLeft' ? 'marginInlineStart' : 'marginInlineEnd'] || '')) ? 0 : px(inner?.[side]);
             sum += (inner && (inner.overflow === 'hidden' || stretched) ? contentWidth(node) : Math.max(box, overflow(node)))
-              + (inner ? px(inner.marginLeft) + px(inner.marginRight) : 0);
+              + (inner ? margin('marginLeft') + margin('marginRight') : 0);
           }
         }
         if (style) sum += px(style.paddingLeft) + px(style.paddingRight);
-        return Math.max(sum, overflow(el), ...[...el.children].map(child => (overflow(child) ? child.scrollWidth + (child.offsetLeft || 0) : 0)));
+        /* Where a clipped child starts, from the element's own left edge.
+           offsetLeft counts from the offset parent -- the row, for a body
+           cell -- so a narrow institution column measured every column to
+           its left as well and the first fit threw it wide. */
+        const left = el.getBoundingClientRect?.().left || 0;
+        const from = child => Math.max(0, (child.getBoundingClientRect?.().left || left) - left);
+        return Math.max(sum, overflow(el), ...[...el.children].map(child => (overflow(child) ? child.scrollWidth + from(child) : 0)));
       };
-      let widest = 0, byScroll = 0, cells = 0, widestText = '';
-      for (const cell of doc.querySelectorAll(`#${tree.props.id} .virtualized-table-body .cell.${escape}`)) {
-        cells++;
-        byScroll = Math.max(byScroll, overflow(cell));
-        const width = contentWidth(cell);
-        if (width > widest) { widest = width; widestText = String(cell.textContent || '').trim().slice(0, 60); }
-      }
-      // The header's own word, measured the same way (its label box grows
-      // with the column, so its scrollWidth would only echo the width back).
-      const label = head.querySelector('.cell-text, span');
-      if (label) {
-        let labelWidth = overflow(label);
-        const style = styleOf(label);
-        if (ctx && style && label.textContent.trim()) { ctx.font = style.font || `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`; labelWidth = Math.max(labelWidth, ctx.measureText(label.textContent).width); }
-        widest = Math.max(widest, labelWidth ? labelWidth + 22 : 0);
-      }
-      const PAD = 16, MIN = 20, SHARE = 0.6, ALWAYS = 320;
-      const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
-      const widths = new Map();
-      for (const c of visible) { const cell = c.dataKey === dataKey ? head : c.dataKey === neighbour.dataKey ? next : cellFor(c.dataKey); if (cell) widths.set(c.dataKey, cell.getBoundingClientRect().width); }
-      const floor = c => (c.minWidth || MIN) + PAD;
-      /* A fit changes this one column and nothing else. When the columns no
-         longer fit the list, the list rolls sideways (rollTable) instead of
-         squeezing the others, as a spreadsheet would. A column still takes
-         at most SHARE of the window's list, a bound that does not move as
-         the rolled list grows, and may always reach ALWAYS pixels. */
-      const body = doc.querySelector(`#${tree.props.id} .virtualized-table-body`);
-      const viewport = (body && body.clientWidth > 16) ? body.clientWidth - 16 : [...widths.values()].reduce((a, b) => a + b, 0);
-      const cap = viewport ? Math.max(floor(column), ALWAYS, Math.round(viewport * SHARE)) : Infinity;
-      const want = Math.round(Math.min(Math.max(floor(column), widest + PAD), cap));
-      const current = widths.get(dataKey);
-      const delta = want - current;
-      // Already the right width: the same double-click must leave it alone.
-      if (Math.abs(delta) < 1) { state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} already fits (content ${Math.round(widest)})`; return; }
-      /* Every flexible column is stored together with the fitted one, at the
-         width it was given, so what Zotero writes to disk is the layout on
-         screen and the next launch restores it, rolled or flat. Zotero's own
-         drag stores only the pair it moved and leaves the rest stale. */
-      const stored = this.storedWidths(win, tree);
-      const changes = {};
-      for (const c of visible) if (!c.fixedWidth && !c.staticWidth) changes[c.dataKey] = Math.round(stored.get(c.dataKey) || widths.get(c.dataKey) || 0);
-      const width = want;
-      changes[dataKey] = width;
-      tree._columns.onResize(changes, true);
-      this.rollTable(win, state);
-      state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)} by text, ${Math.round(byScroll)} by scrollWidth, ${cells} cells, widest "${widestText}", ${state.tableRoll?.rolling ? 'list rolls to ' + Math.round(state.tableRoll.wanted) : 'fits the list'})`;
-      // Left where it can be read without a window, for the next report of a fit that did nothing.
-      try { this.Z.Prefs.set('extensions.style-custom.columnFitLast', new Date().toISOString() + ' ' + state.columnFit.last, true); } catch (ignored) {}
+      /* Measured twice. A clipped cell is measured by its text and an
+         unclipped one by its boxes, and the two disagree by a few pixels; the
+         second pass, once the fitted column is drawn, puts it where a second
+         double-click would, so that double-click finds nothing to change. */
+      const settle = pass => {
+        const hd = pass ? doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${escape}`) || head : head;
+        let widest = 0, byScroll = 0, cells = 0, widestText = '';
+        for (const cell of doc.querySelectorAll(`#${tree.props.id} .virtualized-table-body .cell.${escape}`)) {
+          cells++;
+          byScroll = Math.max(byScroll, overflow(cell));
+          const width = contentWidth(cell);
+          if (width > widest) { widest = width; widestText = String(cell.textContent || '').trim().slice(0, 60); }
+        }
+        // The header's own word, measured the same way (its label box grows
+        // with the column, so its scrollWidth would only echo the width back).
+        const label = hd.querySelector('.cell-text, span');
+        if (label) {
+          let labelWidth = overflow(label);
+          const style = styleOf(label);
+          if (ctx && style && label.textContent.trim()) { ctx.font = style.font || `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`; labelWidth = Math.max(labelWidth, ctx.measureText(label.textContent).width); }
+          widest = Math.max(widest, labelWidth ? labelWidth + 22 : 0);
+        }
+        const PAD = 16, MIN = 20, SHARE = 0.6, ALWAYS = 320;
+        const cellFor = key => doc.querySelector(`#${tree.props.id} .virtualized-table-header .cell.${win.CSS.escape(key)}`);
+        const widths = new Map();
+        for (const c of visible) { const cell = c.dataKey === dataKey ? hd : cellFor(c.dataKey) || (c.dataKey === neighbour.dataKey ? next : null); if (cell) widths.set(c.dataKey, cell.getBoundingClientRect().width); }
+        const floor = c => (c.minWidth || MIN) + PAD;
+        /* A fit changes this one column and nothing else. When the columns no
+           longer fit the list, the list rolls sideways (rollTable) instead of
+           squeezing the others, as a spreadsheet would. A column still takes
+           at most SHARE of the window's list, a bound that does not move as
+           the rolled list grows, and may always reach ALWAYS pixels. */
+        const body = doc.querySelector(`#${tree.props.id} .virtualized-table-body`);
+        const viewport = (body && body.clientWidth > 16) ? body.clientWidth - 16 : [...widths.values()].reduce((a, b) => a + b, 0);
+        const cap = viewport ? Math.max(floor(column), ALWAYS, Math.round(viewport * SHARE)) : Infinity;
+        const want = Math.round(Math.min(Math.max(floor(column), widest + PAD), cap));
+        const current = widths.get(dataKey);
+        /* Compared with the width the column was given, not the one drawn: a
+           list that fits shares its spare room out, so the drawn width is wider
+           than the fit and a second double-click would move it again. */
+        const stored = this.storedWidths(win, tree);
+        const delta = want - (stored.get(dataKey) || current);
+        // Already the right width: the same double-click must leave it alone.
+        if (Math.abs(delta) < 1) { if (pass) return; state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} already fits (content ${Math.round(widest)})`; return; }
+        /* Every flexible column is stored together with the fitted one, at the
+           width it was given, so what Zotero writes to disk is the layout on
+           screen and the next launch restores it, rolled or flat. Zotero's own
+           drag stores only the pair it moved and leaves the rest stale. */
+        const changes = {};
+        for (const c of visible) if (!c.fixedWidth && !c.staticWidth) changes[c.dataKey] = Math.round(stored.get(c.dataKey) || widths.get(c.dataKey) || 0);
+        const width = want;
+        changes[dataKey] = width;
+        tree._columns.onResize(changes, true);
+        this.rollTable(win, state);
+        if (pass) { state.columnFit.last += ` · settled ${Math.round(current)} → ${Math.round(width)}`; return; }
+        state.columnFit.fitted++; state.columnFit.last = `${dataKey}: ${Math.round(current)} → ${Math.round(width)} (content ${Math.round(widest)} by text, ${Math.round(byScroll)} by scrollWidth, ${cells} cells, widest "${widestText}", ${state.tableRoll?.rolling ? 'list rolls to ' + Math.round(state.tableRoll.wanted) : 'fits the list'})`;
+        // Left where it can be read without a window, for the next report of a fit that did nothing.
+        try { this.Z.Prefs.set('extensions.style-custom.columnFitLast', new Date().toISOString() + ' ' + state.columnFit.last, true); } catch (ignored) {}
+        if (!pass && typeof win.setTimeout === 'function') {
+          const later = fn => (typeof win.requestAnimationFrame === 'function' ? win.requestAnimationFrame(() => win.setTimeout(fn, 0)) : win.setTimeout(fn, 16));
+          later(() => { try { settle(1); } catch (error) { this.Z.logError(error); } });
+        }
+      };
+      settle(0);
     };
     doc.addEventListener('dblclick', onDouble, true);
     state.listeners.push([doc, 'dblclick', onDouble, true]);
@@ -7655,12 +7682,29 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   storedWidths(win, tree) {
     const sheet = tree._columns?._stylesheet?.sheet, map = tree._columns?._columnStyleMap || {};
     const widths = new Map();
-    for (const c of tree._getVisibleColumns?.() || []) {
+    const visible = tree._getVisibleColumns?.() || [];
+    /* Zotero 9 writes flex-basis as the width less the 16 px of padding.
+       Zotero 10 writes calc(var(--extra-width, 0px) + Wpx) with the padding
+       kept in, and takes the first column's icon room out of W (the variable
+       puts it back). parseFloat cannot read the calc, so every column fell
+       back to its stored width, which Zotero 10 keeps 16 px short: each fit
+       or drag shrank the other columns and the fitted one took up the slack. */
+    const calc = value => { const m = /^calc\(.*?([-\d.]+)px\s*\)?$/.exec(String(value || '').trim()); return m ? parseFloat(m[1]) : NaN; };
+    const extra = Number(tree.firstColumnExtraWidth) || 0;
+    const CELL_MIN_WIDTH = 30; // virtualized-table .cell { min-width: 30px }
+    for (const c of visible) {
       const rule = sheet?.cssRules?.[map[win.CSS.escape(c.dataKey)]]?.style;
+      const room = c === visible[0] ? extra : 0;
       let width;
       if (c.fixedWidth || c.staticWidth) width = parseFloat(rule?.minWidth) || parseFloat(c.width) || 0;
+      else if (calc(rule?.flexBasis) >= 0) width = calc(rule.flexBasis) + room;
       else if (rule && parseFloat(rule.flexBasis) >= 0) width = parseFloat(rule.flexBasis) + 16;
       else width = parseFloat(c.width) || 0;
+      /* No cell is drawn narrower than Zotero's .cell min-width, whatever its
+         basis says. Widths shrunk below it by the 16 px drift above were
+         summed at their stored size, the list was judged to fit, and the
+         overflow squeezed the column just fitted. */
+      if (!c.fixedWidth && !c.staticWidth && width) width = Math.max(width, CELL_MIN_WIDTH);
       widths.set(c.dataKey, width);
     }
     return widths;

@@ -141,6 +141,7 @@
  "AI 서비스 응답 오류: HTTP ": "The AI service returned an error: HTTP ",
  "AI 연결: {0}": "AI connection: {0}",
  "AI 연결됨": "AI connected",
+ "AI 요약·대화를 이 언어로 씁니다": "AI summaries and chat are written in this language",
  "AI 요약": "AI summary",
  "AI 요약·대화": "AI summary and chat",
  "AI 요청을 완료하지 못했습니다. 연결 설정을 확인하세요.": "The AI request could not be completed. Check the connection settings.",
