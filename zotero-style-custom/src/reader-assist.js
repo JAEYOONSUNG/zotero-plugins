@@ -658,6 +658,7 @@
   function renderSummary(session){
    const ui=session.ui,entry=summaryEntry(session),state=session.summaryState||'idle';
    for(const[id,b]of Object.entries(ui.summaryLang||{})){b.setAttribute('aria-pressed',String(language()===id));b.disabled=state==='loading';}
+   {const first=Object.values(ui.summaryLang||{})[0];if(first)slideIndicator(first.parentNode);}
    const configured=!!runtime.assist?.available?.();
    ui.summaryBody.replaceChildren();ui.summaryNote.textContent='';
    const has=!!entry&&state!=='loading';
@@ -1498,6 +1499,7 @@
    ui.resume.hidden=!(pos&&pos.sig&&idle);ui.more.hidden=ui.resume.hidden;
    if(!ui.resume.hidden){const text=ui.resume.querySelector('.sc-ra-btn-text');if(text)text.textContent=pos.page?T('이어서 듣기 · p. {0}',pos.page):t('이어서 듣기');}
    for(const[name,b]of Object.entries(ui.filters)){const f_=session.filters||{captions:false,references:false};b.setAttribute('aria-pressed',String(name==='body'?!f_.captions:name==='captions'?f_.captions&&!f_.references:f_.references));}
+   {const first=Object.values(ui.filters)[0];if(first)slideIndicator(first.parentNode);}
   }
 
   /* -- following along in the PDF --
@@ -1773,6 +1775,8 @@
     if(moving){refit(session,SLIDE_MS+40);clearSlide(session);}
    }
    tabstops(session);
+   // The pills sit by measurement, so they are placed again once the panel has its new width.
+   try{const win=session.doc.defaultView;win.setTimeout(()=>{if(!session.destroyed)slideAll(session);},(moving?SLIDE_MS:0)+40);}catch(_){}
    // Measured once the slide (and Zotero's own resize after it) has settled.
    if(w>0)try{const win=session.doc.defaultView;if(session.columnTimer)win.clearTimeout(session.columnTimer);session.columnTimer=win.setTimeout(()=>{session.columnTimer=null;if(session.destroyed||!session.open)return;
     // Only after a width of ours changed: a zoom the reader set themselves while the panel stood still is theirs.
@@ -1943,6 +1947,33 @@
    session.endDrag=end;
    handle.addEventListener('keydown',event=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setWidth(panelWidth(session)+(event.key==='ArrowLeft'?16:-16),true);}});
   }
+  /* The chosen item in a segmented row or the tab bar is a white pill that slides to it, the way the reader
+     asked for on 2026-10-11. The pill is one element per track, placed from the DOM: a track that cannot be
+     measured yet (a panel that is not on screen) keeps data-ind off, and the CSS paints the chosen button
+     itself instead, so the choice is always visible. */
+  const INDICATOR='sc-ra-ind';
+  function slideIndicator(track){
+   try{
+    if(!track||!track.isConnected)return;
+    const doc=track.ownerDocument;
+    let pill=track.firstElementChild&&track.firstElementChild.classList.contains(INDICATOR)?track.firstElementChild:track.querySelector(':scope > .'+INDICATOR);
+    if(!pill){pill=doc.createElementNS('http://www.w3.org/1999/xhtml','span');pill.className=INDICATOR;pill.setAttribute('aria-hidden','true');track.insertBefore(pill,track.firstChild);}
+    const chosen=track.querySelector('[aria-pressed="true"],[aria-selected="true"]');
+    const box=track.getBoundingClientRect(),mark=chosen&&chosen.getBoundingClientRect();
+    if(!chosen||!mark||!(mark.width>0)||!(box.width>0)){track.removeAttribute('data-ind');pill.hidden=true;return;}
+    const rtl=(()=>{try{return doc.defaultView.getComputedStyle(track).direction==='rtl';}catch(_){return false;}})();
+    const offset=rtl?box.right-mark.right:mark.left-box.left;
+    pill.hidden=false;
+    track.style.setProperty('--sc-ind-w',Math.round(mark.width)+'px');
+    track.style.setProperty('--sc-ind-x',(rtl?-1:1)*Math.round(offset)+'px');
+    track.setAttribute('data-ind','on');
+   }catch(error){log(error);}
+  }
+  /* Every track in the panel, after anything that may have moved one: a choice, a new width, a redrawn card. */
+  function slideAll(session){
+   const root_=session&&session.ui&&session.ui.root;if(!root_)return;
+   for(const track of root_.querySelectorAll('.sc-ra-seg,.sc-ra-tabs'))slideIndicator(track);
+  }
   function setOpen(session,open,{remember=true}={}){
    session.open=!!open;
    if(session.open)paintTab(session,validTab(session.tab||uiState().tab));
@@ -1950,11 +1981,12 @@
    // The toolbar button may belong to a toolbar that was redrawn since: never let it stop the panel from opening.
    try{if(session.toolbarState)session.toolbarState.panel.setAttribute('aria-pressed',String(session.open));}catch(_){session.toolbarState=null;}
    if(remember&&!session.probing){uiState().open=session.open;persistUI();}
-   if(session.open){showTab(session,validTab(session.tab||uiState().tab));ensureReady(session);ensureVoices(session);}
+   if(session.open){showTab(session,validTab(session.tab||uiState().tab));ensureReady(session);ensureVoices(session);slideAll(session);}
   }
   function paintTab(session,id){
    for(const[name,pane]of Object.entries(session.ui.panes))pane.hidden=name!==id;
    for(const[name,t_]of Object.entries(session.ui.tabs))t_.button.setAttribute('aria-selected',String(name===id));
+   slideIndicator(session.ui.tabs[id]&&session.ui.tabs[id].button.parentNode);
    tabstops(session);
   }
   function showTab(session,id){
