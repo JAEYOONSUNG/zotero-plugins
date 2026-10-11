@@ -27,8 +27,14 @@
     </label>
     <label class="field">
       <span>Zotero API 키</span>
-      <input id="setup-key" type="password" autocomplete="off" spellcheck="false" placeholder="붙여넣기">
+      <span class="with-btn">
+        <input id="setup-key" type="password" autocomplete="off" spellcheck="false" placeholder="붙여넣기">
+        <button id="setup-paste" class="secondary small-btn" type="button">붙여넣기</button>
+      </span>
     </label>
+    <p id="setup-why" class="muted small" hidden>
+      홈 화면 앱은 Safari와 저장 공간이 따로입니다. Safari에서 이미 연결하셨어도 여기서 키를 한 번 더 넣어야 합니다.
+    </p>
     <p class="muted small">
       키는 <a href="https://www.zotero.org/settings/keys/new" target="_blank" rel="noopener">zotero.org/settings/keys</a>에서 만듭니다.
       <b>Allow library access</b>와 <b>Allow write access</b>를 켜 주세요. 쓰기를 켜야 폰에서 상태·별점·메모를 바꿀 수 있습니다.
@@ -55,6 +61,13 @@
 
   <main id="list" class="list" aria-live="polite"></main>
 
+  <div id="pair" class="pair" hidden>
+    <p id="pair-text">홈 화면에 추가하면 키를 다시 넣어야 합니다. <b>키까지 함께 담기</b>를 누른 뒤 공유 → 홈 화면에 추가를 하세요.</p>
+    <div class="actions">
+      <button id="pair-go" class="primary" type="button">키까지 함께 담기</button>
+      <button id="pair-hide" class="secondary" type="button">나중에</button>
+    </div>
+  </div>
   <footer class="bar" id="statusbar"><span id="count"></span><span id="sync-state" class="muted"></span></footer>
 </section>
 

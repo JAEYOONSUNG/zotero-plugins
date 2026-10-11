@@ -84,7 +84,7 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS} = {}) {
 }
 
 /* The app, loaded into that phone. Returns the window it runs in. */
-async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np.key': 'k'.repeat(24)}} = {}) {
+async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np.key': 'k'.repeat(24)}, hash = ''} = {}) {
   const {window, document} = parseHTML(read('index.html'));
   const storage = new Map(Object.entries(stored));
   Object.assign(window, {
@@ -98,12 +98,16 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   // No service worker in this test phone; linkedom's navigator is read-only, so the app is given its own.
   const navigator = {userAgent: 'test'};
   const code = read('app.js');
+  const matchMedia = () => ({matches: false, addEventListener() {}});
   const run = new Function('window', 'document', 'localStorage', 'indexedDB', 'fetch', 'requestAnimationFrame',
-    'Response', 'URL', 'URLSearchParams', 'navigator', 'addEventListener', 'setTimeout', 'clearTimeout', 'console', 'location', code);
+    'Response', 'URL', 'URLSearchParams', 'navigator', 'addEventListener', 'setTimeout', 'clearTimeout', 'console', 'location', 'history', 'matchMedia', code);
+  const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash};
+  const history = {replaceState(_state, _title, url) { location.hash = ''; location.pathname = String(url).split('#')[0]; }};
+  window.location = location;
   run(window, document, window.localStorage, window.indexedDB, window.fetch, window.requestAnimationFrame,
-    Response, URL, URLSearchParams, window.navigator, (type, fn) => window.addEventListener?.(type, fn), setTimeout, clearTimeout, console, {origin: 'https://x.test'});
+    Response, URL, URLSearchParams, navigator, (type, fn) => window.addEventListener?.(type, fn), setTimeout, clearTimeout, console, location, history, matchMedia);
   const settle = async () => { for (let i = 0; i < 60; i++) await new Promise(r => setTimeout(r, 4)); };
-  return {window, document, settle, storage};
+  return {window, document, settle, storage, location};
 }
 
 test('a stored key goes straight to the library, and no key shows the setup screen', async () => {
@@ -116,6 +120,25 @@ test('a stored key goes straight to the library, and no key shows the setup scre
   await fresh.settle();
   assert.equal(fresh.document.getElementById('setup').hasAttribute('hidden'), false, 'with no key the setup screen is shown');
   assert.equal(fresh.document.getElementById('setup-user').value, '16265664', 'the user number is filled in');
+});
+
+test('a key carried in the link is taken in on the first launch and wiped from the address', async () => {
+  const server = fakeServer();
+  const open = await boot({server, stored: {}, hash: '#k=' + 'k'.repeat(24) + '&u=16265664'});
+  await open.settle();
+  assert.equal(open.storage.get('np.user'), '16265664', 'the user number was taken from the link');
+  assert.equal(open.storage.get('np.key'), 'k'.repeat(24), 'and so was the key');
+  assert.equal(open.document.getElementById('main').hasAttribute('hidden'), false, 'it goes straight to the library');
+  assert.ok(!String(open.location.hash || '').includes('k='), 'the key does not stay in the address');
+});
+
+test('a link with no key, or a broken one, still shows the setup screen', async () => {
+  for (const hash of ['', '#k=short&u=16265664', '#k=' + 'k'.repeat(24) + '&u=abc']) {
+    const open = await boot({stored: {}, hash});
+    await open.settle();
+    assert.equal(open.document.getElementById('setup').hasAttribute('hidden'), false, `setup is shown for ${hash || '(no hash)'}`);
+    assert.equal(open.storage.has('np.key'), false, 'nothing was stored');
+  }
 });
 
 test('the whole library is paged in, cached, and drawn without the attachments', async () => {

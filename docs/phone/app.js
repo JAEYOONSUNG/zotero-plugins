@@ -73,6 +73,26 @@ const DB = (() => {
 })();
 
 /* ---------- the account ---------- */
+/* iOS gives a home-screen web app its own storage: the key typed in Safari is not there when the
+   icon is opened. So the key can travel in the link itself — "키까지 함께 담기" puts it in the
+   address, the icon is added from that address, and the app saves it on its first launch and
+   takes it straight back out of the address. */
+const standalone = () => {
+  try { return window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; }
+  catch (_) { return false; }
+};
+function takeKeyFromLink() {
+  const hash = String(location.hash || '');
+  if (!hash.includes('k=')) return false;
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const user = clean(params.get('u')), key = clean(params.get('k'));
+  if (!/^\d+$/.test(user) || key.length < 12) return false;
+  localStorage.setItem(KEYS.user, user);
+  localStorage.setItem(KEYS.key, key);
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { location.hash = ''; }
+  return true;
+}
+
 const account = {
   get user() { return localStorage.getItem(KEYS.user) || ''; },
   get key() { return localStorage.getItem(KEYS.key) || ''; },
@@ -474,7 +494,30 @@ function openCollections() {
 }
 
 /* ---------- start ---------- */
+/* The card that offers to carry the key: only in Safari, only once the library is there. */
+function offerPairing() {
+  const card = $('pair');
+  if (!card || standalone() || !account.ready || localStorage.getItem(KEYS.scope) === 'paired') return;
+  card.hidden = false;
+  $('pair-hide').addEventListener('click', () => { card.hidden = true; });
+  $('pair-go').addEventListener('click', () => {
+    location.hash = `k=${encodeURIComponent(account.key)}&u=${encodeURIComponent(account.user)}`;
+    localStorage.setItem(KEYS.scope, 'paired');
+    $('pair-text').innerHTML = '주소에 키를 담았습니다. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 홈 화면 앱이 열릴 때 키가 자동으로 들어갑니다.';
+    $('pair-go').hidden = true;
+    $('pair-hide').textContent = '닫기';
+  });
+}
+
 function wire() {
+  const paste = $('setup-paste');
+  if (paste) paste.addEventListener('click', async () => {
+    try {
+      const text = clean(await navigator.clipboard.readText());
+      if (text) { $('setup-key').value = text; toast('붙여넣었습니다'); }
+      else toast('클립보드가 비어 있습니다');
+    } catch (_) { toast('길게 눌러 붙여넣기를 쓰세요'); }
+  });
   $('q').addEventListener('input', event => { state.q = event.target.value; render(); });
   $('btn-sync').addEventListener('click', () => sync());
   $('btn-collections').addEventListener('click', openCollections);
@@ -493,6 +536,7 @@ function wire() {
       msg.className = 'msg good'; msg.textContent = '연결되었습니다.';
       $('setup').hidden = true; $('main').hidden = false;
       buildFilters(); await loadCache(); render(); sync({full: true});
+      offerPairing();
     } catch (error) {
       msg.className = 'msg bad'; msg.textContent = error.message;
     }
@@ -500,9 +544,11 @@ function wire() {
 }
 
 async function start() {
+  const paired = takeKeyFromLink();
   wire();
   if (!account.ready) {
     $('setup-user').value = '16265664';
+    $('setup-why').hidden = !standalone();
     $('setup').hidden = false;
     return;
   }
@@ -511,6 +557,8 @@ async function start() {
   await loadCache();
   render();
   sync();
+  if (paired) toast('키가 함께 들어왔습니다');
+  else offerPairing();
 }
 
 if ('serviceWorker' in navigator) {

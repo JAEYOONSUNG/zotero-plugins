@@ -129,3 +129,15 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
          background:var(--ink); color:var(--canvas); padding:10px 16px; border-radius:999px; font-size:14px;
          z-index:50; max-width:85vw; text-align:center; }
 .toast[hidden] { display:none; }
+
+/* setup helpers */
+.with-btn { display:flex; gap:8px; align-items:center; }
+.with-btn input { flex:1; min-width:0; }
+.small-btn { height:44px; padding:0 14px; font-size:14px; flex:none; }
+
+/* the card that carries the key into the home-screen app */
+.pair { position:absolute; left:var(--pad); right:var(--pad); bottom:calc(var(--bottom) + 16px);
+        background:var(--card); border-radius:var(--radius); padding:var(--pad);
+        box-shadow:0 8px 24px rgba(0,0,0,.18); display:flex; flex-direction:column; gap:12px; z-index:20; }
+.pair[hidden] { display:none; }
+.pair p { margin:0; font-size:14px; line-height:1.5; }
