@@ -226,7 +226,8 @@ async function setRating(item, rating) {
 }
 
 async function addNote(item, text) {
-  const body = clean(text);
+  // Trimmed, but the line breaks are the writer's: clean() would run the paragraphs together.
+  const body = String(text ?? '').replace(/[ \t]+/g, ' ').replace(/[ \t]*\n/g, '\n').trim();
   if (!body) return null;
   const html = body.split(/\n{2,}/).map(p => `<p>${p.replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'})[c]).replace(/\n/g, '<br>')}</p>`).join('');
   const response = await api('/items', {
