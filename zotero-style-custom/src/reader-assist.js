@@ -88,6 +88,74 @@
   });
  }
 
+ /* One band per line of the sentence.
+
+    Drawn straight from the extraction, a sentence is a stack of rectangles that each hug their own run of
+    glyphs: they start and end a pixel apart, their heights differ where a superscript or an italic sits, and
+    the eye reads that as a ragged block (the reader, 2026-10-11: "미세하게 안맞잖아 블럭이"). Here the boxes of
+    one line are merged into a single band, the bands are given the line's own height, edges that are within a
+    hair of each other are pulled onto the same pixel, and everything is snapped to whole pixels of the page as
+    it is shown. Boxes far apart on the same line -- the two columns of a paper -- are left as separate bands.
+
+    `view` is the viewport the boxes are drawn in ({width, height} in pixels); the boxes are in percent of it. */
+ function mergeBands(boxes,view){
+  const W=Number(view&&view.width)||0,H=Number(view&&view.height)||0;
+  if(!Array.isArray(boxes)||boxes.length<1||!(W>0)||!(H>0))return Array.isArray(boxes)?boxes:[];
+  const px=boxes.map(b=>({l:b.left/100*W,t:b.top/100*H,r:(b.left+b.width)/100*W,b:(b.top+b.height)/100*H}))
+   .filter(b=>b.r>b.l&&b.b>b.t)
+   .sort((x,y)=>x.t-y.t||x.l-y.l);
+  if(!px.length)return [];
+  // Same line: the two boxes overlap vertically by more than half of the shorter one.
+  const lines=[];
+  for(const box of px){
+   const line=lines[lines.length-1];
+   if(line){
+    const over=Math.min(line.b,box.b)-Math.max(line.t,box.t);
+    if(over>0.5*Math.min(line.b-line.t,box.b-box.t)){line.t=Math.min(line.t,box.t);line.b=Math.max(line.b,box.b);line.parts.push(box);continue;}
+   }
+   lines.push({t:box.t,b:box.b,parts:[box]});
+  }
+  const out=[];
+  for(const line of lines){
+   const height=line.b-line.t;
+   line.parts.sort((x,y)=>x.l-y.l);
+   // A word space joins; the gutter between two columns does not.
+   const gapMax=height*0.9;
+   const runs=[];
+   for(const part of line.parts){
+    const last=runs[runs.length-1];
+    if(last&&part.l-last.r<=gapMax){last.r=Math.max(last.r,part.r);continue;}
+    runs.push({l:part.l,r:part.r});
+   }
+   for(const run of runs)out.push({l:run.l,r:run.r,t:line.t,b:line.b});
+  }
+  // Every band gets the sentence's usual line height, so one with a superscript is not taller than its neighbours.
+  const heights=out.map(b=>b.b-b.t).sort((x,y)=>x-y);
+  const median=heights[Math.floor(heights.length/2)];
+  for(const band of out){
+   const h=band.b-band.t;
+   if(median>0&&Math.abs(h-median)<=median*0.35){const mid=(band.t+band.b)/2;band.t=mid-median/2;band.b=mid+median/2;}
+  }
+  // Edges a hair apart become the same edge, and the band is given a little air around the glyphs.
+  const SNAP=2.5,PAD=1.5;
+  for(const side of ['l','r']){
+   const values=out.map(b=>b[side]).sort((x,y)=>x-y);
+   const groups=[];
+   for(const value of values){
+    const last=groups[groups.length-1];
+    if(last&&value-last[last.length-1]<=SNAP)last.push(value);else groups.push([value]);
+   }
+   for(const group of groups){
+    const to=side==='l'?Math.min(...group):Math.max(...group);
+    for(const band of out)if(group.includes(band[side]))band[side]=to;
+   }
+  }
+  return out.map(band=>{
+   const l=Math.round(band.l-PAD),r=Math.round(band.r+PAD),t=Math.round(band.t),b=Math.round(band.b);
+   return {left:l/W*100,top:t/H*100,width:Math.max(1,r-l)/W*100,height:Math.max(1,b-t)/H*100};
+  });
+ }
+
  /* A point on the page element (fractions of its box) in the extraction's page space: the page element shows the
     live viewport (the reader's zoom and its own rotation), so the point goes back through that viewport to PDF user
     space and forward through the extraction's viewport. Without a live viewport the page is taken as unturned. */
@@ -1525,10 +1593,14 @@
    if(!(size&&size.width>0&&size.height>0&&Array.isArray(unit.rects)&&unit.rects.length))return false;
    const doc=viewerDoc(session.reader),pageEl=doc&&doc.querySelector('.page[data-page-number="'+page+'"]');
    if(!pageEl)return false;
-   for(const box of overlayBoxes(unit.rects.slice(0,12),size,liveViewport(session,page))){
+   const view=liveViewport(session,page)||size;
+   for(const box of mergeBands(overlayBoxes(unit.rects.slice(0,12),size,liveViewport(session,page)),view)){
     const mark=doc.createElementNS(HTML,'div');mark.setAttribute('data-sc-ra-hl','1');
-    // Percentages of the page, so the box follows every zoom level until the next re-render redraws it.
-    mark.style.cssText=`position:absolute;left:${box.left}%;top:${box.top}%;width:${box.width}%;height:${box.height}%;background:rgba(255,212,0,0.32);border-radius:3px;box-shadow:0 0 0 1px rgba(204,146,0,0.55);pointer-events:none;z-index:6;`;
+    /* Percentages of the page, so the box follows every zoom level until the next re-render redraws it.
+       multiply: the yellow darkens the white paper and leaves the black glyphs black, instead of a translucent
+       film over the words (the reader, 2026-10-11: "글자 불투명하게는 안했으면"). The colour is kept under full
+       opacity so a renderer without blending still shows the text through it. */
+    mark.style.cssText=`position:absolute;left:${box.left}%;top:${box.top}%;width:${box.width}%;height:${box.height}%;background:rgba(255,225,97,0.9);mix-blend-mode:multiply;border-radius:2px;box-shadow:0 0 0 1px rgba(214,163,0,0.4);pointer-events:none;z-index:6;`;
     pageEl.appendChild(mark);session.marks.push(mark);
    }
    session.markedPage=page;
@@ -2371,7 +2443,8 @@
     overlay(unit,sizes){
      const page=pageNumberOf(unit),size=page&&sizes&&sizes[page-1];
      if(!size||!Array.isArray(unit.rects)||!unit.rects.length)return {page,boxes:[]};
-     return {page,boxes:overlayBoxes(unit.rects.slice(0,12),size,liveViewport(session,page))};
+     const view=liveViewport(session,page)||size;
+     return {page,boxes:mergeBands(overlayBoxes(unit.rects.slice(0,12),size,liveViewport(session,page)),view)};
     },
     selectionPopup(params,append){return selectionPopup({reader,doc:session.doc,params,append});},
     readAloudState:()=>builtInState(reader),
@@ -2464,5 +2537,5 @@
   }
   return Object.freeze({sync,mountToolbar,releaseWindow,selectionPopup,probe,probeAll,diagnose,reserve,setGuard,pruneCache,stop,sessions:()=>[...sessions.values()],owner});
  }
- return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,shortcutOf,KEY_HINTS,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,pointToPage});
+ return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,shortcutOf,KEY_HINTS,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,mergeBands,pointToPage});
 });

@@ -374,7 +374,13 @@ test('listening: the toolbar ▶ speaks from the page on screen without opening 
  assert.match(f.panel().querySelector('.sc-ra-progress').textContent,/^Sentence \d+\/\d+ · under a minute left · Methods$/,'where, how long is left, and the section last (the part a narrow panel may cut)');
  const marks=f.viewDoc.querySelectorAll('[data-sc-ra-hl]');assert.equal(marks.length,1);
  assert.match(marks[0].parentNode.getAttribute('data-page-number'),/^3$/);
- assert.match(marks[0].getAttribute('style'),/left:11\.7\d*%/,'72 of 612 units, as a percentage of the page');
+ {
+  // The band covers the sentence's 72-of-612 start, with the hair of padding mergeBands() adds around the glyphs.
+  const style=marks[0].getAttribute('style'),at=name=>Number((new RegExp(name+':([\\d.]+)%').exec(style)||[])[1]);
+  const want=72/612*100;
+  assert.ok(at('left')<=want&&at('left')>want-0.5,`the band starts just before 72/612 of the page, not at ${at('left')}%`);
+  assert.match(style,/mix-blend-mode:multiply/,'the mark multiplies onto the paper, so the glyphs keep their ink');
+ }
  assert.equal(f.navs.length,0,'already on that page and in view: no scrolling');
  assert.equal(f.panel().querySelector('.sc-ra-sentence[aria-current="true"]').textContent,'Libraries were screened by compartmentalised self-replication.');
  f.sessionOf().lastActivity=0;f.synth.finish();f.synth.begin();await settle();
@@ -582,6 +588,30 @@ test('extraction never hands pdf.js a chrome object: the viewport is computed fr
   assert.equal(seen[0].fonts.f1.bold,true,'the font that arrived a moment later is used');
   assert.ok(f.synth.log.some(l=>l[0]==='speak'));
  }finally{globalThis.StyleCustomPaperText=PTsaved;f.stop();}
+});
+
+test('the follow-along mark is one band per line, pulled onto whole pixels, and the two columns stay apart',()=>{
+ const view={width:1000,height:1000};
+ const pct=(l,t,w,h)=>({left:l/10,top:t/10,width:w/10,height:h/10});   // pixels of a 1000x1000 page
+ // One line in three runs (an italic word in the middle) plus a second line a pixel wider.
+ const boxes=[pct(100,100,180,16),pct(282,101,60,18),pct(345,100,155,16),pct(100,124,401,17)];
+ const bands=ReaderAssist.mergeBands(boxes,view).map(b=>({
+  l:Math.round(b.left/100*view.width),r:Math.round((b.left+b.width)/100*view.width),
+  t:Math.round(b.top/100*view.height),h:Math.round(b.height/100*view.height)}));
+ assert.equal(bands.length,2,'the runs of a line become one band');
+ assert.equal(bands[0].l,bands[1].l,'the left edges land on the same pixel');
+ assert.ok(Math.abs(bands[0].r-bands[1].r)<=1,'and so do the right edges');
+ assert.equal(bands[0].h,bands[1].h,'both bands take the line height, so the stack is even');
+ assert.ok(bands[0].l<=99&&bands[0].r>=501,'the band has a little air around the glyphs');
+ assert.ok(bands.every(b=>Number.isInteger(b.l)&&Number.isInteger(b.t)),'whole pixels');
+
+ // A sentence that carries on in the next column: the gutter must not be bridged.
+ const twoColumns=ReaderAssist.mergeBands([pct(60,200,240,16),pct(520,200,240,16)],view);
+ assert.equal(twoColumns.length,2,'the gutter between two columns is not filled in');
+
+ // Nothing to measure: the boxes come back as they were, never dropped.
+ assert.deepEqual(ReaderAssist.mergeBands(boxes,null),boxes);
+ assert.deepEqual(ReaderAssist.mergeBands([],view),[]);
 });
 
 test('the viewport matrix is pdf.js\'s own for every rotation, and the overlay boxes follow a rotated, zoomed page',()=>{
