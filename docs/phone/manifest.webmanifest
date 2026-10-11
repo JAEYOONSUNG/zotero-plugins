@@ -1,0 +1,17 @@
+{
+  "name": "논문",
+  "short_name": "논문",
+  "description": "Zotero 라이브러리를 폰에서 읽고, 듣고, 정리합니다.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f2f4",
+  "theme_color": "#f2f2f4",
+  "lang": "ko",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

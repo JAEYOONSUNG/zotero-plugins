@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="논문">
+<title>논문</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- first run: the keys this phone needs, kept on this phone only -->
+<section id="setup" class="screen" hidden>
+  <div class="setup-box">
+    <h1>논문</h1>
+    <p class="muted">내 Zotero 라이브러리를 폰에서 읽고, 듣고, 정리합니다. 키는 이 폰에만 저장되고 어디로도 보내지 않습니다.</p>
+    <label class="field">
+      <span>Zotero 사용자 번호</span>
+      <input id="setup-user" inputmode="numeric" autocomplete="off" placeholder="16265664">
+    </label>
+    <label class="field">
+      <span>Zotero API 키</span>
+      <input id="setup-key" type="password" autocomplete="off" spellcheck="false" placeholder="붙여넣기">
+    </label>
+    <p class="muted small">
+      키는 <a href="https://www.zotero.org/settings/keys/new" target="_blank" rel="noopener">zotero.org/settings/keys</a>에서 만듭니다.
+      <b>Allow library access</b>와 <b>Allow write access</b>를 켜 주세요. 쓰기를 켜야 폰에서 상태·별점·메모를 바꿀 수 있습니다.
+    </p>
+    <button id="setup-go" class="primary">연결</button>
+    <p id="setup-msg" class="msg" hidden></p>
+  </div>
+</section>
+
+<!-- the library -->
+<section id="main" class="screen" hidden>
+  <header class="top">
+    <div class="top-row">
+      <button id="btn-collections" class="icon-btn" aria-label="컬렉션"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h12"/></svg></button>
+      <div class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="제목, 저자, 저널" autocomplete="off" enterkeyhint="search">
+      </div>
+      <button id="btn-sync" class="icon-btn" aria-label="새로 고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></svg></button>
+    </div>
+    <nav id="filters" class="seg" role="group" aria-label="상태"></nav>
+    <p id="scope" class="scope" hidden></p>
+  </header>
+
+  <main id="list" class="list" aria-live="polite"></main>
+
+  <footer class="bar" id="statusbar"><span id="count"></span><span id="sync-state" class="muted"></span></footer>
+</section>
+
+<!-- one paper -->
+<section id="detail" class="screen sheet" hidden>
+  <header class="top detail-top">
+    <button id="back" class="icon-btn" aria-label="뒤로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <span id="detail-title" class="detail-title"></span>
+  </header>
+  <main id="detail-body" class="list"></main>
+</section>
+
+<!-- collections -->
+<section id="collections" class="screen sheet" hidden>
+  <header class="top detail-top">
+    <button id="collections-back" class="icon-btn" aria-label="닫기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="detail-title">컬렉션</span>
+  </header>
+  <main id="collections-body" class="list"></main>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js" type="module"></script>
+</body>
+</html>
