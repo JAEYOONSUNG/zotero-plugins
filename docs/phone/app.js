@@ -15,6 +15,8 @@
 
 import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, RATES} from './play.js';
+import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
+import {createViewer} from './pdfview.js';
 
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
@@ -51,13 +53,15 @@ function toast(text) {
 const DB = (() => {
   let open = null;
   const ready = () => open || (open = new Promise((resolve, reject) => {
-    const req = indexedDB.open('nonmun', 2);
+    const req = indexedDB.open('nonmun', 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', {keyPath: 'key'});
       if (!db.objectStoreNames.contains('collections')) db.createObjectStore('collections', {keyPath: 'key'});
       // The text Zotero indexed, kept so a paper opened once can be listened to with no signal.
       if (!db.objectStoreNames.contains('text')) db.createObjectStore('text', {keyPath: 'key'});
+      // The PDFs themselves, so a paper opened once opens again with no signal.
+      if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', {keyPath: 'key'});
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -96,6 +100,11 @@ function takeKeyFromLink() {
   if (!/^\d+$/.test(user) || key.length < 12) return false;
   localStorage.setItem(KEYS.user, user);
   localStorage.setItem(KEYS.key, key);
+  // The Dropbox connection travels the same way: the home-screen app has its own storage too.
+  for (const [from, to] of [['a', 'np.db.app'], ['d', 'np.db.refresh'], ['b', 'np.db.base']]) {
+    const value = clean(params.get(from));
+    if (value) localStorage.setItem(to, value);
+  }
   try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { location.hash = ''; }
   return true;
 }
@@ -414,6 +423,10 @@ async function openDetail(key) {
   el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, listenButton);
   el('span', {text: Number(localStorage.getItem(KEYS.at + key)) > 0 ? '본문 이어 듣기' : '본문 듣기'}, listenButton);
   listenButton.addEventListener('click', () => openListen(state.items.find(x => x.key === key) || item));
+  const paperButton = el('button', {type: 'button', class: 'paper-start', style: 'margin-top:8px'}, listenCard);
+  el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h4"/></svg>'}, paperButton);
+  el('span', {text: 'PDF 보기'}, paperButton);
+  paperButton.addEventListener('click', () => openPaper(state.items.find(x => x.key === key) || item));
 
   if (clean(item.data.abstractNote)) {
     const card = el('section', {class: 'card'}, body);
@@ -484,8 +497,11 @@ const PDF_TYPES = /pdf|epub/i;
 async function attachmentOf(itemKey) {
   const response = await api(`/items/${itemKey}/children?limit=100`);
   const rows = await response.json();
-  const files = rows.filter(r => r.data.itemType === 'attachment' && (PDF_TYPES.test(r.data.contentType || '') || PDF_TYPES.test(r.data.filename || '')));
-  return files[0] || null;
+  const files = rows.filter(r => r.data.itemType === 'attachment' && (PDF_TYPES.test(r.data.contentType || '') || PDF_TYPES.test(r.data.filename || '') || PDF_TYPES.test(r.data.path || '')));
+  // A PDF before anything else, and among PDFs the one whose bytes this phone can actually reach.
+  const rank = row => (/pdf/i.test(row.data.contentType || row.data.filename || '') ? 0 : 1)
+    + (fileSource(row, dropbox.base).kind === 'none' ? 2 : 0);
+  return files.sort((a, b) => rank(a) - rank(b))[0] || null;
 }
 async function fulltextOf(attachmentKey) {
   const saved = await DB.get('text', attachmentKey).catch(() => null);
@@ -514,6 +530,42 @@ function closeListen() {
   $('listen').hidden = true;
 }
 
+function playMark(button, playing) {
+  if (!button) return;
+  button.setAttribute('aria-label', playing ? '일시정지' : '재생');
+  button.innerHTML = playing
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>';
+}
+
+/* One player, two screens: the transcript marks the sentence, the PDF turns to its page. What
+   they share — the place in the paper, the screen staying awake, the line underneath — is done
+   once here. */
+function paintReading(state) {
+  const playing = state.status === 'playing';
+  const left = remainingSeconds(listen.list, state.index, state.rate);
+  const unit = state.unit;
+  const line = state.status === 'error'
+    ? '이 폰의 목소리가 멈췄습니다. 다시 눌러 주세요.'
+    : `${state.index + 1} / ${state.total}${unit && unit.page ? ` · ${unit.page}쪽` : ''} · 남은 시간 약 ${Math.max(1, Math.round(left / 60))}분`;
+  if (listen.item) localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
+  holdScreen(playing);
+  if (!$('listen').hidden) {
+    $('listen-where').textContent = line;
+    playMark($('listen-play'), playing);
+    paintListen(state);
+  }
+  if (!$('paper').hidden) {
+    $('paper-where').textContent = line;
+    playMark($('paper-play'), playing);
+    // The page is turned only while it is being read, so a reader who scrolled away is left alone.
+    if (playing && unit && unit.page && paper.viewer && paper.following !== unit.page) {
+      paper.following = unit.page;
+      try { paper.viewer.goto(unit.page); } catch (_) {}
+    }
+  }
+}
+
 function paintListen(state) {
   const node = listen.nodes[state.index];
   for (const other of listen.nodes) if (other && other.getAttribute('aria-current')) other.removeAttribute('aria-current');
@@ -521,19 +573,6 @@ function paintListen(state) {
     node.setAttribute('aria-current', 'true');
     try { node.scrollIntoView?.({block: 'center', behavior: 'smooth'}); } catch (_) { try { node.scrollIntoView?.(); } catch (__) {} }
   }
-  const playing = state.status === 'playing';
-  const button = $('listen-play');
-  button.setAttribute('aria-label', playing ? '일시정지' : '재생');
-  button.innerHTML = playing
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>';
-  const left = remainingSeconds(listen.list, state.index, state.rate);
-  const unit = state.unit;
-  $('listen-where').textContent = state.status === 'error'
-    ? '이 폰의 목소리가 멈췄습니다. 다시 눌러 주세요.'
-    : `${state.index + 1} / ${state.total}${unit && unit.page ? ` · ${unit.page}쪽` : ''} · 남은 시간 약 ${Math.max(1, Math.round(left / 60))}분`;
-  if (listen.item) localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
-  holdScreen(playing);
 }
 
 function renderTranscript(list) {
@@ -615,7 +654,7 @@ async function openListen(item) {
 
   if (listen.player) listen.player.stop();
   listen.player = createPlayer({engine, rate, lang: chosen ? chosen.lang : lang, voiceURI: chosen ? chosen.voiceURI : '',
-    onChange: event => paintListen(event.state)});
+    onChange: event => paintReading(event.state)});
   listen.player.load(listen.list, {at});
 
   // The voices arrive late on iOS; refill the menu when they do.
@@ -633,11 +672,10 @@ async function openListen(item) {
   buildRates(rate);
   buildScope(lang, withCaptions);
   $('listen-bar').hidden = false;
-  paintListen(listen.player.state());
+  paintReading(listen.player.state());
 }
 
-function buildRates(current) {
-  const track = $('listen-rate');
+function buildRates(current, track = $('listen-rate')) {
   track.textContent = '';
   el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
   for (const rate of RATES) {
@@ -670,12 +708,241 @@ function buildScope(lang, captions) {
       listen.player.load(listen.list, {at: back});
       for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
       slide(track);
-      if (playing) listen.player.play(back); else paintListen(listen.player.state());
+      if (playing) listen.player.play(back); else paintReading(listen.player.state());
     });
   }
   requestAnimationFrame(() => slide(track));
   void lang;
 }
+
+/* ---------- the PDF itself ---------- */
+/* Zotero's API serves the bytes of an attachment only when Zotero stores it. This library keeps
+   its files as linked files in a Dropbox folder, so for almost every paper the bytes come from
+   Dropbox instead (files.js works out which). What is fetched once is kept in IndexedDB, so a
+   paper opened on the train opens again in a tunnel. */
+
+const FILE_CAP = 250 * 1024 * 1024;   // what this phone keeps of other people's PDFs
+
+const dropbox = createDropbox({store: localStorage});
+const redirectUri = () => location.origin + location.pathname;
+
+let pdfjsPromise = null;
+function loadPdfjs() {
+  if (!pdfjsPromise) pdfjsPromise = import('./vendor/pdf.min.js').then(pdfjs => {
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL('vendor/pdf.worker.min.js', import.meta.url).href;
+    return pdfjs;
+  }).catch(error => { pdfjsPromise = null; throw error; });   // a failed load must be allowed to try again
+  return pdfjsPromise;
+}
+const PDF_ASSETS = {
+  cMapUrl: new URL('vendor/cmaps/', import.meta.url).href, cMapPacked: true,
+  standardFontDataUrl: new URL('vendor/standard_fonts/', import.meta.url).href
+};
+
+async function keepFile(key, bytes) {
+  try {
+    await DB.put('files', [{key, bytes, size: bytes.byteLength, at: Date.now()}]);
+    const rows = await DB.all('files');
+    let total = rows.reduce((sum, row) => sum + (row.size || 0), 0);
+    if (total <= FILE_CAP) return;
+    // The oldest ones go first, and the one just fetched is never the one thrown away.
+    for (const row of rows.sort((a, b) => (a.at || 0) - (b.at || 0))) {
+      if (total <= FILE_CAP || row.key === key) continue;
+      await DB.remove('files', [row.key]);
+      total -= row.size || 0;
+    }
+  } catch (_) {}
+}
+
+/* The file for a paper: from this phone, from Zotero, or from Dropbox — in that order. */
+const fileCache = {
+  async get(key) {
+    const held = await DB.get('files', key);
+    return held && held.bytes && held.bytes.byteLength ? held.bytes : null;
+  },
+  touch(key) { DB.get('files', key).then(held => held && DB.put('files', [{...held, at: Date.now()}])).catch(() => {}); },
+  put: keepFile
+};
+const fileBytes = (attachment, onStep) => paperFile({
+  attachment, base: dropbox.base, cache: fileCache, dropbox, onStep,
+  zoteroFile: async key => (await api(`/items/${key}/file`)).arrayBuffer()
+});
+
+function paperTrouble(error) {
+  const msg = $('paper-msg');
+  showPaperMessage(true);
+  msg.textContent = '';
+  const card = el('section', {class: 'card'}, msg);
+  el('h3', {text: 'PDF를 열지 못했습니다'}, card);
+  el('p', {class: 'muted small', text: error.message}, card);
+  if (error.need === 'dropbox' || (error.source && error.source.kind === 'dropbox') || error.missing) {
+    const row = el('div', {class: 'actions'}, card);
+    const go = el('button', {class: 'primary', type: 'button', text: dropbox.linked ? 'Dropbox 다시 연결' : 'Dropbox 연결'}, row);
+    go.addEventListener('click', () => { $('paper').hidden = true; openSettings(); });
+  }
+}
+
+const paper = {viewer: null, item: null, following: 0};
+
+/* While there is something to say, it stands where the page would be. */
+function showPaperMessage(on) {
+  $('paper-msg').hidden = !on;
+  $('paper-view').hidden = on;
+}
+
+function closePaper() {
+  if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
+  $('paper-view').classList.remove('with-player');
+  if (listen.player && $('listen').hidden) listen.player.stop();
+  holdScreen(false);
+  $('paper').hidden = true;
+}
+
+async function openPaper(item, {at = 0} = {}) {
+  if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
+  paper.following = 0;
+  paper.item = item;
+  listen.item = item;
+  $('paper-title').textContent = clean(item.data.title) || '논문';
+  $('paper-view').textContent = '';
+  $('paper-view').classList.remove('with-player');
+  $('paper-count').textContent = '';
+  $('paper-bar').hidden = true;
+  $('paper').hidden = false;
+  const msg = $('paper-msg');
+  showPaperMessage(true);
+  msg.textContent = '';
+  const waiting = el('p', {class: 'muted small', text: 'PDF를 찾는 중…'}, msg);
+
+  let attachment = null;
+  try {
+    attachment = await attachmentOf(item.key);
+    if (!attachment) throw new Error('이 문헌에는 PDF 첨부가 없습니다.');
+    const bytes = await fileBytes(attachment, step => { waiting.textContent = step; });
+    waiting.textContent = '여는 중…';
+    const pdfjs = await loadPdfjs();
+    if ($('paper').hidden) return;
+    showPaperMessage(false);
+    paper.viewer = createViewer({
+      root: $('paper-view'), pdfjs,
+      onPage: (n, total) => { $('paper-count').textContent = `${n} / ${total}`; }
+    });
+    await paper.viewer.open(bytes.slice(0), PDF_ASSETS);   // pdf.js takes the buffer over; the kept copy must survive
+    if (at > 0) paper.viewer.goto(at);
+  } catch (error) {
+    paperTrouble(error);
+    return;
+  }
+  // The voice is offered once the page is up, and only if there is text to read.
+  readAlong(item, attachment).catch(() => {});
+}
+
+/* The player on the PDF screen: the same one the transcript uses, so a paper carries on from
+   where it was left whichever screen it is read on. */
+async function readAlong(item, attachment) {
+  const bar = $('paper-bar');
+  const engine = speechEngine(window);
+  if (!engine.available() || !attachment) return;
+  let text = '';
+  try { text = await fulltextOf(attachment.key); } catch (_) { return; }
+  if (!clean(text) || $('paper').hidden || paper.item !== item) return;
+
+  listen.paper = readable(text, {title: clean(item.data.title)});
+  listen.list = readingUnits(listen.paper, {captions: false});
+  if (!listen.list.length) return;
+  const lang = paperLanguage(listen.list);
+  listen.voices = engine.voices();
+  const chosen = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
+  const rate = Number(localStorage.getItem(KEYS.rate)) || 1;
+  const place = Math.min(listen.list.length - 1, Math.max(0, Number(localStorage.getItem(KEYS.at + item.key)) || 0));
+  if (listen.player) listen.player.stop();
+  listen.player = createPlayer({engine, rate, lang: chosen ? chosen.lang : lang,
+    voiceURI: chosen ? chosen.voiceURI : '', onChange: event => paintReading(event.state)});
+  listen.player.load(listen.list, {at: place});
+  buildRates(rate, $('paper-rate'));
+  bar.hidden = false;
+  $('paper-view').classList.add('with-player');
+  paintReading(listen.player.state());
+}
+
+/* ---------- settings ---------- */
+function openSettings() {
+  const body = $('settings-body');
+  body.textContent = '';
+  $('settings').hidden = false;
+
+  const card = el('section', {class: 'card'}, body);
+  el('h3', {text: 'Dropbox — PDF 원본'}, card);
+  const state = el('p', {class: 'settings-state'}, card);
+  el('span', {class: `dot ${dropbox.linked ? 'on' : 'off'}`}, state);
+  el('span', {text: dropbox.linked ? '연결되어 있습니다.' : '연결되어 있지 않습니다.'}, state);
+  el('p', {class: 'muted small', text:
+    '이 라이브러리의 PDF는 Zotero 서버가 아니라 Dropbox 폴더에 있습니다. 그래서 Zotero 키만으로는 원본을 열 수 없고, ' +
+    '폰이 Dropbox에 직접 물어봐야 합니다. 아래 앱은 이 폰과 내 Dropbox 사이에만 쓰이고, 토큰은 이 폰에만 저장됩니다.'}, card);
+
+  const appKey = el('label', {class: 'field'}, card);
+  el('span', {text: 'Dropbox 앱 키'}, appKey);
+  const appInput = el('input', {type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'App key'}, appKey);
+  appInput.value = dropbox.appKey;
+
+  const baseField = el('label', {class: 'field'}, card);
+  el('span', {text: '라이브러리 폴더 (Dropbox 안의 경로)'}, baseField);
+  const baseInput = el('input', {type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: DEFAULT_BASE}, baseField);
+  baseInput.value = dropbox.base;
+
+  const steps = el('ol', {class: 'steps'}, card);
+  el('li', {html: '<a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a>에서 <b>Create app</b> → Scoped access → <b>Full Dropbox</b>.'}, steps);
+  el('li', {html: 'Permissions 탭에서 <b>files.metadata.read</b>와 <b>files.content.read</b>를 켜고 Submit.'}, steps);
+  el('li', {html: `Settings 탭의 <b>Redirect URIs</b>에 <code>${redirectUri()}</code>를 넣고 Add.`}, steps);
+  el('li', {html: '같은 탭의 <b>App key</b>를 위에 붙여넣고 아래 연결을 누릅니다.'}, steps);
+
+  const row = el('div', {class: 'actions'}, card);
+  const connect = el('button', {class: 'primary', type: 'button', text: dropbox.linked ? '다시 연결' : '연결'}, row);
+  connect.addEventListener('click', async () => {
+    dropbox.appKey = appInput.value;
+    dropbox.base = baseInput.value || DEFAULT_BASE;
+    if (!dropbox.appKey) { toast('앱 키를 넣어 주세요'); return; }
+    try { location.assign(await dropbox.begin(redirectUri())); }
+    catch (error) { toast(error.message); }
+  });
+  const save = el('button', {class: 'secondary', type: 'button', text: '폴더만 저장'}, row);
+  save.addEventListener('click', () => {
+    dropbox.appKey = appInput.value;
+    dropbox.base = baseInput.value || DEFAULT_BASE;
+    toast('저장했습니다');
+  });
+  if (dropbox.linked) {
+    const drop = el('button', {class: 'secondary', type: 'button', text: '연결 끊기'}, row);
+    drop.addEventListener('click', () => { dropbox.forget(); toast('Dropbox 연결을 끊었습니다'); openSettings(); });
+  }
+
+  // What this phone is holding.
+  const store = el('section', {class: 'card'}, body);
+  el('h3', {text: '이 폰에 받아 둔 것'}, store);
+  const line = el('p', {class: 'muted small', text: '세는 중…'}, store);
+  const storeRow = el('div', {class: 'actions'}, store);
+  const wipe = el('button', {class: 'secondary', type: 'button', text: 'PDF 비우기'}, storeRow);
+  wipe.addEventListener('click', async () => {
+    await DB.clear('files').catch(() => {});
+    toast('받아 둔 PDF를 지웠습니다');
+    openSettings();
+  });
+  const again = el('button', {class: 'secondary', type: 'button', text: '라이브러리 다시 받기'}, storeRow);
+  again.addEventListener('click', async () => {
+    account.version = 0;
+    $('settings').hidden = true;
+    await sync({full: true});
+  });
+  DB.all('files').then(rows => {
+    const size = rows.reduce((sum, row) => sum + (row.size || 0), 0);
+    line.textContent = `PDF ${rows.length}개 · ${(size / 1048576).toFixed(1)} MB · 논문 ${state_items()}편`;
+  }).catch(() => { line.textContent = `논문 ${state_items()}편`; });
+
+  const zotero = el('section', {class: 'card'}, body);
+  el('h3', {text: 'Zotero'}, zotero);
+  el('p', {class: 'muted small', text: `사용자 번호 ${account.user} · 키는 이 폰에만 있습니다.`}, zotero);
+}
+const state_items = () => state.items.length.toLocaleString();
 
 /* ---------- collections ---------- */
 function openCollections() {
@@ -716,7 +983,10 @@ function offerPairing() {
   card.hidden = false;
   $('pair-hide').addEventListener('click', () => { card.hidden = true; });
   $('pair-go').addEventListener('click', () => {
-    location.hash = `k=${encodeURIComponent(account.key)}&u=${encodeURIComponent(account.user)}`;
+    const extra = dropbox.linked
+      ? `&a=${encodeURIComponent(dropbox.appKey)}&d=${encodeURIComponent(localStorage.getItem('np.db.refresh') || '')}&b=${encodeURIComponent(dropbox.base)}`
+      : '';
+    location.hash = `k=${encodeURIComponent(account.key)}&u=${encodeURIComponent(account.user)}${extra}`;
     localStorage.setItem(KEYS.scope, 'paired');
     $('pair-text').innerHTML = '주소에 키를 담았습니다. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 홈 화면 앱이 열릴 때 키가 자동으로 들어갑니다.';
     $('pair-go').hidden = true;
@@ -752,7 +1022,24 @@ function wire() {
   // The screen going away stops the voice rather than leaving it talking to nobody.
   addEventListener('pagehide', () => { if (listen.player) listen.player.stop(); });
   $('collections-back').addEventListener('click', () => { $('collections').hidden = true; });
-  addEventListener('resize', () => { for (const track of document.querySelectorAll('.seg')) slide(track); });
+  $('btn-settings').addEventListener('click', () => { $('collections').hidden = true; openSettings(); });
+  $('settings-back').addEventListener('click', () => { $('settings').hidden = true; });
+  $('listen-pdf').addEventListener('click', () => {
+    if (!listen.item) return;
+    const unit = listen.player ? listen.player.state().unit : null;
+    $('listen').hidden = true;
+    openPaper(listen.item, {at: unit && unit.page ? unit.page : 0});
+  });
+  $('paper-back').addEventListener('click', closePaper);
+  $('paper-in').addEventListener('click', () => { if (paper.viewer) paper.viewer.zoomBy(1); });
+  $('paper-out').addEventListener('click', () => { if (paper.viewer) paper.viewer.zoomBy(-1); });
+  $('paper-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
+  $('paper-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
+  $('paper-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });
+  addEventListener('resize', () => {
+    for (const track of document.querySelectorAll('.seg')) slide(track);
+    if (paper.viewer) paper.viewer.resize();
+  });
   $('setup-go').addEventListener('click', async () => {
     const user = clean($('setup-user').value), key = clean($('setup-key').value);
     const msg = $('setup-msg');
@@ -772,9 +1059,22 @@ function wire() {
   });
 }
 
+/* Dropbox sends the phone back here with a code in the address. It is traded for a token that
+   lasts, and the address is wiped, exactly as the Zotero key in a link is. */
+async function takeDropboxReturn() {
+  const back = returningCode(location.search);
+  if (!back.code && !back.error) return '';
+  try { history.replaceState(null, '', location.pathname); } catch (_) {}
+  if (back.error) return `Dropbox 연결이 취소되었습니다 (${back.error})`;
+  try { await dropbox.finish(back.code, redirectUri()); return 'Dropbox에 연결되었습니다'; }
+  catch (error) { return error.message; }
+}
+
 async function start() {
   const paired = takeKeyFromLink();
+  const fromDropbox = await takeDropboxReturn();
   wire();
+  if (fromDropbox) setTimeout(() => toast(fromDropbox), 300);
   if (!account.ready) {
     $('setup-user').value = '16265664';
     $('setup-why').hidden = !standalone();

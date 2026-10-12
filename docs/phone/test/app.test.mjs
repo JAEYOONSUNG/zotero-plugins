@@ -127,6 +127,7 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, 
       return new Response(JSON.stringify({content: fulltext, indexedPages: 2, totalPages: 2}), {status: 200, headers: {'Content-Type': 'application/json'}});
     }
     if (/^\/items\/\w+\/children$/.test(rest)) return new Response(JSON.stringify(children || []), {status: 200, headers: {'Content-Type': 'application/json'}});
+    if (/^\/items\/\w+\/file$/.test(rest)) return new Response(new Uint8Array(900).fill(37), {status: 200, headers: {'Content-Type': 'application/pdf'}});
     if (/^\/items\/\w+$/.test(rest)) return new Response('', {status: 204, headers: {'Last-Modified-Version': '44'}});
     return new Response('no', {status: 404});
   };
@@ -383,4 +384,95 @@ test('a PDF Zotero has not indexed says what to do instead of failing silently',
 test('a paper with no PDF says so', async () => {
   const {open} = await openListening({children: []});
   assert.match(open.document.getElementById('listen-body').textContent, /PDF 첨부가 없습니다/);
+});
+
+/* ---- the PDF itself ---- */
+/* Almost every file in this library is a linked file: Zotero knows only its path, and the bytes
+   sit in a Dropbox folder. These check that the phone asks the right service for them. pdf.js is
+   not loaded in the fake phone, so what is asserted stops at the bytes arriving. */
+const LINKED_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', linkMode: 'linked_file',
+  contentType: 'application/pdf', filename: 'seo.pdf', path: 'attachments:Defense system/seo.pdf'}}];
+const STORED_CHILD = [{key: 'PDF2', version: 3, data: {key: 'PDF2', itemType: 'attachment', linkMode: 'imported_file',
+  contentType: 'application/pdf', filename: 'seo.pdf'}}];
+const DROPBOX_ON = {'np.db.app': 'APPKEY', 'np.db.refresh': 'RT', 'np.db.base': '/0.Personal folder/0. Zotero'};
+
+/* Dropbox, answering the two calls the app makes of it. */
+function fakeDropbox() {
+  const asked = [];
+  const handle = async (url, init = {}) => {
+    asked.push({url, arg: init.headers && init.headers['Dropbox-API-Arg'], body: init.body});
+    if (/oauth2\/token/.test(url)) return new Response(JSON.stringify({access_token: 'AT', expires_in: 14400}), {status: 200});
+    if (/files\/download/.test(url)) return new Response(new Uint8Array(4096).fill(1), {status: 200});
+    return new Response('{}', {status: 200});
+  };
+  return {handle, asked, get paths() { return asked.filter(a => a.arg).map(a => JSON.parse(a.arg).path); }};
+}
+
+async function openPdf({children = LINKED_CHILD, stored = {}, dropbox = fakeDropbox()} = {}) {
+  const zotero = fakeServer({children, fulltext: FULLTEXT});
+  // One fetch for both: Zotero's own host and Dropbox's.
+  const server = {sent: zotero.sent, fetchImpl: async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    return /dropboxapi\.com|dropbox\.com/.test(url) ? dropbox.handle(url, init) : zotero.fetchImpl(input, init);
+  }};
+  const open = await boot({server, stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...stored}});
+  await open.settle();
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const start = open.document.querySelector('#detail .paper-start');
+  assert.ok(start, 'the paper offers its PDF');
+  start.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  return {open, zotero, dropbox};
+}
+
+test('a paper offers its PDF, and a linked file is fetched from Dropbox by the path the library points at', async () => {
+  const {open, dropbox} = await openPdf({stored: DROPBOX_ON});
+  assert.equal(open.document.getElementById('paper').hidden, false, 'the PDF screen is open');
+  assert.deepEqual(dropbox.paths, ['/0.Personal folder/0. Zotero/Defense system/seo.pdf']);
+  assert.ok(dropbox.asked.some(a => /oauth2\/token/.test(a.url)), 'a fresh token was fetched first');
+});
+
+test('a file Zotero itself stores is fetched from Zotero, not from Dropbox', async () => {
+  const {zotero, dropbox} = await openPdf({children: STORED_CHILD, stored: DROPBOX_ON});
+  assert.ok(zotero.sent.some(r => r.path === '/users/16265664/items/PDF2/file'), 'the bytes came from Zotero');
+  assert.equal(dropbox.paths.length, 0, 'Dropbox was not troubled');
+});
+
+test('the same PDF is fetched once and then read off this phone', async () => {
+  const {open, dropbox} = await openPdf({stored: DROPBOX_ON});
+  assert.equal(dropbox.paths.length, 1);
+  open.document.getElementById('paper-back').dispatchEvent(new open.window.Event('click'));
+  open.document.querySelector('#detail .paper-start').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(dropbox.paths.length, 1, 'the second opening needed no signal');
+});
+
+test('with no Dropbox connected the PDF screen says why and offers to connect it', async () => {
+  const {open, dropbox} = await openPdf();
+  assert.equal(dropbox.paths.length, 0, 'nothing was asked of Dropbox');
+  const message = open.document.getElementById('paper-msg');
+  assert.equal(message.hidden, false);
+  assert.match(message.textContent, /Dropbox/);
+  const connect = [...message.querySelectorAll('button')].find(b => /Dropbox/.test(b.textContent));
+  assert.ok(connect, 'there is a way to connect it');
+  connect.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('settings').hidden, false, 'it leads to the settings');
+  assert.match(open.document.getElementById('settings-body').textContent, /Redirect URIs|앱 키/);
+});
+
+test('an attachment that is only a web link is not offered as a file', async () => {
+  const link = [{key: 'L1', version: 3, data: {key: 'L1', itemType: 'attachment', linkMode: 'linked_url',
+    contentType: 'application/pdf', title: 'full text', url: 'https://example.org/a.pdf'}}];
+  const {open} = await openPdf({children: link, stored: DROPBOX_ON});
+  assert.match(open.document.getElementById('paper-msg').textContent, /링크|열지 못했습니다/);
+});
+
+test('the Dropbox connection travels to the home-screen app in the same link as the key', async () => {
+  const taken = await boot({stored: {}, hash: '#k=' + 'k'.repeat(24) + '&u=16265664&a=APPKEY&d=RT&b=%2FPapers'});
+  await taken.settle();
+  assert.equal(taken.storage.get('np.db.app'), 'APPKEY');
+  assert.equal(taken.storage.get('np.db.refresh'), 'RT');
+  assert.equal(taken.storage.get('np.db.base'), '/Papers');
 });

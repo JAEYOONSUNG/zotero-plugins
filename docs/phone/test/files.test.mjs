@@ -1,0 +1,164 @@
+/* Where a paper's PDF is, and how it is fetched. Nothing here touches a network or a phone: the
+   Dropbox client is given its own fetch and its own storage. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {dropboxPath, fileSource, headerArg, createDropbox, returningCode, paperFile, DROPBOX, DEFAULT_BASE} from '../files.js';
+
+const BASE = '/0.Personal folder/0. Zotero';
+const linked = (path, extra = {}) => ({key: 'ATT1', data: {key: 'ATT1', itemType: 'attachment', linkMode: 'linked_file', contentType: 'application/pdf', path, ...extra}});
+const stored = () => ({key: 'ATT2', data: {key: 'ATT2', itemType: 'attachment', linkMode: 'imported_file', contentType: 'application/pdf', filename: 'a.pdf'}});
+
+/* localStorage, as a Map. */
+function fakeStore(seed = {}) {
+  const map = new Map(Object.entries(seed));
+  return {getItem: k => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k), map};
+}
+const bytes = n => new Uint8Array(n).fill(7).buffer;
+
+test('a Zotero linked path becomes the path Dropbox knows the file by', () => {
+  assert.equal(dropboxPath('attachments:Defense system/s41564.pdf', BASE), `${BASE}/Defense system/s41564.pdf`);
+  assert.equal(dropboxPath('attachments:a.pdf', '0.Personal folder'), '/0.Personal folder/a.pdf', 'a folder without its slash still works');
+  assert.equal(dropboxPath('attachments://odd//slashes.pdf', BASE), `${BASE}/odd/slashes.pdf`);
+  assert.equal(dropboxPath('', BASE), '');
+});
+
+test('a file written as a full path is cut at the Dropbox folder itself', () => {
+  assert.equal(dropboxPath('/Users/JaeYoon/Dropbox/0.Personal folder/0. Zotero/x.pdf'), '/0.Personal folder/0. Zotero/x.pdf');
+  assert.equal(dropboxPath('/Users/JaeYoon/Dropbox (Personal)/Papers/x.pdf'), '/Papers/x.pdf');
+  assert.equal(dropboxPath('/Users/JaeYoon/Documents/x.pdf'), '', 'a file outside Dropbox cannot be reached');
+});
+
+test('a Korean name is composed, because that is how Dropbox holds it', () => {
+  const decomposed = '내 라이브러리'.normalize('NFD');
+  const path = dropboxPath(`attachments:${decomposed}/a.pdf`, BASE);
+  assert.equal(path, `${BASE}/내 라이브러리/a.pdf`.normalize('NFC'));
+  assert.equal(path.normalize('NFC'), path);
+});
+
+test('each kind of attachment is sent to the service that actually holds it', () => {
+  assert.deepEqual(fileSource(stored(), BASE), {kind: 'zotero', key: 'ATT2'});
+  assert.equal(fileSource(linked('attachments:A/b.pdf'), BASE).kind, 'dropbox');
+  assert.equal(fileSource(linked('attachments:A/b.pdf'), BASE).path, `${BASE}/A/b.pdf`);
+  assert.equal(fileSource({data: {linkMode: 'linked_url', url: 'https://x'}}, BASE).kind, 'none');
+  assert.equal(fileSource({data: {linkMode: 'linked_url'}}, BASE).why, 'link');
+  assert.equal(fileSource(linked('/Users/J/Documents/x.pdf'), BASE).kind, 'none', 'a file outside the folder is not pretended to be there');
+});
+
+test('a Korean path survives the trip through an HTTP header', () => {
+  const arg = headerArg({path: '/내 라이브러리/a.pdf'});
+  assert.ok(/^[\x20-\x7e]*$/.test(arg), 'the header is plain ASCII');
+  assert.deepEqual(JSON.parse(arg), {path: '/내 라이브러리/a.pdf'});
+});
+
+test('the Dropbox trip out keeps the verifier here and sends only its hash', async () => {
+  const store = fakeStore({'np.db.app': 'APPKEY'});
+  const db = createDropbox({store, randomBytes: n => new Uint8Array(n).fill(3), digest: async () => new Uint8Array(32).fill(9)});
+  const url = new URL(await db.begin('https://x.test/phone/'));
+  assert.equal(url.origin + url.pathname, DROPBOX.authorize);
+  assert.equal(url.searchParams.get('client_id'), 'APPKEY');
+  assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
+  assert.equal(url.searchParams.get('token_access_type'), 'offline', 'offline is what gives a token that lasts');
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://x.test/phone/');
+  assert.ok(store.map.get('np.db.pkce'), 'the verifier stayed on the phone');
+  assert.ok(!String(url).includes(store.map.get('np.db.pkce')), 'and was not sent');
+});
+
+test('the code that comes back is traded for a token that lasts, and the verifier is spent', async () => {
+  const store = fakeStore({'np.db.app': 'APPKEY', 'np.db.pkce': 'VERIFIER'});
+  const sent = [];
+  const db = createDropbox({store, fetchImpl: async (url, init) => {
+    sent.push({url, body: String(init.body)});
+    return new Response(JSON.stringify({access_token: 'AT', refresh_token: 'RT', expires_in: 14400}), {status: 200});
+  }});
+  await db.finish('CODE', 'https://x.test/phone/');
+  assert.equal(sent[0].url, DROPBOX.token);
+  assert.match(sent[0].body, /code_verifier=VERIFIER/);
+  assert.match(sent[0].body, /grant_type=authorization_code/);
+  assert.equal(store.map.get('np.db.refresh'), 'RT');
+  assert.ok(!store.map.get('np.db.pkce'), 'the verifier is used once');
+  assert.equal(db.linked, true);
+});
+
+test('a token near its end is renewed before it is used, and a good one is not', async () => {
+  let calls = 0;
+  const store = fakeStore({'np.db.app': 'A', 'np.db.refresh': 'RT', 'np.db.access': 'OLD', 'np.db.until': '1000'});
+  const db = createDropbox({store, now: () => 2000, fetchImpl: async () => {
+    calls++;
+    return new Response(JSON.stringify({access_token: 'NEW', expires_in: 14400}), {status: 200});
+  }});
+  assert.equal(await db.access(), 'NEW');
+  assert.equal(calls, 1);
+  assert.equal(await db.access(), 'NEW', 'the second ask is answered from here');
+  assert.equal(calls, 1);
+});
+
+test('a refusal that cannot be retried forgets the connection instead of asking forever', async () => {
+  const store = fakeStore({'np.db.app': 'A', 'np.db.refresh': 'RT'});
+  const db = createDropbox({store, fetchImpl: async () => new Response(JSON.stringify({error: 'invalid_grant'}), {status: 400})});
+  await assert.rejects(() => db.access(), /만료|오류/);
+  assert.equal(db.linked, false, 'the dead token is dropped');
+});
+
+test('the file is asked for by path, and a moved file is found by name instead', async () => {
+  const asked = [];
+  const store = fakeStore({'np.db.app': 'A', 'np.db.refresh': 'RT', 'np.db.access': 'AT', 'np.db.until': String(Date.now() + 1e7)});
+  const db = createDropbox({store, fetchImpl: async (url, init) => {
+    asked.push({url, arg: init.headers['Dropbox-API-Arg'], body: init.body});
+    if (url === DROPBOX.download) {
+      const path = JSON.parse(init.headers['Dropbox-API-Arg']).path;
+      if (path === '/moved/a.pdf') return new Response(bytes(2048), {status: 200});
+      return new Response('{"error_summary":"path/not_found/"}', {status: 409});
+    }
+    return new Response(JSON.stringify({matches: [{metadata: {metadata: {name: 'a.pdf', path_display: '/moved/a.pdf'}}}]}), {status: 200});
+  }});
+  const got = await db.download('/gone/a.pdf');
+  assert.equal(got.byteLength, 2048);
+  assert.equal(asked[0].url, DROPBOX.download);
+  assert.deepEqual(JSON.parse(asked[0].arg), {path: '/gone/a.pdf'});
+  assert.equal(asked[1].url, DROPBOX.search, 'then it looked for the name');
+  assert.equal(asked[0].body, undefined, 'the download carries no body, as Dropbox requires');
+});
+
+test('a file that is nowhere says so plainly rather than looking broken', async () => {
+  const store = fakeStore({'np.db.app': 'A', 'np.db.refresh': 'RT', 'np.db.access': 'AT', 'np.db.until': String(Date.now() + 1e7)});
+  const db = createDropbox({store, fetchImpl: async url =>
+    (url === DROPBOX.download ? new Response('{"error_summary":"path/not_found/"}', {status: 409})
+                              : new Response(JSON.stringify({matches: []}), {status: 200}))});
+  await assert.rejects(() => db.download('/gone/a.pdf'), error => error.missing === true && /Dropbox/.test(error.message));
+});
+
+test('the phone asks itself first, then Zotero, then Dropbox', async () => {
+  const held = new Map();
+  const cache = {get: async key => held.get(key) || null, put: async (key, value) => held.set(key, value)};
+  const calls = {zotero: 0, dropbox: 0};
+  const dropbox = {linked: true, download: async () => { calls.dropbox++; return bytes(900); }};
+  const zoteroFile = async () => { calls.zotero++; return bytes(800); };
+
+  const one = await paperFile({attachment: stored(), base: BASE, cache, zoteroFile, dropbox});
+  assert.equal(one.byteLength, 800);
+  assert.deepEqual(calls, {zotero: 1, dropbox: 0}, 'a file Zotero holds comes from Zotero');
+
+  const two = await paperFile({attachment: linked('attachments:A/b.pdf'), base: BASE, cache, zoteroFile, dropbox});
+  assert.equal(two.byteLength, 900);
+  assert.equal(calls.dropbox, 1, 'a linked file comes from Dropbox');
+
+  await paperFile({attachment: linked('attachments:A/b.pdf'), base: BASE, cache, zoteroFile, dropbox});
+  assert.equal(calls.dropbox, 1, 'the second time it comes from this phone');
+});
+
+test('with no Dropbox the error says what to do, and names it as the thing to connect', async () => {
+  await assert.rejects(
+    () => paperFile({attachment: linked('attachments:A/b.pdf'), base: BASE, dropbox: {linked: false}}),
+    error => error.need === 'dropbox' && /Dropbox/.test(error.message));
+});
+
+test('a truncated download is refused rather than handed to the viewer', async () => {
+  await assert.rejects(() => paperFile({attachment: stored(), zoteroFile: async () => bytes(2)}), /비어/);
+});
+
+test('the address Dropbox sends the phone back to is read, refusal and all', () => {
+  assert.deepEqual(returningCode('?code=ABC'), {code: 'ABC'});
+  assert.deepEqual(returningCode(''), {});
+  assert.equal(returningCode('?error=access_denied&error_description=no').error, 'no');
+  assert.equal(DEFAULT_BASE, '/0.Personal folder/0. Zotero');
+});

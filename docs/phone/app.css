@@ -177,3 +177,37 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
                 padding:12px; border-radius:14px; background:var(--track); font-weight:650; }
 .listen-start:active { background:var(--track-hover); }
 .listen-start svg { width:20px; height:20px; fill:currentColor; stroke:none; }
+
+/* ---------- the PDF ---------- */
+/* The page itself is white on a dimmer canvas, as paper is, in both schemes: a PDF rendered on
+   a dark canvas would otherwise be a bright rectangle with no edge. */
+.pdf { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+       padding:10px 10px calc(var(--bottom) + 24px); background:var(--pdf-canvas,#8d8d93);
+       display:flex; flex-direction:column; align-items:center; gap:10px; }
+.pdf.with-player { padding-bottom:calc(var(--bottom) + 170px); }
+.pdf[hidden] { display:none; }
+.pdf-page { width:calc(100% * var(--pdf-zoom,1)); max-width:none; flex:none; background:#fff;
+            border-radius:3px; box-shadow:0 1px 4px rgba(0,0,0,.3); overflow:hidden; }
+.pdf-page.ready { background:#fff; }
+.pdf-page canvas { display:block; }
+.pdf-page:not(.ready)::after { content:''; display:block; height:100%; }
+.pdf-msg { flex:1; min-height:0; padding:var(--pad); overflow-y:auto; }
+.pdf-msg[hidden] { display:none; }
+.paper-start { display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+               height:46px; border-radius:14px; background:var(--track); font-weight:650; }
+.paper-start:active { background:var(--track-hover); }
+.paper-start svg { width:20px; height:20px; }
+.detail-top .icon-btn + .icon-btn { margin-inline-start:-4px; }
+.pdf-count { font-variant-numeric:tabular-nums; }
+@media (prefers-color-scheme: dark) { .pdf { --pdf-canvas:#2a2a2e; } }
+
+/* ---------- settings ---------- */
+.field + .field { margin-top:12px; }
+.settings-state { display:flex; align-items:center; gap:8px; font-size:14px; }
+.dot { width:9px; height:9px; border-radius:999px; background:var(--muted); flex:none; }
+.dot.on { background:var(--good); }
+.dot.off { background:var(--bad); }
+.steps { margin:8px 0 0; padding-inline-start:20px; color:var(--muted); font-size:13px; line-height:1.7; }
+.steps code { background:var(--track); border-radius:6px; padding:1px 5px; font-size:12px;
+              user-select:all; -webkit-user-select:all; word-break:break-all; }
+.player .small-btn { height:28px; padding:0 12px; font-size:13px; border-radius:999px; }

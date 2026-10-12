@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="논문">
 <title>논문</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png?v=2">
+<link rel="icon" href="icon-192.png?v=2">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -98,8 +98,40 @@
     <div class="player-row wrap">
       <label class="pick"><span class="muted small">목소리</span><select id="listen-voice"></select></label>
       <nav id="listen-what" class="seg small-seg" role="group" aria-label="읽을 범위"></nav>
+      <button id="listen-pdf" class="secondary small-btn" type="button">PDF</button>
     </div>
   </footer>
+</section>
+
+<!-- the PDF itself -->
+<section id="paper" class="screen sheet" hidden>
+  <header class="top detail-top">
+    <button id="paper-back" class="icon-btn" aria-label="뒤로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <span id="paper-title" class="detail-title"></span>
+    <span id="paper-count" class="muted small pdf-count"></span>
+    <button id="paper-out" class="icon-btn" aria-label="축소"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.5-3.5"/></svg></button>
+    <button id="paper-in" class="icon-btn" aria-label="확대"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.5-3.5"/></svg></button>
+  </header>
+  <main id="paper-view" class="pdf" aria-label="본문 PDF"></main>
+  <div id="paper-msg" class="pdf-msg" hidden></div>
+  <footer id="paper-bar" class="player" hidden>
+    <div class="player-meta"><span id="paper-where" class="muted small"></span></div>
+    <div class="player-row">
+      <button id="paper-prev" class="icon-btn" aria-label="이전 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-7 6 7 6"/><path d="M8 6v12"/></svg></button>
+      <button id="paper-play" class="play-btn" aria-label="재생"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
+      <button id="paper-next" class="icon-btn" aria-label="다음 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l7 6-7 6"/><path d="M16 6v12"/></svg></button>
+    </div>
+    <nav id="paper-rate" class="seg small-seg" role="group" aria-label="속도"></nav>
+  </footer>
+</section>
+
+<!-- the keys and the folder this phone uses -->
+<section id="settings" class="screen sheet" hidden>
+  <header class="top detail-top">
+    <button id="settings-back" class="icon-btn" aria-label="닫기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="detail-title">설정</span>
+  </header>
+  <main id="settings-body" class="list"></main>
 </section>
 
 <!-- collections -->
@@ -107,6 +139,7 @@
   <header class="top detail-top">
     <button id="collections-back" class="icon-btn" aria-label="닫기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <span class="detail-title">컬렉션</span>
+    <button id="btn-settings" class="icon-btn" aria-label="설정"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-3-1.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.3-3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 3 1.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1.4z"/></svg></button>
   </header>
   <main id="collections-body" class="list"></main>
 </section>
