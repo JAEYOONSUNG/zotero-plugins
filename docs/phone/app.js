@@ -938,6 +938,29 @@ function openSettings() {
     line.textContent = `PDF ${rows.length}개 · ${(size / 1048576).toFixed(1)} MB · 논문 ${state_items()}편`;
   }).catch(() => { line.textContent = `논문 ${state_items()}편`; });
 
+  // The home-screen app has its own storage, and deleting the icon empties it. This puts the
+  // keys back into the address so adding the icon again carries them, however often that happens.
+  const carry = el('section', {class: 'card'}, body);
+  el('h3', {text: '홈 화면 앱'}, carry);
+  if (standalone()) {
+    el('p', {class: 'muted small', text:
+      '지금 홈 화면 앱으로 열려 있습니다. 키를 다시 담으려면 Safari에서 같은 주소를 열고 이 화면으로 오세요.'}, carry);
+  } else {
+    el('p', {class: 'muted small', text:
+      '홈 화면 앱은 Safari와 저장 공간이 따로입니다. 아래를 누르면 Zotero 키와 Dropbox 연결이 주소에 담기고, ' +
+      '그 상태로 공유 → 홈 화면에 추가를 하면 새 아이콘이 열릴 때 전부 자동으로 들어갑니다.'}, carry);
+    const said = el('p', {class: 'msg', hidden: true}, carry);
+    const row = el('div', {class: 'actions'}, carry);
+    const go = el('button', {class: 'primary', type: 'button', text: '키까지 함께 담기'}, row);
+    go.addEventListener('click', () => {
+      carryKeys();
+      localStorage.setItem(KEYS.scope, 'paired');
+      said.hidden = false;
+      said.className = 'msg good';
+      said.innerHTML = `주소에 담았습니다${dropbox.linked ? ' (Dropbox 연결까지)' : ''}. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 먼저 홈 화면의 옛 아이콘은 지워 주세요.`;
+    });
+  }
+
   const zotero = el('section', {class: 'card'}, body);
   el('h3', {text: 'Zotero'}, zotero);
   el('p', {class: 'muted small', text: `사용자 번호 ${account.user} · 키는 이 폰에만 있습니다.`}, zotero);
@@ -976,6 +999,17 @@ function openCollections() {
 }
 
 /* ---------- start ---------- */
+/* Everything the home-screen app cannot see for itself, put into the address so that adding the
+   icon from here carries it: iOS gives that app its own storage, and deleting the icon empties
+   it. The Dropbox connection travels the same way. */
+function carryKeys() {
+  const extra = dropbox.linked
+    ? `&a=${encodeURIComponent(dropbox.appKey)}&d=${encodeURIComponent(localStorage.getItem('np.db.refresh') || '')}&b=${encodeURIComponent(dropbox.base)}`
+    : '';
+  location.hash = `k=${encodeURIComponent(account.key)}&u=${encodeURIComponent(account.user)}${extra}`;
+  return location.hash;
+}
+
 /* The card that offers to carry the key: only in Safari, only once the library is there. */
 function offerPairing() {
   const card = $('pair');
@@ -983,10 +1017,7 @@ function offerPairing() {
   card.hidden = false;
   $('pair-hide').addEventListener('click', () => { card.hidden = true; });
   $('pair-go').addEventListener('click', () => {
-    const extra = dropbox.linked
-      ? `&a=${encodeURIComponent(dropbox.appKey)}&d=${encodeURIComponent(localStorage.getItem('np.db.refresh') || '')}&b=${encodeURIComponent(dropbox.base)}`
-      : '';
-    location.hash = `k=${encodeURIComponent(account.key)}&u=${encodeURIComponent(account.user)}${extra}`;
+    carryKeys();
     localStorage.setItem(KEYS.scope, 'paired');
     $('pair-text').innerHTML = '주소에 키를 담았습니다. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 홈 화면 앱이 열릴 때 키가 자동으로 들어갑니다.';
     $('pair-go').hidden = true;
