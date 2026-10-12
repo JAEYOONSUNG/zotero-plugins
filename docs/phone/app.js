@@ -17,7 +17,7 @@ import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
-import {filterRows, sortRows, usefulTags, SORTS} from './list.js';
+import {filterRows, sortRows, usefulTags, familyOf, SORTS} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
@@ -466,12 +466,34 @@ function pullToRefresh(list, run) {
    is never hidden directly: it is hidden because the history went back past it, which is the only
    way the stack and the screen cannot drift apart. */
 const sheets = [];
+const SHEET_IDS = ['detail', 'listen', 'paper', 'collections', 'settings'];
+
+/* What is underneath a sheet is not reachable while it is open — not by a swipe of VoiceOver and
+   not by a tab — and the eye is put at the top of what just opened. */
+function layerUp() {
+  const top = sheets.length ? sheets[sheets.length - 1].id : '';
+  for (const id of ['main', ...SHEET_IDS]) {
+    const node = $(id);
+    if (!node) continue;
+    const below = !!top && id !== top;
+    node.toggleAttribute('inert', below);
+    if (SHEET_IDS.includes(id)) node.setAttribute('aria-hidden', String(below && node.hidden));
+  }
+}
+
 function openSheet(id, leave = () => {}) {
   const node = $(id);
   if (!node || sheets.some(sheet => sheet.id === id)) return false;
-  sheets.push({id, leave});
+  const from = document.activeElement;
+  sheets.push({id, leave, from});
   try { history.pushState({depth: sheets.length}, ''); } catch (_) {}
   node.hidden = false;
+  node.setAttribute('role', 'dialog');
+  node.setAttribute('aria-modal', 'true');
+  layerUp();
+  // The way back out is where the eye and the keyboard should land first.
+  const first = node.querySelector('.icon-btn, button, [href]');
+  requestAnimationFrame(() => { try { first && first.focus({preventScroll: true}); } catch (_) {} });
   return true;
 }
 function closeSheet(id) {
@@ -485,6 +507,8 @@ function popped() {
   if (!sheet) return;
   const node = $(sheet.id);
   if (node) node.hidden = true;
+  layerUp();
+  try { sheet.from && sheet.from.focus && sheet.from.focus({preventScroll: true}); } catch (_) {}
   try { sheet.leave(); } catch (_) {}
 }
 function onPopState() {
@@ -523,7 +547,8 @@ function buildFilters() {
 
 /* ---------- the list ---------- */
 const visible = () => sortRows(filterRows(state.items, {
-  collection: state.collection, status: state.status, tag: state.tag, q: state.q, statusOf
+  collections: familyOf(state.collections, state.collection),
+  status: state.status, tag: state.tag, q: state.q, statusOf
 }), state.sort);
 
 function stars(n) { return n ? '★'.repeat(n) + '☆'.repeat(5 - n) : ''; }
@@ -1449,8 +1474,18 @@ function openCollections() {
     if (!byParent.has(parent)) byParent.set(parent, []);
     byParent.get(parent).push(c);
   }
+  // Counted the way picking one counts: a collection and everything filed under it.
+  const direct = new Map();
+  for (const item of state.items) for (const key of item.data.collections || []) {
+    if (!direct.has(key)) direct.set(key, new Set());
+    direct.get(key).add(item.key);
+  }
   const counts = new Map();
-  for (const item of state.items) for (const key of item.data.collections || []) counts.set(key, (counts.get(key) || 0) + 1);
+  for (const c of state.collections) {
+    const seen = new Set();
+    for (const key of familyOf(state.collections, c.key)) for (const paper of direct.get(key) || []) seen.add(paper);
+    counts.set(c.key, seen.size);
+  }
 
   const all = el('button', {class: 'row', type: 'button'}, body);
   el('h2', {text: '전체'}, all);
@@ -1582,6 +1617,9 @@ function wire() {
   $('btn-settings-main').addEventListener('click', () => openSettings());
   $('settings-back').addEventListener('click', () => closeSheet('settings'));
   addEventListener('popstate', onPopState);
+  addEventListener('keydown', event => {
+    if (event.key === 'Escape' && sheets.length) closeSheet(sheets[sheets.length - 1].id);
+  });
   pullToRefresh($('list'), () => sync());
   // Scrolling the library puts the keyboard away, as every other list on the phone does.
   $('list').addEventListener('touchmove', () => {

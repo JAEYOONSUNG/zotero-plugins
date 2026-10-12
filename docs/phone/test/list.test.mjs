@@ -1,7 +1,7 @@
 /* Finding a paper in a library of a few thousand, and putting them in the order asked for. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fold, haystack, words, matches, sortRows, filterRows, usefulTags, SORTS} from '../list.js';
+import {fold, haystack, words, matches, sortRows, filterRows, usefulTags, familyOf, SORTS} from '../list.js';
 
 const paper = (over = {}) => ({key: over.key || 'K', version: 1, data: {
   itemType: 'journalArticle', title: 'A paper', date: '2024', dateAdded: '2024-01-01T00:00:00Z',
@@ -79,4 +79,38 @@ test('nothing in, nothing out, and no crash', () => {
   assert.deepEqual(sortRows([], 'year'), []);
   assert.deepEqual(words(''), []);
   assert.equal(fold(null), '');
+});
+
+/* Zotero nests collections, and a paper sits in the one it was filed in, not in its parents. */
+const TREE = [
+  {key: 'root', data: {name: 'Defence', parentCollection: false}},
+  {key: 'kid', data: {name: 'CRISPR', parentCollection: 'root'}},
+  {key: 'grandkid', data: {name: 'Type III', parentCollection: 'kid'}},
+  {key: 'other', data: {name: 'Enzymes', parentCollection: false}}
+];
+
+test('picking a collection takes everything filed under it too', () => {
+  assert.deepEqual([...familyOf(TREE, 'root')].sort(), ['grandkid', 'kid', 'root']);
+  assert.deepEqual([...familyOf(TREE, 'kid')].sort(), ['grandkid', 'kid']);
+  assert.deepEqual([...familyOf(TREE, 'other')], ['other']);
+  assert.equal(familyOf(TREE, '').size, 0, 'picking nothing narrows nothing');
+});
+
+test('a collection filed inside itself does not become a loop', () => {
+  const bent = [{key: 'a', data: {parentCollection: 'b'}}, {key: 'b', data: {parentCollection: 'a'}}];
+  assert.deepEqual([...familyOf(bent, 'a')].sort(), ['a', 'b']);
+});
+
+test('a paper in a sub-collection shows under its parent', () => {
+  const deep = [paper({key: 'X', collections: ['grandkid']}), paper({key: 'Y', collections: ['other']})];
+  const under = key => filterRows(deep, {collections: familyOf(TREE, key), statusOf}).map(p => p.key);
+  assert.deepEqual(under('root'), ['X']);
+  assert.deepEqual(under('kid'), ['X']);
+  assert.deepEqual(under('other'), ['Y']);
+});
+
+test('the abstract is searched too, which is where the words usually are', () => {
+  const one = paper({key: 'Z', title: 'A short title', abstractNote: 'We show that the thermophile degrades lignin.'});
+  assert.ok(matches(one, words('thermophile lignin')));
+  assert.ok(!matches(one, words('mesophile')));
 });

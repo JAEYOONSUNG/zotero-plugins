@@ -776,6 +776,29 @@ test('a key Zotero refuses is said once, where it can be put right', async () =>
   assert.equal(open.document.getElementById('settings').hidden, false, 'and it leads to where the key goes');
 });
 
+test('what is under a sheet is out of reach while it is open, and comes back after', async () => {
+  const open = await boot();
+  await open.settle();
+  const main = open.document.getElementById('main');
+  assert.equal(main.hasAttribute('inert'), false);
+  open.document.getElementById('btn-collections').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(main.hasAttribute('inert'), true, 'the library is out of reach');
+  assert.equal(open.document.getElementById('collections').getAttribute('aria-modal'), 'true');
+
+  open.document.getElementById('btn-settings').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('collections').hasAttribute('inert'), true,
+    'and so is the sheet underneath the new one');
+
+  open.window.history.back();
+  await open.settle();
+  assert.equal(open.document.getElementById('collections').hasAttribute('inert'), false, 'it comes back');
+  open.window.history.back();
+  await open.settle();
+  assert.equal(main.hasAttribute('inert'), false, 'and so does the library');
+});
+
 /* ---- the PDF itself ---- */
 /* Almost every file in this library is a linked file: Zotero knows only its path, and the bytes
    sit in a Dropbox folder. These check that the phone asks the right service for them. pdf.js is

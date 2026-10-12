@@ -24,7 +24,7 @@ export function haystack(item) {
   const tags = (data.tags || []).map(t => t.tag);
   const text = fold([
     data.title, data.publicationTitle, data.bookTitle, data.repository, data.publisher,
-    data.date, data.DOI, data.shortTitle, ...people, ...tags
+    data.date, data.DOI, data.shortTitle, data.abstractNote, ...people, ...tags
   ].filter(Boolean).join(' '));
   hayOf.set(item, text);
   return text;
@@ -70,11 +70,36 @@ export function sortRows(rows, how = 'added') {
   return rows.slice().sort(by[how] || by.added);
 }
 
+/* A collection and everything filed under it. Zotero nests collections, and a paper sits in the
+   one it was filed in, not in its parents: picking 파지 방어 and seeing nothing because every
+   paper is in a sub-collection of it is not what anyone means by picking it. */
+export function familyOf(collections, key) {
+  const family = new Set(key ? [key] : []);
+  if (!key) return family;
+  const children = new Map();
+  for (const row of collections || []) {
+    const parent = (row.data && row.data.parentCollection) || '';
+    if (!parent) continue;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(row.key);
+  }
+  const walk = [key];
+  while (walk.length) {
+    for (const child of children.get(walk.pop()) || []) {
+      if (family.has(child)) continue;   // a cycle in the data must not become a loop here
+      family.add(child);
+      walk.push(child);
+    }
+  }
+  return family;
+}
+
 /* The library narrowed to what is being looked at. The original array is never touched. */
-export function filterRows(items, {collection = '', status = '', tag = '', q = '', statusOf} = {}) {
+export function filterRows(items, {collection = '', collections = null, status = '', tag = '', q = '', statusOf} = {}) {
   const needles = words(q);
+  const family = collections || (collection ? new Set([collection]) : null);
   let rows = items;
-  if (collection) rows = rows.filter(item => (item.data.collections || []).includes(collection));
+  if (family && family.size) rows = rows.filter(item => (item.data.collections || []).some(c => family.has(c)));
   if (status) rows = rows.filter(item => statusOf(item) === status);
   if (tag) rows = rows.filter(item => (item.data.tags || []).some(t => t.tag === tag));
   if (needles.length) rows = rows.filter(item => matches(item, needles));
