@@ -247,9 +247,9 @@ async function sync({full = false} = {}) {
     localStorage.setItem(KEYS.synced, String(Date.now()));
     $('sync-state').textContent = seen ? `${seen.toLocaleString()}건 갱신` : '최신';
   } catch (error) {
-    $('sync-state').textContent = '';
-    if (error.status === 403) showKeyTrouble();
-    else toast(error.message || '가져오지 못했습니다');
+    if (error.status === 403) { $('sync-state').textContent = ''; showKeyTrouble(); }
+    else if (error.offline) $('sync-state').textContent = '오프라인';   // the usual state on a phone, not news
+    else { $('sync-state').textContent = ''; toast(error.message || '가져오지 못했습니다'); }
   } finally {
     state.busy = false;
     setTimeout(() => { if (!state.busy) $('sync-state').textContent = ''; }, 4000);
@@ -343,11 +343,17 @@ async function heldWrites() {
   const rows = await DB.all('queue').catch(() => []);
   return rows.sort((a, b) => (a.at || 0) - (b.at || 0));
 }
-async function holdWrite(write) {
-  const queue = mergeQueue(await heldWrites(), {...write, at: Date.now()});
-  await DB.clear('queue').catch(() => {});
-  await DB.put('queue', queue.map((row, i) => ({...row, id: `${row.kind}:${row.key}:${row.at}:${i}`}))).catch(() => {});
-  paintHeld(queue.length);
+/* Rewriting the whole queue is the simplest way to merge one change into it, so the rewrites are
+   taken in turn: two changes made at once would otherwise each write over the other's. */
+let holding = Promise.resolve();
+function holdWrite(write) {
+  holding = holding.then(async () => {
+    const queue = mergeQueue(await heldWrites(), {...write, at: Date.now()});
+    await DB.clear('queue').catch(() => {});
+    await DB.put('queue', queue.map((row, i) => ({...row, id: `${row.kind}:${row.key}:${row.at}:${i}`}))).catch(() => {});
+    paintHeld(queue.length);
+  }).catch(() => {});
+  return holding;
 }
 function paintHeld(n) {
   const mark = $('held');
@@ -612,7 +618,12 @@ function drawRow(item, list) {
     el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
     el('span', {class: 'muted small', text: `${heard}%`}, foot);
   }
-  row.addEventListener('click', () => { state.at = $('list').scrollTop; openDetail(item.key); });
+  row.addEventListener('click', () => {
+    // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
+    state.at = $('list').scrollTop;
+    state.drawn = state.shown;
+    openDetail(item.key);
+  });
   return row;
 }
 
@@ -666,6 +677,7 @@ function render({keep = false} = {}) {
 }
 
 let endWatch = null;
+let listening = false;
 function watchEnd() {
   if (!more) return;
   if (!endWatch && typeof IntersectionObserver === 'function') {
@@ -674,7 +686,7 @@ function watchEnd() {
     }, {root: $('list'), rootMargin: '600px'});
   }
   if (endWatch) { try { endWatch.disconnect(); endWatch.observe(more); } catch (_) {} }
-  else $('list').addEventListener('scroll', onListScroll, {passive: true});
+  else if (!listening) { listening = true; $('list').addEventListener('scroll', onListScroll, {passive: true}); }
 }
 /* Without an IntersectionObserver (and in the fake phone), the scroll position does the same job. */
 function onListScroll() {
@@ -685,6 +697,7 @@ function onListScroll() {
 /* ---------- one paper ---------- */
 /* Going back puts the list where it was left, with as much of it drawn as there was. */
 function leftDetail() {
+  state.shown = Math.max(state.shown, state.drawn || 0);
   render({keep: true});
   requestAnimationFrame(() => { $('list').scrollTop = state.at || 0; });
 }
@@ -738,7 +751,7 @@ async function openDetail(key) {
       try {
         await setStatus(live, id);
         for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
-        slide(track); render(); toast('상태를 바꿨습니다');
+        slide(track); render({keep: true}); toast('상태를 바꿨습니다');
       } catch (error) { toast(error.message); }
     });
   }
@@ -754,7 +767,7 @@ async function openDetail(key) {
     button.addEventListener('click', async () => {
       const live = state.items.find(x => x.key === key) || item;
       const next = ratingOf(live) === n ? 0 : n;
-      try { await setRating(live, next); paint(next); render(); toast(next ? `${next}점` : '별점을 지웠습니다'); }
+      try { await setRating(live, next); paint(next); render({keep: true}); toast(next ? `${next}점` : '별점을 지웠습니다'); }
       catch (error) { toast(error.message); }
     });
   }
@@ -1235,6 +1248,7 @@ function showPaperMessage(on) {
 
 function leftPaper() {
   if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
+  paper.bytes = null;   // it is in IndexedDB; holding it in memory too is just weight
   $('paper-view').classList.remove('with-player');
   if (listen.player && $('listen').hidden) listen.player.stop();
   holdScreen(false);

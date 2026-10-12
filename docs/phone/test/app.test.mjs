@@ -436,6 +436,33 @@ test('a big library draws a screenful at once and the rest as it is scrolled, al
   assert.equal(drawn(), 900, 'the whole library can be reached by scrolling');
 });
 
+test('scrolling deep into the library and opening a paper comes back to the same place', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  const drawn = () => open.document.querySelectorAll('#list .row').length;
+  const push = () => {
+    Object.defineProperty(list, 'scrollTop', {value: 1e6, configurable: true, writable: true});
+    Object.defineProperty(list, 'clientHeight', {value: 800, configurable: true});
+    Object.defineProperty(list, 'scrollHeight', {value: 1000, configurable: true});
+    list.dispatchEvent(new open.window.Event('scroll'));
+  };
+  for (let i = 0; i < 5; i++) push();
+  const deep = drawn();
+  assert.ok(deep > 120, `scrolled well in (${deep} rows)`);
+
+  // A scroll listener added on every draw would make each flick draw several screenfuls.
+  const before = drawn();
+  list.dispatchEvent(new open.window.Event('scroll'));
+  assert.equal(drawn(), before + 60, 'one flick draws one screenful, not one per redraw');
+
+  open.document.querySelectorAll('#list .row')[100].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  open.document.getElementById('back').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(drawn() >= deep, `the list came back as long as it was (${drawn()} of ${deep})`);
+});
+
 test('the order can be changed, and it is remembered', async () => {
   const open = await boot();
   await open.settle();
@@ -540,6 +567,27 @@ test('a change made with no signal is shown, kept, and sent when the signal come
     'queue=', JSON.stringify([...(open.window.indexedDB._stores.get('queue')?.entries() || [])]),
     'patches=', server.sent.filter(r => r.method === 'PATCH').map(r => r.path).join(','));
   assert.equal(open.document.getElementById('held').hidden, true, 'and nothing is left waiting');
+});
+
+test('two changes made at once are both kept, neither writing over the other', async () => {
+  const signal = {on: true};
+  const open = await boot({server: fakeServer({signal})});
+  await open.settle();
+  signal.on = false;
+
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const done = [...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === '완료');
+  const stars = open.document.querySelectorAll('#detail .rate button');
+  // Pressed together, as a thumb does, before either has finished failing.
+  done.dispatchEvent(new open.window.Event('click'));
+  stars[3].dispatchEvent(new open.window.Event('click'));
+  await open.settle(400);
+
+  const held = [...open.window.indexedDB._stores.get('queue').values()];
+  assert.equal(held.length, 2, `both changes are waiting (${held.map(w => w.kind).join(', ')})`);
+  assert.deepEqual(held.map(w => w.kind).sort(), ['rating', 'status']);
+  assert.match(open.document.getElementById('held').textContent, /2건/);
 });
 
 test('a paper changed on the Mac is fetched afresh and the change meant here is applied to that', async () => {
