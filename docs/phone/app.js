@@ -23,7 +23,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
-              pct: 'np.pct.'};
+              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -244,6 +244,7 @@ async function sync({full = false} = {}) {
     await loadCache();
     render();
     await flushWrites();
+    localStorage.setItem(KEYS.synced, String(Date.now()));
     $('sync-state').textContent = seen ? `${seen.toLocaleString()}건 갱신` : '최신';
   } catch (error) {
     $('sync-state').textContent = '';
@@ -549,7 +550,7 @@ function buildFilters() {
 const visible = () => sortRows(filterRows(state.items, {
   collections: familyOf(state.collections, state.collection),
   status: state.status, tag: state.tag, q: state.q, statusOf
-}), state.sort);
+}), state.sort, {seenAt: key => Number(localStorage.getItem(KEYS.seen + key)) || 0});
 
 function stars(n) { return n ? '★'.repeat(n) + '☆'.repeat(5 - n) : ''; }
 
@@ -691,6 +692,7 @@ function leftDetail() {
 async function openDetail(key) {
   const item = state.items.find(x => x.key === key);
   if (!item) return;
+  localStorage.setItem(KEYS.seen + key, String(Date.now()));
   $('detail-title').textContent = clean(item.data.title) || '논문';
   const body = $('detail-body');
   body.textContent = '';
@@ -876,7 +878,7 @@ async function fulltextOf(attachmentKey) {
 }
 
 const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
-                sleep: null, sleepAt: 0, sleepSection: ''};
+                sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false};
 
 /* Stops reading after a while, or at the end of the part being read, so a paper can be put on at
    night without talking until morning. */
@@ -973,10 +975,16 @@ function paintReading(state) {
 function paintListen(state) {
   const node = listen.nodes[state.index];
   for (const other of listen.nodes) if (other && other.getAttribute('aria-current')) other.removeAttribute('aria-current');
-  if (node) {
-    node.setAttribute('aria-current', 'true');
-    try { node.scrollIntoView?.({block: 'center', behavior: 'smooth'}); } catch (_) { try { node.scrollIntoView?.(); } catch (__) {} }
-  }
+  if (!node) return;
+  node.setAttribute('aria-current', 'true');
+  // Chased only when it has gone off screen, and never while the reader is looking somewhere else.
+  if (Date.now() - listen.scrolledAt < 6000) return;
+  const body = $('listen-body');
+  const top = node.offsetTop, height = body.clientHeight || 0;
+  if (height && top >= body.scrollTop && top < body.scrollTop + height - 80) return;
+  listen.chasing = true;
+  try { node.scrollIntoView?.({block: 'center', behavior: 'smooth'}); } catch (_) { try { node.scrollIntoView?.(); } catch (__) {} }
+  setTimeout(() => { listen.chasing = false; }, 700);
 }
 
 /* A long paper is a couple of thousand sentences. They are built in one fragment and share a
@@ -999,7 +1007,16 @@ function renderTranscript(list) {
 function fillVoiceMenu(lang) {
   const select = $('listen-voice');
   const same = listen.voices.filter(v => String(v.lang || '').toLowerCase().startsWith(lang));
-  const offered = (same.length ? same : listen.voices).slice(0, 60);
+  // Best first, by the same reckoning that picks one when nobody has chosen.
+  const pool = (same.length ? same : listen.voices).slice();
+  const order = [];
+  const left = pool.slice();
+  while (left.length && order.length < 60) {
+    const best = pickVoice(left, lang, '') || left[0];
+    order.push(best);
+    left.splice(left.indexOf(best), 1);
+  }
+  const offered = order;
   const saved = localStorage.getItem(KEYS.voice + lang) || '';
   const chosen = offered.some(v => v.voiceURI === saved) ? saved : '';
   select.textContent = '';
@@ -1285,11 +1302,13 @@ async function openPaper(item, {at = 0} = {}) {
    where it was left whichever screen it is read on. */
 async function readAlong(item, attachment) {
   const bar = $('paper-bar');
+  for (const id of ['paper-prev', 'paper-play', 'paper-next']) $(id).hidden = false;
   const engine = speechEngine(window);
   if (!engine.available() || !attachment) return;
   let text = '';
-  try { text = await fulltextOf(attachment.key); } catch (_) { return; }
-  if (!clean(text) || $('paper').hidden || paper.item !== item) return;
+  try { text = await fulltextOf(attachment.key); } catch (error) { sayNoVoice(error.status === 404); return; }
+  if ($('paper').hidden || paper.item !== item) return;
+  if (!clean(text)) { sayNoVoice(true); return; }
 
   listen.paper = readable(text, {title: clean(item.data.title)});
   listen.list = readingUnits(listen.paper, {captions: false});
@@ -1307,6 +1326,17 @@ async function readAlong(item, attachment) {
   bar.hidden = false;
   $('paper-view').classList.add('with-player');
   paintReading(listen.player.state());
+}
+
+/* Silence with no explanation reads as a broken button, so the PDF screen says why there is no
+   voice on this paper. */
+function sayNoVoice(unindexed) {
+  const bar = $('paper-bar');
+  bar.hidden = false;
+  $('paper-where').textContent = unindexed
+    ? '본문 색인이 없어 읽어 줄 수 없습니다. 맥에서 PDF를 한 번 열고 동기화하세요.'
+    : '이 논문은 읽어 줄 수 없습니다.';
+  for (const id of ['paper-prev', 'paper-play', 'paper-next']) $(id).hidden = true;
 }
 
 /* The marks made in Zotero, laid over the page. Fetched only when the PDF screen did not come
@@ -1418,8 +1448,9 @@ function paintSettings() {
   });
   DB.all('files').then(rows => {
     const size = rows.reduce((sum, row) => sum + (row.size || 0), 0);
-    line.textContent = `PDF ${rows.length}개 · ${(size / 1048576).toFixed(1)} MB · 논문 ${state_items()}편`;
+    line.textContent = `PDF ${rows.length}개 · ${(size / 1048576).toFixed(1)} MB · 논문 ${state_items()}편 · 컬렉션 ${state.collections.length}개`;
   }).catch(() => { line.textContent = `논문 ${state_items()}편`; });
+  el('p', {class: 'muted small', text: `마지막 동기화 ${whenSynced()}`}, store);
 
   // The home-screen app has its own storage, and deleting the icon empties it. This puts the
   // keys back into the address so adding the icon again carries them, however often that happens.
@@ -1462,6 +1493,17 @@ function paintSettings() {
   el('p', {class: 'muted small', text: `사용자 번호 ${account.user} · 키는 이 폰에만 있습니다.`}, zotero);
 }
 const state_items = () => state.items.length.toLocaleString();
+
+function whenSynced() {
+  const at = Number(localStorage.getItem(KEYS.synced)) || 0;
+  if (!at) return '아직 없음';
+  const minutes = Math.round((Date.now() - at) / 60000);
+  if (minutes < 1) return '방금';
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  return new Date(at).toLocaleDateString('ko-KR');
+}
 
 /* ---------- collections ---------- */
 function openCollections() {
@@ -1584,6 +1626,9 @@ function wire() {
   $('btn-collections').addEventListener('click', openCollections);
   $('back').addEventListener('click', () => closeSheet('detail'));
   $('listen-back').addEventListener('click', () => closeSheet('listen'));
+  $('listen-body').addEventListener('scroll', () => {
+    if (!listen.chasing) listen.scrolledAt = Date.now();
+  }, {passive: true});
   $('listen-body').addEventListener('click', event => {
     const node = event.target && event.target.closest && event.target.closest('.sent');
     if (!node || !listen.player) return;

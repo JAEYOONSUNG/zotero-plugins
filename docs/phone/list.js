@@ -45,6 +45,7 @@ export const matches = (item, needles) => needles.every(word => haystack(item).i
 
 export const SORTS = [
   ['added', '최근 추가'],
+  ['seen', '최근 본'],
   ['modified', '최근 변경'],
   ['year', '연도'],
   ['rating', '별점'],
@@ -58,10 +59,12 @@ const when = (item, field) => String(item.data?.[field] || '');
 
 /* A sort always falls back to the most recently added, so two papers of the same year or the same
    rating keep a stable and sensible order rather than whatever the array happened to hold. */
-export function sortRows(rows, how = 'added') {
+export function sortRows(rows, how = 'added', {seenAt = () => 0} = {}) {
   const recent = (a, b) => when(b, 'dateAdded').localeCompare(when(a, 'dateAdded'));
   const by = {
     added: recent,
+    // Papers never opened fall to the bottom together, in the order they were added.
+    seen: (a, b) => (seenAt(b.key) - seenAt(a.key)) || recent(a, b),
     modified: (a, b) => when(b, 'dateModified').localeCompare(when(a, 'dateModified')) || recent(a, b),
     year: (a, b) => yearOf(b) - yearOf(a) || recent(a, b),
     rating: (a, b) => ratingOf(b) - ratingOf(a) || recent(a, b),

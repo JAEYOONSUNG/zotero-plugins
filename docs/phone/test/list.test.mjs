@@ -49,7 +49,11 @@ test('each order does what it says, and ties fall back to the newest addition', 
   assert.deepEqual(sortRows(LIB, 'rating').map(p => p.key), ['A', 'B', 'C']);
   // Korean collation puts Hangul before the Latin alphabet; that is the order a Korean reader expects.
   assert.deepEqual(sortRows(LIB, 'title').map(p => p.key), ['B', 'A', 'C']);
-  assert.equal(SORTS.length, 5);
+  assert.equal(SORTS.length, 6);
+  // Papers opened lately come first; the ones never opened keep the order they were added in.
+  const seen = {A: 0, B: 500, C: 100};
+  assert.deepEqual(sortRows(LIB, 'seen', {seenAt: key => seen[key]}).map(p => p.key), ['B', 'C', 'A']);
+  assert.deepEqual(sortRows(LIB, 'seen').map(p => p.key), ['A', 'C', 'B'], 'with none opened it is the order they arrived');
 });
 
 test('sorting never rearranges the library itself', () => {
