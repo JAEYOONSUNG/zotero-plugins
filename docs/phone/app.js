@@ -425,17 +425,30 @@ async function addNote(item, text) {
   }
 }
 
+/* The one card above the library, used for the two things worth interrupting for. It has a
+   single owner: every showing replaces what the buttons do, so two of them cannot both fire. */
+function showCard({html, label, run, dismiss = '나중에'}) {
+  const card = $('pair');
+  if (!card) return;
+  $('pair-text').innerHTML = html;
+  const go = $('pair-go'), hide = $('pair-hide');
+  go.textContent = label;
+  go.hidden = !label;
+  go.onclick = run || null;
+  hide.textContent = dismiss;
+  hide.onclick = () => { card.hidden = true; };
+  card.hidden = false;
+}
+
 /* A key the server refuses is not a passing failure: nothing will work until it is replaced,
    so it is said once, where it can be put right. */
 function showKeyTrouble() {
-  const card = $('pair');
-  if (!card) return;
-  card.hidden = false;
-  $('pair-text').innerHTML = 'Zotero가 이 키를 거부했습니다. <b>Allow library access</b>와 <b>Allow write access</b>가 켜져 있는지 확인하고 새 키를 넣어 주세요.';
-  $('pair-go').textContent = '설정 열기';
-  $('pair-go').hidden = false;
-  $('pair-go').onclick = () => { card.hidden = true; openSettings(); };
-  $('pair-hide').textContent = '닫기';
+  showCard({
+    html: 'Zotero가 이 키를 거부했습니다. <b>Allow library access</b>와 <b>Allow write access</b>가 켜져 있는지 확인하고 새 키를 넣어 주세요.',
+    label: '설정 열기',
+    run: () => { $('pair').hidden = true; openSettings(); },
+    dismiss: '닫기'
+  });
 }
 
 /* Dragging a list that is already at the top, far enough, asks for the library again — the
@@ -1680,16 +1693,18 @@ function carryKeys() {
 
 /* The card that offers to carry the key: only in Safari, only once the library is there. */
 function offerPairing() {
-  const card = $('pair');
-  if (!card || standalone() || !account.ready || localStorage.getItem(KEYS.scope) === 'paired') return;
-  card.hidden = false;
-  $('pair-hide').addEventListener('click', () => { card.hidden = true; });
-  $('pair-go').addEventListener('click', () => {
-    carryKeys();
-    localStorage.setItem(KEYS.scope, 'paired');
-    $('pair-text').innerHTML = '주소에 키를 담았습니다. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 홈 화면 앱이 열릴 때 키가 자동으로 들어갑니다.';
-    $('pair-go').hidden = true;
-    $('pair-hide').textContent = '닫기';
+  if (!$('pair') || standalone() || !account.ready || localStorage.getItem(KEYS.scope) === 'paired') return;
+  showCard({
+    html: '홈 화면에 추가하면 키를 다시 넣어야 합니다. <b>키까지 함께 담기</b>를 누른 뒤 공유 → 홈 화면에 추가를 하세요.',
+    label: '키까지 함께 담기',
+    run: () => {
+      carryKeys();
+      localStorage.setItem(KEYS.scope, 'paired');
+      showCard({
+        html: '주소에 키를 담았습니다. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 홈 화면 앱이 열릴 때 키가 자동으로 들어갑니다.',
+        label: '', run: null, dismiss: '닫기'
+      });
+    }
   });
 }
 

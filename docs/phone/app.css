@@ -303,3 +303,5 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .found .page { flex:none; padding-top:2px; font-variant-numeric:tabular-nums; }
 .found-text { flex:1; min-width:0; font-size:13px; line-height:1.5; }
 .found-text b { background:var(--sel); box-shadow:var(--sel-shadow); border-radius:4px; padding:0 2px; }
+/* Safari puts its own clear in a search box; one is enough. */
+.search input::-webkit-search-cancel-button, .finder-row input::-webkit-search-cancel-button { display:none; }

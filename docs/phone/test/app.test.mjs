@@ -843,6 +843,32 @@ test('tapping a sentence reads from there', async () => {
   assert.equal(open.document.querySelector('#listen .sent[aria-current="true"]'), third);
 });
 
+test('the card above the library does one thing at a time, never two', async () => {
+  const base = fakeServer();
+  let refuse = false;
+  const server = {sent: base.sent, fetchImpl: async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input.url);
+    if (refuse && url.pathname.endsWith('/items') && (init.method || 'GET') === 'GET') return new Response('', {status: 403});
+    return base.fetchImpl(input, init);
+  }};
+  const open = await boot({server});
+  await open.settle();
+  // First it offers to carry the keys to the home screen.
+  assert.match(open.document.getElementById('pair').textContent, /홈 화면에 추가/);
+
+  // Then the key is refused, and the same card says that instead.
+  refuse = true;
+  open.document.getElementById('btn-sync').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.match(open.document.getElementById('pair').textContent, /거부했습니다/);
+
+  // Pressing it opens the settings and does NOT also put the keys in the address.
+  open.document.getElementById('pair-go').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('settings').hidden, false);
+  assert.ok(!String(open.location.hash || '').includes('k='), 'the keys did not go into the address as well');
+});
+
 test('a key Zotero refuses is said once, where it can be put right', async () => {
   const base = fakeServer();
   const server = {sent: base.sent, fetchImpl: async (input, init) => {
