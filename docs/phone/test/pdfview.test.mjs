@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fitScale, nearestPage, nearby, pinchZoom, fingerGap, isDoubleTap, clampZoom,
-        MAX_PIXELS, ZOOMS, ZOOM_MIN, ZOOM_MAX} from '../pdfview.js';
+        markRects, markPlace, MAX_PIXELS, ZOOMS, ZOOM_MIN, ZOOM_MAX} from '../pdfview.js';
 
 const A4 = {width: 595, height: 842};
 
@@ -77,4 +77,46 @@ test('the buttons step through the named sizes from wherever a pinch left it', (
   assert.equal(step(3, 1), 3, 'the top stays the top');
   assert.equal(step(1, -1), 1, 'and the bottom the bottom');
   assert.equal(clampZoom('x'), ZOOM_MIN);
+});
+
+/* A mark made in Zotero has to land in the same place on the phone, at every zoom. Zotero keeps
+   it in PDF user space, whose origin is the bottom left. */
+test('a mark is placed as a share of the page, measured from the top', () => {
+  const view = {width: 600, height: 800};
+  const [box] = markRects(view, [[60, 700, 300, 740]]);
+  assert.equal(box.left, 10, '60 of 600 across');
+  assert.equal(box.top, 7.5, '800 - 740 of 800 down, not 700');
+  assert.equal(box.width, 40);
+  assert.equal(box.height, 5);
+});
+
+test('pdf.js is asked where a mark falls when it is there to ask, rotation and all', () => {
+  const view = {width: 800, height: 600, convertToViewportRectangle: () => [400, 300, 200, 150]};
+  const [box] = markRects(view, [[0, 0, 1, 1]]);
+  assert.equal(box.left, 25, 'the corners are put back in order');
+  assert.equal(box.top, 25);
+  assert.equal(box.width, 25);
+  assert.equal(box.height, 25);
+});
+
+test('a mark that makes no sense is left out rather than drawn wrong', () => {
+  const view = {width: 600, height: 800};
+  assert.deepEqual(markRects(view, [[1, 1, 1, 1]]), [], 'nothing of no size');
+  assert.deepEqual(markRects(view, [[0, 0]]), []);
+  assert.deepEqual(markRects(view, [['a', 'b', 'c', 'd']]), []);
+  assert.deepEqual(markRects({width: 0, height: 0}, [[0, 0, 10, 10]]), []);
+  assert.deepEqual(markRects(view, null), []);
+});
+
+test("Zotero's own shape for a mark is read, and a damaged one is skipped", () => {
+  const place = markPlace({data: {itemType: 'annotation', annotationType: 'highlight',
+    annotationColor: '#5fb236', annotationText: 'the enzyme works',
+    annotationPosition: JSON.stringify({pageIndex: 2, rects: [[1, 2, 3, 4]]})}});
+  assert.equal(place.page, 3, 'pageIndex counts from zero, pages from one');
+  assert.equal(place.colour, '#5fb236');
+  assert.equal(place.text, 'the enzyme works');
+  assert.deepEqual(place.rects, [[1, 2, 3, 4]]);
+  assert.equal(markPlace({data: {annotationPosition: 'not json'}}), null);
+  assert.equal(markPlace({data: {}}), null);
+  assert.equal(markPlace(null), null);
 });

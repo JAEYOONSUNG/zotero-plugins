@@ -591,6 +591,22 @@ test('a paper shows where it sits, where to read it, and how far it was listened
   assert.equal(out.getAttribute('rel'), 'noopener', 'and it is opened safely');
 });
 
+test('the marks made in Zotero are listed in the order they appear, and lead into the paper', async () => {
+  const open = await boot({server: fakeServer({children: MARKED, fulltext: FULLTEXT})});
+  await open.settle();
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const rows = [...open.document.querySelectorAll('#detail .mark-row')];
+  assert.equal(rows.length, 2, 'both marks are there');
+  assert.match(rows[0].textContent, /first thing said/, 'the one earlier in the paper comes first');
+  assert.match(rows[0].textContent, /1쪽/);
+  assert.match(rows[1].textContent, /3쪽/, 'pageIndex 2 is page three');
+
+  rows[1].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('paper').hidden, false, 'a mark opens the paper at its page');
+});
+
 /* ---- listening ---- */
 const PDF_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', contentType: 'application/pdf', filename: 'seo.pdf'}}];
 
@@ -766,6 +782,13 @@ test('a key Zotero refuses is said once, where it can be put right', async () =>
    not loaded in the fake phone, so what is asserted stops at the bytes arriving. */
 const LINKED_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', linkMode: 'linked_file',
   contentType: 'application/pdf', filename: 'seo.pdf', path: 'attachments:Defense system/seo.pdf'}}];
+const MARKED = [...LINKED_CHILD,
+  {key: 'M1', version: 4, data: {key: 'M1', itemType: 'annotation', annotationType: 'highlight',
+    annotationColor: '#ffd400', annotationText: 'the enzyme degrades PET', annotationSortIndex: '00002|000100|00050',
+    annotationPosition: JSON.stringify({pageIndex: 2, rects: [[60, 700, 300, 740]]})}},
+  {key: 'M2', version: 5, data: {key: 'M2', itemType: 'annotation', annotationType: 'highlight',
+    annotationColor: '#5fb236', annotationText: 'first thing said', annotationSortIndex: '00000|000100|00050',
+    annotationPosition: JSON.stringify({pageIndex: 0, rects: [[60, 100, 300, 140]]})}}];
 const STORED_CHILD = [{key: 'PDF2', version: 3, data: {key: 'PDF2', itemType: 'attachment', linkMode: 'imported_file',
   contentType: 'application/pdf', filename: 'seo.pdf'}}];
 const DROPBOX_ON = {'np.db.app': 'APPKEY', 'np.db.refresh': 'RT', 'np.db.base': '/0.Personal folder/0. Zotero'};

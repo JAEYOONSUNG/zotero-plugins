@@ -16,7 +16,7 @@
 import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
-import {createViewer} from './pdfview.js';
+import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, SORTS} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
 
@@ -800,14 +800,22 @@ async function openDetail(key) {
         const text = String(note.data.note || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n').replace(/<[^>]+>/g, '');
         el('p', {class: 'note', text: clean(text).slice(0, 1200) || '(빈 메모)'}, childBody);
       }
+      // The reader's own marks: in the order they appear in the paper, each one a way into it.
+      paper.marks = marks;
       if (marks.length) {
         const card = el('section', {class: 'card'}, body);
         el('h3', {text: `주석 ${marks.length}개`}, card);
-        for (const mark of marks.slice(0, 50)) {
-          const line = el('p', {class: 'note'}, card);
-          const colour = mark.data.annotationColor || 'var(--warm)';
-          el('span', {style: `display:inline-block;width:6px;height:6px;border-radius:9px;background:${colour};margin-inline-end:6px;vertical-align:middle`}, line);
-          el('span', {text: clean(mark.data.annotationText || mark.data.annotationComment || '(그림 주석)')}, line);
+        const placed = marks
+          .map(mark => ({mark, place: markPlace(mark)}))
+          .sort((a, b) => String(a.mark.data.annotationSortIndex || '').localeCompare(String(b.mark.data.annotationSortIndex || '')));
+        for (const {mark, place} of placed.slice(0, 200)) {
+          const line = el('button', {class: 'mark-row', type: 'button'}, card);
+          el('span', {class: 'swatch', style: `background:${mark.data.annotationColor || 'var(--warm)'}`}, line);
+          const text = el('span', {class: 'mark-text'}, line);
+          el('span', {text: clean(mark.data.annotationText || mark.data.annotationComment || '(그림 주석)')}, text);
+          const page = place ? place.page : Number(mark.data.annotationPageLabel) || 0;
+          if (page) el('span', {class: 'muted small', text: `${page}쪽`}, line);
+          line.addEventListener('click', () => openPaper(liveItem(key) || item, {at: page || 0}));
         }
       }
     } catch (error) {
@@ -1174,7 +1182,7 @@ function paperTrouble(error) {
   }
 }
 
-const paper = {viewer: null, item: null, following: 0, pages: 0};
+const paper = {viewer: null, item: null, following: 0, pages: 0, marks: []};
 const NIGHT = 'np.pdf.night';
 
 /* While there is something to say, it stands where the page would be. */
@@ -1194,6 +1202,7 @@ async function openPaper(item, {at = 0} = {}) {
   if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
   paper.following = 0;
   paper.bytes = null;
+  if (!paper.item || paper.item.key !== item.key) paper.marks = [];
   $('paper-jump').hidden = true;
   $('paper-view').classList.toggle('night', localStorage.getItem(NIGHT) === 'on');
   $('paper-night').setAttribute('aria-pressed', String(localStorage.getItem(NIGHT) === 'on'));
@@ -1233,6 +1242,7 @@ async function openPaper(item, {at = 0} = {}) {
       },
       onZoom: value => { $('paper-out').disabled = value <= 1.001; }
     });
+    if (paper.marks.length) paper.viewer.setMarks(paper.marks);
     await paper.viewer.open(bytes.slice(0), PDF_ASSETS);   // pdf.js takes the buffer over; the kept copy must survive
     paper.bytes = bytes;
     const back = at > 0 ? at : Number(localStorage.getItem(KEYS.page + item.key)) || 0;
@@ -1243,6 +1253,7 @@ async function openPaper(item, {at = 0} = {}) {
   }
   // The voice is offered once the page is up, and only if there is text to read.
   readAlong(item, attachment).catch(() => {});
+  loadMarks(item).catch(() => {});
 }
 
 /* The player on the PDF screen: the same one the transcript uses, so a paper carries on from
@@ -1271,6 +1282,18 @@ async function readAlong(item, attachment) {
   bar.hidden = false;
   $('paper-view').classList.add('with-player');
   paintReading(listen.player.state());
+}
+
+/* The marks made in Zotero, laid over the page. Fetched only when the PDF screen did not come
+   from the paper's own screen, which has them already. */
+async function loadMarks(item) {
+  if (paper.marks.length) return;
+  const response = await api(`/items/${item.key}/children?limit=100`);
+  const rows = await response.json();
+  const marks = rows.filter(row => row.data.itemType === 'annotation');
+  if (!marks.length || paper.item !== item) return;
+  paper.marks = marks;
+  if (paper.viewer) paper.viewer.setMarks(marks);
 }
 
 /* The PDF handed to whatever else the phone can open it with — a reader, mail, Files. */

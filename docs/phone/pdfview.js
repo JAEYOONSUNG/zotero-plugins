@@ -55,6 +55,51 @@ export function nearby(page, total, reach = 1) {
   return out;
 }
 
+/* Where a mark made in Zotero falls on the page, as a share of the page rather than as pixels,
+   so it stays put through every zoom without being worked out again.
+
+   Zotero keeps a mark in PDF user space, whose origin is the BOTTOM left; the screen's is the top
+   left. pdf.js knows how to turn one into the other, rotated pages included, and when it is not
+   there to ask the flip is done by hand. */
+export function markRects(view, rects) {
+  const out = [];
+  const width = (view && view.width) || 0, height = (view && view.height) || 0;
+  if (!width || !height) return out;
+  for (const rect of rects || []) {
+    if (!rect || rect.length < 4) continue;
+    let [x1, y1, x2, y2] = rect.map(Number);
+    if (![x1, y1, x2, y2].every(Number.isFinite)) continue;
+    let box;
+    if (view.convertToViewportRectangle) {
+      const flat = view.convertToViewportRectangle([x1, y1, x2, y2]);
+      box = [Math.min(flat[0], flat[2]), Math.min(flat[1], flat[3]),
+             Math.max(flat[0], flat[2]), Math.max(flat[1], flat[3])];
+    } else {
+      box = [Math.min(x1, x2), height - Math.max(y1, y2), Math.max(x1, x2), height - Math.min(y1, y2)];
+    }
+    const left = (box[0] / width) * 100, top = (box[1] / height) * 100;
+    const w = ((box[2] - box[0]) / width) * 100, h = ((box[3] - box[1]) / height) * 100;
+    if (w <= 0 || h <= 0) continue;
+    out.push({left, top, width: w, height: h});
+  }
+  return out;
+}
+
+/* Zotero stores a mark's place as a JSON string; a damaged one is simply not drawn. */
+export function markPlace(annotation) {
+  const data = (annotation && annotation.data) || annotation || {};
+  let place = data.annotationPosition;
+  if (typeof place === 'string') { try { place = JSON.parse(place); } catch (_) { place = null; } }
+  if (!place || !Array.isArray(place.rects)) return null;
+  return {
+    page: Number(place.pageIndex || 0) + 1,
+    rects: place.rects,
+    colour: String(data.annotationColor || '#ffd400'),
+    kind: String(data.annotationType || 'highlight'),
+    text: String(data.annotationText || data.annotationComment || '')
+  };
+}
+
 export function createViewer({root, pdfjs, onPage = () => {}, onStatus = () => {}, onZoom = () => {},
                               maxPixels = MAX_PIXELS} = {}) {
   if (!root) throw new Error('a root is required');
@@ -104,11 +149,32 @@ export function createViewer({root, pdfjs, onPage = () => {}, onStatus = () => {
       if (dead) return;
       slot.frame.textContent = '';
       slot.frame.appendChild(canvas);
+      paintMarks(slot);
       slot.frame.classList.add('ready');
     } catch (error) {
       if (!/cancel/i.test(String(error && error.message))) onStatus({type: 'error', error});
     }
     void css;
+  }
+
+  /* The reader's own marks, laid over the page. They are shares of the page, so they need no
+     redrawing when it is zoomed — only when the page itself is drawn again. */
+  let marks = new Map();
+  function paintMarks(slot) {
+    const mine = marks.get(slot.n);
+    if (!mine || !mine.length) return;
+    const layer = document.createElement('div');
+    layer.className = 'pdf-marks';
+    for (const mark of mine) {
+      for (const box of markRects(slot.view, mark.rects)) {
+        const bit = document.createElement('div');
+        bit.className = `pdf-mark ${mark.kind === 'underline' ? 'underline' : 'highlight'}`;
+        bit.style.cssText = `left:${box.left}%;top:${box.top}%;width:${box.width}%;height:${box.height}%;--mark:${mark.colour}`;
+        if (mark.text) bit.title = mark.text.slice(0, 120);
+        layer.appendChild(bit);
+      }
+    }
+    if (layer.childNodes.length) slot.frame.appendChild(layer);
   }
 
   function release(n) {
@@ -219,6 +285,22 @@ export function createViewer({root, pdfjs, onPage = () => {}, onStatus = () => {
       return zoom;
     },
     get zoom() { return zoom; },
+    /* Given the annotations as Zotero holds them; the pages already drawn take them at once. */
+    setMarks(annotations) {
+      marks = new Map();
+      for (const row of annotations || []) {
+        const place = markPlace(row);
+        if (!place || !place.rects.length) continue;
+        if (!marks.has(place.page)) marks.set(place.page, []);
+        marks.get(place.page).push(place);
+      }
+      for (const slot of frames) {
+        const layer = slot.frame.querySelector('.pdf-marks');
+        if (layer) layer.remove();
+        if (slot.frame.classList.contains('ready')) paintMarks(slot);
+      }
+      return marks.size;
+    },
     page: () => page,
     pages: () => frames.length,
     resize() { measure(); redraw(); },

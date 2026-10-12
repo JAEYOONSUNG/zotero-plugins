@@ -273,3 +273,17 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .row.ghost .line.wide { width:88%; height:15px; }
 @keyframes breathe { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
 @media (prefers-reduced-motion:reduce) { .row.ghost .line { animation:none } }
+/* the reader's own marks */
+.pdf-marks { position:absolute; inset:0; pointer-events:none; }
+.pdf-mark { position:absolute; background:var(--mark,#ffd400); opacity:.32; mix-blend-mode:multiply;
+            border-radius:1px; }
+.pdf-mark.underline { top:auto; height:2px !important; opacity:.85; mix-blend-mode:normal; }
+.pdf-page { position:relative; }
+.pdf.night .pdf-mark { mix-blend-mode:screen; opacity:.4; }
+.mark-row { display:flex; align-items:flex-start; gap:8px; width:100%; text-align:start; padding:8px 0;
+            border-bottom:1px solid var(--line); }
+.mark-row:last-child { border-bottom:0; }
+.mark-row:active { background:var(--track); border-radius:8px; }
+.mark-row .swatch { width:4px; align-self:stretch; min-height:18px; border-radius:999px; flex:none; }
+.mark-row .mark-text { flex:1; min-width:0; font-size:14px; line-height:1.5; }
+.mark-row .muted { flex:none; padding-top:2px; }
