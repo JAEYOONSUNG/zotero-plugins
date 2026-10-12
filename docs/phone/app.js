@@ -14,7 +14,7 @@
    this phone last saw it is refused rather than overwritten. */
 
 import {readable, units as readingUnits, remainingSeconds} from './read.js';
-import {createPlayer, speechEngine, pickVoice, paperLanguage, RATES} from './play.js';
+import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, SORTS} from './list.js';
@@ -756,7 +756,31 @@ async function fulltextOf(attachmentKey) {
   return content;
 }
 
-const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: []};
+const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
+                sleep: null, sleepAt: 0, sleepSection: ''};
+
+/* Stops reading after a while, or at the end of the part being read, so a paper can be put on at
+   night without talking until morning. */
+function setSleep(choice) {
+  clearTimeout(listen.sleep);
+  listen.sleep = null; listen.sleepAt = 0; listen.sleepSection = '';
+  if (!choice || choice === '0') return;
+  if (choice === 'section') {
+    const unit = listen.player ? listen.player.state().unit : null;
+    listen.sleepSection = (unit && unit.section) || '';
+    toast(listen.sleepSection ? `${listen.sleepSection}이 끝나면 멈춥니다` : '이 구간이 끝나면 멈춥니다');
+    return;
+  }
+  const minutes = Number(choice) || 0;
+  if (!minutes) return;
+  listen.sleepAt = Date.now() + minutes * 60000;
+  listen.sleep = setTimeout(() => {
+    if (listen.player) listen.player.pause();
+    listen.sleepAt = 0;
+    toast('잠들기 시간이 되어 멈췄습니다');
+  }, minutes * 60000);
+  toast(`${minutes}분 뒤에 멈춥니다`);
+}
 
 /* Keep the screen on while the paper is being read; the lock screen stops Safari's speech. */
 async function holdScreen(on) {
@@ -785,6 +809,13 @@ function playMark(button, playing) {
    once here. */
 function paintReading(state) {
   const playing = state.status === 'playing';
+  // The part being read has finished and that is where the reader asked to stop.
+  if (listen.sleepSection && state.unit && state.unit.section && state.unit.section !== listen.sleepSection) {
+    listen.sleepSection = '';
+    if (listen.player) listen.player.pause();
+    toast('구간이 끝나 멈췄습니다');
+    return;
+  }
   const left = remainingSeconds(listen.list, state.index, state.rate);
   const unit = state.unit;
   const line = state.status === 'error'
@@ -795,6 +826,12 @@ function paintReading(state) {
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
     playMark($('listen-play'), playing);
+    const seek = $('listen-seek');
+    seek.max = String(Math.max(0, state.total - 1));
+    seek.value = String(state.index);
+    const section = $('listen-section');
+    const here = state.unit && state.unit.section;
+    if (here) for (const option of section.querySelectorAll('option')) option.selected = option.dataset.name === here;
     paintListen(state);
   }
   if (!$('paper').hidden) {
@@ -913,8 +950,25 @@ async function openListen(item) {
 
   buildRates(rate);
   buildScope(lang, withCaptions);
+  buildSections();
+  setSleep('0');
+  for (const option of $('listen-sleep').querySelectorAll('option')) option.selected = option.value === '0';
   $('listen-bar').hidden = false;
   paintReading(listen.player.state());
+}
+
+/* The parts of a paper, so a reader who wants the Results can have them. */
+function buildSections() {
+  const select = $('listen-section');
+  select.textContent = '';
+  const found = sectionsOf(listen.list);
+  const first = el('option', {value: '', text: found.length ? '처음부터' : '구간 없음'}, select);
+  first.selected = true;
+  for (const {name, index} of found) {
+    const option = el('option', {value: String(index), text: name.length > 24 ? name.slice(0, 23) + '…' : name}, select);
+    option.dataset.name = name;
+  }
+  select.disabled = !found.length;
 }
 
 function buildRates(current, track = $('listen-rate')) {
@@ -1379,6 +1433,16 @@ function wire() {
   $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
   $('listen-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
   $('listen-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });
+  $('listen-seek').addEventListener('change', event => {
+    if (listen.player) listen.player.seek(Number(event.target.value) || 0);
+  });
+  $('listen-section').addEventListener('change', event => {
+    if (!listen.player) return;
+    const at = Number(event.target.value) || 0;
+    const playing = listen.player.state().status === 'playing';
+    if (playing) listen.player.play(at); else listen.player.seek(at);
+  });
+  $('listen-sleep').addEventListener('change', event => setSleep(event.target.value));
   $('listen-voice').addEventListener('change', event => {
     if (!listen.player) return;
     const uri = event.target.value;

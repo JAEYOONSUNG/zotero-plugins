@@ -90,6 +90,7 @@
   <main id="listen-body" class="list transcript" aria-live="off"></main>
   <footer id="listen-bar" class="player" hidden>
     <div class="player-meta"><span id="listen-where" class="muted small"></span></div>
+    <input id="listen-seek" class="seek" type="range" min="0" max="0" value="0" step="1" aria-label="읽는 위치">
     <div class="player-row">
       <button id="listen-prev" class="icon-btn" aria-label="이전 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-7 6 7 6"/><path d="M8 6v12"/></svg></button>
       <button id="listen-play" class="play-btn" aria-label="재생"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
@@ -100,6 +101,13 @@
       <label class="pick"><span class="muted small">목소리</span><select id="listen-voice"></select></label>
       <nav id="listen-what" class="seg small-seg" role="group" aria-label="읽을 범위"></nav>
       <button id="listen-pdf" class="secondary small-btn" type="button">PDF</button>
+    </div>
+    <div class="player-row wrap">
+      <label class="pick"><span class="muted small">구간</span><select id="listen-section"></select></label>
+      <label class="pick"><span class="muted small">잠들기</span><select id="listen-sleep">
+        <option value="0">끄기</option><option value="10">10분</option><option value="20">20분</option>
+        <option value="30">30분</option><option value="45">45분</option><option value="section">이 구간까지</option>
+      </select></label>
     </div>
   </footer>
 </section>

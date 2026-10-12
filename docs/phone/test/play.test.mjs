@@ -2,7 +2,7 @@
    interrupts it. No DOM, no phone. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlayer, pickVoice, paperLanguage, speechEngine} from '../play.js';
+import {createPlayer, pickVoice, paperLanguage, speechEngine, spokenSeconds, sectionsOf, WATCH_EVERY} from '../play.js';
 
 /* A voice that speaks when told to: queue(), then finish() ends the oldest utterance. */
 function fakeEngine({supportsPause = true} = {}) {
@@ -27,10 +27,29 @@ function fakeEngine({supportsPause = true} = {}) {
 
 const units = (...texts) => texts.map((text, index) => ({text, spoken: text, index, page: 1}));
 
+/* A clock the test turns by hand, so the watchdog can be made to fire without waiting for it and
+   no test leaves a timer running behind it. */
+function handClock() {
+  let at = 0;
+  const ticks = [];
+  return {
+    now: () => at,
+    every: (fn, ms) => { ticks.push({fn, ms}); return ticks.length; },
+    stopEvery: id => { if (ticks[id - 1]) ticks[id - 1].fn = null; },
+    pass(ms) { at += ms; for (const tick of ticks) if (tick.fn) tick.fn(); },
+    get running() { return ticks.filter(t => t.fn).length; }
+  };
+}
+/* Every player here runs on a hand clock, so none of them leaves a timer behind. */
+const makePlayer = options => {
+  const clock = handClock();
+  return createPlayer({now: clock.now, every: clock.every, stopEvery: clock.stopEvery, ...options});
+};
+
 test('playing reads the sentences in order and queues the next one as each starts', () => {
   const engine = fakeEngine();
   const seen = [];
-  const player = createPlayer({engine, onChange: event => seen.push(event.type)});
+  const player = makePlayer({engine, onChange: event => seen.push(event.type)});
   player.load(units('One.', 'Two.', 'Three.'));
   player.play();
 
@@ -49,7 +68,7 @@ test('playing reads the sentences in order and queues the next one as each start
 
 test('the section name is said once, before the first sentence under it', () => {
   const engine = fakeEngine();
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load([{text: 'We did it.', spoken: 'We did it.', lead: 'Results'}, {text: 'And more.', spoken: 'And more.'}]);
   player.play();
   engine.step(); engine.step();
@@ -58,7 +77,7 @@ test('the section name is said once, before the first sentence under it', () => 
 
 test('pause stops where it is and resume carries on without repeating', () => {
   const engine = fakeEngine();
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load(units('One.', 'Two.'));
   player.play();
   engine.start();
@@ -73,7 +92,7 @@ test('pause stops where it is and resume carries on without repeating', () => {
 
 test('a voice that cannot pause is stopped and starts the same sentence again', () => {
   const engine = fakeEngine({supportsPause: false});
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load(units('One.', 'Two.'));
   player.play();
   engine.start();
@@ -86,7 +105,7 @@ test('a voice that cannot pause is stopped and starts the same sentence again', 
 
 test('jumping while playing starts there and drops what was queued', () => {
   const engine = fakeEngine();
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load(units('One.', 'Two.', 'Three.'));
   player.play();
   engine.start();
@@ -98,7 +117,7 @@ test('jumping while playing starts there and drops what was queued', () => {
 
 test('jumping while paused moves the place without speaking', () => {
   const engine = fakeEngine();
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load(units('One.', 'Two.', 'Three.'));
   player.next();
   assert.equal(player.state().index, 1);
@@ -109,7 +128,7 @@ test('jumping while paused moves the place without speaking', () => {
 
 test('a sentence the phone drops without starting does not stall the rest', () => {
   const engine = fakeEngine();
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load(units('One.', 'Two.', 'Three.'));
   player.play();
   engine.start();            // One. speaks, Two. is queued
@@ -122,7 +141,7 @@ test('a sentence the phone drops without starting does not stall the rest', () =
 test('a real failure stops and is reported once', () => {
   const engine = fakeEngine();
   const seen = [];
-  const player = createPlayer({engine, onChange: event => seen.push(event.type)});
+  const player = makePlayer({engine, onChange: event => seen.push(event.type)});
   player.load(units('One.', 'Two.'));
   player.play();
   engine.fail('synthesis-failed');
@@ -133,7 +152,7 @@ test('a real failure stops and is reported once', () => {
 
 test('changing speed while playing keeps the place and speaks it at the new rate', () => {
   const engine = fakeEngine();
-  const player = createPlayer({engine});
+  const player = makePlayer({engine});
   player.load(units('One.', 'Two.', 'Three.'));
   player.play();
   engine.start(); engine.finish();
@@ -146,7 +165,7 @@ test('changing speed while playing keeps the place and speaks it at the new rate
 });
 
 test('the rate stays within what a voice can do', () => {
-  const player = createPlayer({engine: fakeEngine()});
+  const player = makePlayer({engine: fakeEngine()});
   assert.equal(player.setRate(9), 2);
   assert.equal(player.setRate(0.1), 0.5);
   assert.equal(player.setRate('fast'), 0.5, 'nonsense leaves the rate alone');
@@ -172,4 +191,78 @@ test('the paper language comes from the body, not from one English line', () => 
 
 test('the phone engine reports itself unavailable when the phone has no speech', () => {
   assert.equal(speechEngine({}).available(), false);
+});
+
+/* iOS stops speaking now and then and reports nothing: the reader is left looking at a sentence
+   that never finishes. The watchdog is what notices. */
+test('a voice that goes quiet without a word is started again where it stopped', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => false;
+  const clock = handClock();
+  const seen = [];
+  const player = createPlayer({engine, ...clock, onChange: event => seen.push(event.type)});
+  player.load(units('One sentence here.', 'Two.', 'Three.'));
+  player.play();
+  engine.start();
+  assert.deepEqual(engine.spoken, ['One sentence here.']);
+
+  clock.pass(3000);                       // still well within the time this sentence should take
+  assert.equal(engine.spoken.length, 1, 'a sentence being read is left alone');
+
+  clock.pass(20000);                      // long past it, and the engine says it is not speaking
+  assert.equal(engine.spoken.length, 1, 'the sentence is queued again, not spoken twice over');
+  engine.start();
+  assert.deepEqual(engine.spoken, ['One sentence here.', 'One sentence here.'], 'the same sentence, again');
+  assert.ok(seen.includes('stalled'), 'and it is reported');
+  assert.equal(player.state().revivals, 1);
+  player.stop();
+  assert.equal(clock.running, 0, 'nothing is left ticking');
+});
+
+test('a voice that is simply slow is not interrupted', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => true;           // still talking, just taking its time
+  const clock = handClock();
+  const player = createPlayer({engine, ...clock});
+  player.load(units('A very long sentence indeed.', 'Two.'));
+  player.play();
+  engine.start();
+  clock.pass(60000);
+  assert.deepEqual(engine.spoken, ['A very long sentence indeed.'], 'it was left to finish');
+  player.stop();
+});
+
+test('nothing is watched while it is paused, stopped or finished', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => false;
+  const clock = handClock();
+  const player = createPlayer({engine, ...clock});
+  player.load(units('One.', 'Two.'));
+  player.play();
+  engine.start();
+  player.pause();
+  clock.pass(60000);
+  assert.deepEqual(engine.spoken, ['One.'], 'a paused paper is not revived');
+  player.stop();
+  assert.equal(clock.running, 0);
+  assert.ok(WATCH_EVERY > 0);
+});
+
+test('how long a sentence should take is guessed from its words, and its Hangul', () => {
+  assert.ok(spokenSeconds('one two three four five six', 1) > 1.5);
+  assert.ok(spokenSeconds('one two three four five six', 2) < spokenSeconds('one two three four five six', 1));
+  assert.ok(spokenSeconds('이 효소는 플라스틱을 분해한다', 1) > 1.2);
+  assert.equal(spokenSeconds('', 1), 1.2, 'nothing still takes a moment');
+});
+
+test('the sections of a paper are listed with where each one starts', () => {
+  const list = [
+    {text: 'a', section: 'Introduction'}, {text: 'b', section: 'Introduction'},
+    {text: 'c', section: 'Results'}, {text: 'd'}, {text: 'e', section: 'Discussion'}
+  ];
+  assert.deepEqual(sectionsOf(list), [
+    {name: 'Introduction', index: 0}, {name: 'Results', index: 2}, {name: 'Discussion', index: 4}
+  ]);
+  assert.deepEqual(sectionsOf([]), []);
+  assert.deepEqual(sectionsOf(null), []);
 });

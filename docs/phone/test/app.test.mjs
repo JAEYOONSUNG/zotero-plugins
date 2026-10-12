@@ -63,13 +63,21 @@ function fakeIndexedDB() {
 let boots = 0;
 /* Each boot gets its own clock. The globals a module reads are replaced on the next boot, so a
    timer left running by the one before would otherwise redraw this phone's screen. */
-let timers = [];
+let timers = [], repeats = [];
 const realAfter = globalThis.setTimeout, realStop = globalThis.clearTimeout;
+const realEvery = globalThis.setInterval, realStopEvery = globalThis.clearInterval;
 function ownClock() {
   const after = (fn, ms, ...rest) => { const id = realAfter(fn, ms, ...rest); timers.push(id); return id; };
-  return {after, stop: id => realStop(id)};
+  const every = (fn, ms, ...rest) => { const id = realEvery(fn, ms, ...rest); repeats.push(id); return id; };
+  return {after, stop: id => realStop(id), every, stopEvery: id => realStopEvery(id)};
 }
-function stopOldTimers() { for (const id of timers) realStop(id); timers = []; }
+function stopOldTimers() {
+  for (const id of timers) realStop(id);
+  // The reading watchdog repeats for as long as a paper is being read; a test that ends mid-paper
+  // would otherwise leave it ticking and the whole run would never finish.
+  for (const id of repeats) realStopEvery(id);
+  timers = []; repeats = [];
+}
 
 /* The phone's voice: utterances are collected, and step() speaks the oldest one through. */
 function fakeSpeech() {
@@ -178,6 +186,8 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   const clock = ownClock();
   window.setTimeout = clock.after;
   window.clearTimeout = clock.stop;
+  window.setInterval = clock.every;
+  window.clearInterval = clock.stopEvery;
   /* app.js is a real module (it imports read.js and play.js), so the fake phone is put in the
      globals the module will read and the module is imported fresh for each boot. */
   const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash};
@@ -207,6 +217,7 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     requestAnimationFrame: window.requestAnimationFrame, Response, URL, URLSearchParams, location, history,
     matchMedia: () => ({matches: false, addEventListener() {}}),
     setTimeout: clock.after, clearTimeout: clock.stop,
+    setInterval: clock.every, clearInterval: clock.stopEvery,
     addEventListener: (type, fn, opts) => window.addEventListener?.(type, fn, opts),
     // No service worker in this test phone, and linkedom's navigator is read-only.
     navigator: {userAgent: 'test'},
@@ -220,6 +231,9 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   const settle = async (rounds = 60) => { for (let i = 0; i < rounds; i++) await new Promise(r => realAfter(r, 4)); };
   return {window, document, settle, storage, location, speech};
 }
+
+import {after as afterAll} from 'node:test';
+afterAll(() => stopOldTimers());
 
 test('a stored key goes straight to the library, and no key shows the setup screen', async () => {
   const open = await boot();
@@ -655,6 +669,50 @@ test('the manifest does not fix where the icon opens, so the keys in the address
   const manifest = JSON.parse(read('manifest.webmanifest'));
   assert.equal('start_url' in manifest, false, 'iOS would open the icon there and drop the address');
   assert.match(read('app.js'), /link\[rel="manifest"\]'\)\?\.remove/, 'and the link goes before the icon is added');
+});
+
+test('a long paper can be jumped about in by part, and the place shows on the slider', async () => {
+  const {open} = await openListening();
+  const section = open.document.getElementById('listen-section');
+  const names = [...section.querySelectorAll('option')].map(o => o.textContent);
+  assert.ok(names.includes('Introduction'), `the parts are offered (${names.join(', ')})`);
+
+  const target = [...section.querySelectorAll('option')].find(o => o.textContent === 'Introduction');
+  for (const option of section.querySelectorAll('option')) option.selected = option === target;
+  section.dispatchEvent(new open.window.Event('change'));
+  await open.settle();
+  const seek = open.document.getElementById('listen-seek');
+  assert.equal(seek.value, target.value, 'the slider followed');
+  assert.ok(Number(seek.max) >= 1, 'and knows how long the paper is');
+
+  // Dragging the slider moves the reading.
+  seek.value = String(Number(seek.max));
+  seek.dispatchEvent(new open.window.Event('change'));
+  await open.settle();
+  const marked = open.document.querySelector('#listen .sent[aria-current="true"]');
+  assert.ok(marked, 'a sentence is marked');
+  assert.equal(marked, open.document.querySelectorAll('#listen .sent')[Number(seek.max)]);
+});
+
+test('the sleep timer stops the reading, and says so', async () => {
+  const {open} = await openListening();
+  const play = open.document.getElementById('listen-play');
+  play.dispatchEvent(new open.window.Event('click'));
+  open.speech.start();
+  await open.settle();
+
+  const sleep = open.document.getElementById('listen-sleep');
+  for (const option of sleep.querySelectorAll('option')) option.selected = option.value === 'section';
+  sleep.dispatchEvent(new open.window.Event('change'));
+  await open.settle();
+  assert.match(open.document.getElementById('toast').textContent, /멈춥니다/);
+
+  // Reading on into the next part is where it stops.
+  const sentences = open.document.querySelectorAll('#listen .sent');
+  for (let i = 0; i < sentences.length + 2; i++) { open.speech.step(); }
+  await open.settle();
+  assert.notEqual(open.document.getElementById('listen-play').getAttribute('aria-label'), '일시정지',
+    'it is no longer playing');
 });
 
 /* ---- the PDF itself ---- */

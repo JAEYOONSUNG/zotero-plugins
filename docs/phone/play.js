@@ -54,6 +54,7 @@ export function speechEngine(win = globalThis) {
       synth.speak(utterance);
     },
     cancel() { epoch++; live.clear(); try { synth.cancel(); } catch (_) {} },
+    speaking() { try { return !!(synth.speaking || synth.pending); } catch (_) { return false; } },
     pause() { try { synth.pause(); } catch (_) {} },
     resume() { try { synth.resume(); } catch (_) {} }
   };
@@ -88,17 +89,53 @@ export function paperLanguage(units) {
 }
 
 /* ---- the player ---- */
-export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en', voiceURI = ''} = {}) {
+/* How long a sentence should take, so a voice that has gone quiet can be told from a slow one. */
+export function spokenSeconds(text, rate = 1) {
+  const body = String(text || '');
+  const words = body.trim().split(/\s+/).filter(Boolean).length;
+  const hangul = (body.match(/[가-힣]/g) || []).length;
+  return Math.max(1.2, (words / 2.7) + (hangul / 5.5)) / Math.max(0.5, rate);
+}
+
+export const WATCH_EVERY = 2500;
+
+export function createPlayer({
+  engine, onChange = () => {}, rate = 1, lang = 'en', voiceURI = '',
+  now = () => Date.now(),
+  every = (fn, ms) => setInterval(fn, ms),
+  stopEvery = id => clearInterval(id)
+} = {}) {
   if (!engine) throw new Error('an engine is required');
   let list = [], index = 0, status = 'idle', generation = 0, queuedTo = -1, entered = -1, error = '';
+  let heard = 0, watch = null, revivals = 0;
   let speakRate = clamp(rate, RATE_MIN, RATE_MAX, 1), speakLang = lang || 'en', speakVoice = voiceURI || '';
-  const state = () => ({status, index, total: list.length, unit: list[index] || null, rate: speakRate, lang: speakLang, voiceURI: speakVoice, error});
+  const state = () => ({status, index, total: list.length, unit: list[index] || null,
+                       rate: speakRate, lang: speakLang, voiceURI: speakVoice, error, revivals});
   const emit = type => { try { onChange({type, state: state()}); } catch (_) {} };
+  const alive = () => { heard = now(); };
   const sayable = unit => {
     const spoken = String(unit && unit.spoken || unit && unit.text || '').trim();
     const lead = unit && unit.lead ? String(unit.lead).replace(/[.。]?\s*$/, '. ') : '';
     return (lead + spoken).trim();
   };
+
+  /* iOS drops the speech queue now and then — the screen dims, a notification arrives, or the
+     engine simply stops — and says nothing about it, leaving the reader looking at a sentence
+     that never finishes. So while it is meant to be playing, a sentence that has had long enough
+     to be spoken and has made no sound is started again. */
+  function watchdog() {
+    if (status !== 'playing') return;
+    const due = spokenSeconds(sayable(list[index]), speakRate) * 1000 + 6000;
+    if (now() - heard < due) return;
+    if (engine.speaking && engine.speaking()) { alive(); return; }
+    revivals++;
+    emit('stalled');
+    startAt(index);
+  }
+  function watching(on) {
+    if (on && !watch) watch = every(watchdog, WATCH_EVERY);
+    if (!on && watch) { stopEvery(watch); watch = null; }
+  }
 
   function enqueue(at, mine) {
     const unit = list[at];
@@ -113,6 +150,7 @@ export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en'
   }
   function onStart(mine, at) {
     if (mine !== generation || entered === at) return;
+    alive();
     entered = at; index = at; status = 'playing'; error = '';
     // The next sentence is queued as this one starts, so the engine runs them together.
     if (at + 1 < list.length && queuedTo < at + 1) enqueue(at + 1, mine);
@@ -120,13 +158,15 @@ export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en'
   }
   function onEnd(mine, at) {
     if (mine !== generation) return;
-    if (at + 1 >= list.length) { status = 'done'; emit('done'); return; }
+    alive();
+    if (at + 1 >= list.length) { status = 'done'; watching(false); emit('done'); return; }
     // A sentence that ended without ever starting (iOS drops one now and then): move on.
     if (entered < at + 1 && queuedTo < at + 1) enqueue(at + 1, mine);
   }
   function fail(mine, reason) {
     if (mine !== generation) return;
     generation++; try { engine.cancel(); } catch (_) {}
+    watching(false);
     status = 'error'; error = String(reason || 'error'); emit('error');
   }
   function startAt(at) {
@@ -136,6 +176,8 @@ export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en'
     if (engine.supportsPause !== false) try { engine.resume(); } catch (_) {}
     index = Math.max(0, Math.min(list.length - 1, at));
     entered = -1; queuedTo = index - 1; status = 'playing'; error = '';
+    alive();
+    watching(true);
     emit('status');
     enqueue(index, mine);
   }
@@ -155,6 +197,7 @@ export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en'
       if (status !== 'playing') return state();
       if (engine.supportsPause === false) { generation++; try { engine.cancel(); } catch (_) {} queuedTo = index - 1; entered = -1; }
       else try { engine.pause(); } catch (_) {}
+      watching(false);
       status = 'paused'; emit('status');
       return state();
     },
@@ -169,6 +212,7 @@ export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en'
     toggle() { return status === 'playing' ? api.pause() : status === 'paused' ? api.resume() : api.play(); },
     stop() {
       generation++; try { engine.cancel(); } catch (_) {}
+      watching(false);
       queuedTo = -1; entered = -1;
       if (status !== 'idle') { status = 'idle'; emit('status'); }
       return state();
@@ -200,3 +244,13 @@ export function createPlayer({engine, onChange = () => {}, rate = 1, lang = 'en'
 }
 
 export const RATES = [0.8, 1, 1.2, 1.5, 1.8];
+
+/* The sections of a paper and where each one starts, for jumping about in a long one. */
+export function sectionsOf(units) {
+  const out = [];
+  (units || []).forEach((unit, index) => {
+    const name = unit && unit.section;
+    if (name && (!out.length || out[out.length - 1].name !== name)) out.push({name, index});
+  });
+  return out;
+}

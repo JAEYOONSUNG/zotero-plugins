@@ -247,3 +247,6 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
 .pdf-count { font-variant-numeric:tabular-nums; padding:4px 8px; border-radius:8px; }
 .pdf-count:active { background:var(--track); }
 .icon-btn:disabled { opacity:.3; }
+.seek { width:100%; margin:2px 0 0; accent-color:var(--ink); height:18px; }
+.player-row.wrap + .player-row.wrap { margin-top:2px; }
+.pick select:disabled { opacity:.45; }
