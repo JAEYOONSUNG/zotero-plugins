@@ -613,20 +613,46 @@ function paintScope(total) {
     el('span', {class: 'x', text: '×'}, chip);
     chip.addEventListener('click', () => { state.tag = ''; render(); });
   }
-  el('span', {class: 'grow'}, bar);
-  const pick = el('label', {class: 'sort'}, bar);
-  el('span', {class: 'muted small', text: '정렬'}, pick);
-  const select = el('select', {'aria-label': '정렬 순서'}, pick);
-  for (const [id, label] of SORTS) {
-    const option = el('option', {value: id, text: label}, select);
-    if (id === state.sort) option.selected = true;
-  }
-  select.addEventListener('change', event => {
-    state.sort = event.target.value;
-    localStorage.setItem(KEYS.sort, state.sort);
-    render();
-  });
+  // Nothing to say about what is being looked at is itself worth a row of the screen.
+  bar.hidden = !bar.firstChild;
   void total;
+}
+
+/* The order the library is in: a menu under the button that opens it, with a tick against the one
+   it is in now, rather than a row of its own taken up for ever by a thing changed once a week. */
+function openSortMenu() {
+  floatMenu($('btn-sort'), SORTS.map(([id, label]) => ({id, label, run: () => {
+    state.sort = id;
+    localStorage.setItem(KEYS.sort, id);
+    state.shown = 0;
+    $('list').scrollTop = 0;
+    render();
+  }})), {chosen: state.sort});
+}
+
+/* Holding a finger on a row is how this phone asks for the things that are not worth a screen of
+   their own. The press is given up the moment the finger moves, so a scroll is never a hold, and
+   the tap that ends it is swallowed so the paper does not open behind the menu. */
+export const HOLD = 480;
+function holdToOpen(row, run) {
+  let timer = null, from = null, held = false;
+  const give = () => { if (timer) clearTimeout(timer); timer = null; from = null; };
+  row.addEventListener('touchstart', event => {
+    const touch = event.touches && event.touches[0];
+    if (!touch) return;
+    from = {x: touch.clientX, y: touch.clientY};
+    timer = setTimeout(() => { timer = null; held = true; run(); }, HOLD);
+  }, {passive: true});
+  row.addEventListener('touchmove', event => {
+    const touch = event.touches && event.touches[0];
+    if (!from || !touch) return;
+    if (Math.abs(touch.clientX - from.x) > 10 || Math.abs(touch.clientY - from.y) > 10) give();
+  }, {passive: true});
+  row.addEventListener('touchend', give, {passive: true});
+  row.addEventListener('touchcancel', give, {passive: true});
+  // A mouse has its own way of asking the same question.
+  row.addEventListener('contextmenu', event => { event.preventDefault(); held = true; run(); });
+  return () => { const was = held; held = false; return was; };
 }
 
 /* One row. Kept apart so more of them can be added as the list is scrolled without redrawing
@@ -655,7 +681,17 @@ function drawRow(item, list) {
       el('span', {class: 'muted', text: `${heard}%`}, foot);
     }
   }
+  /* Held down: the status, without opening the paper and coming back out of it. */
+  const wasHeld = holdToOpen(row, () => floatMenu(row, [
+    {id: 'unread', label: '안 읽음'}, {id: 'reading', label: '읽는 중'},
+    {id: 'done', label: '완료'}, {id: '', label: '표시 없음'}
+  ].map(choice => ({...choice, run: async () => {
+    const live = liveItem(item.key) || item;
+    try { await setStatus(live, choice.id); render({keep: true}); toast(choice.id ? `${choice.label}으로 표시` : '표시를 지웠습니다'); }
+    catch (error) { toast(error.message); }
+  }})), {chosen: status}));
   row.addEventListener('click', () => {
+    if (wasHeld()) return;           // the tap that ended the hold is not a tap on the paper
     // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
     state.at = $('list').scrollTop;
     state.drawn = state.shown;
@@ -1521,6 +1557,46 @@ async function sharePaper() {
   } catch (_) { toast('이 폰에서는 공유할 수 없습니다'); }
 }
 
+/* A menu that belongs to a button rather than to a screen: it is put where the button is, it takes
+   the next tap anywhere else as a way of saying no, and it never leaves two of itself about. */
+const TICK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>';
+let floating = null;
+export function closeFloat() {
+  if (!floating) return;
+  const {menu, anchor, away} = floating;
+  floating = null;
+  menu.remove();
+  if (anchor) anchor.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', away, true);
+  document.removeEventListener('touchstart', away, true);
+}
+function floatMenu(anchor, items, {chosen = ''} = {}) {
+  const was = floating && floating.anchor === anchor;
+  closeFloat();
+  if (was) return null;                       // the same button again means put it away
+  const menu = el('div', {class: 'menu float'}, document.body);
+  for (const item of items) {
+    const row = el('button', {class: 'menu-row', type: 'button', 'aria-pressed': String(item.id === chosen)}, menu);
+    el('span', {class: 'tick', html: item.id === chosen ? TICK : ''}, row);
+    el('span', {text: item.label}, row);
+    row.addEventListener('click', () => { closeFloat(); item.run(); });
+  }
+  const box = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+  if (box && box.width) {
+    menu.style.top = `${Math.round(box.bottom + 6)}px`;
+    menu.style.right = `${Math.max(8, Math.round((window.innerWidth || 0) - box.right))}px`;
+  }
+  /* The tap that lands on the button itself is left to the button, which closes the menu by being
+     pressed again; anything else is a way of saying no. iOS does not always let a tap on a plain
+     div reach the document as a click, so the touch is listened for as well. */
+  const away = event => { if (!menu.contains(event.target) && !anchor.contains(event.target)) closeFloat(); };
+  document.addEventListener('click', away, true);
+  document.addEventListener('touchstart', away, true);
+  anchor.setAttribute('aria-expanded', 'true');
+  floating = {menu, anchor, away};
+  return menu;
+}
+
 /* The menu over a paper: shown, put away, and never left open behind a screen that closed. */
 function showMenu(on) {
   const menu = $('paper-menu');
@@ -1831,7 +1907,9 @@ function wire() {
   $('settings-back').addEventListener('click', () => closeSheet('settings'));
   addEventListener('popstate', onPopState);
   addEventListener('keydown', event => {
-    if (event.key === 'Escape' && sheets.length) closeSheet(sheets[sheets.length - 1].id);
+    if (event.key !== 'Escape') return;
+    if (floating) { closeFloat(); return; }
+    if (sheets.length) closeSheet(sheets[sheets.length - 1].id);
   });
   pullToRefresh($('list'), () => sync());
   followScroll($('list'), $('main').querySelector('.top'));
@@ -1877,6 +1955,7 @@ function wire() {
   $('paper-share').addEventListener('click', () => { showMenu(false); sharePaper(); });
   /* Everything that is not reading itself is behind one button, so the bar over a paper is the
      paper's name and the page it is on. */
+  $('btn-sort').addEventListener('click', openSortMenu);
   $('paper-more').addEventListener('click', () => showMenu($('paper-menu').hidden));
   $('paper-view').addEventListener('click', () => showMenu(false));
   // Zooming is the one thing worth pressing twice, so the menu stays up for it.

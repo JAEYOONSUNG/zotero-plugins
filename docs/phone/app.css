@@ -106,10 +106,9 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .scope-chip span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .scope-chip .x { color:var(--muted); font-size:15px; line-height:1; }
 .scope-chip:active { background:var(--track-hover); }
-.sort { display:flex; align-items:center; gap:4px; flex:none; }
-.sort select, .pick select { font:inherit; font-size:12px; font-weight:600; color:var(--ink); background:var(--track);
-                             border:0; border-radius:999px; padding:5px 9px; }
-.pick select { font-size:13px; max-width:46vw; }
+.scope[hidden] { display:none; }
+.pick select { font:inherit; font-size:13px; font-weight:600; color:var(--ink); background:var(--track);
+               border:0; border-radius:999px; padding:5px 9px; max-width:46vw; }
 .pick select:disabled { opacity:.45; }
 
 /* ---------- the library ---------- */
@@ -336,6 +335,10 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .menu-row:active { background:var(--track); }
 .menu-row svg { width:19px; height:19px; flex:none; }
 .menu-row[aria-pressed="true"] { color:var(--link); font-weight:600; }
+/* A menu that hangs off a button is put where the button is, by the hand that opened it. */
+.menu.float { position:fixed; z-index:40; width:186px; }
+.menu-row .tick { width:17px; flex:none; display:flex; color:var(--link); }
+.menu-row .tick svg { width:17px; height:17px; stroke-width:2.4; }
 
 /* ---------- the PDF ---------- */
 /* The page itself is white on a dimmer canvas, as paper is, in both schemes: a PDF rendered on

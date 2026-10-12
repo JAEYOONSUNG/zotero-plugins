@@ -480,13 +480,23 @@ test('the order can be changed, and it is remembered', async () => {
   const open = await boot();
   await open.settle();
   const titles = () => [...open.document.querySelectorAll('#list .row h2')].map(h => h.textContent);
-  const select = open.document.querySelector('#scope select');
-  assert.ok(select, 'the order is offered');
-  // linkedom's <select>.value is read-only, as a real one is: the option is what gets chosen.
-  for (const option of select.querySelectorAll('option')) option.selected = option.value === 'title';
-  select.dispatchEvent(new open.window.Event('change'));
+  const button = open.document.getElementById('btn-sort');
+  button.dispatchEvent(new open.window.Event('click'));
+  const rows = [...open.document.querySelectorAll('.menu.float .menu-row')];
+  assert.deepEqual(rows.map(r => r.textContent.trim()),
+    ['최근 추가', '최근 본', '최근 변경', '연도', '별점', '제목'], 'every order is offered');
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  assert.equal(rows[0].getAttribute('aria-pressed'), 'true', 'with a tick against the one it is in');
+  rows[5].dispatchEvent(new open.window.Event('click'));
   assert.deepEqual(titles(), ['Immune sensing in bacteria', 'PET depolymerase landscape', 'Retron Septu defence']);
   assert.equal(open.storage.get('np.sort'), 'title', 'and kept for next time');
+  assert.equal(open.document.querySelectorAll('.menu.float').length, 0, 'the menu goes once it is used');
+  assert.equal(button.getAttribute('aria-expanded'), 'false');
+  // The same button again means putting it away, not opening a second one.
+  button.dispatchEvent(new open.window.Event('click'));
+  assert.equal(open.document.querySelectorAll('.menu.float').length, 1);
+  button.dispatchEvent(new open.window.Event('click'));
+  assert.equal(open.document.querySelectorAll('.menu.float').length, 0);
 });
 
 test('a collection and a tag show as chips that take themselves off again', async () => {
@@ -1193,12 +1203,13 @@ test('the toolbar at the bottom opens the collections and the settings', async (
 test('the list is broken up by headings that follow the order it is in', async () => {
   const open = await boot();
   await open.settle();
-  // linkedom's <select> does not pick an option the way a phone does, so the chosen value is put
-  // on the element the app will read it from.
+  const label = {title: '제목', rating: '별점'};
   const pick = how => {
-    const select = open.document.querySelector('#scope select');
-    Object.defineProperty(select, 'value', {value: how, configurable: true});
-    select.dispatchEvent(new open.window.Event('change'));
+    open.document.getElementById('btn-sort').dispatchEvent(new open.window.Event('click'));
+    const row = [...open.document.querySelectorAll('.menu.float .menu-row')]
+      .find(b => b.textContent.includes(label[how]));
+    assert.ok(row, `${label[how]} is offered as an order`);
+    row.dispatchEvent(new open.window.Event('click'));
   };
   pick('title');
   const headings = [...open.document.querySelectorAll('#list .group')].map(h => h.textContent);
@@ -1260,4 +1271,42 @@ test('the listening settings are one tap away, not in the way of the buttons', a
   assert.equal($id('listen-more').getAttribute('aria-expanded'), 'true');
   click($id('listen-more'));
   assert.equal(extra.hidden, true);
+});
+
+test('a paper is marked without opening it, by holding a finger on its row', async () => {
+  const server = fakeServer();
+  const open = await boot({server});
+  await open.settle();
+  const row = open.document.querySelectorAll('#list .row')[0];      // Retron Septu, 읽는 중
+  const touch = (type, x = 40, y = 200) => {
+    const event = new open.window.Event(type);
+    event.touches = [{clientX: x, clientY: y}];
+    row.dispatchEvent(event);
+  };
+  // A finger that moves is a scroll, not a hold.
+  touch('touchstart');
+  touch('touchmove', 40, 260);
+  await new Promise(r => setTimeout(r, 560));
+  assert.equal(open.document.querySelectorAll('.menu.float').length, 0, 'scrolling never opens it');
+
+  touch('touchstart');
+  await new Promise(r => setTimeout(r, 560));
+  const menu = open.document.querySelector('.menu.float');
+  assert.ok(menu, 'holding it does');
+  const rows = [...menu.querySelectorAll('.menu-row')];
+  assert.deepEqual(rows.map(r => r.textContent.trim()), ['안 읽음', '읽는 중', '완료', '표시 없음']);
+  assert.equal(rows[1].getAttribute('aria-pressed'), 'true', 'with a tick against what it is now');
+  rows[2].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const write = server.sent.find(r => r.method === 'PATCH');
+  assert.ok(write, 'the mark was written');
+  assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/done']);
+  assert.ok(open.document.querySelector('#list .row .flag.done'), 'and the row says so straight away');
+
+  // The tap that ended the hold must not also open the paper.
+  touch('touchstart');
+  await new Promise(r => setTimeout(r, 560));
+  row.dispatchEvent(new open.window.Event('click'));
+  await open.settle(6);
+  assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper did not open behind it');
 });
