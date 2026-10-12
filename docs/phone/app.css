@@ -287,3 +287,17 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .mark-row .swatch { width:4px; align-self:stretch; min-height:18px; border-radius:999px; flex:none; }
 .mark-row .mark-text { flex:1; min-width:0; font-size:14px; line-height:1.5; }
 .mark-row .muted { flex:none; padding-top:2px; }
+/* finding a word in the paper */
+.finder { background:var(--card); border-top:1px solid var(--line); max-height:52vh; display:flex;
+          flex-direction:column; }
+.finder[hidden] { display:none; }
+.finder-row { display:flex; align-items:center; gap:8px; padding:8px var(--pad); }
+.finder-row input { flex:1; min-width:0; height:36px; border-radius:999px; border:0; background:var(--track);
+                    color:var(--ink); padding:0 14px; font:inherit; font-size:15px; outline:none; }
+.finder-list { overflow-y:auto; padding:0 var(--pad) calc(var(--bottom) + 8px); }
+.found { display:flex; gap:8px; width:100%; text-align:start; padding:8px 0; border-bottom:1px solid var(--line); }
+.found:last-child { border-bottom:0; }
+.found:active { background:var(--track); border-radius:8px; }
+.found .page { flex:none; padding-top:2px; font-variant-numeric:tabular-nums; }
+.found-text { flex:1; min-width:0; font-size:13px; line-height:1.5; }
+.found-text b { background:var(--sel); box-shadow:var(--sel-shadow); border-radius:4px; padding:0 2px; }

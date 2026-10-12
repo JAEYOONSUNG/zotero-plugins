@@ -119,12 +119,21 @@
     <button id="paper-back" class="icon-btn" aria-label="뒤로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <span id="paper-title" class="detail-title"></span>
     <button id="paper-count" class="muted small pdf-count" type="button" aria-label="페이지 이동"></button>
+    <button id="paper-find" class="icon-btn" aria-label="본문에서 찾기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
     <button id="paper-night" class="icon-btn" aria-label="야간 모드" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13A8 8 0 0 1 11 4a8 8 0 1 0 9 9z"/></svg></button>
     <button id="paper-share" class="icon-btn" aria-label="다른 앱으로 열기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg></button>
     <button id="paper-out" class="icon-btn" aria-label="축소"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.5-3.5"/></svg></button>
     <button id="paper-in" class="icon-btn" aria-label="확대"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.5-3.5"/></svg></button>
   </header>
   <main id="paper-view" class="pdf" aria-label="본문 PDF"></main>
+  <div id="paper-finder" class="finder" hidden>
+    <div class="finder-row">
+      <input id="paper-q" type="search" placeholder="이 논문에서 찾기" autocomplete="off" enterkeyhint="search">
+      <span id="paper-hits" class="muted small"></span>
+      <button id="paper-find-close" class="secondary small-btn" type="button">닫기</button>
+    </div>
+    <div id="paper-found" class="finder-list"></div>
+  </div>
   <div id="paper-jump" class="jump" hidden>
     <input id="paper-slider" type="range" min="1" max="1" value="1" step="1" aria-label="페이지">
     <span id="paper-jump-at" class="muted small"></span>

@@ -1237,7 +1237,7 @@ function paperTrouble(error) {
   }
 }
 
-const paper = {viewer: null, item: null, following: 0, pages: 0, marks: []};
+const paper = {viewer: null, item: null, following: 0, pages: 0, marks: [], text: []};
 const NIGHT = 'np.pdf.night';
 
 /* While there is something to say, it stands where the page would be. */
@@ -1260,6 +1260,10 @@ async function openPaper(item, {at = 0} = {}) {
   paper.bytes = null;
   if (!paper.item || paper.item.key !== item.key) paper.marks = [];
   $('paper-jump').hidden = true;
+  $('paper-finder').hidden = true;
+  $('paper-q').value = '';
+  $('paper-found').textContent = '';
+  paper.text = [];
   $('paper-view').classList.toggle('night', localStorage.getItem(NIGHT) === 'on');
   $('paper-night').setAttribute('aria-pressed', String(localStorage.getItem(NIGHT) === 'on'));
   paper.item = item;
@@ -1279,6 +1283,10 @@ async function openPaper(item, {at = 0} = {}) {
   try {
     attachment = await attachmentOf(item.key);
     if (!attachment) throw new Error('이 문헌에는 PDF 첨부가 없습니다.');
+    /* The voice and the marks do not wait for the page to be drawn, and they are wanted even when
+       it cannot be: a paper whose file is out of reach can still be listened to and searched. */
+    readAlong(item, attachment).catch(() => {});
+    loadMarks(item).catch(() => {});
     const bytes = await fileBytes(attachment, step => { waiting.textContent = step; });
     waiting.textContent = '여는 중…';
     const pdfjs = await loadPdfjs();
@@ -1298,18 +1306,15 @@ async function openPaper(item, {at = 0} = {}) {
       },
       onZoom: value => { $('paper-out').disabled = value <= 1.001; }
     });
-    if (paper.marks.length) paper.viewer.setMarks(paper.marks);
     await paper.viewer.open(bytes.slice(0), PDF_ASSETS);   // pdf.js takes the buffer over; the kept copy must survive
     paper.bytes = bytes;
+    // The marks go on after the pages exist to put them on; they may have arrived while it loaded.
+    if (paper.marks.length) paper.viewer.setMarks(paper.marks);
     const back = at > 0 ? at : Number(localStorage.getItem(KEYS.page + item.key)) || 0;
     if (back > 1) paper.viewer.goto(back);
   } catch (error) {
     paperTrouble(error);
-    return;
   }
-  // The voice is offered once the page is up, and only if there is text to read.
-  readAlong(item, attachment).catch(() => {});
-  loadMarks(item).catch(() => {});
 }
 
 /* The player on the PDF screen: the same one the transcript uses, so a paper carries on from
@@ -1326,6 +1331,7 @@ async function readAlong(item, attachment) {
 
   listen.paper = readable(text, {title: clean(item.data.title)});
   listen.list = readingUnits(listen.paper, {captions: false});
+  paper.text = readingUnits(listen.paper, {captions: true});   // captions included: a figure is worth finding
   if (!listen.list.length) return;
   const lang = paperLanguage(listen.list);
   listen.voices = engine.voices();
@@ -1340,6 +1346,33 @@ async function readAlong(item, attachment) {
   bar.hidden = false;
   $('paper-view').classList.add('with-player');
   paintReading(listen.player.state());
+}
+
+/* Finding a word in the paper without a text layer: the sentences Zotero indexed each know which
+   page they came from, so a match is a page to turn to. */
+function findInPaper(query) {
+  const list = $('paper-found');
+  list.textContent = '';
+  const needle = String(query || '').trim().toLowerCase();
+  if (needle.length < 2) { $('paper-hits').textContent = paper.text.length ? '' : '본문 색인이 없습니다'; return; }
+  const hits = [];
+  for (const unit of paper.text) {
+    const at = unit.text.toLowerCase().indexOf(needle);
+    if (at < 0) continue;
+    hits.push({page: unit.page, at, text: unit.text});
+    if (hits.length >= 80) break;
+  }
+  $('paper-hits').textContent = hits.length ? `${hits.length}${hits.length >= 80 ? '+' : ''}곳` : '없음';
+  for (const hit of hits) {
+    const row = el('button', {class: 'found', type: 'button'}, list);
+    el('span', {class: 'muted small page', text: `${hit.page}쪽`}, row);
+    const line = el('span', {class: 'found-text'}, row);
+    const from = Math.max(0, hit.at - 40);
+    el('span', {text: (from ? '…' : '') + hit.text.slice(from, hit.at)}, line);
+    el('b', {text: hit.text.slice(hit.at, hit.at + needle.length)}, line);
+    el('span', {text: hit.text.slice(hit.at + needle.length, hit.at + needle.length + 70) + '…'}, line);
+    row.addEventListener('click', () => { if (paper.viewer) paper.viewer.goto(hit.page); });
+  }
 }
 
 /* Silence with no explanation reads as a broken button, so the PDF screen says why there is no
@@ -1705,6 +1738,7 @@ function wire() {
   $('paper-count').addEventListener('click', () => {
     const jump = $('paper-jump');
     jump.hidden = !jump.hidden || !paper.pages;
+    if (!jump.hidden) $('paper-finder').hidden = true;
   });
   $('paper-slider').addEventListener('input', event => {
     const n = Number(event.target.value) || 1;
@@ -1718,6 +1752,19 @@ function wire() {
     $('paper-night').setAttribute('aria-pressed', String(on));
   });
   $('paper-share').addEventListener('click', sharePaper);
+  $('paper-find').addEventListener('click', () => {
+    const box = $('paper-finder');
+    box.hidden = !box.hidden;
+    $('paper-jump').hidden = true;
+    if (!box.hidden) { $('paper-q').focus(); findInPaper($('paper-q').value); }
+  });
+  $('paper-find-close').addEventListener('click', () => { $('paper-finder').hidden = true; });
+  let finding = null;
+  $('paper-q').addEventListener('input', event => {
+    clearTimeout(finding);
+    const value = event.target.value;
+    finding = setTimeout(() => findInPaper(value), 140);
+  });
   $('paper-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
   $('paper-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
   $('paper-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });

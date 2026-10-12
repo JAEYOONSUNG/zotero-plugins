@@ -930,6 +930,22 @@ test('with no Dropbox connected the PDF screen says why and offers to connect it
   assert.match(open.document.getElementById('settings-body').textContent, /Redirect URIs|앱 키/);
 });
 
+test('a paper whose file is out of reach can still be listened to and searched', async () => {
+  const {open} = await openPdf();   // no Dropbox: the PDF cannot be fetched
+  assert.equal(open.document.getElementById('paper-msg').hidden, false, 'it says the PDF did not open');
+  assert.equal(open.document.getElementById('paper-bar').hidden, false, 'but the voice is there anyway');
+
+  open.document.getElementById('paper-find').dispatchEvent(new open.window.Event('click'));
+  const box = open.document.getElementById('paper-q');
+  box.value = 'decomposers';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  const found = [...open.document.querySelectorAll('#paper-found .found')];
+  assert.equal(found.length, 1, 'the word is found in the text Zotero indexed');
+  assert.match(found[0].textContent, /1쪽/, 'and it says which page to turn to');
+  assert.match(open.document.getElementById('paper-hits').textContent, /1곳/);
+});
+
 test('an attachment that is only a web link is not offered as a file', async () => {
   const link = [{key: 'L1', version: 3, data: {key: 'L1', itemType: 'attachment', linkMode: 'linked_url',
     contentType: 'application/pdf', title: 'full text', url: 'https://example.org/a.pdf'}}];
