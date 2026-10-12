@@ -25,22 +25,26 @@ const ITEMS = [
 ];
 const COLLECTIONS = [{key: 'C1', version: 5, data: {key: 'C1', name: 'Phage defence', parentCollection: false}}];
 
-/* The smallest IndexedDB that answers what the app asks of it. */
+/* The smallest IndexedDB that answers what the app asks of it. Each store remembers the keyPath
+   it was made with, because a store keyed by something other than `key` is exactly where a wrong
+   assumption hides: a row put under one name and deleted under another is never deleted. */
 function fakeIndexedDB() {
   const stores = new Map();
+  const paths = new Map();
   const store = name => { if (!stores.has(name)) stores.set(name, new Map()); return stores.get(name); };
+  const idOf = (name, row) => row[paths.get(name) || 'key'];
   const task = result => { const req = {result, onsuccess: null, onerror: null}; queueMicrotask(() => req.onsuccess && req.onsuccess()); return req; };
   return {
     open() {
       const db = {
         objectStoreNames: {contains: name => stores.has(name)},
-        createObjectStore(name) { store(name); return {}; },
+        createObjectStore(name, options = {}) { store(name); paths.set(name, options.keyPath || 'key'); return {}; },
         transaction(name) {
           const tx = {oncomplete: null, onerror: null,
             objectStore: () => ({
               getAll: () => task([...store(name).values()]),
               get: key => task(store(name).get(key)),
-              put: row => { store(name).set(row.key, row); return task(); },
+              put: row => { store(name).set(idOf(name, row), row); return task(); },
               delete: key => { store(name).delete(key); return task(); },
               clear: () => { store(name).clear(); return task(); }
             })};
@@ -112,8 +116,10 @@ References
 2`
 ].join('\f');
 
-function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, fulltext = null} = {}) {
+function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, fulltext = null,
+                     signal = {on: true}, conflicts = 0} = {}) {
   const sent = [];
+  let refused = 0;
   const page = (rows, url) => {
     const limit = Number(url.searchParams.get('limit') || 25), start = Number(url.searchParams.get('start') || 0);
     const slice = rows.slice(start, start + limit);
@@ -122,9 +128,12 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, 
   };
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
+    // No signal: the request dies on the way out, the way a phone's fetch does, and never arrives.
+    if (!signal.on) throw new TypeError('Load failed');
     sent.push({method: init.method || 'GET', path: url.pathname + url.search, headers: init.headers || {}, body: init.body ? JSON.parse(init.body) : null});
     if (!url.pathname.startsWith('/users/16265664')) return new Response('no', {status: 404});
     const rest = url.pathname.replace('/users/16265664', '');
+    if ((init.method || 'GET') === 'PATCH' && refused < conflicts) { refused++; return new Response('', {status: 412}); }
     if (rest === '/collections') return page(collections, url);
     if (rest === '/items') {
       if ((init.method || 'GET') === 'POST') return new Response(JSON.stringify({successful: {0: {key: 'NNN'}}, failed: {}}), {status: 200, headers: {'Last-Modified-Version': '43'}});
@@ -137,7 +146,17 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, 
     }
     if (/^\/items\/\w+\/children$/.test(rest)) return new Response(JSON.stringify(children || []), {status: 200, headers: {'Content-Type': 'application/json'}});
     if (/^\/items\/\w+\/file$/.test(rest)) return new Response(new Uint8Array(900).fill(37), {status: 200, headers: {'Content-Type': 'application/pdf'}});
-    if (/^\/items\/\w+$/.test(rest)) return new Response('', {status: 204, headers: {'Last-Modified-Version': '44'}});
+    if (/^\/items\/\w+$/.test(rest)) {
+      if ((init.method || 'GET') === 'GET') {
+        const key = rest.split('/').pop();
+        const row = items.find(i => i.key === key);
+        // The paper as it is NOW: someone else moved it on, which is why the write was refused.
+        return new Response(JSON.stringify(row ? {...row, version: 99, data: {...row.data, version: 99, tags: [...(row.data.tags || []), {tag: 'added-elsewhere'}]}} : {}),
+          {status: row ? 200 : 404, headers: {'Content-Type': 'application/json'}});
+      }
+      // 204 carries no body, and constructing one with a body throws rather than answering.
+      return new Response(null, {status: 204, headers: {'Last-Modified-Version': '44'}});
+    }
     return new Response('no', {status: 404});
   };
   return {fetchImpl, sent};
@@ -196,7 +215,9 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   const put = (name, value) => Object.defineProperty(globalThis, name, {value, configurable: true, writable: true});
   for (const [name, value] of Object.entries(globals)) put(name, value);
   await import(new URL(`../app.js?boot=${++boots}`, here));
-  const settle = async () => { for (let i = 0; i < 60; i++) await new Promise(r => setTimeout(r, 4)); };
+  /* Turn the crank until everything in flight has landed. Waiting out a busy server takes
+     longer than the usual round, so those tests ask for more rounds. */
+  const settle = async (rounds = 60) => { for (let i = 0; i < rounds; i++) await new Promise(r => realAfter(r, 4)); };
   return {window, document, settle, storage, location, speech};
 }
 
@@ -288,6 +309,7 @@ test('changing the status sends the tags the desktop plugin reads, and keeps the
   assert.ok(write, 'a PATCH was sent');
   assert.equal(write.path, '/users/16265664/items/AAA');
   assert.equal(write.headers['If-Unmodified-Since-Version'], '10', 'the version this phone holds guards the write');
+  assert.equal(server.sent.filter(r => r.method === 'PATCH').length, 1, 'sent once, not retried behind the scenes');
   const tags = write.body.tags.map(t => t.tag);
   assert.deepEqual(tags.filter(t => t.startsWith('/')), ['/done'], 'exactly one status tag');
   assert.ok(tags.includes('phage'), "the paper's own tags are kept");
@@ -466,6 +488,77 @@ test('closing with the button and closing with the gesture end in the same place
   await open.settle();
   assert.equal(open.document.getElementById('detail').hidden, true);
   assert.equal(open.document.getElementById('main').hidden, false);
+});
+
+/* A change made on a train must not vanish, and a paper someone moved on the Mac must not be
+   overwritten with what this phone happened to be holding. */
+async function pressStatus(open, label, rounds = 60) {
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const button = [...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === label);
+  assert.ok(button, `${label} is offered`);
+  button.dispatchEvent(new open.window.Event('click'));
+  await open.settle(rounds);
+}
+
+test('a change made with no signal is shown, kept, and sent when the signal comes back', async () => {
+  const signal = {on: true};
+  const server = fakeServer({signal});
+  const open = await boot({server});
+  await open.settle();
+  signal.on = false;
+  await pressStatus(open, '완료', 400);
+
+  assert.equal(server.sent.filter(r => r.method === 'PATCH').length, 0, 'nothing reached the server');
+  const held = open.document.getElementById('held');
+  assert.equal(held.hidden, false, 'the phone says it is holding something');
+  assert.match(held.textContent, /1건/);
+  const pressed = [...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === '완료');
+  assert.equal(pressed.getAttribute('aria-pressed'), 'true', 'the screen does not lie about what was pressed');
+
+  signal.on = true;
+  open.window.dispatchEvent(new open.window.Event('online'));
+  await open.settle(200);
+  const write = server.sent.find(r => r.method === 'PATCH');
+  assert.ok(write, 'it went out once there was signal');
+  assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/done']);
+  console.log('DEBUG held=', JSON.stringify(open.document.getElementById('held').textContent),
+    'queue=', JSON.stringify([...(open.window.indexedDB._stores.get('queue')?.entries() || [])]),
+    'patches=', server.sent.filter(r => r.method === 'PATCH').map(r => r.path).join(','));
+  assert.equal(open.document.getElementById('held').hidden, true, 'and nothing is left waiting');
+});
+
+test('a paper changed on the Mac is fetched afresh and the change meant here is applied to that', async () => {
+  const server = fakeServer({conflicts: 1});
+  const open = await boot({server});
+  await open.settle();
+  await pressStatus(open, '완료');
+
+  const writes = server.sent.filter(r => r.method === 'PATCH');
+  assert.equal(writes.length, 2, 'refused once, then sent again');
+  assert.equal(writes[0].headers['If-Unmodified-Since-Version'], '10', 'the first guarded the version this phone held');
+  assert.equal(writes[1].headers['If-Unmodified-Since-Version'], '99', 'the second guarded the version the server has');
+  const tags = writes[1].body.tags.map(t => t.tag);
+  assert.deepEqual(tags.filter(t => t.startsWith('/')), ['/done'], 'what was pressed here still happened');
+  assert.ok(tags.includes('added-elsewhere'), "and what was added on the Mac was not wiped out");
+  assert.ok(tags.includes('phage'), 'nor were the paper\u2019s own tags');
+});
+
+test('a busy server is waited out rather than reported as a failure', async () => {
+  let tries = 0;
+  const base = fakeServer();
+  const server = {sent: base.sent, fetchImpl: async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input.url);
+    if (url.pathname.endsWith('/items') && (init.method || 'GET') === 'GET') {
+      tries++;
+      if (tries <= 2) return new Response('', {status: 429, headers: {'Retry-After': '0'}});
+    }
+    return base.fetchImpl(input, init);
+  }};
+  const open = await boot({server});
+  await open.settle();
+  assert.ok(tries >= 3, `the listing was asked for again (${tries})`);
+  assert.equal(open.document.querySelectorAll('#list .row').length, 3, 'and the library arrived');
 });
 
 /* ---- listening ---- */

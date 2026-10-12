@@ -18,6 +18,7 @@ import {createPlayer, speechEngine, pickVoice, paperLanguage, RATES} from './pla
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, SORTS} from './list.js';
+import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
@@ -54,7 +55,7 @@ function toast(text) {
 const DB = (() => {
   let open = null;
   const ready = () => open || (open = new Promise((resolve, reject) => {
-    const req = indexedDB.open('nonmun', 3);
+    const req = indexedDB.open('nonmun', 4);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', {keyPath: 'key'});
@@ -63,6 +64,8 @@ const DB = (() => {
       if (!db.objectStoreNames.contains('text')) db.createObjectStore('text', {keyPath: 'key'});
       // The PDFs themselves, so a paper opened once opens again with no signal.
       if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', {keyPath: 'key'});
+      // Changes made with no signal, waiting for some.
+      if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', {keyPath: 'id'});
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -119,8 +122,12 @@ const account = {
   get ready() { return !!(this.user && this.key); }
 };
 
-async function api(path, {method = 'GET', body = null, headers = {}} = {}) {
-  const response = await fetch(`${API}/users/${account.user}${path}`, {
+/* A read is tried again when the server is busy or the request dies on the way out. A change is
+   tried again only for the answers that mean it was not taken (429, 503); anything that may have
+   been applied is left to the caller, which knows whether sending it twice would be harmless. */
+async function api(path, {method = 'GET', body = null, headers = {}, tries = null} = {}) {
+  const url = `${API}/users/${account.user}${path}`;
+  const send = {
     method,
     headers: {
       'Zotero-API-Version': '3',
@@ -129,11 +136,18 @@ async function api(path, {method = 'GET', body = null, headers = {}} = {}) {
       ...headers
     },
     body: body ? JSON.stringify(body) : undefined
+  };
+  const response = await withRetry(() => fetch(url, send), {
+    tries: tries === null ? (method === 'GET' ? 4 : method === 'POST' ? 1 : 2) : tries,
+    onWait: ms => { if (ms > 1200) $('sync-state').textContent = `서버가 바빠 ${Math.round(ms / 1000)}초 기다립니다…`; }
+  }).catch(error => {
+    if (isOffline(error)) throw Object.assign(new Error('신호가 없습니다.'), {offline: true});
+    throw error;
   });
   if (response.status === 403) throw Object.assign(new Error('키가 거부되었습니다. 읽기·쓰기 권한을 확인하세요.'), {status: 403});
   if (response.status === 412) throw Object.assign(new Error('다른 곳에서 먼저 바뀌었습니다. 새로 고침하고 다시 시도하세요.'), {status: 412});
   if (response.status === 429 || response.status === 503) {
-    throw Object.assign(new Error('Zotero 서버가 잠시 바쁩니다. 조금 뒤에 다시 시도하세요.'), {status: response.status});
+    throw Object.assign(new Error('Zotero 서버가 계속 바쁩니다. 조금 뒤에 다시 시도하세요.'), {status: response.status, busy: true});
   }
   if (!response.ok) throw Object.assign(new Error(`Zotero 서버 오류 (${response.status})`), {status: response.status});
   return response;
@@ -227,6 +241,7 @@ async function sync({full = false} = {}) {
     if (version) account.version = version;
     await loadCache();
     render();
+    await flushWrites();
     $('sync-state').textContent = seen ? `${seen.toLocaleString()}건 갱신` : '최신';
   } catch (error) {
     $('sync-state').textContent = '';
@@ -238,8 +253,27 @@ async function sync({full = false} = {}) {
 }
 
 /* ---------- writing back ---------- */
-/* One PATCH per change, guarded by the version this phone holds. The item in the cache is
-   replaced with what the server confirms, so the next write carries the new version. */
+/* A change is kept as an INTENTION — "mark it done", "give it four" — not as the fields to send.
+   That is what makes the two hard cases work: a paper changed on the Mac since this phone last
+   saw it is fetched afresh and the intention applied to that (rather than overwriting someone
+   else's tags), and a change made with no signal is held until there is some, by which time the
+   paper may have moved on and "mark it done" still means the same thing.
+
+   One PATCH per change, guarded by the version this phone holds, so a paper that moved under us
+   is refused rather than overwritten. */
+
+const INTENT = {
+  status: (item, value) => {
+    const kept = (item.data.tags || []).filter(t => !TAG_STATUS[t.tag]);
+    return {tags: value ? [...kept, {tag: STATUS_TAG[value], type: 1}] : kept};
+  },
+  rating: (item, value) => {
+    const lines = String(item.data.extra || '').split('\n').filter(line => !/^\s*Rating:\s*[0-5]\s*$/i.test(line));
+    if (value > 0) lines.unshift(`Rating: ${value}`);
+    return {extra: lines.join('\n').replace(/^\n+|\n+$/g, '')};
+  }
+};
+
 async function patchItem(item, data) {
   const response = await api(`/items/${item.key}`, {
     method: 'PATCH', body: data,
@@ -254,30 +288,131 @@ async function patchItem(item, data) {
   return next;
 }
 
-async function setStatus(item, status) {
-  const kept = (item.data.tags || []).filter(t => !TAG_STATUS[t.tag]);
-  const tags = status ? [...kept, {tag: STATUS_TAG[status], type: 1}] : kept;
-  return patchItem(item, {tags});
+const liveItem = key => state.items.find(x => x.key === key) || null;
+
+/* The paper as the server has it now, for when this phone's copy was refused as out of date. */
+async function freshItem(key) {
+  const response = await api(`/items/${key}`);
+  const row = await response.json();
+  await DB.put('items', [row]);
+  const at = state.items.findIndex(x => x.key === key);
+  if (at >= 0) state.items[at] = row; else state.items.push(row);
+  return row;
 }
 
-async function setRating(item, rating) {
-  const lines = String(item.data.extra || '').split('\n').filter(line => !/^\s*Rating:\s*[0-5]\s*$/i.test(line));
-  if (rating > 0) lines.unshift(`Rating: ${rating}`);
-  return patchItem(item, {extra: lines.join('\n').replace(/^\n+|\n+$/g, '')});
+/* Applied here first so the screen never lies about what was pressed, then sent. */
+function applyLocally(key, kind, value) {
+  const item = liveItem(key);
+  if (!item || !INTENT[kind]) return;
+  const next = {...item, data: {...item.data, ...INTENT[kind](item, value)}};
+  const at = state.items.findIndex(x => x.key === key);
+  if (at >= 0) state.items[at] = next;
+  DB.put('items', [next]).catch(() => {});
 }
 
-async function addNote(item, text) {
+async function writeIntent(key, kind, value) {
+  const item = liveItem(key);
+  if (!item) throw new Error('이 논문을 찾을 수 없습니다.');
+  try {
+    return await patchItem(item, INTENT[kind](item, value));
+  } catch (error) {
+    if (error.status === 412) {
+      // Changed elsewhere since this phone last looked: take what is there now and mean the same thing.
+      const fresh = await freshItem(key);
+      return await patchItem(fresh, INTENT[kind](fresh, value));
+    }
+    if (error.offline || error.busy) {
+      applyLocally(key, kind, value);
+      await holdWrite({kind, key, value});
+      toast(error.offline ? '신호가 없어 저장해 두었습니다. 연결되면 보냅니다' : '서버가 바빠 저장해 두었습니다');
+      return liveItem(key);
+    }
+    throw error;
+  }
+}
+
+const setStatus = (item, status) => writeIntent(item.key, 'status', status);
+const setRating = (item, rating) => writeIntent(item.key, 'rating', rating);
+
+/* ---------- changes waiting for signal ---------- */
+async function heldWrites() {
+  const rows = await DB.all('queue').catch(() => []);
+  return rows.sort((a, b) => (a.at || 0) - (b.at || 0));
+}
+async function holdWrite(write) {
+  const queue = mergeQueue(await heldWrites(), {...write, at: Date.now()});
+  await DB.clear('queue').catch(() => {});
+  await DB.put('queue', queue.map((row, i) => ({...row, id: `${row.kind}:${row.key}:${row.at}:${i}`}))).catch(() => {});
+  paintHeld(queue.length);
+}
+function paintHeld(n) {
+  const mark = $('held');
+  if (!mark) return;
+  mark.hidden = !n;
+  mark.textContent = n ? `보낼 변경 ${n}건` : '';
+}
+
+/* Sent oldest first; one that cannot go yet stays, and the rest are left for the next try. */
+async function flushWrites({quiet = true} = {}) {
+  // Claimed before the first await, or two of these would read the same queue and send it twice.
+  if (!account.ready || flushWrites.busy) return 0;
+  flushWrites.busy = true;
+  let sent = 0;
+  const queue = await heldWrites().catch(() => []);
+  if (!queue.length) { flushWrites.busy = false; paintHeld(0); return 0; }
+  try {
+    for (const write of queue) {
+      try {
+        if (write.kind === 'note') await postNote(write.key, write.value);
+        else {
+          const item = liveItem(write.key) || await freshItem(write.key);
+          try { await patchItem(item, INTENT[write.kind](item, write.value)); }
+          catch (error) {
+            if (error.status !== 412) throw error;
+            const fresh = await freshItem(write.key);
+            await patchItem(fresh, INTENT[write.kind](fresh, write.value));
+          }
+        }
+        await DB.remove('queue', [write.id]);
+        sent++;
+      } catch (error) {
+        if (error.offline || error.busy) break;   // no signal yet; the rest can wait with it
+        await DB.remove('queue', [write.id]);     // refused for good: keeping it would retry forever
+        toast(`보내지 못한 변경 하나를 버렸습니다 — ${error.message}`);
+      }
+    }
+  } finally {
+    flushWrites.busy = false;
+    const left = await heldWrites();
+    paintHeld(left.length);
+    if (sent) { render({keep: true}); if (!quiet) toast(`${sent}건을 보냈습니다`); }
+  }
+  return sent;
+}
+
+async function postNote(key, text) {
   // Trimmed, but the line breaks are the writer's: clean() would run the paragraphs together.
   const body = String(text ?? '').replace(/[ \t]+/g, ' ').replace(/[ \t]*\n/g, '\n').trim();
   if (!body) return null;
   const html = body.split(/\n{2,}/).map(p => `<p>${p.replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'})[c]).replace(/\n/g, '<br>')}</p>`).join('');
   const response = await api('/items', {
     method: 'POST',
-    body: [{itemType: 'note', parentItem: item.key, note: html, tags: []}]
+    body: [{itemType: 'note', parentItem: key, note: html, tags: []}]
   });
   const result = await response.json();
   if (result.failed && Object.keys(result.failed).length) throw new Error('메모를 저장하지 못했습니다');
   return result;
+}
+
+async function addNote(item, text) {
+  try {
+    return await postNote(item.key, text);
+  } catch (error) {
+    if (!error.offline && !error.busy) throw error;
+    await holdWrite({kind: 'note', key: item.key, value: text});
+    toast('신호가 없어 메모를 저장해 두었습니다. 연결되면 보냅니다');
+    return null;
+  }
 }
 
 /* ---------- the screens on top of the list ---------- */
@@ -558,7 +693,11 @@ async function openDetail(key) {
     const text = noteBox.value;
     if (!clean(text)) return;
     save.disabled = true;
-    try { await addNote(item, text); noteBox.value = ''; toast('메모를 저장했습니다'); loadChildren(); }
+    try {
+      const saved = await addNote(item, text);
+      noteBox.value = '';
+      if (saved) { toast('메모를 저장했습니다'); loadChildren(); }
+    }
     catch (error) { toast(error.message); }
     finally { save.disabled = false; }
   });
@@ -1216,6 +1355,9 @@ function wire() {
   $('btn-settings-main').addEventListener('click', () => openSettings());
   $('settings-back').addEventListener('click', () => closeSheet('settings'));
   addEventListener('popstate', onPopState);
+  // Whatever was changed with no signal goes out the moment there is some.
+  addEventListener('online', () => flushWrites({quiet: false}));
+  $('held').addEventListener('click', () => flushWrites({quiet: false}));
   // The PDF opens on top of the transcript, so going back lands on the transcript again.
   $('listen-pdf').addEventListener('click', () => {
     if (!listen.item) return;
@@ -1278,6 +1420,7 @@ async function start() {
   buildFilters();
   await loadCache();
   render();
+  heldWrites().then(queue => paintHeld(queue.length)).catch(() => {});
   sync();
   if (paired) toast('키가 함께 들어왔습니다');
   else offerPairing();
