@@ -250,3 +250,19 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
 .seek { width:100%; margin:2px 0 0; accent-color:var(--ink); height:18px; }
 .player-row.wrap + .player-row.wrap { margin-top:2px; }
 .pick select:disabled { opacity:.45; }
+
+/* ---------- the list, in use ---------- */
+.q-clear { width:22px; height:22px; border-radius:999px; background:var(--track-hover); color:var(--muted);
+           font-size:15px; line-height:1; flex:none; display:none; }
+.search:focus-within .q-clear, .search input:not(:placeholder-shown) ~ .q-clear { display:block; }
+.heard { position:relative; display:inline-block; width:44px; height:3px; border-radius:999px;
+         background:var(--track-hover); overflow:hidden; vertical-align:middle; }
+.heard i { position:absolute; inset:0 auto 0 0; background:var(--ink); border-radius:999px; }
+.pull { height:var(--pull,0); flex:none; overflow:hidden; display:grid; place-items:center;
+        pointer-events:none; opacity:0; transition:opacity 140ms; }
+.pull.on { opacity:1; }
+.pull::after { content:'당겨서 새로 고침'; font-size:11px; color:var(--muted); }
+.pull.ready::after { content:'놓으면 새로 고침'; color:var(--ink); font-weight:650; }
+.note.clipped { display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
+.link-btn { align-self:flex-start; padding:4px 0; font-size:13px; font-weight:650; color:var(--link); }
+a.out { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }

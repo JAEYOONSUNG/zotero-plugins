@@ -22,7 +22,8 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
-              rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.'};
+              rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
+              pct: 'np.pct.'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -415,6 +416,35 @@ async function addNote(item, text) {
   }
 }
 
+/* Dragging a list that is already at the top, far enough, asks for the library again — the
+   gesture every other list on this phone has. */
+function pullToRefresh(list, run) {
+  let from = null, pulled = 0;
+  const mark = el('div', {class: 'pull', 'aria-hidden': 'true'});
+  list.parentNode.insertBefore(mark, list);   // above the list, so it pushes rather than covers
+  const show = distance => {
+    pulled = distance;
+    mark.style.setProperty('--pull', `${Math.min(70, distance)}px`);
+    mark.classList.toggle('ready', distance > 62);
+    mark.classList.toggle('on', distance > 4);
+  };
+  list.addEventListener('touchstart', event => {
+    from = list.scrollTop <= 0 && event.touches.length === 1 ? event.touches[0].clientY : null;
+    show(0);
+  }, {passive: true});
+  list.addEventListener('touchmove', event => {
+    if (from === null || list.scrollTop > 0) { show(0); return; }
+    const moved = event.touches[0].clientY - from;
+    if (moved > 0) show(moved * 0.5);
+  }, {passive: true});
+  list.addEventListener('touchend', () => {
+    const go = pulled > 62;
+    from = null;
+    show(0);
+    if (go) run();
+  }, {passive: true});
+}
+
 /* ---------- the screens on top of the list ---------- */
 /* Each sheet puts an entry in the history, so the phone's own back — the swipe from the edge in
    the home-screen app, the back button in Safari — closes it instead of leaving the app. A sheet
@@ -534,6 +564,13 @@ function drawRow(item, list) {
   if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
   const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
   if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
+  // How far the reading got, for the papers that were started and not finished.
+  const heard = Number(localStorage.getItem(KEYS.pct + item.key)) || 0;
+  if (heard > 1 && heard < 99) {
+    const bar = el('span', {class: 'heard', 'aria-label': `${heard}% 들음`}, foot);
+    el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
+    el('span', {class: 'muted small', text: `${heard}%`}, foot);
+  }
   row.addEventListener('click', () => { state.at = $('list').scrollTop; openDetail(item.key); });
   return row;
 }
@@ -611,14 +648,29 @@ async function openDetail(key) {
 
   const head = el('section', {class: 'card'}, body);
   el('h3', {text: clean(item.data.title) || '(제목 없음)'}, head);
+  const inside = (item.data.collections || [])
+    .map(c => state.collections.find(x => x.key === c)?.data?.name)
+    .filter(Boolean).join(' · ');
   for (const [label, value] of [
     ['저자', (item.data.creators || []).filter(c => c.creatorType === 'author').map(c => clean(`${c.lastName || c.name || ''}${c.firstName ? `, ${c.firstName}` : ''}`)).join(' · ')],
-    ['연도', yearOf(item)], ['저널', venueOf(item)], ['DOI', clean(item.data.DOI)]
+    ['연도', yearOf(item)], ['저널', venueOf(item)], ['DOI', clean(item.data.DOI)], ['컬렉션', inside]
   ]) {
     if (!value) continue;
     const row = el('div', {class: 'kv'}, head);
     el('b', {text: label}, row);
     el('span', {text: value}, row);
+  }
+  // Out to the publisher, for the things only the real page has.
+  const doi = clean(item.data.DOI), link = clean(item.data.url);
+  if (doi || link) {
+    const out = el('div', {class: 'actions'}, head);
+    const href = doi ? `https://doi.org/${encodeURI(doi)}` : link;
+    el('a', {class: 'secondary out', href, target: '_blank', rel: 'noopener', text: doi ? 'DOI 열기' : '원문 열기'}, out);
+    const copy = el('button', {class: 'secondary', type: 'button', text: '링크 복사'}, out);
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(href); toast('복사했습니다'); }
+      catch (_) { toast('복사하지 못했습니다'); }
+    });
   }
 
   // Status: the same three tags the desktop plugin reads.
@@ -667,10 +719,19 @@ async function openDetail(key) {
   el('span', {text: 'PDF 보기'}, paperButton);
   paperButton.addEventListener('click', () => openPaper(state.items.find(x => x.key === key) || item));
 
-  if (clean(item.data.abstractNote)) {
+  const abstract = clean(item.data.abstractNote);
+  if (abstract) {
     const card = el('section', {class: 'card'}, body);
     el('h3', {text: '초록'}, card);
-    el('p', {class: 'note', text: clean(item.data.abstractNote)}, card);
+    const text = el('p', {class: 'note clipped', text: abstract}, card);
+    // Long abstracts are folded away, so the things below them are reachable without a long scroll.
+    if (abstract.length > 320) {
+      const more = el('button', {class: 'link-btn', type: 'button', text: '더 보기'}, card);
+      more.addEventListener('click', () => {
+        const open = text.classList.toggle('clipped');
+        more.textContent = open ? '더 보기' : '접기';
+      });
+    } else text.classList.remove('clipped');
   }
 
   const tags = (item.data.tags || []).filter(t => !TAG_STATUS[t.tag]);
@@ -821,7 +882,10 @@ function paintReading(state) {
   const line = state.status === 'error'
     ? '이 폰의 목소리가 멈췄습니다. 다시 눌러 주세요.'
     : `${state.index + 1} / ${state.total}${unit && unit.page ? ` · ${unit.page}쪽` : ''} · 남은 시간 약 ${Math.max(1, Math.round(left / 60))}분`;
-  if (listen.item) localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
+  if (listen.item) {
+    localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
+    if (state.total > 1) localStorage.setItem(KEYS.pct + listen.item.key, String(Math.round(state.index / (state.total - 1) * 100)));
+  }
   holdScreen(playing);
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
@@ -1458,6 +1522,16 @@ function wire() {
   $('btn-settings-main').addEventListener('click', () => openSettings());
   $('settings-back').addEventListener('click', () => closeSheet('settings'));
   addEventListener('popstate', onPopState);
+  pullToRefresh($('list'), () => sync());
+  // Scrolling the library puts the keyboard away, as every other list on the phone does.
+  $('list').addEventListener('touchmove', () => {
+    const box = $('q');
+    if (box && document.activeElement === box) box.blur();
+  }, {passive: true});
+  $('q-clear').addEventListener('click', () => {
+    $('q').value = ''; state.q = ''; state.shown = 0;
+    $('list').scrollTop = 0; render(); $('q').focus();
+  });
   // Whatever was changed with no signal goes out the moment there is some.
   addEventListener('online', () => flushWrites({quiet: false}));
   $('held').addEventListener('click', () => flushWrites({quiet: false}));

@@ -14,7 +14,7 @@ const read = name => fs.readFileSync(new URL(`../${name}`, here), 'utf8');
 const ITEMS = [
   {key: 'AAA', version: 10, data: {key: 'AAA', version: 10, itemType: 'journalArticle', title: 'Retron Septu defence', date: '2025-01-03',
     creators: [{creatorType: 'author', lastName: 'Seo', firstName: 'H'}, {creatorType: 'author', lastName: 'Kim', firstName: 'K'}],
-    publicationTitle: 'Science', tags: [{tag: '/reading', type: 1}, {tag: 'phage'}], collections: ['C1'], extra: 'Citations: 89', dateModified: '2026-10-10T00:00:00Z'}},
+    publicationTitle: 'Science', DOI: '10.1126/science.abc1234', tags: [{tag: '/reading', type: 1}, {tag: 'phage'}], collections: ['C1'], extra: 'Citations: 89', dateModified: '2026-10-10T00:00:00Z'}},
   {key: 'BBB', version: 11, data: {key: 'BBB', version: 11, itemType: 'journalArticle', title: 'PET depolymerase landscape', date: '2026',
     creators: [{creatorType: 'author', lastName: 'Hong', firstName: 'H'}], publicationTitle: 'Nature', tags: [{tag: '/unread', type: 1}],
     collections: [], extra: 'Rating: 4\nCitations: 7', dateModified: '2026-10-09T00:00:00Z'}},
@@ -573,6 +573,22 @@ test('a busy server is waited out rather than reported as a failure', async () =
   await open.settle();
   assert.ok(tries >= 3, `the listing was asked for again (${tries})`);
   assert.equal(open.document.querySelectorAll('#list .row').length, 3, 'and the library arrived');
+});
+
+test('a paper shows where it sits, where to read it, and how far it was listened to', async () => {
+  const stored = {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.pct.AAA': '42'};
+  const open = await boot({stored});
+  await open.settle();
+  const row = [...open.document.querySelectorAll('#list .row')].find(r => /Retron/.test(r.textContent));
+  assert.match(row.textContent, /42%/, 'how far the reading got is on the row');
+
+  row.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const detail = open.document.getElementById('detail');
+  assert.match(detail.textContent, /Phage defence/, 'the collection it is in');
+  const out = detail.querySelector('a.out');
+  assert.ok(out, 'a way out to the publisher');
+  assert.equal(out.getAttribute('rel'), 'noopener', 'and it is opened safely');
 });
 
 /* ---- listening ---- */
