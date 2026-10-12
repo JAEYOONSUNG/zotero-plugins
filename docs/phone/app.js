@@ -213,6 +213,7 @@ async function sync({full = false} = {}) {
   state.busy = true;
   const since = full ? 0 : account.version;
   $('sync-state').textContent = since ? '확인 중…' : '처음 받는 중…';
+  if (!state.items.length) render();
   try {
     if (full) { await DB.clear('items'); await DB.clear('collections'); account.version = 0; }
 
@@ -246,7 +247,8 @@ async function sync({full = false} = {}) {
     $('sync-state').textContent = seen ? `${seen.toLocaleString()}건 갱신` : '최신';
   } catch (error) {
     $('sync-state').textContent = '';
-    toast(error.message || '가져오지 못했습니다');
+    if (error.status === 403) showKeyTrouble();
+    else toast(error.message || '가져오지 못했습니다');
   } finally {
     state.busy = false;
     setTimeout(() => { if (!state.busy) $('sync-state').textContent = ''; }, 4000);
@@ -414,6 +416,19 @@ async function addNote(item, text) {
     toast('신호가 없어 메모를 저장해 두었습니다. 연결되면 보냅니다');
     return null;
   }
+}
+
+/* A key the server refuses is not a passing failure: nothing will work until it is replaced,
+   so it is said once, where it can be put right. */
+function showKeyTrouble() {
+  const card = $('pair');
+  if (!card) return;
+  card.hidden = false;
+  $('pair-text').innerHTML = 'Zotero가 이 키를 거부했습니다. <b>Allow library access</b>와 <b>Allow write access</b>가 켜져 있는지 확인하고 새 키를 넣어 주세요.';
+  $('pair-go').textContent = '설정 열기';
+  $('pair-go').hidden = false;
+  $('pair-go').onclick = () => { card.hidden = true; openSettings(); };
+  $('pair-hide').textContent = '닫기';
 }
 
 /* Dragging a list that is already at the top, far enough, asks for the library again — the
@@ -600,9 +615,19 @@ function render({keep = false} = {}) {
   paintScope(rows.length);
 
   if (!rows.length) {
-    el('p', {class: 'empty', text: state.items.length
-      ? '해당하는 논문이 없습니다. 검색어나 필터를 지워 보세요.'
-      : '아직 받은 논문이 없습니다. 오른쪽 위 새로 고침을 누르세요.'}, list);
+    if (!state.items.length && state.busy) {
+      // The first sync of a few thousand papers takes a moment; an empty screen would look broken.
+      for (let i = 0; i < 6; i++) {
+        const ghost = el('div', {class: 'row ghost', 'aria-hidden': 'true'}, list);
+        el('span', {class: 'line wide'}, ghost);
+        el('span', {class: 'line'}, ghost);
+      }
+      el('p', {class: 'empty', text: '라이브러리를 처음 받는 중입니다…'}, list);
+    } else {
+      el('p', {class: 'empty', text: state.items.length
+        ? '해당하는 논문이 없습니다. 검색어나 필터를 지워 보세요.'
+        : '아직 받은 논문이 없습니다. 오른쪽 위 새로 고침을 누르세요.'}, list);
+    }
     state.shown = 0;
     return;
   }
@@ -829,7 +854,9 @@ function setSleep(choice) {
   if (choice === 'section') {
     const unit = listen.player ? listen.player.state().unit : null;
     listen.sleepSection = (unit && unit.section) || '';
-    toast(listen.sleepSection ? `${listen.sleepSection}이 끝나면 멈춥니다` : '이 구간이 끝나면 멈춥니다');
+    // Without named parts there is nothing to stop at, and saying so beats stopping at nothing.
+    if (!listen.sleepSection) { toast('이 논문에는 구간 제목이 없습니다'); return; }
+    toast(`${listen.sleepSection}이(가) 끝나면 멈춥니다`);
     return;
   }
   const minutes = Number(choice) || 0;
@@ -854,6 +881,7 @@ async function holdScreen(on) {
 
 function leftListen() {
   if (listen.player && $('paper').hidden) listen.player.stop();
+  if ($('paper').hidden) setSleep('0');   // a timer belongs to the paper it was set on
   holdScreen(false);
 }
 
@@ -918,17 +946,21 @@ function paintListen(state) {
   }
 }
 
+/* A long paper is a couple of thousand sentences. They are built in one fragment and share a
+   single listener, rather than carrying a closure each. */
 function renderTranscript(list) {
   const body = $('listen-body');
   body.textContent = '';
   listen.nodes = [];
+  const batch = document.createDocumentFragment();
   let section = null;
   list.forEach((unit, index) => {
-    if (unit.section && unit.section !== section) { section = unit.section; el('p', {class: 'sec', text: section}, body); }
-    const node = el('button', {type: 'button', class: `sent${unit.kind === 'caption' ? ' caption' : ''}`, text: unit.text}, body);
-    node.addEventListener('click', () => { listen.player.play(index); });
+    if (unit.section && unit.section !== section) { section = unit.section; el('p', {class: 'sec', text: section}, batch); }
+    const node = el('button', {type: 'button', class: `sent${unit.kind === 'caption' ? ' caption' : ''}`,
+                               'data-at': String(index), text: unit.text}, batch);
     listen.nodes[index] = node;
   });
+  body.appendChild(batch);
 }
 
 function fillVoiceMenu(lang) {
@@ -1494,6 +1526,11 @@ function wire() {
   $('btn-collections').addEventListener('click', openCollections);
   $('back').addEventListener('click', () => closeSheet('detail'));
   $('listen-back').addEventListener('click', () => closeSheet('listen'));
+  $('listen-body').addEventListener('click', event => {
+    const node = event.target && event.target.closest && event.target.closest('.sent');
+    if (!node || !listen.player) return;
+    listen.player.play(Number(node.getAttribute('data-at')) || 0);
+  });
   $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
   $('listen-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
   $('listen-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });

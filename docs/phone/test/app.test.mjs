@@ -731,6 +731,35 @@ test('the sleep timer stops the reading, and says so', async () => {
     'it is no longer playing');
 });
 
+test('tapping a sentence reads from there', async () => {
+  const {open} = await openListening();
+  const sentences = [...open.document.querySelectorAll('#listen .sent')];
+  assert.ok(sentences.length > 1);
+  const third = sentences[Math.min(2, sentences.length - 1)];
+  third.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  open.speech.start();
+  assert.equal(open.speech.spoken[0], third.textContent.replace(/^/, ''), 'it started at the sentence tapped');
+  assert.equal(open.document.querySelector('#listen .sent[aria-current="true"]'), third);
+});
+
+test('a key Zotero refuses is said once, where it can be put right', async () => {
+  const base = fakeServer();
+  const server = {sent: base.sent, fetchImpl: async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input.url);
+    if (url.pathname.endsWith('/items') && (init.method || 'GET') === 'GET') return new Response('', {status: 403});
+    return base.fetchImpl(input, init);
+  }};
+  const open = await boot({server});
+  await open.settle();
+  const card = open.document.getElementById('pair');
+  assert.equal(card.hidden, false, 'the trouble is on screen');
+  assert.match(card.textContent, /거부|Allow library access/);
+  open.document.getElementById('pair-go').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('settings').hidden, false, 'and it leads to where the key goes');
+});
+
 /* ---- the PDF itself ---- */
 /* Almost every file in this library is a linked file: Zotero knows only its path, and the bytes
    sit in a Dropbox folder. These check that the phone asks the right service for them. pdf.js is

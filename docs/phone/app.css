@@ -266,3 +266,10 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
 .note.clipped { display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
 .link-btn { align-self:flex-start; padding:4px 0; font-size:13px; font-weight:650; color:var(--link); }
 a.out { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
+/* while the first few thousand are arriving */
+.row.ghost { pointer-events:none; }
+.row.ghost .line { display:block; height:12px; border-radius:6px; background:var(--track);
+                   margin-bottom:8px; width:54%; animation:breathe 1.6s ease-in-out infinite; }
+.row.ghost .line.wide { width:88%; height:15px; }
+@keyframes breathe { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
+@media (prefers-reduced-motion:reduce) { .row.ghost .line { animation:none } }
