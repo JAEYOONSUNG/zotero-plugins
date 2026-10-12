@@ -17,7 +17,7 @@ import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
-import {filterRows, sortRows, usefulTags, familyOf, SORTS} from './list.js';
+import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
@@ -451,6 +451,26 @@ function showKeyTrouble() {
   });
 }
 
+/* The big title gives way to the small one as the library is scrolled, and the bar grows its
+   hairline only once there is something underneath it — what every list on this phone does. The
+   two thresholds are apart so a title cannot flicker on a finger held still. */
+const followed = new WeakMap();
+export function followScroll(list, top) {
+  if (!list || !top) return null;
+  if (followed.has(list)) { const paint = followed.get(list); paint(); return paint; }
+  let small = false;
+  const paint = () => {
+    const at = list.scrollTop || 0;
+    if (at > 14) small = true; else if (at < 4) small = false;
+    top.classList.toggle('shrunk', small);
+    top.classList.toggle('lifted', at > 1);
+  };
+  list.addEventListener('scroll', paint, {passive: true});
+  followed.set(list, paint);
+  paint();
+  return paint;
+}
+
 /* Dragging a list that is already at the top, far enough, asks for the library again — the
    gesture every other list on this phone has. */
 function pullToRefresh(list, run) {
@@ -566,12 +586,14 @@ function buildFilters() {
 }
 
 /* ---------- the list ---------- */
+const seenAt = key => Number(localStorage.getItem(KEYS.seen + key)) || 0;
 const visible = () => sortRows(filterRows(state.items, {
   collections: familyOf(state.collections, state.collection),
   status: state.status, tag: state.tag, q: state.q, statusOf
-}), state.sort, {seenAt: key => Number(localStorage.getItem(KEYS.seen + key)) || 0});
+}), state.sort, {seenAt});
 
 function stars(n) { return n ? '★'.repeat(n) + '☆'.repeat(5 - n) : ''; }
+const STATUS_WORD = {unread: '안 읽음', reading: '읽는 중', done: '완료'};
 
 /* What is being looked at, and the order it is in — always on screen, so a library that seems
    to be missing papers says why. */
@@ -611,25 +633,27 @@ function paintScope(total) {
    what is already there. */
 function drawRow(item, list) {
   const row = el('button', {class: 'row', type: 'button'}, list);
+  // The status is a mark in the margin beside the title: a labelled chip for it cost every row a
+  // line of its own, and most of a library has no status at all.
+  const status = statusOf(item);
+  if (status) el('span', {class: `flag ${status}`, 'aria-label': STATUS_WORD[status]}, row);
   el('h2', {text: clean(item.data.title) || '(제목 없음)'}, row);
   el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, row);
-  const foot = el('div', {class: 'foot'}, row);
-  const status = statusOf(item);
-  if (status) {
-    const dot = el('span', {class: `dot ${status}`}, foot);
-    el('i', {}, dot);
-    el('span', {text: {unread: '안 읽음', reading: '읽는 중', done: '완료'}[status]}, dot);
-  }
   const rating = ratingOf(item);
-  if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
   const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
-  if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
   // How far the reading got, for the papers that were started and not finished.
   const heard = Number(localStorage.getItem(KEYS.pct + item.key)) || 0;
-  if (heard > 1 && heard < 99) {
-    const bar = el('span', {class: 'heard', 'aria-label': `${heard}% 들음`}, foot);
-    el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
-    el('span', {class: 'muted small', text: `${heard}%`}, foot);
+  const part = heard > 1 && heard < 99;
+  // The third line is only drawn for a paper that has something to say on it.
+  if (rating || tag || part) {
+    const foot = el('div', {class: 'foot'}, row);
+    if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
+    if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
+    if (part) {
+      const bar = el('span', {class: 'heard', 'aria-label': `${heard}% 들음`}, foot);
+      el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
+      el('span', {class: 'muted', text: `${heard}%`}, foot);
+    }
   }
   row.addEventListener('click', () => {
     // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
@@ -649,7 +673,15 @@ function drawMore() {
   const from = state.shown, to = Math.min(rows.length, from + PAGE);
   if (from >= to) return;
   const batch = document.createDocumentFragment();
-  for (let i = from; i < to; i++) drawRow(rows[i], batch);
+  for (let i = from; i < to; i++) {
+    // The heading is drawn where the list changes, whichever order it is in.
+    const under = groupOf(rows[i], state.sort, {seenAt});
+    if (under && under !== render.group) {
+      render.group = under;
+      el('h3', {class: 'group', text: under}, batch);
+    }
+    drawRow(rows[i], batch);
+  }
   list.insertBefore(batch, more || null);
   state.shown = to;
   if (more && state.shown >= rows.length) { more.remove(); more = null; }
@@ -659,6 +691,7 @@ function render({keep = false} = {}) {
   const list = $('list');
   const rows = visible();
   render.rows = rows;
+  render.group = '';
   list.textContent = '';
   more = null;
   $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
@@ -743,6 +776,8 @@ async function openDetail(key) {
   const body = $('detail-body');
   body.textContent = '';
   openSheet('detail', leftDetail);
+  body.scrollTop = 0;
+  followScroll(body, $('detail').querySelector('.top'));
 
   const head = el('section', {class: 'card'}, body);
   el('h3', {text: clean(item.data.title) || '(제목 없음)'}, head);
@@ -775,6 +810,17 @@ async function openDetail(key) {
     try { await navigator.clipboard.writeText(citationOf(item)); toast('인용을 복사했습니다'); }
     catch (_) { toast('복사하지 못했습니다'); }
   });
+
+  // Listening to the paper: the text Zotero indexed, body only.
+  const listenCard = el('section', {class: 'card'}, body);
+  const listenButton = el('button', {type: 'button', class: 'listen-start'}, listenCard);
+  el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, listenButton);
+  el('span', {text: Number(localStorage.getItem(KEYS.at + key)) > 0 ? '본문 이어 듣기' : '본문 듣기'}, listenButton);
+  listenButton.addEventListener('click', () => openListen(state.items.find(x => x.key === key) || item));
+  const paperButton = el('button', {type: 'button', class: 'paper-start', style: 'margin-top:8px'}, listenCard);
+  el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h4"/></svg>'}, paperButton);
+  el('span', {text: 'PDF 보기'}, paperButton);
+  paperButton.addEventListener('click', () => openPaper(state.items.find(x => x.key === key) || item));
 
   // Status: the same three tags the desktop plugin reads.
   const statusCard = el('section', {class: 'card'}, body);
@@ -810,17 +856,6 @@ async function openDetail(key) {
     });
   }
   paint(ratingOf(item));
-
-  // Listening to the paper: the text Zotero indexed, body only.
-  const listenCard = el('section', {class: 'card'}, body);
-  const listenButton = el('button', {type: 'button', class: 'listen-start'}, listenCard);
-  el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, listenButton);
-  el('span', {text: Number(localStorage.getItem(KEYS.at + key)) > 0 ? '본문 이어 듣기' : '본문 듣기'}, listenButton);
-  listenButton.addEventListener('click', () => openListen(state.items.find(x => x.key === key) || item));
-  const paperButton = el('button', {type: 'button', class: 'paper-start', style: 'margin-top:8px'}, listenCard);
-  el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h4"/></svg>'}, paperButton);
-  el('span', {text: 'PDF 보기'}, paperButton);
-  paperButton.addEventListener('click', () => openPaper(state.items.find(x => x.key === key) || item));
 
   const abstract = clean(item.data.abstractNote);
   if (abstract) {
@@ -1640,16 +1675,27 @@ function openCollections() {
     counts.set(c.key, seen.size);
   }
 
-  const all = el('button', {class: 'row', type: 'button'}, body);
-  el('h2', {text: '전체'}, all);
-  el('p', {class: 'meta', text: `${state.items.length.toLocaleString()}편`}, all);
+  /* One row the way this phone draws a row that leads somewhere: the name, how many are in it,
+     and the mark that says it opens. */
+  const CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  const navRow = (name, n, depth = 0) => {
+    const row = el('button', {class: 'row nav', type: 'button',
+      style: depth ? `padding-inline-start:${18 + depth * 16}px` : null}, body);
+    el('h2', {text: name}, row);
+    el('span', {class: 'n', text: `${n.toLocaleString()}편`}, row);
+    el('span', {class: 'chev', html: CHEVRON}, row);
+    return row;
+  };
+
+  el('h3', {class: 'group', text: '라이브러리'}, body);
+  const all = navRow('전체', state.items.length);
   all.addEventListener('click', () => { state.collection = ''; closeSheet('collections'); render(); });
 
   // The tags actually in use, so a subject can be picked the way a collection can.
   const tags = usefulTags(state.items);
   if (tags.length) {
+    el('h3', {class: 'group', text: '태그'}, body);
     const card = el('section', {class: 'card'}, body);
-    el('h3', {text: '태그'}, card);
     const wrap = el('div', {class: 'tags'}, card);
     for (const {tag, n} of tags) {
       const chip = el('button', {class: `chip pick-chip${state.tag === tag ? ' on' : ''}`, type: 'button'}, wrap);
@@ -1663,11 +1709,10 @@ function openCollections() {
     }
   }
 
+  if (state.collections.length) el('h3', {class: 'group', text: '컬렉션'}, body);
   const draw = (parent, depth) => {
     for (const c of (byParent.get(parent) || []).sort((a, b) => a.data.name.localeCompare(b.data.name, 'ko'))) {
-      const row = el('button', {class: 'row', type: 'button', style: depth ? `margin-inline-start:${depth * 14}px` : null}, body);
-      el('h2', {text: clean(c.data.name)}, row);
-      el('p', {class: 'meta', text: `${(counts.get(c.key) || 0).toLocaleString()}편`}, row);
+      const row = navRow(clean(c.data.name), counts.get(c.key) || 0, depth);
       row.addEventListener('click', () => { state.collection = c.key; closeSheet('collections'); render(); });
       draw(c.key, depth + 1);
     }
@@ -1779,6 +1824,7 @@ function wire() {
     if (event.key === 'Escape' && sheets.length) closeSheet(sheets[sheets.length - 1].id);
   });
   pullToRefresh($('list'), () => sync());
+  followScroll($('list'), $('main').querySelector('.top'));
   // Scrolling the library puts the keyboard away, as every other list on the phone does.
   $('list').addEventListener('touchmove', () => {
     const box = $('q');

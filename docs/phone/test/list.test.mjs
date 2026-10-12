@@ -1,7 +1,8 @@
 /* Finding a paper in a library of a few thousand, and putting them in the order asked for. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fold, haystack, words, matches, sortRows, filterRows, usefulTags, familyOf, SORTS} from '../list.js';
+import {fold, haystack, words, matches, sortRows, filterRows, usefulTags, familyOf, SORTS,
+        groupOf, dayName, initialOf} from '../list.js';
 
 const paper = (over = {}) => ({key: over.key || 'K', version: 1, data: {
   itemType: 'journalArticle', title: 'A paper', date: '2024', dateAdded: '2024-01-01T00:00:00Z',
@@ -117,4 +118,47 @@ test('the abstract is searched too, which is where the words usually are', () =>
   const one = paper({key: 'Z', title: 'A short title', abstractNote: 'We show that the thermophile degrades lignin.'});
   assert.ok(matches(one, words('thermophile lignin')));
   assert.ok(!matches(one, words('mesophile')));
+});
+
+/* ---------- the headings a long list is walked by ---------- */
+/* Local time throughout, because a phone in Seoul decides what "yesterday" means by the clock on
+   the phone, not by UTC. */
+const NOW = Date.parse('2026-10-13T09:00:00');
+
+test('a date gets the name a reader would give it', () => {
+  const name = local => dayName(Date.parse(local), NOW);
+  assert.equal(name('2026-10-13T01:00:00'), '오늘');
+  assert.equal(name('2026-10-12T23:00:00'), '어제');
+  assert.equal(name('2026-10-09T10:00:00'), '이번 주');
+  assert.equal(name('2026-10-02T10:00:00'), '이번 달');
+  assert.equal(name('2026-07-02T10:00:00'), '7월', 'this year needs no year on it');
+  assert.equal(name('2024-11-02T10:00:00'), '2024년 11월');
+  assert.equal(dayName(0, NOW), '', 'nothing has no name');
+  assert.equal(dayName(Date.parse('nonsense'), NOW), '');
+});
+
+test('the heading over a paper follows the order the list is in', () => {
+  const one = paper({title: 'Landscape of PET depolymerases', date: '2026', dateAdded: '2026-03-15T10:00:00',
+    extra: 'Rating: 5'});
+  assert.equal(groupOf(one, 'added', {now: NOW}), '3월');
+  assert.equal(groupOf(one, 'year', {now: NOW}), '2026년');
+  assert.equal(groupOf(one, 'rating', {now: NOW}), '★★★★★');
+  assert.equal(groupOf(paper({extra: ''}), 'rating', {now: NOW}), '별점 없음');
+  assert.equal(groupOf(one, 'title', {now: NOW}), 'L');
+  assert.equal(groupOf(paper({title: '세균의 방어 기작'}), 'title', {now: NOW}), 'ㅅ', 'Hangul is filed under its leading consonant');
+  assert.equal(groupOf(one, 'seen', {now: NOW}), '아직 안 봄');
+  assert.equal(groupOf(one, 'seen', {now: NOW, seenAt: () => NOW - 3600e3}), '오늘');
+  assert.equal(groupOf(paper({date: ''}), 'year', {now: NOW}), '연도 모름');
+  assert.equal(groupOf(paper({dateAdded: ''}), 'added', {now: NOW}), '날짜 모름');
+  assert.equal(groupOf(paper({dateModified: '2026-10-13T08:00:00'}), 'modified', {now: NOW}), '오늘');
+});
+
+test('a title is filed under a letter however it is written', () => {
+  assert.equal(initialOf('Übermensch'), 'U');
+  assert.equal(initialOf('  spaced'), 'S');
+  assert.equal(initialOf('3D printing'), '#');
+  assert.equal(initialOf('(bracketed)'), '#');
+  assert.equal(initialOf(''), '#');
+  assert.equal(initialOf(null), '#');
+  assert.equal(initialOf('까치'), 'ㄲ');
 });

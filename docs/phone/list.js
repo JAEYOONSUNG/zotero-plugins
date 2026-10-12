@@ -124,3 +124,45 @@ export function usefulTags(items, {limit = 40} = {}) {
     .slice(0, limit)
     .map(([tag, n]) => ({tag, n}));
 }
+
+/* ---------- where you are in a long list ---------- */
+/* A thousand papers scroll past without a landmark. The heading a paper sits under depends on the
+   order the list is in — a date for the three date orders, the year, the stars, the first letter —
+   and a paper whose heading is the same as the one above it draws none, so the headings fall where
+   the list actually changes. */
+const CHOSEONG = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+
+/* The letter a title is filed under: the leading consonant for Hangul, the plain letter for the
+   alphabets that have accents, and # for everything that starts with a digit or a bracket. */
+export function initialOf(title) {
+  const first = String(title ?? '').trim()[0];
+  if (!first) return '#';
+  const code = first.codePointAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return CHOSEONG[Math.floor((code - 0xac00) / 588)];
+  if (/\p{L}/u.test(first)) return first.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return '#';
+}
+
+/* Today and yesterday have names; a week has one; after that a month is what anyone means. */
+export function dayName(at, now = Date.now()) {
+  if (!at) return '';
+  const was = new Date(at), today = new Date(now);
+  if (Number.isNaN(was.getTime())) return '';
+  const midnight = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((midnight(today) - midnight(was)) / 86400000);
+  if (days <= 0) return '오늘';
+  if (days === 1) return '어제';
+  if (days < 7) return '이번 주';
+  if (was.getFullYear() === today.getFullYear() && was.getMonth() === today.getMonth()) return '이번 달';
+  if (was.getFullYear() === today.getFullYear()) return `${was.getMonth() + 1}월`;
+  return `${was.getFullYear()}년 ${was.getMonth() + 1}월`;
+}
+
+export function groupOf(item, how = 'added', {now = Date.now(), seenAt = () => 0} = {}) {
+  if (how === 'year') { const year = yearOf(item); return year ? `${year}년` : '연도 모름'; }
+  if (how === 'rating') { const n = ratingOf(item); return n ? '★'.repeat(n) : '별점 없음'; }
+  if (how === 'title') return initialOf(item.data?.title);
+  if (how === 'seen') return dayName(seenAt(item.key), now) || '아직 안 봄';
+  const at = Date.parse(when(item, how === 'modified' ? 'dateModified' : 'dateAdded'));
+  return dayName(at, now) || '날짜 모름';
+}

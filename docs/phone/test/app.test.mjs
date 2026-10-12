@@ -1102,3 +1102,112 @@ test('a whole session: find, mark, listen, look, search, and back out again', as
   assert.equal(open.document.querySelectorAll('#list .row').length, 1, 'with the search still narrowing it');
   assert.equal(open.document.getElementById('main').hasAttribute('inert'), false, 'and reachable again');
 });
+
+/* ---------- the look ---------- */
+/* The status used to be a labelled dot in the row's third line, and `.dot` was later given a
+   second meaning in the settings screen — nine pixels square with a grey fill — which turned every
+   row's status into a sliver of stacked letters on the phone. A class that is used but never
+   styled, or styled twice over for two different things, looks exactly like a broken app, so what
+   the markup asks for and what the stylesheet offers are checked against each other. */
+const classesIn = text => new Set([
+  ...text.matchAll(/class="([^"]*)"/g),      // the page
+  ...text.matchAll(/class: *'([^']*)'/g),    // what the app draws
+  ...text.matchAll(/class: *`([^`]*)`/g)     // and what it draws with a state in the name
+].flatMap(m => m[1].replace(/\$\{[^}]*\}/g, ' ').split(/\s+/))
+ .filter(name => /^[a-z][a-z0-9-]*$/.test(name)));
+
+test('every class the app asks for is one the stylesheet draws', () => {
+  const css = read('app.css');
+  const wanted = new Set([...classesIn(read('index.html')), ...classesIn(read('app.js'))]);
+  // Drawn by the phone, not by us: the states the app toggles are checked below by name.
+  for (const state of ['on', 'off', 'ready', 'night', 'with-player', 'shrunk', 'lifted', 'busy']) wanted.delete(state);
+  const missing = [...wanted].filter(name => !new RegExp(`\\.${name}[^a-z0-9-]`).test(css));
+  assert.deepEqual(missing, [], `these classes are used but never styled: ${missing.join(', ')}`);
+});
+
+test('a status is a mark in the margin, and the three of them are told apart by colour', () => {
+  const css = read('app.css');
+  for (const status of ['unread', 'reading', 'done']) {
+    assert.match(css, new RegExp(`\\.flag\\.${status}\\s*\\{[^}]*background`), `${status} has its own colour`);
+  }
+  // Never a bar down the edge of a row: a mark in the margin is a dot, and small.
+  assert.match(css, /\.flag\s*\{[^}]*border-radius:999px/);
+});
+
+test('a paper with nothing to add draws no third line, and one with a rating draws it once', async () => {
+  const open = await boot();
+  await open.settle();
+  const rows = [...open.document.querySelectorAll('#list .row')];
+  const byTitle = title => rows.find(row => row.querySelector('h2').textContent.includes(title));
+  const read1 = byTitle('Retron Septu');                       // reading, tagged "phage"
+  assert.ok(read1.querySelector('.flag.reading'), 'the one being read is marked as such');
+  assert.equal(read1.querySelector('.flag').getAttribute('aria-label'), '읽는 중', 'and says so out loud');
+  assert.ok(read1.querySelector('.foot .chip'), 'its tag is shown');
+  const rated = byTitle('PET depolymerase');                   // unread, four stars
+  assert.ok(rated.querySelector('.flag.unread'));
+  assert.match(rated.querySelector('.stars').textContent, /^★★★★☆$/);
+  const plain = byTitle('Immune sensing');                     // done, nothing else to say
+  assert.ok(plain.querySelector('.flag.done'));
+  assert.equal(plain.querySelector('.foot'), null, 'nothing to say, so no line to say it on');
+});
+
+test('the big title gives way to the small one as the library is scrolled, and does not flicker', async () => {
+  const open = await boot();
+  await open.settle();
+  const {followScroll} = await import(new URL(`../app.js?boot=${boots}`, here));
+  const list = open.document.getElementById('list');
+  const top = open.document.querySelector('#main .top');
+  const paint = followScroll(list, top);
+  assert.equal(top.classList.contains('shrunk'), false, 'at the top it is the big title');
+  assert.equal(top.classList.contains('lifted'), false, 'and the bar has no line under it');
+  list.scrollTop = 8; paint();
+  assert.equal(top.classList.contains('shrunk'), false, 'a nudge is not a scroll');
+  assert.equal(top.classList.contains('lifted'), true, 'but the line is drawn as soon as anything is under it');
+  list.scrollTop = 40; paint();
+  assert.equal(top.classList.contains('shrunk'), true);
+  list.scrollTop = 8; paint();
+  assert.equal(top.classList.contains('shrunk'), true, 'coming back up a little does not throw the title about');
+  list.scrollTop = 0; paint();
+  assert.equal(top.classList.contains('shrunk'), false, 'back at the top, the big title is back');
+  assert.equal(followScroll(null, top), null, 'and a screen without a list is no trouble');
+});
+
+test('the toolbar at the bottom opens the collections and the settings', async () => {
+  const open = await boot();
+  await open.settle();
+  const bar = open.document.getElementById('statusbar');
+  const tabs = [...bar.querySelectorAll('.tab')];
+  assert.deepEqual(tabs.map(t => t.textContent.trim()), ['컬렉션', '설정'], 'both are named, not just drawn');
+  tabs[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle(4);
+  assert.equal(open.document.getElementById('collections').hasAttribute('hidden'), false);
+  tabs[1].dispatchEvent(new open.window.Event('click'));
+  await open.settle(4);
+  assert.equal(open.document.getElementById('settings').hasAttribute('hidden'), false);
+  // The count moved up beside the title; the bar now carries what the library is doing.
+  assert.ok(bar.querySelector('#sync-state'), 'the state of the sync is still shown');
+  assert.equal(bar.querySelector('#count'), null, 'the count is no longer down here');
+  assert.ok(open.document.querySelector('.title-row #count'), 'it is beside the title');
+});
+
+test('the list is broken up by headings that follow the order it is in', async () => {
+  const open = await boot();
+  await open.settle();
+  // linkedom's <select> does not pick an option the way a phone does, so the chosen value is put
+  // on the element the app will read it from.
+  const pick = how => {
+    const select = open.document.querySelector('#scope select');
+    Object.defineProperty(select, 'value', {value: how, configurable: true});
+    select.dispatchEvent(new open.window.Event('change'));
+  };
+  pick('title');
+  const headings = [...open.document.querySelectorAll('#list .group')].map(h => h.textContent);
+  assert.deepEqual(headings, ['I', 'P', 'R'], 'by title, each letter says where it starts');
+  // A heading is drawn once, above the first paper under it, never twice over.
+  const inOrder = [...open.document.querySelectorAll('#list .group, #list .row')].map(n => n.className);
+  assert.ok(!inOrder.some((cls, i) => cls === 'group' && inOrder[i + 1] === 'group'), 'no heading stands alone');
+  assert.equal(inOrder[0], 'group', 'the list starts with one');
+  pick('rating');
+  assert.deepEqual([...open.document.querySelectorAll('#list .group')].map(h => h.textContent),
+    ['★★★★', '별점 없음'], 'by rating, the stars themselves');
+});
