@@ -655,6 +655,26 @@ test('the marks made in Zotero are listed in the order they appear, and lead int
   assert.equal(open.document.getElementById('paper').hidden, false, 'a mark opens the paper at its page');
 });
 
+test('a paper hands over a citation worth pasting', async () => {
+  const open = await boot();
+  await open.settle();
+  let copied = '';
+  // linkedom's window.navigator is read-only; the module reads the global one.
+  Object.defineProperty(globalThis, 'navigator', {
+    value: {userAgent: 'test', clipboard: {writeText: async text => { copied = text; }}},
+    configurable: true, writable: true});
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const button = [...open.document.querySelectorAll('#detail button')].find(b => b.textContent === '인용 복사');
+  assert.ok(button, 'a citation is offered');
+  button.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.match(copied, /Seo & Kim \(2025\)/, 'two authors are both named');
+  assert.match(copied, /Retron Septu defence/);
+  assert.match(copied, /Science/);
+  assert.match(copied, /doi\.org\/10\.1126/);
+});
+
 /* ---- listening ---- */
 const PDF_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', contentType: 'application/pdf', filename: 'seo.pdf'}}];
 

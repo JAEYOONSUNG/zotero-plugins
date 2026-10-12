@@ -694,6 +694,26 @@ function onListScroll() {
   if (list.scrollTop + list.clientHeight > list.scrollHeight - 600) drawMore();
 }
 
+/* A line to paste into a mail or under a slide. Not a style anyone has standardised, just the
+   five things a reader needs to find the paper again. */
+export function citationOf(item) {
+  const data = item.data || {};
+  const people = (data.creators || []).filter(c => c.creatorType === 'author');
+  const names = people.map(c => clean(c.lastName || c.name || '')).filter(Boolean);
+  const who = !names.length ? ''
+    : names.length === 1 ? names[0]
+    : names.length === 2 ? `${names[0]} & ${names[1]}`
+    : `${names[0]} et al.`;
+  const year = yearOf(item);
+  const bits = [
+    who && year ? `${who} (${year})` : who || (year ? `(${year})` : ''),
+    clean(data.title),
+    venueOf(item),
+    clean(data.DOI) ? `https://doi.org/${clean(data.DOI)}` : clean(data.url)
+  ].filter(Boolean);
+  return bits.join('. ').replace(/\.\.$/, '.') + (bits.length ? '' : '');
+}
+
 /* ---------- one paper ---------- */
 /* Going back puts the list where it was left, with as much of it drawn as there was. */
 function leftDetail() {
@@ -737,6 +757,11 @@ async function openDetail(key) {
       catch (_) { toast('복사하지 못했습니다'); }
     });
   }
+  const cite = el('button', {class: 'link-btn', type: 'button', text: '인용 복사'}, head);
+  cite.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(citationOf(item)); toast('인용을 복사했습니다'); }
+    catch (_) { toast('복사하지 못했습니다'); }
+  });
 
   // Status: the same three tags the desktop plugin reads.
   const statusCard = el('section', {class: 'card'}, body);
@@ -880,13 +905,26 @@ async function attachmentOf(itemKey) {
     + (fileSource(row, dropbox.base).kind === 'none' ? 2 : 0);
   return files.sort((a, b) => rank(a) - rank(b))[0] || null;
 }
+const TEXT_KEEP = 300;   // papers whose indexed text is kept; each is tens of kilobytes
+
 async function fulltextOf(attachmentKey) {
   const saved = await DB.get('text', attachmentKey).catch(() => null);
-  if (saved && saved.content) return saved.content;
+  if (saved && saved.content) {
+    DB.put('text', [{...saved, at: Date.now()}]).catch(() => {});
+    return saved.content;
+  }
   const response = await api(`/items/${attachmentKey}/fulltext`);
   const body = await response.json();
   const content = String(body.content || '');
-  if (content) await DB.put('text', [{key: attachmentKey, content, at: Date.now()}]).catch(() => {});
+  if (!content) return content;
+  await DB.put('text', [{key: attachmentKey, content, at: Date.now()}]).catch(() => {});
+  try {
+    const rows = await DB.all('text');
+    if (rows.length > TEXT_KEEP) {
+      const old = rows.sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, rows.length - TEXT_KEEP);
+      await DB.remove('text', old.map(row => row.key));
+    }
+  } catch (_) {}
   return content;
 }
 
@@ -1050,12 +1088,16 @@ async function openListen(item) {
   openSheet('listen', leftListen);
   el('p', {class: 'muted small', text: '본문을 가져오는 중…'}, body);
 
-  let text = '';
+  let text = '', onlyAbstract = false;
   try {
     const attachment = await attachmentOf(item.key);
     if (!attachment) throw new Error('이 문헌에는 PDF 첨부가 없습니다.');
     text = await fulltextOf(attachment.key);
   } catch (error) {
+    // No indexed body, but an abstract is a paper's own summary and worth hearing.
+    const abstract = clean(item.data.abstractNote);
+    if (abstract.length > 120) { text = `Abstract\n\n${abstract}`; onlyAbstract = true; }
+    else {
     body.textContent = '';
     const card = el('section', {class: 'card'}, body);
     el('h3', {text: '읽을 본문이 없습니다'}, card);
@@ -1063,6 +1105,7 @@ async function openListen(item) {
       ? 'Zotero가 이 PDF의 본문을 아직 색인하지 않았습니다. 맥에서 PDF를 한 번 열고 동기화한 뒤 다시 시도하세요.'
       : error.message}, card);
     return;
+    }
   }
   if (!clean(text)) {
     body.textContent = '';
@@ -1072,6 +1115,7 @@ async function openListen(item) {
 
   const paper = readable(text, {title: clean(item.data.title)});
   listen.paper = paper;
+  if (onlyAbstract) toast('본문 색인이 없어 초록을 읽습니다');
   const engine = speechEngine(window);
   if (!engine.available()) {
     body.textContent = '';
