@@ -1,7 +1,8 @@
 /* The app shell, so 논문 opens with no signal. The library itself lives in IndexedDB, and every
    request to api.zotero.org goes to the network: a cached answer would show a stale library. */
-const CACHE = 'nonmun-v4';
-const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'read.js', 'play.js', 'files.js', 'pdfview.js',
+const CACHE = 'nonmun-v5';
+const SHELL = ['./', 'index.html', 'app.css', 'app.js',
+               'read.js', 'play.js', 'files.js', 'pdfview.js', 'list.js', 'net.js',
                'manifest.webmanifest', 'icon-192.png?v=3', 'icon-512.png?v=3', 'icon-180.png?v=3'];
 /* pdf.js and its fonts are not fetched until a PDF is opened; the handler below keeps whatever
    was fetched, so the second time a paper is opened it needs no signal either. */

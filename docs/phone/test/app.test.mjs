@@ -380,6 +380,19 @@ test('the service worker never caches an answer from the Zotero API', () => {
   assert.doesNotMatch(shell[1], /https?:/, 'nothing off this origin is pre-cached');
 });
 
+/* Every module app.js imports has to be in the shell, or the first opening with no signal gets a
+   page that cannot start. This went wrong twice: list.js and net.js were written after the shell
+   list and nobody added them to it. */
+test('everything the app imports is kept for opening with no signal', () => {
+  const app = read('app.js');
+  const sw = read('sw.js');
+  const shell = /const SHELL = \[([\s\S]*?)\]/.exec(sw)[1];
+  const imported = [...app.matchAll(/from '\.\/([\w.-]+)'/g)].map(m => m[1]);
+  assert.ok(imported.length >= 6, `app.js imports several modules (${imported.join(', ')})`);
+  for (const name of imported) assert.ok(shell.includes(`'${name}'`), `${name} is in the shell`);
+  assert.ok(shell.includes("'app.css'") && shell.includes("'index.html'"), 'and so are the page and its look');
+});
+
 /* A new version of the app has to arrive the next time 논문 is opened. Serving the cache first
    and refreshing behind it meant a change landed only on the opening after that, which is how a
    setting that had been shipped was not on the phone. */
