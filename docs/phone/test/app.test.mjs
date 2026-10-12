@@ -1310,3 +1310,36 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   await open.settle(6);
   assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper did not open behind it');
 });
+
+test('a change made far down the library leaves the reader where they were', async () => {
+  const server = fakeServer({items: MANY});
+  const open = await boot({server});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  /* A real list loses its place the moment it is emptied: the scroll has nothing left to be
+     measured against. linkedom keeps whatever it is told, so the phone's own behaviour is put
+     back here, or this would pass however the app behaved. */
+  let at = 0;
+  const text = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Object.getPrototypeOf(list)), 'textContent')
+    || Object.getOwnPropertyDescriptor(Object.getPrototypeOf(list), 'textContent');
+  Object.defineProperty(list, 'scrollTop', {get: () => at, set: v => { at = Number(v) || 0; }, configurable: true});
+  Object.defineProperty(list, 'textContent', {
+    get: () => text.get.call(list),
+    set: value => { if (!value) at = 0; text.set.call(list, value); },
+    configurable: true
+  });
+  // Scrolled a long way in, with more drawn than a screenful.
+  list.scrollHeight = 40000; list.clientHeight = 700;
+  for (let i = 0; i < 4; i++) { list.dispatchEvent(new open.window.Event('scroll')); await open.settle(2); }
+  list.scrollTop = 2400;
+  const drawn = open.document.querySelectorAll('#list .row').length;
+  const row = open.document.querySelectorAll('#list .row')[9];
+  const touch = type => { const e = new open.window.Event(type); e.touches = [{clientX: 40, clientY: 400}]; row.dispatchEvent(e); };
+  touch('touchstart');
+  await new Promise(r => setTimeout(r, 560));
+  const done = [...open.document.querySelectorAll('.menu.float .menu-row')].find(b => b.textContent.includes('완료'));
+  done.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(list.scrollTop, 2400, 'the list did not jump back to the first paper');
+  assert.equal(open.document.querySelectorAll('#list .row').length, drawn, 'and as much of it is still drawn');
+});

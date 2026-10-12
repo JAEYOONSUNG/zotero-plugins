@@ -726,6 +726,9 @@ function drawMore() {
 
 function render({keep = false} = {}) {
   const list = $('list');
+  /* Emptying the list puts the scroll back at the top, so a change made from a row three hundred
+     papers down would throw the reader back to the first one. */
+  const was = keep ? list.scrollTop || 0 : 0;
   const rows = visible();
   render.rows = rows;
   render.group = '';
@@ -756,6 +759,7 @@ function render({keep = false} = {}) {
   // A sentinel at the end: when it comes into view there is more to draw.
   more = el('div', {class: 'more', 'aria-hidden': 'true'}, list);
   while (state.shown < want) { const before = state.shown; drawMore(); if (state.shown === before) break; }
+  if (was) { list.scrollTop = was; requestAnimationFrame(() => { list.scrollTop = was; }); }
   watchEnd();
 }
 
@@ -1583,7 +1587,12 @@ function floatMenu(anchor, items, {chosen = ''} = {}) {
   }
   const box = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
   if (box && box.width) {
-    menu.style.top = `${Math.round(box.bottom + 6)}px`;
+    const tall = menu.offsetHeight || 0;
+    const room = (window.innerHeight || 0) - 8;
+    // A row near the bottom of the screen gets its menu above it rather than off the edge.
+    const under = box.bottom + 6;
+    const top = tall && under + tall > room ? Math.max(8, box.top - tall - 6) : under;
+    menu.style.top = `${Math.round(top)}px`;
     menu.style.right = `${Math.max(8, Math.round((window.innerWidth || 0) - box.right))}px`;
   }
   /* The tap that lands on the button itself is left to the button, which closes the menu by being
