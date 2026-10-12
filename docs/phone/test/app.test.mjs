@@ -414,6 +414,23 @@ test('a paper with no PDF says so', async () => {
   assert.match(open.document.getElementById('listen-body').textContent, /PDF 첨부가 없습니다/);
 });
 
+test('one pasted string fills both boxes, whether it is the key alone or number and key', async () => {
+  const open = await boot({stored: {}});
+  await open.settle();
+  const user = open.document.getElementById('setup-user'), key = open.document.getElementById('setup-key');
+  key.value = '16265664:' + 'k'.repeat(24);
+  key.dispatchEvent(new open.window.Event('paste'));
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal(user.value, '16265664', 'the number went to its own box');
+  assert.equal(key.value, 'k'.repeat(24), 'and the key to its own');
+});
+
+test('the manifest does not fix where the icon opens, so the keys in the address survive', () => {
+  const manifest = JSON.parse(read('manifest.webmanifest'));
+  assert.equal('start_url' in manifest, false, 'iOS would open the icon there and drop the address');
+  assert.match(read('app.js'), /link\[rel="manifest"\]'\)\?\.remove/, 'and the link goes before the icon is added');
+});
+
 /* ---- the PDF itself ---- */
 /* Almost every file in this library is a linked file: Zotero knows only its path, and the bytes
    sit in a Dropbox folder. These check that the phone asks the right service for them. pdf.js is

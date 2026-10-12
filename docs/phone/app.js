@@ -952,6 +952,19 @@ function openSettings() {
     const said = el('p', {class: 'msg', hidden: true}, carry);
     const row = el('div', {class: 'actions'}, carry);
     const go = el('button', {class: 'primary', type: 'button', text: '키까지 함께 담기'}, row);
+    // If the address will not carry it, one string will: copied here, pasted on the other side.
+    const copy = el('button', {class: 'secondary', type: 'button', text: '키 복사'}, row);
+    const shown = el('p', {class: 'muted small', hidden: true}, carry);
+    copy.addEventListener('click', async () => {
+      const both = `${account.user}:${account.key}`;
+      try {
+        await navigator.clipboard.writeText(both);
+        toast('복사했습니다. 홈 화면 앱 첫 화면에서 붙여넣기를 누르세요');
+      } catch (_) {
+        shown.hidden = false;
+        shown.innerHTML = `길게 눌러 복사하세요: <code>${both}</code>`;
+      }
+    });
     go.addEventListener('click', () => {
       carryKeys();
       localStorage.setItem(KEYS.scope, 'paired');
@@ -1003,6 +1016,10 @@ function openCollections() {
    icon from here carries it: iOS gives that app its own storage, and deleting the icon empties
    it. The Dropbox connection travels the same way. */
 function carryKeys() {
+  /* iOS opens a home-screen icon at the manifest's start_url when there is one, which would
+     throw away everything the address is carrying. Dropping the manifest leaves the old iOS
+     way — apple-touch-icon and apple-mobile-web-app-capable — which uses the address as it is. */
+  try { document.querySelector('link[rel="manifest"]')?.remove(); } catch (_) {}
   const extra = dropbox.linked
     ? `&a=${encodeURIComponent(dropbox.appKey)}&d=${encodeURIComponent(localStorage.getItem('np.db.refresh') || '')}&b=${encodeURIComponent(dropbox.base)}`
     : '';
@@ -1025,15 +1042,25 @@ function offerPairing() {
   });
 }
 
+/* One pasted string, whether it is the key alone or "number:key" as 설정 hands it over. */
+function takePasted(text) {
+  const both = /^(\d{3,})\s*[:|,\s]\s*(\S{12,})$/.exec(clean(text));
+  if (both) { $('setup-user').value = both[1]; $('setup-key').value = both[2]; return true; }
+  $('setup-key').value = clean(text);
+  return false;
+}
+
 function wire() {
   const paste = $('setup-paste');
   if (paste) paste.addEventListener('click', async () => {
     try {
       const text = clean(await navigator.clipboard.readText());
-      if (text) { $('setup-key').value = text; toast('붙여넣었습니다'); }
+      if (text) { takePasted(text); toast('붙여넣었습니다'); }
       else toast('클립보드가 비어 있습니다');
     } catch (_) { toast('길게 눌러 붙여넣기를 쓰세요'); }
   });
+  // 설정's 키 복사 puts the number and the key in one string, so one paste fills both boxes.
+  $('setup-key').addEventListener('paste', () => setTimeout(() => takePasted($('setup-key').value), 0));
   $('q').addEventListener('input', event => { state.q = event.target.value; render(); });
   $('btn-sync').addEventListener('click', () => sync());
   $('btn-collections').addEventListener('click', openCollections);
