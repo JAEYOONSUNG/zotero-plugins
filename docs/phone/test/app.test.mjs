@@ -1347,3 +1347,16 @@ test('a change made far down the library leaves the reader where they were', asy
   assert.equal(list.scrollTop, 2400, 'the list did not jump back to the first paper');
   assert.equal(open.document.querySelectorAll('#list .row').length, drawn, 'and as much of it is still drawn');
 });
+
+test('the refresh button says, by turning, that something is happening', async () => {
+  const open = await boot();
+  await open.settle();
+  const button = open.document.getElementById('btn-sync');
+  assert.equal(button.classList.contains('spinning'), false, 'and stops when there is not');
+  button.dispatchEvent(new open.window.Event('click'));
+  assert.equal(button.classList.contains('spinning'), true);
+  assert.equal(button.getAttribute('aria-busy'), 'true', 'which is also said out loud');
+  await open.settle();
+  assert.equal(button.classList.contains('spinning'), false);
+  assert.equal(button.getAttribute('aria-busy'), 'false');
+});

@@ -208,9 +208,19 @@ async function loadCache() {
   state.collections = collections;
 }
 
+/* The button says, by turning, that the library is being fetched — the one place the app has to
+   show that it is doing something and not simply stuck. */
+function spinSync(on) {
+  const button = $('btn-sync');
+  if (!button) return;
+  button.classList.toggle('spinning', !!on);
+  button.setAttribute('aria-busy', String(!!on));
+}
+
 async function sync({full = false} = {}) {
   if (state.busy) return;
   state.busy = true;
+  spinSync(true);
   const since = full ? 0 : account.version;
   $('sync-state').textContent = since ? '확인 중…' : '처음 받는 중…';
   if (!state.items.length) render();
@@ -252,6 +262,7 @@ async function sync({full = false} = {}) {
     else { $('sync-state').textContent = ''; toast(error.message || '가져오지 못했습니다'); }
   } finally {
     state.busy = false;
+    spinSync(false);
     setTimeout(() => { if (!state.busy) $('sync-state').textContent = ''; }, 4000);
   }
 }
@@ -1965,6 +1976,12 @@ function wire() {
   /* Everything that is not reading itself is behind one button, so the bar over a paper is the
      paper's name and the page it is on. */
   $('btn-sort').addEventListener('click', openSortMenu);
+  // The name of the app is the way back to the top of it, as a title bar is on this phone.
+  document.querySelector('#main .big').addEventListener('click', () => {
+    const list = $('list');
+    if (typeof list.scrollTo === 'function') list.scrollTo({top: 0, behavior: 'smooth'});
+    else list.scrollTop = 0;
+  });
   $('paper-more').addEventListener('click', () => showMenu($('paper-menu').hidden));
   $('paper-view').addEventListener('click', () => showMenu(false));
   // Zooming is the one thing worth pressing twice, so the menu stays up for it.
