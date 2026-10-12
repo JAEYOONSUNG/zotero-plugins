@@ -162,7 +162,25 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   /* app.js is a real module (it imports read.js and play.js), so the fake phone is put in the
      globals the module will read and the module is imported fresh for each boot. */
   const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash};
-  const history = {replaceState(_state, _title, url) { location.hash = ''; location.pathname = String(url).split('#')[0]; }};
+  /* A history with a real stack, so the back gesture can be exercised: pushState adds, go(-n)
+     walks back and fires popstate the way a browser does. */
+  const stack = [{depth: 0}];
+  let at = 0;
+  const history = {
+    get state() { return stack[at]; },
+    replaceState(entry, _title, url) {
+      stack[at] = entry || stack[at];
+      if (url !== undefined) { location.hash = ''; location.pathname = String(url).split('#')[0]; }
+    },
+    pushState(entry) { stack.splice(at + 1); stack.push(entry || {}); at = stack.length - 1; },
+    go(n) {
+      const to = Math.max(0, Math.min(stack.length - 1, at + n));
+      if (to === at) return;
+      at = to;
+      queueMicrotask(() => window.dispatchEvent(new window.Event('popstate')));
+    },
+    back() { history.go(-1); }
+  };
   window.location = location;
   const speech = fakeSpeech();
   const globals = {
@@ -409,6 +427,45 @@ test('a collection and a tag show as chips that take themselves off again', asyn
   assert.ok(chip, 'the narrowing is on screen');
   chip.dispatchEvent(new open.window.Event('click'));
   assert.equal(open.document.querySelectorAll('#list .row').length, 3, 'and comes off again');
+});
+
+/* The phone's own back — the swipe from the edge of a home-screen app, the back button in
+   Safari — has to close the screen on top rather than leave 논문 altogether. */
+test('the phone\u2019s back closes the screen on top, one at a time, and leaves the list alone', async () => {
+  const open = await boot();
+  await open.settle();
+  const shown = id => open.document.getElementById(id).hidden === false;
+  const back = async () => { open.window.history.back(); await open.settle(); };
+
+  open.document.getElementById('btn-collections').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(shown('collections'), '컬렉션 is open');
+  open.document.getElementById('btn-settings').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(shown('settings') && shown('collections'), '설정 opens on top of it');
+
+  await back();
+  assert.ok(!shown('settings'), 'back closed 설정');
+  assert.ok(shown('collections'), 'and left 컬렉션 where it was');
+  await back();
+  assert.ok(!shown('collections'), 'back closed 컬렉션 too');
+  assert.ok(shown('main'), 'the library is still there');
+});
+
+test('closing with the button and closing with the gesture end in the same place', async () => {
+  const open = await boot();
+  await open.settle();
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('detail').hidden, false);
+  open.document.getElementById('back').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.getElementById('detail').hidden, true, 'the button closed it');
+  // And the history went back with it, so one more back does not strand a hidden screen.
+  open.window.history.back();
+  await open.settle();
+  assert.equal(open.document.getElementById('detail').hidden, true);
+  assert.equal(open.document.getElementById('main').hidden, false);
 });
 
 /* ---- listening ---- */

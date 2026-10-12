@@ -280,6 +280,38 @@ async function addNote(item, text) {
   return result;
 }
 
+/* ---------- the screens on top of the list ---------- */
+/* Each sheet puts an entry in the history, so the phone's own back — the swipe from the edge in
+   the home-screen app, the back button in Safari — closes it instead of leaving the app. A sheet
+   is never hidden directly: it is hidden because the history went back past it, which is the only
+   way the stack and the screen cannot drift apart. */
+const sheets = [];
+function openSheet(id, leave = () => {}) {
+  const node = $(id);
+  if (!node || sheets.some(sheet => sheet.id === id)) return false;
+  sheets.push({id, leave});
+  try { history.pushState({depth: sheets.length}, ''); } catch (_) {}
+  node.hidden = false;
+  return true;
+}
+function closeSheet(id) {
+  const at = sheets.findIndex(sheet => sheet.id === id);
+  if (at < 0) { const node = $(id); if (node) node.hidden = true; return; }
+  // Going back is what closes it; popped() below does the hiding.
+  try { history.go(-(sheets.length - at)); } catch (_) { while (sheets.length > at) popped(); }
+}
+function popped() {
+  const sheet = sheets.pop();
+  if (!sheet) return;
+  const node = $(sheet.id);
+  if (node) node.hidden = true;
+  try { sheet.leave(); } catch (_) {}
+}
+function onPopState() {
+  const depth = Number(history.state && history.state.depth) || 0;
+  while (sheets.length > depth) popped();
+}
+
 /* ---------- the sliding pill ---------- */
 function slide(track) {
   const chosen = track.querySelector('[aria-pressed="true"]');
@@ -429,8 +461,7 @@ function onListScroll() {
 
 /* ---------- one paper ---------- */
 /* Going back puts the list where it was left, with as much of it drawn as there was. */
-function closeDetail() {
-  $('detail').hidden = true;
+function leftDetail() {
   render({keep: true});
   requestAnimationFrame(() => { $('list').scrollTop = state.at || 0; });
 }
@@ -441,7 +472,7 @@ async function openDetail(key) {
   $('detail-title').textContent = clean(item.data.title) || '논문';
   const body = $('detail-body');
   body.textContent = '';
-  $('detail').hidden = false;
+  openSheet('detail', leftDetail);
 
   const head = el('section', {class: 'card'}, body);
   el('h3', {text: clean(item.data.title) || '(제목 없음)'}, head);
@@ -597,10 +628,9 @@ async function holdScreen(on) {
   } catch (_) { listen.wake = null; }
 }
 
-function closeListen() {
-  if (listen.player) listen.player.stop();
+function leftListen() {
+  if (listen.player && $('paper').hidden) listen.player.stop();
   holdScreen(false);
-  $('listen').hidden = true;
 }
 
 function playMark(button, playing) {
@@ -682,7 +712,7 @@ async function openListen(item) {
   const body = $('listen-body');
   body.textContent = '';
   $('listen-bar').hidden = true;
-  $('listen').hidden = false;
+  openSheet('listen', leftListen);
   el('p', {class: 'muted small', text: '본문을 가져오는 중…'}, body);
 
   let text = '';
@@ -851,7 +881,7 @@ function paperTrouble(error) {
   if (error.need === 'dropbox' || (error.source && error.source.kind === 'dropbox') || error.missing) {
     const row = el('div', {class: 'actions'}, card);
     const go = el('button', {class: 'primary', type: 'button', text: dropbox.linked ? 'Dropbox 다시 연결' : 'Dropbox 연결'}, row);
-    go.addEventListener('click', () => { $('paper').hidden = true; openSettings(); });
+    go.addEventListener('click', () => openSettings());
   }
 }
 
@@ -863,12 +893,11 @@ function showPaperMessage(on) {
   $('paper-view').hidden = on;
 }
 
-function closePaper() {
+function leftPaper() {
   if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
   $('paper-view').classList.remove('with-player');
   if (listen.player && $('listen').hidden) listen.player.stop();
   holdScreen(false);
-  $('paper').hidden = true;
 }
 
 async function openPaper(item, {at = 0} = {}) {
@@ -881,7 +910,7 @@ async function openPaper(item, {at = 0} = {}) {
   $('paper-view').classList.remove('with-player');
   $('paper-count').textContent = '';
   $('paper-bar').hidden = true;
-  $('paper').hidden = false;
+  openSheet('paper', leftPaper);
   const msg = $('paper-msg');
   showPaperMessage(true);
   msg.textContent = '';
@@ -940,9 +969,14 @@ async function readAlong(item, attachment) {
 
 /* ---------- settings ---------- */
 function openSettings() {
+  openSheet('settings');
+  paintSettings();
+}
+
+/* Drawn afresh whenever something in it changes, without stacking another way back. */
+function paintSettings() {
   const body = $('settings-body');
   body.textContent = '';
-  $('settings').hidden = false;
 
   const card = el('section', {class: 'card'}, body);
   el('h3', {text: 'Dropbox — PDF 원본'}, card);
@@ -986,7 +1020,7 @@ function openSettings() {
   });
   if (dropbox.linked) {
     const drop = el('button', {class: 'secondary', type: 'button', text: '연결 끊기'}, row);
-    drop.addEventListener('click', () => { dropbox.forget(); toast('Dropbox 연결을 끊었습니다'); openSettings(); });
+    drop.addEventListener('click', () => { dropbox.forget(); toast('Dropbox 연결을 끊었습니다'); paintSettings(); });
   }
 
   // What this phone is holding.
@@ -998,12 +1032,12 @@ function openSettings() {
   wipe.addEventListener('click', async () => {
     await DB.clear('files').catch(() => {});
     toast('받아 둔 PDF를 지웠습니다');
-    openSettings();
+    paintSettings();
   });
   const again = el('button', {class: 'secondary', type: 'button', text: '라이브러리 다시 받기'}, storeRow);
   again.addEventListener('click', async () => {
     account.version = 0;
-    $('settings').hidden = true;
+    closeSheet('settings');
     await sync({full: true});
   });
   DB.all('files').then(rows => {
@@ -1057,7 +1091,7 @@ const state_items = () => state.items.length.toLocaleString();
 function openCollections() {
   const body = $('collections-body');
   body.textContent = '';
-  $('collections').hidden = false;
+  openSheet('collections');
   const byParent = new Map();
   for (const c of state.collections) {
     const parent = c.data.parentCollection || '';
@@ -1070,7 +1104,7 @@ function openCollections() {
   const all = el('button', {class: 'row', type: 'button'}, body);
   el('h2', {text: '전체'}, all);
   el('p', {class: 'meta', text: `${state.items.length.toLocaleString()}편`}, all);
-  all.addEventListener('click', () => { state.collection = ''; $('collections').hidden = true; render(); });
+  all.addEventListener('click', () => { state.collection = ''; closeSheet('collections'); render(); });
 
   // The tags actually in use, so a subject can be picked the way a collection can.
   const tags = usefulTags(state.items);
@@ -1084,7 +1118,7 @@ function openCollections() {
       el('span', {class: 'n', text: String(n)}, chip);
       chip.addEventListener('click', () => {
         state.tag = state.tag === tag ? '' : tag;
-        $('collections').hidden = true;
+        closeSheet('collections');
         render();
       });
     }
@@ -1095,7 +1129,7 @@ function openCollections() {
       const row = el('button', {class: 'row', type: 'button', style: depth ? `margin-inline-start:${depth * 14}px` : null}, body);
       el('h2', {text: clean(c.data.name)}, row);
       el('p', {class: 'meta', text: `${(counts.get(c.key) || 0).toLocaleString()}편`}, row);
-      row.addEventListener('click', () => { state.collection = c.key; $('collections').hidden = true; render(); });
+      row.addEventListener('click', () => { state.collection = c.key; closeSheet('collections'); render(); });
       draw(c.key, depth + 1);
     }
   };
@@ -1162,8 +1196,8 @@ function wire() {
   $('q').addEventListener('search', () => { state.q = $('q').value; render(); });
   $('btn-sync').addEventListener('click', () => sync());
   $('btn-collections').addEventListener('click', openCollections);
-  $('back').addEventListener('click', closeDetail);
-  $('listen-back').addEventListener('click', closeListen);
+  $('back').addEventListener('click', () => closeSheet('detail'));
+  $('listen-back').addEventListener('click', () => closeSheet('listen'));
   $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
   $('listen-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
   $('listen-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });
@@ -1177,17 +1211,18 @@ function wire() {
   });
   // The screen going away stops the voice rather than leaving it talking to nobody.
   addEventListener('pagehide', () => { if (listen.player) listen.player.stop(); });
-  $('collections-back').addEventListener('click', () => { $('collections').hidden = true; });
-  $('btn-settings').addEventListener('click', () => { $('collections').hidden = true; openSettings(); });
+  $('collections-back').addEventListener('click', () => closeSheet('collections'));
+  $('btn-settings').addEventListener('click', () => openSettings());
   $('btn-settings-main').addEventListener('click', () => openSettings());
-  $('settings-back').addEventListener('click', () => { $('settings').hidden = true; });
+  $('settings-back').addEventListener('click', () => closeSheet('settings'));
+  addEventListener('popstate', onPopState);
+  // The PDF opens on top of the transcript, so going back lands on the transcript again.
   $('listen-pdf').addEventListener('click', () => {
     if (!listen.item) return;
     const unit = listen.player ? listen.player.state().unit : null;
-    $('listen').hidden = true;
     openPaper(listen.item, {at: unit && unit.page ? unit.page : 0});
   });
-  $('paper-back').addEventListener('click', closePaper);
+  $('paper-back').addEventListener('click', () => closeSheet('paper'));
   $('paper-in').addEventListener('click', () => { if (paper.viewer) paper.viewer.zoomBy(1); });
   $('paper-out').addEventListener('click', () => { if (paper.viewer) paper.viewer.zoomBy(-1); });
   $('paper-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
@@ -1228,6 +1263,7 @@ async function takeDropboxReturn() {
 }
 
 async function start() {
+  try { history.replaceState({depth: 0}, ''); } catch (_) {}
   const paired = takeKeyFromLink();
   const fromDropbox = await takeDropboxReturn();
   wire();
