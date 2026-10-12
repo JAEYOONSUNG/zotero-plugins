@@ -3,7 +3,7 @@
    of lines, figure captions in the middle of the body, and a reference list at the end. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds} from '../read.js';
+import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds, stripStamp} from '../read.js';
 
 const PAPER = [
   // page 1
@@ -160,4 +160,84 @@ test('text with no pages and no furniture still reads', () => {
 test('nothing to read gives nothing, not a crash', () => {
   assert.deepEqual(units(readable('')), []);
   assert.deepEqual(units(readable(null)), []);
+});
+
+/* What a real journal PDF puts in front of the paper, and at the back of it. Every line below was
+   taken from the text Zotero had indexed for a paper in the library and was being read out loud. */
+const REAL_FRONT = `Seo et al., Nature 601, 1 (2026)
+
+Landscape profiling of PET depolymerases
+
+Hyun Seo1, Jan Müller2, Jae Yoon Sung1
+
+1Department of Biotechnology, Yonsei University, Seoul, Korea. 2Institute of Molecular Biology, Mainz, Germany.
+9These authors contributed equally: Hyun Seo, Jan Müller. e-mail: seo@yonsei.ac.kr 1234567890():,; 1234567890():,;
+Received: 11 June 2022 Accepted: 7 November 2022 Check for updates
+https://doi.org/10.1038/s41586-022-05432-3
+Keywords: PET, depolymerase, plastics
+
+Abstract
+
+Enzymes capable of breaking down polymers have been identified from natural sources.
+
+Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation and reproduction in any medium.
+
+Introduction
+
+The isolation of Ideonella sakaiensis exemplifies this evolutionary concept.`;
+
+test('nothing in front of the paper is read: who wrote it, where, when it arrived, or its licence', () => {
+  const said = units(readable(REAL_FRONT, {title: 'Landscape profiling of PET depolymerases'})).map(u => u.spoken).join(' ');
+  assert.ok(/Enzymes capable of breaking down/.test(said), 'the abstract is read');
+  assert.ok(/Ideonella/.test(said), 'and so is the introduction');
+  assert.ok(!/yonsei\.ac\.kr/.test(said), 'the address to write to is not');
+  assert.ok(!/Department of Biotechnology/.test(said), 'nor where they work');
+  assert.ok(!/Received: 11 June/.test(said), 'nor when it arrived');
+  assert.ok(!/Creative Commons/.test(said), 'nor the licence');
+  assert.ok(!/1234567890/.test(said), 'nor the glyph table the PDF left behind');
+  assert.ok(!/Keywords/.test(said), 'nor the keyword line');
+  assert.ok(!/doi\.org/.test(said), 'nor the DOI');
+});
+
+test('an address in the body is still read, because by then the paper has begun', () => {
+  const paper = `Methods
+
+We obtained the strains from the collection. The data are at https://example.org and requests go to lab@uni.edu for the plasmids.`;
+  const said = units(readable(paper)).map(u => u.spoken).join(' ');
+  assert.ok(/requests go to/.test(said), 'a sentence of the paper is not thrown away for holding an address');
+});
+
+test('a caption that shares a block with the paragraph above it is still set aside', () => {
+  const paper = `Results
+
+The enzyme works well in water.
+Fig. 5 | Schematic representation of the mechanism.`;
+  const list = units(readable(paper));
+  assert.deepEqual(list.map(u => u.spoken), ['The enzyme works well in water.']);
+  assert.equal(readable(paper).captions.length, 1);
+  assert.ok(units(readable(paper), {captions: true}).some(u => /Schematic representation/.test(u.spoken)));
+});
+
+test('a journal stamp run together with the first words of a page loses the stamp, not the words', () => {
+  const paper = `Introduction
+
+802 | VOL.11 NO.8 | AUGUST 2014 | nature methods Doing this for the first time can be challenging.`;
+  const said = units(readable(paper)).map(u => u.spoken).join(' ');
+  assert.ok(/Doing this for the first time can be challenging/.test(said), 'the words are kept');
+  assert.ok(!/VOL\.11|nature methods/.test(said), 'the stamp is gone');
+  assert.equal(stripStamp('5 | Cell 182 | July 2020 | The cell divides.'), 'The cell divides.');
+  assert.equal(stripStamp('An ordinary sentence.'), 'An ordinary sentence.');
+});
+
+test('a reference that ran on without a heading is not read as a sentence', () => {
+  const paper = `Discussion
+
+The result holds across species.
+
+12. H. Seo, J. Park, Nature 500, 1 (2019).
+13. K. Kim et al., Science 300, 20 (2020).`;
+  const said = units(readable(paper)).map(u => u.spoken).join(' ');
+  assert.ok(/The result holds/.test(said));
+  assert.ok(!/H\. Seo/.test(said));
+  assert.ok(!/K\. Kim/.test(said));
 });

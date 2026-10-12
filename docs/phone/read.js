@@ -29,11 +29,60 @@ const FURNITURE = [
   /creativecommons\.org/i,
   /^\s*(?:see discussions|citations:?\s*\d+|reads\s*\d+)\s*$/i,
   /^\s*author manuscript\b/i, /\bHHS Public Access\b/i,
-  /^\s*\[?(?:e|pre)?print\]?\s*$/i
+  /^\s*\[?(?:e|pre)?print\]?\s*$/i,
+  /^\s*check for updates\s*$/i,
+  /1234567890\(\)/,                                          // the glyph table some PDFs leave in the text
+  /^\s*(?:received|accepted|revised|published(?:\s+online)?|available online)\s*[:,]?\s*(?:\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i,
+  /^\s*\d{0,2}\s*(?:department|institute|institut|laborator(?:y|ies)|school|college|faculty|division)\s+(?:of|for|de|,)/i,
+  /^\s*keywords?\s*[:：]/i,
+  /\|\s*(?:doi:|www\.|https?:\/\/)/i,                       // a journal citing itself across the top of every page
+  /^\s*\*?\s*(?:e-?mail|correspondence|corresponding author|lead contact)\s*[:.]/i,
+  /^\s*\d{0,2}\s*these authors (?:contributed|jointly)/i,
+  /\blicen[cs]e information\b/i, /\bexclusive licensee\b/i
 ];
+
+/* The front matter of a journal paper: who wrote it, where they work, how to reach them, when it
+   was received, and the licence it is published under. All of it sits before the first word of
+   the paper and all of it was being read out before it — which is most of the first minute. */
+const FRONT = [
+  /\b[\w.%+-]+@[\w.-]+\.[a-z]{2,}\b/i,                      // an address to write to
+  /\borcid\.org\b/i,
+  /^\s*(?:received|accepted|revised|published(?:\s+online)?|available online)\s*[:,]?\s*\d/i,
+  /^\s*(?:keywords?|key words|subject (?:areas|terms)|abbreviations)\s*[:：]/i,
+  /^\s*(?:doi|https?:\/\/doi\.org)\b/i,
+  /^\s*\d{0,2}\s*(?:department|institute|institut|laborator(?:y|ies)|school|college|faculty|division|centre|center|graduate school)\s+(?:of|for|de|,)/i,
+  /^\s*\d{0,2}\s*(?:these authors|corresponding author|correspondence|present address|e-?mail)\b/i,
+  /^\s*\*?\s*correspondence\s*(?:and requests|to|:)/i
+];
+/* The licence, which is paragraphs of it and never the paper. */
+const LICENCE = /\b(?:creative\s+commons|this article is licensed under|open access this article|the images or other third[- ]party material|permits use, sharing|no changes were made)\b/i;
+
+/* A line from a reference list that is not under a "References" heading — some PDFs run it on. */
+const REFERENCE_LINE = /^\s*\[?\d{1,3}[.\]]\s+\p{Lu}[^\n]{0,180}?(?:\((?:19|20)\d\d\)|\b(?:19|20)\d\d[a-z]?[;.,]|\bdoi\.org\/|\bet al\.)/u;
+
+/* A journal's own stamp run together with the first words of the page, which happens when the
+   text comes out of the PDF in one line: "802 | VOL.11 NO.8 | AUGUST 2014 | nature methods for
+   the first time...". The stamp is cut off the front and the words are kept. */
+const STAMPS = [
+  /^\s*\d{1,4}\s*\|(?:[^|]{1,40}\|){1,3}\s*/,
+  /^\s*(?:vol\.?\s*\d+[^|]{0,30}\|)\s*/i,
+  /^\s*downloaded from [^\s]+(?: at [^,]{0,60})?(?: on [A-Z][a-z]+ \d{1,2}, \d{4})?\s*/i,
+  /^\s*nature (?:methods|biotechnology|communications|microbiology|reviews [a-z]+)\s*\|\s*/i
+];
+export function stripStamp(line) {
+  let out = String(line), cut = false;
+  for (const stamp of STAMPS) {
+    const shorter = out.replace(stamp, '');
+    if (shorter !== out) { cut = true; out = shorter; }
+  }
+  // What follows the last bar is usually the journal's own name — lower case words before the
+  // capital that starts the page's first sentence. A line never begins in lower case otherwise.
+  if (cut) out = out.replace(/^(?:[a-z][a-z.&]*\s+){1,4}(?=\p{Lu})/u, '');
+  return out.trim() || String(line).trim();
+}
 const REFERENCES = /^\s*(?:\d+\.?\s*)?(references?|bibliography|literature cited|works cited|참고\s*문헌)\s*:?\s*$/i;
 const BACK = /^\s*(?:\d+\.?\s*)?(acknowledge?ments?|author contributions?|competing interests?|conflicts? of interest|data availability|supplementary (?:information|material)|funding|ethics|감사의 글)\s*:?\s*$/i;
-const CAPTION = /^\s*(?:fig(?:ure)?|table|box|scheme|supplementary figure|extended data fig(?:ure)?)\s*\.?\s*\d+[.:|]?\s/i;
+const CAPTION = /^\s*(?:(?:supplementary|extended data|supporting)\s+)?(?:fig(?:ure)?s?|table|box|scheme|chart|plate)\s*\.?\s*(?:s\s*)?\d+[a-z]?\s*(?:[.:|)\]–-]|$)/i;
 const HEADING = /^(?:(?:\d+(?:\.\d+){0,3}|[IVX]+)[.)]?\s+)?(abstract|introduction|background|related work|methods?|materials and methods|experimental(?: procedures)?|results?(?: and discussion)?|discussion|conclusions?|limitations?|초록|서론|방법|결과|논의|결론)(?![\p{L}\p{N}])[\s:.]*$/iu;
 
 const norm = line => line.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -51,7 +100,8 @@ export function repeatedLines(pages, {edge = 3, share = 0.5} = {}) {
     const lines = page.split('\n').map(l => l.trim()).filter(Boolean);
     const edges = new Set([...lines.slice(0, edge), ...lines.slice(-edge)]);
     for (const line of edges) {
-      if (line.length > 90) continue;
+      // A long line may still be a stamp, but only if it does not read like a sentence.
+      if (line.length > 160 || (line.length > 90 && /[.!?]$/.test(line))) continue;
       const key = norm(line);
       if (!key || key.length < 4) continue;
       if (!seen.has(key)) seen.set(key, new Set());
@@ -67,7 +117,12 @@ export function repeatedLines(pages, {edge = 3, share = 0.5} = {}) {
 }
 
 /* A line of running text, or something that only looks like one? */
-const isJunk = (line, repeats) => !line || FURNITURE.some(re => re.test(line)) || repeats.has(norm(line));
+const isJunk = (line, repeats) =>
+  !line || FURNITURE.some(re => re.test(line)) || repeats.has(norm(line)) || REFERENCE_LINE.test(line);
+
+/* Who wrote it and where — true of a whole block, not of one line, because an affiliation runs
+   over several and an address sits on the end of one. */
+export const isFrontMatter = block => FRONT.some(re => re.test(block));
 
 /* "trans-\nporter" is one word; "RNA-\nguided" keeps its hyphen. */
 function dehyphenate(text) {
@@ -119,7 +174,7 @@ export function readable(raw, {title = ''} = {}) {
   const sections = [{heading: '', page: 1, blocks: []}];
   const captions = [];
   const skipped = {repeated: repeats.size, furniture: 0, references: 0, captions: 0};
-  let inBack = false;
+  let inBack = false, started = false;
 
   pages.forEach((page, index) => {
     const pageNo = index + 1;
@@ -132,24 +187,41 @@ export function readable(raw, {title = ''} = {}) {
         kept.push(line);
       }
       if (!kept.length) continue;
+      for (let i = 0; i < kept.length; i++) kept[i] = stripStamp(kept[i]);
 
       // A heading of its own, or the line that starts the back matter.
       if (kept.length === 1 && kept[0].length < 90) {
         if (REFERENCES.test(kept[0])) { inBack = true; skipped.references++; continue; }
         if (BACK.test(kept[0])) { inBack = true; continue; }
         if (HEADING.test(kept[0])) {
-          inBack = false;
+          inBack = false; started = true;
           sections.push({heading: kept[0].replace(/^(?:\d+(?:\.\d+)*|[IVX]+)[.)]?\s+/, '').replace(/[:.]\s*$/, ''), page: pageNo, blocks: []});
           continue;
         }
       }
       if (inBack) { skipped.references++; continue; }
 
+      // A caption often shares a block with the paragraph above it; the block is cut where it begins.
+      const breaks = kept.findIndex((line, i) => i > 0 && CAPTION.test(line));
+      let tail = [];
+      if (breaks > 0) { tail = kept.slice(breaks); kept.length = breaks; }
+      if (tail.length) {
+        captions.push({text: dehyphenate(tail.join('\n')).replace(/\s{2,}/g, ' ').trim(), page: pageNo});
+        skipped.captions++;
+      }
+      if (!kept.length) continue;
+
       const joined = dehyphenate(kept.join('\n')).replace(/\s{2,}/g, ' ').trim();
       if (joined.length < 3) continue;
       if (CAPTION.test(joined)) { captions.push({text: joined, page: pageNo}); skipped.captions++; continue; }
+      if (LICENCE.test(joined)) { skipped.furniture++; continue; }
+      // The front matter only ever sits before the paper starts; after that an address in the
+      // text is part of what is being said.
+      if (!started && isFrontMatter(joined)) { skipped.furniture++; continue; }
       // The title block of the first page: the app shows the title already.
       if (pageNo === 1 && title && joined.toLowerCase().startsWith(String(title).toLowerCase().slice(0, 40))) continue;
+      // Once a real paragraph has been read, the paper has begun.
+      if (joined.length > 160 || /[.!?]\s/.test(joined)) started = true;
       sections[sections.length - 1].blocks.push({text: joined, page: pageNo});
     }
   });
