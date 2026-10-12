@@ -123,7 +123,9 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .group:first-child { margin-top:0; }
 
 .row { position:relative; display:block; width:100%; text-align:start; background:var(--card);
-       padding:10px 14px 11px 18px; transition:background 90ms; }
+       padding:10px 14px 11px 18px; transition:background 90ms;
+       /* A held finger asks this app a question; it must not also summon the phone's own callout. */
+       -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
 .row:first-of-type, .group + .row { border-radius:var(--radius) var(--radius) 0 0; }
 .row:last-of-type { border-radius:0 0 var(--radius) var(--radius); box-shadow:var(--card-shadow); }
 .row:only-of-type, .group + .row:last-of-type { border-radius:var(--radius); }
@@ -223,7 +225,8 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .kv { display:flex; gap:10px; font-size:13px; line-height:1.5; }
 .kv b { flex:none; width:58px; color:var(--faint); font-weight:500; }
 .kv span { flex:1; min-width:0; overflow-wrap:anywhere; }
-.rate { display:flex; gap:2px; }
+.rate-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.rate { display:flex; gap:2px; margin-inline-end:-6px; }
 .rate button { width:36px; height:36px; border-radius:999px; font-size:21px; color:var(--track-hover); }
 .rate button[aria-pressed="true"], .rate button.on { color:var(--warm); }
 .tags { display:flex; flex-wrap:wrap; gap:6px; }

@@ -522,6 +522,7 @@ function layerUp() {
 }
 
 function openSheet(id, leave = () => {}) {
+  closeFloat();              // a menu belongs to the screen it was opened on
   const node = $(id);
   if (!node || sheets.some(sheet => sheet.id === id)) return false;
   const from = document.activeElement;
@@ -858,9 +859,9 @@ async function openDetail(key) {
   el('span', {text: 'PDF 보기'}, paperButton);
   paperButton.addEventListener('click', () => openPaper(state.items.find(x => x.key === key) || item));
 
-  // Status: the same three tags the desktop plugin reads.
+  // Status and rating: the same three tags and the same Rating line the desktop plugin reads.
   const statusCard = el('section', {class: 'card'}, body);
-  el('h3', {text: '상태'}, statusCard);
+  el('h3', {text: '읽기'}, statusCard);
   const track = el('nav', {class: 'seg', role: 'group', 'aria-label': '상태'}, statusCard);
   el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
   const current = () => statusOf(state.items.find(x => x.key === key) || item);
@@ -877,10 +878,9 @@ async function openDetail(key) {
   }
   requestAnimationFrame(() => slide(track));
 
-  // Rating: the "Rating: N" line in Extra, as on the desktop.
-  const rateCard = el('section', {class: 'card'}, body);
-  el('h3', {text: '별점'}, rateCard);
-  const rate = el('div', {class: 'rate'}, rateCard);
+  const rateRow = el('div', {class: 'rate-row'}, statusCard);
+  el('span', {class: 'muted small', text: '별점'}, rateRow);
+  const rate = el('div', {class: 'rate'}, rateRow);
   const paint = value => [...rate.children].forEach((b, i) => b.classList.toggle('on', i < value));
   for (let n = 1; n <= 5; n++) {
     const button = el('button', {type: 'button', 'aria-label': `${n}점`, text: '★'}, rate);

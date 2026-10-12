@@ -9,7 +9,7 @@ A web app you add to the iPhone home screen. No store, no account of its own, no
 1. Make a Zotero API key at <https://www.zotero.org/settings/keys/new> with **Allow library
    access** and **Allow write access** both ticked.
 2. Open the address above in Safari, paste the key, and press 연결.
-3. 설정 (the gear at the top) → **키까지 함께 담기**, then 공유 → **홈 화면에 추가**.
+3. 설정 (the gear at the bottom right) → **키까지 함께 담기**, then 공유 → **홈 화면에 추가**.
 
 That last step matters: iOS gives a home-screen web app its own storage, separate from Safari's,
 so the key has to travel in the address. The icon added that way carries it, and keeps carrying it
@@ -23,13 +23,19 @@ The key stays on the phone (localStorage and IndexedDB). Nothing is sent anywher
 
 **The library.** The whole of it, paged in once and then only what changed (`?since=`,
 `/deleted`). Drawn a screenful at a time, so a few thousand papers open at once and scrolling
-still reaches the end. Six orders — 최근 추가, 최근 본, 최근 변경, 연도, 별점, 제목. Browse by
-collection (a collection means everything filed under it) or by tag; what is being looked at shows
-as chips that take themselves off. Search covers the title, authors, journal, year, DOI, tags and
-the abstract, folds accents so Muller finds Müller, and every word has to appear.
+still reaches the end. The papers are one grouped card with hairline separators, under headings
+that say where you are — 오늘, 이번 달, 2024년 11월, the year, the stars, the letter — and the
+headings follow whichever of the six orders the list is in (최근 추가, 최근 본, 최근 변경, 연도,
+별점, 제목; a menu under the button beside the title). Holding a finger on a paper marks it
+안 읽음 · 읽는 중 · 완료 without opening it, and the mark shows in the margin beside the title.
+Browse by collection (a collection means everything filed under it) or by tag; what is being
+looked at shows as chips that take themselves off. Search covers the title, authors, journal,
+year, DOI, tags and the abstract, folds accents so Muller finds Müller, and every word has to
+appear.
 
 **The PDF.** Pinch to zoom, double tap for 2×, a slider for the long ones, night mode, and out to
-any other app through the share sheet. A paper opens where it was left. Your own Zotero
+any other app through the share sheet — the bar over a paper carries its name, the page and a way
+to find a word, and the rest is a menu under one button. A paper opens where it was left. Your own Zotero
 highlights are drawn on the page in their own colours, and listed in order with the page each one
 is on. Finding a word needs no text layer — the indexed sentences know their pages — so a search
 is a list of places to turn to. A paper fetched once opens again with no signal.
@@ -54,12 +60,23 @@ does, a watchdog starts the sentence again rather than leaving you looking at on
 
 A change is kept as an intention, not as fields to send. So a paper changed on the Mac meanwhile
 is fetched afresh and "mark it done" applied to that, rather than overwriting someone else's
-tags; and a change made with no signal waits in IndexedDB until there is some. The status bar
-says how many are waiting, and tapping it tries again.
+tags; and a change made with no signal waits in IndexedDB until there is some. The toolbar along
+the bottom says how many are waiting, and tapping that tries again.
 
 **On a phone's signal.** A busy server (429, 503) is waited out, doubling the wait and believing
 Retry-After when Zotero sends one. A read is tried four times, a change twice, a note once —
 because the server may have taken the note even though the answer never arrived.
+
+## The look
+
+It is meant to feel like an app on the phone rather than a page in a browser: a grouped list on a
+recessed canvas, hairline separators inset to where the title starts, a large title that shrinks
+into the bar as the library is scrolled, a toolbar along the bottom rather than a strip floating
+over the last row, and screens that come in from the right. The chosen thing is a raised white
+pill on a soft grey track, never a solid fill and never a coloured bar down the edge of a row. In
+the dark it is a true black canvas with the cards lifted off it. Every class the app asks for is
+held against what the stylesheet draws, by a test — a status that was styled twice over for two
+different things is exactly what a broken app looks like.
 
 ## The PDF, and why Dropbox
 
