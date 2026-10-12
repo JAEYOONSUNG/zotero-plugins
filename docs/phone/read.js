@@ -39,11 +39,15 @@ const HEADING = /^(?:(?:\d+(?:\.\d+){0,3}|[IVX]+)[.)]?\s+)?(abstract|introductio
 const norm = line => line.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim().toLowerCase();
 
 /* Lines that appear, in the same shape, near the top or the bottom of many pages: the running
-   head and the footer. Kept to the edges so a sentence that happens to repeat is not lost. */
-export function repeatedLines(pages, {edge = 3, share = 0.34} = {}) {
-  if (pages.length < 4) return new Set();
+   head and the footer. Kept to the edges so a sentence that happens to repeat is not lost.
+   A paper of two or three pages has too few to go by counting, so there a line is only dropped
+   when it is on every page and does not end like a sentence. */
+export function repeatedLines(pages, {edge = 3, share = 0.5} = {}) {
+  if (pages.length < 2) return new Set();
+  const few = pages.length < 4;
   const seen = new Map();
-  for (const page of pages) {
+  // Counted by page number, not by the page's text: two pages that read the same are still two.
+  pages.forEach((page, at) => {
     const lines = page.split('\n').map(l => l.trim()).filter(Boolean);
     const edges = new Set([...lines.slice(0, edge), ...lines.slice(-edge)]);
     for (const line of edges) {
@@ -51,11 +55,14 @@ export function repeatedLines(pages, {edge = 3, share = 0.34} = {}) {
       const key = norm(line);
       if (!key || key.length < 4) continue;
       if (!seen.has(key)) seen.set(key, new Set());
-      seen.get(key).add(page);
+      seen.get(key).add(at);
     }
-  }
+  });
   const out = new Set();
-  for (const [key, where] of seen) if (where.size >= Math.max(2, Math.ceil(pages.length * share))) out.add(key);
+  for (const [key, where] of seen) {
+    if (few) { if (where.size === pages.length && key.length <= 60 && !/[.!?]$/.test(key)) out.add(key); }
+    else if (where.size >= Math.max(3, Math.ceil(pages.length * share))) out.add(key);
+  }
   return out;
 }
 

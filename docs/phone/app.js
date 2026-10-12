@@ -13,8 +13,12 @@
    Writes go through PATCH with If-Unmodified-Since-Version, so an item changed elsewhere since
    this phone last saw it is refused rather than overwritten. */
 
+import {readable, units as readingUnits, remainingSeconds} from './read.js';
+import {createPlayer, speechEngine, pickVoice, paperLanguage, RATES} from './play.js';
+
 const API = 'https://api.zotero.org';
-const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope'};
+const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
+              rate: 'np.rate', voice: 'np.voice.', at: 'np.at.'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -47,11 +51,13 @@ function toast(text) {
 const DB = (() => {
   let open = null;
   const ready = () => open || (open = new Promise((resolve, reject) => {
-    const req = indexedDB.open('nonmun', 1);
+    const req = indexedDB.open('nonmun', 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', {keyPath: 'key'});
       if (!db.objectStoreNames.contains('collections')) db.createObjectStore('collections', {keyPath: 'key'});
+      // The text Zotero indexed, kept so a paper opened once can be listened to with no signal.
+      if (!db.objectStoreNames.contains('text')) db.createObjectStore('text', {keyPath: 'key'});
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -66,6 +72,7 @@ const DB = (() => {
   };
   return {
     all: store => run(store, 'readonly', s => s.getAll()),
+    get: (store, key) => run(store, 'readonly', s => s.get(key)),
     put: (store, rows) => run(store, 'readwrite', s => { for (const row of rows) s.put(row); }),
     remove: (store, keys) => run(store, 'readwrite', s => { for (const key of keys) s.delete(key); }),
     clear: store => run(store, 'readwrite', s => s.clear())
@@ -401,6 +408,13 @@ async function openDetail(key) {
   }
   paint(ratingOf(item));
 
+  // Listening to the paper: the text Zotero indexed, body only.
+  const listenCard = el('section', {class: 'card'}, body);
+  const listenButton = el('button', {type: 'button', class: 'listen-start'}, listenCard);
+  el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, listenButton);
+  el('span', {text: Number(localStorage.getItem(KEYS.at + key)) > 0 ? '본문 이어 듣기' : '본문 듣기'}, listenButton);
+  listenButton.addEventListener('click', () => openListen(state.items.find(x => x.key === key) || item));
+
   if (clean(item.data.abstractNote)) {
     const card = el('section', {class: 'card'}, body);
     el('h3', {text: '초록'}, card);
@@ -460,6 +474,207 @@ async function openDetail(key) {
     }
   }
   loadChildren();
+}
+
+/* ---------- listening ---------- */
+/* The phone has no PDF. What it reads is the text Zotero already indexed for the attachment
+   (GET /items/<attachment>/fulltext), cleaned by read.js down to the body, and spoken by the
+   phone's own voices. The text is kept so a paper opened once can be listened to with no signal. */
+const PDF_TYPES = /pdf|epub/i;
+async function attachmentOf(itemKey) {
+  const response = await api(`/items/${itemKey}/children?limit=100`);
+  const rows = await response.json();
+  const files = rows.filter(r => r.data.itemType === 'attachment' && (PDF_TYPES.test(r.data.contentType || '') || PDF_TYPES.test(r.data.filename || '')));
+  return files[0] || null;
+}
+async function fulltextOf(attachmentKey) {
+  const saved = await DB.get('text', attachmentKey).catch(() => null);
+  if (saved && saved.content) return saved.content;
+  const response = await api(`/items/${attachmentKey}/fulltext`);
+  const body = await response.json();
+  const content = String(body.content || '');
+  if (content) await DB.put('text', [{key: attachmentKey, content, at: Date.now()}]).catch(() => {});
+  return content;
+}
+
+const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: []};
+
+/* Keep the screen on while the paper is being read; the lock screen stops Safari's speech. */
+async function holdScreen(on) {
+  try {
+    if (!('wakeLock' in navigator)) return;
+    if (on && !listen.wake) listen.wake = await navigator.wakeLock.request('screen');
+    if (!on && listen.wake) { await listen.wake.release(); listen.wake = null; }
+  } catch (_) { listen.wake = null; }
+}
+
+function closeListen() {
+  if (listen.player) listen.player.stop();
+  holdScreen(false);
+  $('listen').hidden = true;
+}
+
+function paintListen(state) {
+  const node = listen.nodes[state.index];
+  for (const other of listen.nodes) if (other && other.getAttribute('aria-current')) other.removeAttribute('aria-current');
+  if (node) {
+    node.setAttribute('aria-current', 'true');
+    try { node.scrollIntoView?.({block: 'center', behavior: 'smooth'}); } catch (_) { try { node.scrollIntoView?.(); } catch (__) {} }
+  }
+  const playing = state.status === 'playing';
+  const button = $('listen-play');
+  button.setAttribute('aria-label', playing ? '일시정지' : '재생');
+  button.innerHTML = playing
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>';
+  const left = remainingSeconds(listen.list, state.index, state.rate);
+  const unit = state.unit;
+  $('listen-where').textContent = state.status === 'error'
+    ? '이 폰의 목소리가 멈췄습니다. 다시 눌러 주세요.'
+    : `${state.index + 1} / ${state.total}${unit && unit.page ? ` · ${unit.page}쪽` : ''} · 남은 시간 약 ${Math.max(1, Math.round(left / 60))}분`;
+  if (listen.item) localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
+  holdScreen(playing);
+}
+
+function renderTranscript(list) {
+  const body = $('listen-body');
+  body.textContent = '';
+  listen.nodes = [];
+  let section = null;
+  list.forEach((unit, index) => {
+    if (unit.section && unit.section !== section) { section = unit.section; el('p', {class: 'sec', text: section}, body); }
+    const node = el('button', {type: 'button', class: `sent${unit.kind === 'caption' ? ' caption' : ''}`, text: unit.text}, body);
+    node.addEventListener('click', () => { listen.player.play(index); });
+    listen.nodes[index] = node;
+  });
+}
+
+function fillVoiceMenu(lang) {
+  const select = $('listen-voice');
+  const same = listen.voices.filter(v => String(v.lang || '').toLowerCase().startsWith(lang));
+  const offered = (same.length ? same : listen.voices).slice(0, 60);
+  const saved = localStorage.getItem(KEYS.voice + lang) || '';
+  const chosen = offered.some(v => v.voiceURI === saved) ? saved : '';
+  select.textContent = '';
+  const auto = el('option', {value: '', text: '자동'}, select);
+  if (!chosen) auto.selected = true;
+  for (const voice of offered) {
+    const option = el('option', {value: voice.voiceURI, text: `${voice.name}${voice.lang ? ` · ${voice.lang}` : ''}`}, select);
+    if (voice.voiceURI === chosen) option.selected = true;
+  }
+}
+
+async function openListen(item) {
+  listen.item = item;
+  $('listen-title').textContent = clean(item.data.title) || '논문';
+  const body = $('listen-body');
+  body.textContent = '';
+  $('listen-bar').hidden = true;
+  $('listen').hidden = false;
+  el('p', {class: 'muted small', text: '본문을 가져오는 중…'}, body);
+
+  let text = '';
+  try {
+    const attachment = await attachmentOf(item.key);
+    if (!attachment) throw new Error('이 문헌에는 PDF 첨부가 없습니다.');
+    text = await fulltextOf(attachment.key);
+  } catch (error) {
+    body.textContent = '';
+    const card = el('section', {class: 'card'}, body);
+    el('h3', {text: '읽을 본문이 없습니다'}, card);
+    el('p', {class: 'muted small', text: error.status === 404
+      ? 'Zotero가 이 PDF의 본문을 아직 색인하지 않았습니다. 맥에서 PDF를 한 번 열고 동기화한 뒤 다시 시도하세요.'
+      : error.message}, card);
+    return;
+  }
+  if (!clean(text)) {
+    body.textContent = '';
+    el('p', {class: 'muted small', text: '색인된 본문이 비어 있습니다. 맥에서 PDF를 한 번 열어 주세요.'}, body);
+    return;
+  }
+
+  const paper = readable(text, {title: clean(item.data.title)});
+  listen.paper = paper;
+  const engine = speechEngine(window);
+  if (!engine.available()) {
+    body.textContent = '';
+    el('p', {class: 'muted small', text: '이 폰에서 음성을 쓸 수 없습니다.'}, body);
+    return;
+  }
+
+  const withCaptions = false;
+  listen.list = readingUnits(paper, {captions: withCaptions});
+  renderTranscript(listen.list);
+
+  const lang = paperLanguage(listen.list);
+  listen.voices = engine.voices();
+  fillVoiceMenu(lang);
+  const chosen = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
+  const rate = Number(localStorage.getItem(KEYS.rate)) || 1;
+  const at = Math.min(listen.list.length - 1, Math.max(0, Number(localStorage.getItem(KEYS.at + item.key)) || 0));
+
+  if (listen.player) listen.player.stop();
+  listen.player = createPlayer({engine, rate, lang: chosen ? chosen.lang : lang, voiceURI: chosen ? chosen.voiceURI : '',
+    onChange: event => paintListen(event.state)});
+  listen.player.load(listen.list, {at});
+
+  // The voices arrive late on iOS; refill the menu when they do.
+  try {
+    speechSynthesis.addEventListener('voiceschanged', () => {
+      listen.voices = engine.voices();
+      fillVoiceMenu(lang);
+      if (!localStorage.getItem(KEYS.voice + lang)) {
+        const better = pickVoice(listen.voices, lang, '');
+        if (better) listen.player.setVoice(better.voiceURI, better.lang);
+      }
+    }, {once: true});
+  } catch (_) {}
+
+  buildRates(rate);
+  buildScope(lang, withCaptions);
+  $('listen-bar').hidden = false;
+  paintListen(listen.player.state());
+}
+
+function buildRates(current) {
+  const track = $('listen-rate');
+  track.textContent = '';
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
+  for (const rate of RATES) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(Math.abs(rate - current) < 0.01), text: `${rate}×`}, track);
+    button.addEventListener('click', () => {
+      listen.player.setRate(rate);
+      localStorage.setItem(KEYS.rate, String(rate));
+      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(track);
+    });
+  }
+  requestAnimationFrame(() => slide(track));
+}
+
+/* What is read: the body alone, or the figure captions with it. */
+function buildScope(lang, captions) {
+  const track = $('listen-what');
+  track.textContent = '';
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
+  for (const [id, label] of [['body', '본문만'], ['captions', '캡션까지']]) {
+    const on = (id === 'captions') === captions;
+    const button = el('button', {type: 'button', 'aria-pressed': String(on), text: label}, track);
+    button.addEventListener('click', () => {
+      const at = listen.player.state().index;
+      const unit = listen.list[at];
+      listen.list = readingUnits(listen.paper, {captions: id === 'captions'});
+      renderTranscript(listen.list);
+      const back = unit ? Math.max(0, listen.list.findIndex(u => u.text === unit.text)) : 0;
+      const playing = listen.player.state().status === 'playing';
+      listen.player.load(listen.list, {at: back});
+      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(track);
+      if (playing) listen.player.play(back); else paintListen(listen.player.state());
+    });
+  }
+  requestAnimationFrame(() => slide(track));
+  void lang;
 }
 
 /* ---------- collections ---------- */
@@ -522,6 +737,20 @@ function wire() {
   $('btn-sync').addEventListener('click', () => sync());
   $('btn-collections').addEventListener('click', openCollections);
   $('back').addEventListener('click', () => { $('detail').hidden = true; });
+  $('listen-back').addEventListener('click', closeListen);
+  $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
+  $('listen-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
+  $('listen-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });
+  $('listen-voice').addEventListener('change', event => {
+    if (!listen.player) return;
+    const uri = event.target.value;
+    const lang = paperLanguage(listen.list);
+    localStorage.setItem(KEYS.voice + lang, uri);
+    const voice = listen.voices.find(v => v.voiceURI === uri) || pickVoice(listen.voices, lang, '');
+    listen.player.setVoice(voice ? voice.voiceURI : '', voice ? voice.lang : lang);
+  });
+  // The screen going away stops the voice rather than leaving it talking to nobody.
+  addEventListener('pagehide', () => { if (listen.player) listen.player.stop(); });
   $('collections-back').addEventListener('click', () => { $('collections').hidden = true; });
   addEventListener('resize', () => { for (const track of document.querySelectorAll('.seg')) slide(track); });
   $('setup-go').addEventListener('click', async () => {

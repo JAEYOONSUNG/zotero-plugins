@@ -39,6 +39,7 @@ function fakeIndexedDB() {
           const tx = {oncomplete: null, onerror: null,
             objectStore: () => ({
               getAll: () => task([...store(name).values()]),
+              get: key => task(store(name).get(key)),
               put: row => { store(name).set(row.key, row); return task(); },
               delete: key => { store(name).delete(key); return task(); },
               clear: () => { store(name).clear(); return task(); }
@@ -55,9 +56,54 @@ function fakeIndexedDB() {
   };
 }
 
+let boots = 0;
+
+/* The phone's voice: utterances are collected, and step() speaks the oldest one through. */
+function fakeSpeech() {
+  const queue = [], spoken = [];
+  class Utterance {
+    constructor(text) { this.text = text; this.onstart = null; this.onend = null; this.onerror = null; }
+  }
+  const synth = {
+    getVoices: () => [{voiceURI: 'v-sam', name: 'Samantha', lang: 'en-US', localService: true, default: true}],
+    speak(u) { queue.push(u); },
+    cancel() { queue.length = 0; },
+    pause() { synth.paused = true; },
+    resume() { synth.paused = false; },
+    addEventListener() {}, removeEventListener() {},
+    paused: false
+  };
+  return {synth, Utterance, spoken, queue,
+    /* The phone starts the oldest utterance, and finishes it when the voice reaches the end. */
+    start() { const u = queue[0]; if (u) { spoken.push(u.text); u.onstart?.(); } return u; },
+    finish() { const u = queue.shift(); if (u) u.onend?.(); return u; },
+    step() { this.start(); return this.finish(); }};
+}
+
 /* api.zotero.org, enough of it: paged listings with the headers the app reads, and PATCH/POST
    that record what was sent. */
-function fakeServer({items = ITEMS, collections = COLLECTIONS} = {}) {
+/* One page of what Zotero indexed for a PDF: a running head, the body, a caption, references. */
+const FULLTEXT = [
+  `Seo et al., Science 387, 41 (2026)
+
+Introduction
+
+Microbial decomposers can degrade newly encountered materials [1]. The enzyme works at fif-
+ty degrees.
+
+Fig. 1. The landscape, coloured by cluster.
+
+1`,
+  `Seo et al., Science 387, 41 (2026)
+
+References
+
+1. H. Seo, Nature 500, 1 (2019).
+
+2`
+].join('\f');
+
+function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, fulltext = null} = {}) {
   const sent = [];
   const page = (rows, url) => {
     const limit = Number(url.searchParams.get('limit') || 25), start = Number(url.searchParams.get('start') || 0);
@@ -76,7 +122,11 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS} = {}) {
       return page(items, url);
     }
     if (rest === '/deleted') return new Response(JSON.stringify({items: [], collections: []}), {status: 200, headers: {'Last-Modified-Version': '42'}});
-    if (/^\/items\/\w+\/children$/.test(rest)) return new Response('[]', {status: 200, headers: {'Content-Type': 'application/json'}});
+    if (/^\/items\/\w+\/fulltext$/.test(rest)) {
+      if (fulltext === null) return new Response('Not found', {status: 404});
+      return new Response(JSON.stringify({content: fulltext, indexedPages: 2, totalPages: 2}), {status: 200, headers: {'Content-Type': 'application/json'}});
+    }
+    if (/^\/items\/\w+\/children$/.test(rest)) return new Response(JSON.stringify(children || []), {status: 200, headers: {'Content-Type': 'application/json'}});
     if (/^\/items\/\w+$/.test(rest)) return new Response('', {status: 204, headers: {'Last-Modified-Version': '44'}});
     return new Response('no', {status: 404});
   };
@@ -95,19 +145,26 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     matchMedia: () => ({matches: false, addEventListener() {}}),
     Response, Request, Headers, URL, URLSearchParams, queueMicrotask, setTimeout, clearTimeout, console
   });
-  // No service worker in this test phone; linkedom's navigator is read-only, so the app is given its own.
-  const navigator = {userAgent: 'test'};
-  const code = read('app.js');
-  const matchMedia = () => ({matches: false, addEventListener() {}});
-  const run = new Function('window', 'document', 'localStorage', 'indexedDB', 'fetch', 'requestAnimationFrame',
-    'Response', 'URL', 'URLSearchParams', 'navigator', 'addEventListener', 'setTimeout', 'clearTimeout', 'console', 'location', 'history', 'matchMedia', code);
+  /* app.js is a real module (it imports read.js and play.js), so the fake phone is put in the
+     globals the module will read and the module is imported fresh for each boot. */
   const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash};
   const history = {replaceState(_state, _title, url) { location.hash = ''; location.pathname = String(url).split('#')[0]; }};
   window.location = location;
-  run(window, document, window.localStorage, window.indexedDB, window.fetch, window.requestAnimationFrame,
-    Response, URL, URLSearchParams, navigator, (type, fn) => window.addEventListener?.(type, fn), setTimeout, clearTimeout, console, location, history, matchMedia);
+  const speech = fakeSpeech();
+  const globals = {
+    window, document, localStorage: window.localStorage, indexedDB: window.indexedDB, fetch: window.fetch,
+    requestAnimationFrame: window.requestAnimationFrame, Response, URL, URLSearchParams, location, history,
+    matchMedia: () => ({matches: false, addEventListener() {}}),
+    addEventListener: (type, fn, opts) => window.addEventListener?.(type, fn, opts),
+    // No service worker in this test phone, and linkedom's navigator is read-only.
+    navigator: {userAgent: 'test'},
+    speechSynthesis: speech.synth, SpeechSynthesisUtterance: speech.Utterance
+  };
+  const put = (name, value) => Object.defineProperty(globalThis, name, {value, configurable: true, writable: true});
+  for (const [name, value] of Object.entries(globals)) put(name, value);
+  await import(new URL(`../app.js?boot=${++boots}`, here));
   const settle = async () => { for (let i = 0; i < 60; i++) await new Promise(r => setTimeout(r, 4)); };
-  return {window, document, settle, storage, location};
+  return {window, document, settle, storage, location, speech};
 }
 
 test('a stored key goes straight to the library, and no key shows the setup screen', async () => {
@@ -247,4 +304,83 @@ test('the service worker never caches an answer from the Zotero API', () => {
   const shell = /const SHELL = \[([^\]]*)\]/.exec(sw);
   assert.ok(shell, 'the shell list is there');
   assert.doesNotMatch(shell[1], /https?:/, 'nothing off this origin is pre-cached');
+});
+
+/* ---- listening ---- */
+const PDF_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', contentType: 'application/pdf', filename: 'seo.pdf'}}];
+
+async function openListening(options = {}) {
+  const server = fakeServer({children: PDF_CHILD, fulltext: FULLTEXT, ...options});
+  const open = await boot({server});
+  await open.settle();
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const start = [...open.document.querySelectorAll('#detail .listen-start')][0];
+  start.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  return {open, server};
+}
+
+test('listening shows the body only: no running head, no caption, no reference list', async () => {
+  const {open} = await openListening();
+  const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.ok(lines.length, 'there are sentences to read');
+  assert.ok(lines.some(l => /Microbial decomposers/.test(l)), 'the body is there');
+  assert.ok(lines.some(l => /fifty degrees/.test(l)), 'a word broken across a line is put back together');
+  assert.ok(!lines.some(l => /Seo et al\., Science/.test(l)), 'the running head is not read');
+  assert.ok(!lines.some(l => /coloured by cluster/.test(l)), 'captions are not read unless asked for');
+  assert.ok(!lines.some(l => /Nature 500/.test(l)), 'the reference list is not read');
+  assert.equal(open.document.getElementById('listen').hidden, false);
+});
+
+test('pressing play speaks the first sentence without its citation, and the place is remembered', async () => {
+  const {open} = await openListening();
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.speech.queue.length > 0, true, 'the phone was asked to speak');
+  open.speech.start();
+  await open.settle();
+  assert.match(open.speech.spoken[0], /Introduction\. Microbial decomposers/, 'the section name comes first');
+  assert.ok(!/\[1\]/.test(open.speech.spoken[0]), 'the citation is not read out');
+  assert.equal(open.storage.get('np.at.AAA'), '0');
+  const current = open.document.querySelector('#listen .sent[aria-current="true"]');
+  assert.ok(current, 'the sentence being read is marked');
+  assert.equal(open.document.getElementById('listen-play').getAttribute('aria-label'), '일시정지');
+
+  // The next sentence is read without a gap, and the place moves with it.
+  open.speech.finish();
+  open.speech.start();
+  await open.settle();
+  assert.equal(open.speech.spoken.length, 2);
+  assert.equal(open.storage.get('np.at.AAA'), '1');
+});
+
+test('the text Zotero indexed is asked for once and then kept on the phone', async () => {
+  const {open, server} = await openListening();
+  open.document.getElementById('listen-back').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  [...open.document.querySelectorAll('#detail .listen-start')][0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(server.sent.filter(r => /\/fulltext$/.test(r.path)).length, 1, 'the second time it comes from the phone');
+});
+
+test('captions are added to the reading when asked for', async () => {
+  const {open} = await openListening();
+  const captions = [...open.document.querySelectorAll('#listen-what button')].find(b => b.textContent === '캡션까지');
+  captions.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.ok(lines.some(l => /coloured by cluster/.test(l)));
+});
+
+test('a PDF Zotero has not indexed says what to do instead of failing silently', async () => {
+  const {open} = await openListening({fulltext: null});
+  const said = open.document.getElementById('listen-body').textContent;
+  assert.match(said, /색인/);
+  assert.equal(open.document.getElementById('listen-bar').hidden, true, 'no player is offered');
+});
+
+test('a paper with no PDF says so', async () => {
+  const {open} = await openListening({children: []});
+  assert.match(open.document.getElementById('listen-body').textContent, /PDF 첨부가 없습니다/);
 });

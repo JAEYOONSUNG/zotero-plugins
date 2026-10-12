@@ -141,3 +141,39 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
         box-shadow:0 8px 24px rgba(0,0,0,.18); display:flex; flex-direction:column; gap:12px; z-index:20; }
 .pair[hidden] { display:none; }
 .pair p { margin:0; font-size:14px; line-height:1.5; }
+
+/* ---- listening ---- */
+/* The transcript is the paper itself: one sentence a line, the one being read raised onto a white
+   card like the chosen pill, so the eye finds it without the page jumping about. */
+.transcript { gap:0; padding-bottom:calc(var(--bottom) + 220px); }
+.transcript .sec { margin:18px 0 6px; font-size:12px; font-weight:700; letter-spacing:.04em;
+                   text-transform:uppercase; color:var(--muted); }
+.transcript .sent { display:block; width:100%; text-align:start; padding:7px 12px; border-radius:12px;
+                    font-size:15px; line-height:1.6; color:var(--ink);
+                    transition:background var(--slide), box-shadow var(--slide); }
+.transcript .sent[aria-current="true"] { background:var(--sel); box-shadow:var(--sel-shadow); font-weight:600; }
+.transcript .sent.caption { color:var(--muted); font-size:14px; }
+.transcript .sent:active { background:var(--track); }
+
+.player { position:absolute; left:0; right:0; bottom:0; z-index:2;
+          padding:10px var(--pad) calc(var(--bottom) + 10px);
+          display:flex; flex-direction:column; gap:8px;
+          background:color-mix(in srgb, var(--card) 86%, transparent);
+          -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px);
+          border-top:1px solid var(--line); }
+.player[hidden] { display:none; }
+.player-meta { display:flex; justify-content:center; }
+.player-row { display:flex; align-items:center; justify-content:center; gap:18px; }
+.player-row.wrap { gap:10px; justify-content:space-between; }
+.play-btn { width:56px; height:56px; border-radius:999px; background:var(--sel); box-shadow:var(--sel-shadow);
+            display:grid; place-items:center; }
+.play-btn svg { width:26px; height:26px; fill:currentColor; stroke:none; }
+.play-btn:active { background:var(--track-hover); }
+.small-seg button { height:26px; font-size:12px; }
+.pick { display:flex; align-items:center; gap:6px; min-width:0; }
+.pick select { max-width:46vw; font:inherit; font-size:13px; color:var(--ink); background:var(--track);
+               border:0; border-radius:999px; padding:5px 10px; }
+.listen-start { display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+                padding:12px; border-radius:14px; background:var(--track); font-weight:650; }
+.listen-start:active { background:var(--track-hover); }
+.listen-start svg { width:20px; height:20px; fill:currentColor; stroke:none; }

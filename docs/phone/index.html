@@ -80,6 +80,28 @@
   <main id="detail-body" class="list"></main>
 </section>
 
+<!-- listening to one paper -->
+<section id="listen" class="screen sheet" hidden>
+  <header class="top detail-top">
+    <button id="listen-back" class="icon-btn" aria-label="뒤로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <span id="listen-title" class="detail-title"></span>
+  </header>
+  <main id="listen-body" class="list transcript" aria-live="off"></main>
+  <footer id="listen-bar" class="player" hidden>
+    <div class="player-meta"><span id="listen-where" class="muted small"></span></div>
+    <div class="player-row">
+      <button id="listen-prev" class="icon-btn" aria-label="이전 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-7 6 7 6"/><path d="M8 6v12"/></svg></button>
+      <button id="listen-play" class="play-btn" aria-label="재생"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
+      <button id="listen-next" class="icon-btn" aria-label="다음 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l7 6-7 6"/><path d="M16 6v12"/></svg></button>
+    </div>
+    <nav id="listen-rate" class="seg small-seg" role="group" aria-label="속도"></nav>
+    <div class="player-row wrap">
+      <label class="pick"><span class="muted small">목소리</span><select id="listen-voice"></select></label>
+      <nav id="listen-what" class="seg small-seg" role="group" aria-label="읽을 범위"></nav>
+    </div>
+  </footer>
+</section>
+
 <!-- collections -->
 <section id="collections" class="screen sheet" hidden>
   <header class="top detail-top">

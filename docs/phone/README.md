@@ -19,6 +19,13 @@ anywhere except to `api.zotero.org`.
 - The whole library, paged in once and then only what changed (`?since=`, `/deleted`).
 - Browse by collection, search title, author, journal, year and tags.
 - Open a paper for its metadata, abstract, tags, notes and annotations.
+- **Listen to the body.** The text Zotero already indexed is cleaned down to what is worth
+  hearing — the running head, the download stamp, the page numbers, the figure captions and the
+  reference list are left out, words broken across a line are put back together, and the
+  citations are dropped from what is said while the sentence on screen keeps them. The sentence
+  being read is marked, tapping a sentence starts there, and the place is remembered per paper.
+  The phone's own voices do the speaking, so it costs nothing and works with no signal once the
+  text has been fetched.
 - Change the **status** and the **rating**, and write a note — all of it in the same places
   the desktop plugin reads, so a change here shows up on the Mac after a sync:
   | | where it lives |
@@ -30,14 +37,14 @@ anywhere except to `api.zotero.org`.
 
 ## Still to come
 
-- The PDF itself, from the Dropbox folder the library points at, with read-aloud over the body
-  text only (the extraction the desktop plugin already does).
-- Audio rendered on the Mac (Supertonic) for lock-screen and offline listening.
+- The PDF itself, from the Dropbox folder the library points at, to read along with.
+- Audio rendered on the Mac (Supertonic) for lock-screen listening in a nicer voice than the
+  phone's own.
 
 ## Checking it
 
 ```sh
-node --test docs/phone/test/app.test.mjs
+node --test docs/phone/test/*.test.mjs
 ```
 
 The app is loaded into a fake phone (a DOM, a fake IndexedDB, a fake api.zotero.org) and what
