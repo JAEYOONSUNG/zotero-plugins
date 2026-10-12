@@ -1023,6 +1023,7 @@ function wire() {
   addEventListener('pagehide', () => { if (listen.player) listen.player.stop(); });
   $('collections-back').addEventListener('click', () => { $('collections').hidden = true; });
   $('btn-settings').addEventListener('click', () => { $('collections').hidden = true; openSettings(); });
+  $('btn-settings-main').addEventListener('click', () => openSettings());
   $('settings-back').addEventListener('click', () => { $('settings').hidden = true; });
   $('listen-pdf').addEventListener('click', () => {
     if (!listen.item) return;

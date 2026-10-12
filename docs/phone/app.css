@@ -211,3 +211,6 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
 .steps code { background:var(--track); border-radius:6px; padding:1px 5px; font-size:12px;
               user-select:all; -webkit-user-select:all; word-break:break-all; }
 .player .small-btn { height:28px; padding:0 12px; font-size:13px; border-radius:999px; }
+/* Four things in the top row on a phone: the search gives up its width first. */
+.top-row .search { flex:1 1 auto; }
+.top-row .icon-btn { width:36px; }

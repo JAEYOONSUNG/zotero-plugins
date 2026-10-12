@@ -307,6 +307,34 @@ test('the service worker never caches an answer from the Zotero API', () => {
   assert.doesNotMatch(shell[1], /https?:/, 'nothing off this origin is pre-cached');
 });
 
+/* A new version of the app has to arrive the next time 논문 is opened. Serving the cache first
+   and refreshing behind it meant a change landed only on the opening after that, which is how a
+   setting that had been shipped was not on the phone. */
+test('the app is fetched fresh when there is signal, and only pdf.js is served from the cache first', async () => {
+  const sw = read('sw.js');
+  const scope = {CACHE: null, IMMUTABLE: null, SLOW: null, fetch: null, handler: null, caches: null,
+                 location: {origin: 'https://x.test'}, setTimeout, Promise, URL, Response};
+  const held = new Map([['https://x.test/phone/app.js', 'OLD'], ['https://x.test/phone/vendor/pdf.min.js', 'LIB']]);
+  const self = {addEventListener: (type, fn) => { if (type === 'fetch') scope.handler = fn; }, skipWaiting() {}, clients: {claim() {}}};
+  const asked = [];
+  const run = new Function('self', 'caches', 'fetch', 'location', 'setTimeout', sw);
+  run(self,
+      {match: async request => (held.has(request.url) ? new Response(held.get(request.url)) : undefined),
+       open: async () => ({put: async () => {}}), keys: async () => []},
+      async request => { asked.push(request.url); return new Response('NEW', {status: 200}); },
+      scope.location, setTimeout);
+  assert.ok(scope.handler, 'the worker answers fetches');
+
+  const ask = async url => {
+    let answer = null;
+    scope.handler({request: {url, method: 'GET'}, respondWith: promise => { answer = promise; }});
+    return answer ? (await answer).text() : null;
+  };
+  assert.equal(await ask('https://x.test/phone/app.js'), 'NEW', 'the app comes from the network');
+  assert.equal(await ask('https://x.test/phone/vendor/pdf.min.js'), 'LIB', 'pdf.js comes from this phone');
+  assert.ok(!asked.includes('https://x.test/phone/vendor/pdf.min.js'), 'and is not fetched again');
+});
+
 /* ---- listening ---- */
 const PDF_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', contentType: 'application/pdf', filename: 'seo.pdf'}}];
 
