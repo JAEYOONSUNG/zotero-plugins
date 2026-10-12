@@ -1938,6 +1938,8 @@ function wire() {
     const box = $('q');
     if (box && document.activeElement === box) box.blur();
   }, {passive: true});
+  // The search key on the keyboard means "that is the whole word": the keyboard goes away.
+  $('q').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('q').blur(); } });
   $('q-clear').addEventListener('click', () => {
     $('q').value = ''; state.q = ''; state.shown = 0;
     $('list').scrollTop = 0; render(); $('q').focus();

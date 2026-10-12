@@ -4,16 +4,17 @@
    a recessed canvas, hairline separators inset to the text, a large title that shrinks away as the
    library is scrolled, and a toolbar along the bottom. The chosen item is a RAISED WHITE PILL on a
    soft grey track that slides to it — never a solid black fill, never a coloured bar down the edge
-   of a row. Text keeps 4.5:1 and is at least 11px. */
+   of a row. Text keeps 4.5:1 and is at least 11px: --faint is the quietest ink allowed, and it is
+   measured against the card it sits on, not against the canvas behind it. */
 
 :root {
   --canvas:#f1f1f5; --card:#fff; --press:#e8e8ee;
-  --ink:#16161a; --muted:#6b6b73; --faint:#95959d;
+  --ink:#16161a; --muted:#5a5a62; --faint:#6b6b73;
   --track:rgba(118,118,128,.12); --track-hover:rgba(118,118,128,.22); --line:rgba(60,60,67,.22);
   --sel:#fff; --sel-shadow:0 2px 6px rgba(0,0,0,.1),0 0 0 .5px rgba(0,0,0,.04);
   --card-shadow:0 1px 2px rgba(0,0,0,.05);
   --chrome:rgba(246,246,249,.88);
-  --link:#0a66e0; --bad:#c6362c; --good:#17904d; --warm:#b0730e;
+  --link:#0a66e0; --bad:#c6362c; --good:#0f7d41; --warm:#9a6508;
   --pad:16px; --gap:12px; --radius:14px; --slide:220ms cubic-bezier(.2,.8,.2,1);
   --top:calc(env(safe-area-inset-top,0px)); --bottom:calc(env(safe-area-inset-bottom,0px));
   color-scheme: light dark;
@@ -23,7 +24,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --canvas:#000; --card:#1c1c1e; --press:#2c2c2e;
-    --ink:#f3f3f6; --muted:#9d9da6; --faint:#78787f;
+    --ink:#f3f3f6; --muted:#9d9da6; --faint:#8a8a92;
     --track:rgba(118,118,128,.26); --track-hover:rgba(118,118,128,.4); --line:rgba(255,255,255,.1);
     --sel:#3a3a3f; --sel-shadow:0 1px 3px rgba(0,0,0,.6);
     --card-shadow:none;
@@ -194,7 +195,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .tabbar::before { content:''; position:absolute; left:0; right:0; top:0; height:1px; background:var(--line);
                   transform:scaleY(.5); transform-origin:top; }
 .tab { display:flex; flex-direction:column; align-items:center; gap:1px; flex:none; width:64px;
-       padding:4px 0 2px; border-radius:10px; font-size:10px; font-weight:600; color:var(--muted); }
+       padding:4px 0 2px; border-radius:10px; font-size:11px; font-weight:600; color:var(--muted); }
 .tab svg { width:23px; height:23px; }
 .tab:active { color:var(--ink); background:var(--track); }
 .tab-state { flex:1; min-width:0; text-align:center; font-size:11px; color:var(--faint);

@@ -1360,3 +1360,43 @@ test('the refresh button says, by turning, that something is happening', async (
   assert.equal(button.classList.contains('spinning'), false);
   assert.equal(button.getAttribute('aria-busy'), 'false');
 });
+
+/* The instruction this app is written under says text keeps 4.5:1 and is at least 11px. Colour is
+   the one part of a look that cannot be judged by eye in the dark, so it is measured here: every
+   ink, against the card it is written on, and the two quiet ones against the canvas as well,
+   because that is where the count and the headings sit. */
+const hexToRgb = hex => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255);
+const luminance = hex => {
+  const [r, g, b] = hexToRgb(hex).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+const inksIn = block => Object.fromEntries([...block.matchAll(/--([a-z-]+):\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/g)]
+  .map(m => [m[1], m[2].length === 4 ? '#' + [...m[2].slice(1)].map(c => c + c).join('') : m[2]]));
+
+test('every ink the app writes in can be read on the paper it is written on', () => {
+  const css = read('app.css');
+  const schemes = {
+    light: inksIn(/:root \{([\s\S]*?)\n\}/.exec(css)[1]),
+    dark: inksIn(/@media \(prefers-color-scheme: dark\) \{\n  :root \{([\s\S]*?)\n  \}/.exec(css)[1])
+  };
+  for (const [scheme, ink] of Object.entries(schemes)) {
+    assert.ok(ink.card && ink.canvas, `${scheme} says what a card and the canvas are`);
+    for (const name of ['ink', 'muted', 'faint', 'link', 'bad', 'good', 'warm']) {
+      assert.ok(ink[name], `${scheme} has --${name}`);
+      const on = contrast(ink[name], ink.card);
+      assert.ok(on >= 4.5, `${scheme}: --${name} on a card is ${on.toFixed(2)}:1, under 4.5`);
+    }
+    // 1,203편 beside the title, and the headings down the list, are written straight on the canvas.
+    for (const name of ['muted', 'faint']) {
+      const on = contrast(ink[name], ink.canvas);
+      assert.ok(on >= 4.5, `${scheme}: --${name} on the canvas is ${on.toFixed(2)}:1, under 4.5`);
+    }
+  }
+  // Nothing is written smaller than 11px, whatever it is.
+  const sizes = [...css.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(m => Number(m[1]));
+  assert.equal(sizes.filter(size => size < 11).length, 0, `smallest is ${Math.min(...sizes)}px`);
+});
