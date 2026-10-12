@@ -17,10 +17,11 @@ import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer} from './pdfview.js';
+import {filterRows, sortRows, usefulTags, SORTS} from './list.js';
 
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
-              rate: 'np.rate', voice: 'np.voice.', at: 'np.at.'};
+              rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -179,7 +180,11 @@ const REGULAR = /^(?:journalArticle|preprint|conferencePaper|bookSection|book|th
 const isPaper = item => REGULAR.test(item.data?.itemType || '') && !item.data?.parentItem && !item.data?.deleted;
 
 /* ---------- state ---------- */
-const state = {items: [], collections: [], status: '', collection: '', q: '', busy: false};
+/* `shown` is how far down the list has been drawn: a library of a few thousand is put on screen
+   a screenful at a time, so opening it is instant and scrolling to the end still reaches the end. */
+const state = {items: [], collections: [], status: '', collection: '', tag: '', q: '',
+               sort: localStorage.getItem('np.sort') || 'added', shown: 0, busy: false, at: 0};
+const PAGE = 60;
 
 /* ---------- sync ---------- */
 async function loadCache() {
@@ -305,63 +310,131 @@ function buildFilters() {
 }
 
 /* ---------- the list ---------- */
-const matches = (item, needle) => {
-  if (!needle) return true;
-  const hay = [item.data.title, venueOf(item), yearOf(item), ...(item.data.creators || []).map(c => `${c.lastName || ''} ${c.firstName || ''} ${c.name || ''}`), ...(item.data.tags || []).map(t => t.tag)].join(' ').toLowerCase();
-  return needle.split(/\s+/).every(word => hay.includes(word));
-};
-
-function visible() {
-  const needle = state.q.trim().toLowerCase();
-  let rows = state.items;
-  if (state.collection) rows = rows.filter(item => (item.data.collections || []).includes(state.collection));
-  if (state.status) rows = rows.filter(item => statusOf(item) === state.status);
-  if (needle) rows = rows.filter(item => matches(item, needle));
-  return rows.sort((a, b) => String(b.data.dateModified || '').localeCompare(String(a.data.dateModified || '')));
-}
+const visible = () => sortRows(filterRows(state.items, {
+  collection: state.collection, status: state.status, tag: state.tag, q: state.q, statusOf
+}), state.sort);
 
 function stars(n) { return n ? '★'.repeat(n) + '☆'.repeat(5 - n) : ''; }
 
-function render() {
-  const list = $('list');
-  list.textContent = '';
-  const rows = visible();
-  $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
-  const scope = $('scope');
+/* What is being looked at, and the order it is in — always on screen, so a library that seems
+   to be missing papers says why. */
+function paintScope(total) {
+  const bar = $('scope');
+  bar.textContent = '';
   if (state.collection) {
     const name = state.collections.find(c => c.key === state.collection)?.data?.name || '컬렉션';
-    scope.hidden = false; scope.textContent = '';
-    el('span', {text: name}, scope);
-    el('button', {type: 'button', text: '전체 보기'}, scope).addEventListener('click', () => { state.collection = ''; render(); });
-  } else scope.hidden = true;
+    const chip = el('button', {class: 'scope-chip', type: 'button', 'aria-label': `${name} 해제`}, bar);
+    el('span', {text: name}, chip);
+    el('span', {class: 'x', text: '×'}, chip);
+    chip.addEventListener('click', () => { state.collection = ''; render(); });
+  }
+  if (state.tag) {
+    const chip = el('button', {class: 'scope-chip', type: 'button', 'aria-label': `${state.tag} 해제`}, bar);
+    el('span', {text: '#' + state.tag}, chip);
+    el('span', {class: 'x', text: '×'}, chip);
+    chip.addEventListener('click', () => { state.tag = ''; render(); });
+  }
+  el('span', {class: 'grow'}, bar);
+  const pick = el('label', {class: 'sort'}, bar);
+  el('span', {class: 'muted small', text: '정렬'}, pick);
+  const select = el('select', {'aria-label': '정렬 순서'}, pick);
+  for (const [id, label] of SORTS) {
+    const option = el('option', {value: id, text: label}, select);
+    if (id === state.sort) option.selected = true;
+  }
+  select.addEventListener('change', event => {
+    state.sort = event.target.value;
+    localStorage.setItem(KEYS.sort, state.sort);
+    render();
+  });
+  void total;
+}
+
+/* One row. Kept apart so more of them can be added as the list is scrolled without redrawing
+   what is already there. */
+function drawRow(item, list) {
+  const row = el('button', {class: 'row', type: 'button'}, list);
+  el('h2', {text: clean(item.data.title) || '(제목 없음)'}, row);
+  el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, row);
+  const foot = el('div', {class: 'foot'}, row);
+  const status = statusOf(item);
+  if (status) {
+    const dot = el('span', {class: `dot ${status}`}, foot);
+    el('i', {}, dot);
+    el('span', {text: {unread: '안 읽음', reading: '읽는 중', done: '완료'}[status]}, dot);
+  }
+  const rating = ratingOf(item);
+  if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
+  const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
+  if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
+  row.addEventListener('click', () => { state.at = $('list').scrollTop; openDetail(item.key); });
+  return row;
+}
+
+/* The list is drawn a screenful at a time. Everything that matches is counted and reachable; what
+   is on screen is only what has been scrolled to, so a library of thousands opens at once. */
+let more = null;
+function drawMore() {
+  const list = $('list');
+  const rows = render.rows || [];
+  const from = state.shown, to = Math.min(rows.length, from + PAGE);
+  if (from >= to) return;
+  const batch = document.createDocumentFragment();
+  for (let i = from; i < to; i++) drawRow(rows[i], batch);
+  list.insertBefore(batch, more || null);
+  state.shown = to;
+  if (more && state.shown >= rows.length) { more.remove(); more = null; }
+}
+
+function render({keep = false} = {}) {
+  const list = $('list');
+  const rows = visible();
+  render.rows = rows;
+  list.textContent = '';
+  more = null;
+  $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
+  paintScope(rows.length);
 
   if (!rows.length) {
-    el('p', {class: 'empty', text: state.items.length ? '해당하는 논문이 없습니다.' : '아직 받은 논문이 없습니다. 오른쪽 위 새로 고침을 누르세요.'}, list);
+    el('p', {class: 'empty', text: state.items.length
+      ? '해당하는 논문이 없습니다. 검색어나 필터를 지워 보세요.'
+      : '아직 받은 논문이 없습니다. 오른쪽 위 새로 고침을 누르세요.'}, list);
+    state.shown = 0;
     return;
   }
-  for (const item of rows.slice(0, 400)) {
-    const row = el('button', {class: 'row', type: 'button'}, list);
-    el('h2', {text: clean(item.data.title) || '(제목 없음)'}, row);
-    el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, row);
-    const foot = el('div', {class: 'foot'}, row);
-    const status = statusOf(item);
-    if (status) {
-      const dot = el('span', {class: `dot ${status}`}, foot);
-      el('i', {}, dot);
-      el('span', {text: {unread: '안 읽음', reading: '읽는 중', done: '완료'}[status]}, dot);
-    }
-    const rating = ratingOf(item);
-    if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
-    if (item.data.tags?.some(t => !TAG_STATUS[t.tag])) {
-      const first = item.data.tags.find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
-      if (first) el('span', {class: 'chip', text: clean(first.tag).slice(0, 18)}, foot);
-    }
-    row.addEventListener('click', () => openDetail(item.key));
+  const want = keep ? Math.min(rows.length, Math.max(PAGE, state.shown)) : PAGE;
+  state.shown = 0;
+  // A sentinel at the end: when it comes into view there is more to draw.
+  more = el('div', {class: 'more', 'aria-hidden': 'true'}, list);
+  while (state.shown < want) { const before = state.shown; drawMore(); if (state.shown === before) break; }
+  watchEnd();
+}
+
+let endWatch = null;
+function watchEnd() {
+  if (!more) return;
+  if (!endWatch && typeof IntersectionObserver === 'function') {
+    endWatch = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) drawMore();
+    }, {root: $('list'), rootMargin: '600px'});
   }
-  if (rows.length > 400) el('p', {class: 'empty', text: `${rows.length.toLocaleString()}편 중 400편만 보입니다. 검색으로 좁혀 보세요.`}, list);
+  if (endWatch) { try { endWatch.disconnect(); endWatch.observe(more); } catch (_) {} }
+  else $('list').addEventListener('scroll', onListScroll, {passive: true});
+}
+/* Without an IntersectionObserver (and in the fake phone), the scroll position does the same job. */
+function onListScroll() {
+  const list = $('list');
+  if (list.scrollTop + list.clientHeight > list.scrollHeight - 600) drawMore();
 }
 
 /* ---------- one paper ---------- */
+/* Going back puts the list where it was left, with as much of it drawn as there was. */
+function closeDetail() {
+  $('detail').hidden = true;
+  render({keep: true});
+  requestAnimationFrame(() => { $('list').scrollTop = state.at || 0; });
+}
+
 async function openDetail(key) {
   const item = state.items.find(x => x.key === key);
   if (!item) return;
@@ -999,6 +1072,24 @@ function openCollections() {
   el('p', {class: 'meta', text: `${state.items.length.toLocaleString()}편`}, all);
   all.addEventListener('click', () => { state.collection = ''; $('collections').hidden = true; render(); });
 
+  // The tags actually in use, so a subject can be picked the way a collection can.
+  const tags = usefulTags(state.items);
+  if (tags.length) {
+    const card = el('section', {class: 'card'}, body);
+    el('h3', {text: '태그'}, card);
+    const wrap = el('div', {class: 'tags'}, card);
+    for (const {tag, n} of tags) {
+      const chip = el('button', {class: `chip pick-chip${state.tag === tag ? ' on' : ''}`, type: 'button'}, wrap);
+      el('span', {text: tag}, chip);
+      el('span', {class: 'n', text: String(n)}, chip);
+      chip.addEventListener('click', () => {
+        state.tag = state.tag === tag ? '' : tag;
+        $('collections').hidden = true;
+        render();
+      });
+    }
+  }
+
   const draw = (parent, depth) => {
     for (const c of (byParent.get(parent) || []).sort((a, b) => a.data.name.localeCompare(b.data.name, 'ko'))) {
       const row = el('button', {class: 'row', type: 'button', style: depth ? `margin-inline-start:${depth * 14}px` : null}, body);
@@ -1061,10 +1152,17 @@ function wire() {
   });
   // 설정's 키 복사 puts the number and the key in one string, so one paste fills both boxes.
   $('setup-key').addEventListener('paste', () => setTimeout(() => takePasted($('setup-key').value), 0));
-  $('q').addEventListener('input', event => { state.q = event.target.value; render(); });
+  let typing = null;
+  $('q').addEventListener('input', event => {
+    state.q = event.target.value;
+    clearTimeout(typing);
+    // A fast typist would otherwise filter the whole library between every two letters.
+    typing = setTimeout(() => { state.shown = 0; $('list').scrollTop = 0; render(); }, 110);
+  });
+  $('q').addEventListener('search', () => { state.q = $('q').value; render(); });
   $('btn-sync').addEventListener('click', () => sync());
   $('btn-collections').addEventListener('click', openCollections);
-  $('back').addEventListener('click', () => { $('detail').hidden = true; });
+  $('back').addEventListener('click', closeDetail);
   $('listen-back').addEventListener('click', closeListen);
   $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
   $('listen-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });

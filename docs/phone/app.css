@@ -214,3 +214,21 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
 /* Four things in the top row on a phone: the search gives up its width first. */
 .top-row .search { flex:1 1 auto; }
 .top-row .icon-btn { width:36px; }
+
+/* ---------- what is being looked at ---------- */
+.scope { display:flex; align-items:center; gap:6px; min-height:28px; }
+.scope .grow { flex:1; }
+.scope-chip { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 6px 0 10px;
+              border-radius:999px; background:var(--track); font-size:12px; font-weight:600;
+              max-width:46vw; overflow:hidden; }
+.scope-chip span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.scope-chip .x { color:var(--muted); font-size:15px; line-height:1; }
+.scope-chip:active { background:var(--track-hover); }
+.sort { display:flex; align-items:center; gap:5px; flex:none; }
+.sort select { font:inherit; font-size:12px; font-weight:600; color:var(--ink); background:var(--track);
+               border:0; border-radius:999px; padding:5px 8px; }
+.more { height:1px; }
+.pick-chip { display:inline-flex; align-items:center; gap:6px; }
+.pick-chip .n { color:var(--muted); font-variant-numeric:tabular-nums; font-size:11px; }
+.pick-chip.on { background:var(--sel); box-shadow:var(--sel-shadow); font-weight:650; }
+.pick-chip.on .n { color:var(--ink); }

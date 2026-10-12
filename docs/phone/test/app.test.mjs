@@ -57,6 +57,15 @@ function fakeIndexedDB() {
 }
 
 let boots = 0;
+/* Each boot gets its own clock. The globals a module reads are replaced on the next boot, so a
+   timer left running by the one before would otherwise redraw this phone's screen. */
+let timers = [];
+const realAfter = globalThis.setTimeout, realStop = globalThis.clearTimeout;
+function ownClock() {
+  const after = (fn, ms, ...rest) => { const id = realAfter(fn, ms, ...rest); timers.push(id); return id; };
+  return {after, stop: id => realStop(id)};
+}
+function stopOldTimers() { for (const id of timers) realStop(id); timers = []; }
 
 /* The phone's voice: utterances are collected, and step() speaks the oldest one through. */
 function fakeSpeech() {
@@ -144,8 +153,12 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     fetch: server.fetchImpl,
     requestAnimationFrame: fn => setTimeout(fn, 0),
     matchMedia: () => ({matches: false, addEventListener() {}}),
-    Response, Request, Headers, URL, URLSearchParams, queueMicrotask, setTimeout, clearTimeout, console
+    Response, Request, Headers, URL, URLSearchParams, queueMicrotask, console
   });
+  stopOldTimers();
+  const clock = ownClock();
+  window.setTimeout = clock.after;
+  window.clearTimeout = clock.stop;
   /* app.js is a real module (it imports read.js and play.js), so the fake phone is put in the
      globals the module will read and the module is imported fresh for each boot. */
   const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash};
@@ -156,6 +169,7 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     window, document, localStorage: window.localStorage, indexedDB: window.indexedDB, fetch: window.fetch,
     requestAnimationFrame: window.requestAnimationFrame, Response, URL, URLSearchParams, location, history,
     matchMedia: () => ({matches: false, addEventListener() {}}),
+    setTimeout: clock.after, clearTimeout: clock.stop,
     addEventListener: (type, fn, opts) => window.addEventListener?.(type, fn, opts),
     // No service worker in this test phone, and linkedom's navigator is read-only.
     navigator: {userAgent: 'test'},
@@ -234,8 +248,13 @@ test('the status filter and the search narrow the list', async () => {
   const box = open.document.getElementById('q');
   box.value = 'nature';
   box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();   // the search waits for the typist to stop
   assert.deepEqual([...open.document.querySelectorAll('#list .row h2')].map(h => h.textContent), ['PET depolymerase landscape'],
     'the search reaches the journal, not only the title');
+  box.value = 'müller';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  assert.equal(open.document.querySelectorAll('#list .row').length, 0, 'an accent that is not in the library finds nothing');
 });
 
 test('changing the status sends the tags the desktop plugin reads, and keeps the others', async () => {
@@ -333,6 +352,63 @@ test('the app is fetched fresh when there is signal, and only pdf.js is served f
   assert.equal(await ask('https://x.test/phone/app.js'), 'NEW', 'the app comes from the network');
   assert.equal(await ask('https://x.test/phone/vendor/pdf.min.js'), 'LIB', 'pdf.js comes from this phone');
   assert.ok(!asked.includes('https://x.test/phone/vendor/pdf.min.js'), 'and is not fetched again');
+});
+
+/* A library of a few thousand is what this is for. Everything that matches has to be reachable:
+   it used to stop at 400 rows with a line saying so, which on a real library hid most of it. */
+const MANY = Array.from({length: 900}, (_, i) => ({
+  key: `P${i}`, version: 10 + i, data: {key: `P${i}`, version: 10 + i, itemType: 'journalArticle',
+    title: `Paper number ${i}`, date: String(2000 + (i % 26)), dateAdded: `2026-01-01T00:${String(i % 60).padStart(2, '0')}:00Z`,
+    dateModified: '2026-10-01T00:00:00Z', creators: [{creatorType: 'author', lastName: `Author${i % 7}`}],
+    publicationTitle: i % 2 ? 'Science' : 'Nature', tags: i % 3 ? [] : [{tag: 'phage'}], collections: [], extra: i % 5 ? '' : 'Rating: 4'}}));
+
+test('a big library draws a screenful at once and the rest as it is scrolled, all of it reachable', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  const drawn = () => open.document.querySelectorAll('#list .row').length;
+  assert.equal(open.document.getElementById('count').textContent, '900편', 'all of them are counted');
+  assert.ok(drawn() > 0 && drawn() <= 120, `a screenful to begin with, not 900 (${drawn()})`);
+  assert.doesNotMatch(list.textContent, /만 보입니다/, 'nothing says the list has been cut');
+
+  // Scrolling to the end keeps asking for more until there is no more.
+  for (let i = 0; i < 40 && drawn() < 900; i++) {
+    Object.defineProperty(list, 'scrollTop', {value: 1e6, configurable: true});
+    Object.defineProperty(list, 'clientHeight', {value: 800, configurable: true});
+    Object.defineProperty(list, 'scrollHeight', {value: 1000, configurable: true});
+    list.dispatchEvent(new open.window.Event('scroll'));
+    await new Promise(r => setTimeout(r, 1));
+  }
+  assert.equal(drawn(), 900, 'the whole library can be reached by scrolling');
+});
+
+test('the order can be changed, and it is remembered', async () => {
+  const open = await boot();
+  await open.settle();
+  const titles = () => [...open.document.querySelectorAll('#list .row h2')].map(h => h.textContent);
+  const select = open.document.querySelector('#scope select');
+  assert.ok(select, 'the order is offered');
+  // linkedom's <select>.value is read-only, as a real one is: the option is what gets chosen.
+  for (const option of select.querySelectorAll('option')) option.selected = option.value === 'title';
+  select.dispatchEvent(new open.window.Event('change'));
+  assert.deepEqual(titles(), ['Immune sensing in bacteria', 'PET depolymerase landscape', 'Retron Septu defence']);
+  assert.equal(open.storage.get('np.sort'), 'title', 'and kept for next time');
+});
+
+test('a collection and a tag show as chips that take themselves off again', async () => {
+  const open = await boot();
+  await open.settle();
+  open.document.getElementById('btn-collections').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const tag = [...open.document.querySelectorAll('#collections .pick-chip')].find(c => /phage/.test(c.textContent));
+  assert.ok(tag, 'the tags in use are offered');
+  tag.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.deepEqual([...open.document.querySelectorAll('#list .row h2')].map(h => h.textContent), ['Retron Septu defence']);
+  const chip = [...open.document.querySelectorAll('#scope .scope-chip')].find(c => /phage/.test(c.textContent));
+  assert.ok(chip, 'the narrowing is on screen');
+  chip.dispatchEvent(new open.window.Event('click'));
+  assert.equal(open.document.querySelectorAll('#list .row').length, 3, 'and comes off again');
 });
 
 /* ---- listening ---- */
