@@ -46,6 +46,10 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .grow { flex:1; min-width:0; }
 .muted { color:var(--muted); } .small { font-size:13px; }
 
+/* Keyboard and VoiceOver: what is being acted on is always visible, which a phone's own focus
+   ring is not. */
+:focus-visible { outline:2px solid var(--link); outline-offset:2px; }
+
 .screen { position:fixed; inset:0; display:flex; flex-direction:column; background:var(--canvas); }
 .screen[hidden] { display:none; }
 /* A screen pushed onto the stack comes in from the right, as one does on this phone. */
@@ -216,8 +220,9 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .card { background:var(--card); border-radius:var(--radius); padding:var(--pad); box-shadow:var(--card-shadow);
         display:flex; flex-direction:column; gap:10px; }
 .card + .card { margin-top:var(--gap); }
-.card h3 { margin:0; font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
-           color:var(--faint); }
+/* Not set in capitals: half of what this app says is Korean, which has none, and the other half
+   would be shouting beside it. */
+.card h3 { margin:0; font-size:13px; font-weight:700; letter-spacing:-.01em; color:var(--muted); }
 .card p { margin:0; font-size:14px; }
 /* The paper's own name, at the top of its screen, is the one thing set in display size. */
 #detail-body .card:first-child h3 { font-size:20px; font-weight:700; letter-spacing:-.02em;
@@ -408,3 +413,13 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 
 /* Safari puts its own clear in a search box; one is enough. */
 .search input::-webkit-search-cancel-button, .finder-row input::-webkit-search-cancel-button { display:none; }
+
+/* ---------- a wider screen ---------- */
+/* On an iPad, or Safari on the Mac, a line of text the full width of the window is not a list
+   anyone wants to read: the app keeps a phone's measure and sits in the middle. */
+@media (min-width:620px) {
+  .top > *, .list, .pdf-msg, .finder-list { max-width:760px; margin-inline:auto; width:100%; }
+  .tabbar { max-width:780px; margin-inline:auto; width:100%; }
+  .pair { left:50%; right:auto; transform:translateX(-50%); width:min(520px,calc(100% - 32px)); }
+  .player > * { max-width:760px; margin-inline:auto; width:100%; }
+}

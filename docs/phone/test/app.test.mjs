@@ -502,6 +502,8 @@ test('the order can be changed, and it is remembered', async () => {
 test('a collection and a tag show as chips that take themselves off again', async () => {
   const open = await boot();
   await open.settle();
+  const scope = open.document.getElementById('scope');
+  assert.equal(scope.hidden, true, 'nothing to say about the whole library, so it takes no room');
   open.document.getElementById('btn-collections').dispatchEvent(new open.window.Event('click'));
   await open.settle();
   const tag = [...open.document.querySelectorAll('#collections .pick-chip')].find(c => /phage/.test(c.textContent));
@@ -511,8 +513,10 @@ test('a collection and a tag show as chips that take themselves off again', asyn
   assert.deepEqual([...open.document.querySelectorAll('#list .row h2')].map(h => h.textContent), ['Retron Septu defence']);
   const chip = [...open.document.querySelectorAll('#scope .scope-chip')].find(c => /phage/.test(c.textContent));
   assert.ok(chip, 'the narrowing is on screen');
+  assert.equal(scope.hidden, false, 'and now the row is there to say it');
   chip.dispatchEvent(new open.window.Event('click'));
   assert.equal(open.document.querySelectorAll('#list .row').length, 3, 'and comes off again');
+  assert.equal(scope.hidden, true, 'and the row goes with it');
 });
 
 /* The phone's own back — the swipe from the edge of a home-screen app, the back button in
