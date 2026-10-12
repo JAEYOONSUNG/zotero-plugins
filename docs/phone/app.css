@@ -318,6 +318,24 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .pick { display:flex; align-items:center; gap:6px; min-width:0; }
 .player .small-btn { height:28px; padding:0 12px; font-size:13px; border-radius:999px; }
 .seek { width:100%; margin:0; accent-color:var(--ink); height:18px; }
+/* The voice, the range, the section and the sleep timer are set once and then left alone, so they
+   are not in the way of the three buttons that are pressed all the time. */
+#listen-extra { display:flex; flex-direction:column; gap:7px; padding-top:3px; }
+#listen-extra[hidden] { display:none; }
+
+/* The menu under a bar: a card of its own, each thing on it a row with its mark. */
+.menu { position:absolute; z-index:12; top:calc(var(--top) + 52px); inset-inline-end:10px; width:218px;
+        background:var(--card); border-radius:14px; padding:5px; display:flex; flex-direction:column;
+        box-shadow:0 14px 36px rgba(0,0,0,.3),0 0 0 .5px var(--line);
+        transform-origin:top right; animation:pop 140ms cubic-bezier(.2,.9,.3,1); }
+.menu[hidden] { display:none; }
+@keyframes pop { from { transform:scale(.92); opacity:0 } to { transform:none; opacity:1 } }
+@media (prefers-reduced-motion:reduce) { .menu { animation:none } }
+.menu-row { display:flex; align-items:center; gap:11px; width:100%; text-align:start; padding:10px;
+            border-radius:10px; font-size:15px; }
+.menu-row:active { background:var(--track); }
+.menu-row svg { width:19px; height:19px; flex:none; }
+.menu-row[aria-pressed="true"] { color:var(--link); font-weight:600; }
 
 /* ---------- the PDF ---------- */
 /* The page itself is white on a dimmer canvas, as paper is, in both schemes: a PDF rendered on

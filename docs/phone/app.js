@@ -1346,6 +1346,7 @@ function showPaperMessage(on) {
 }
 
 function leftPaper() {
+  showMenu(false);
   if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
   paper.bytes = null;   // it is in IndexedDB; holding it in memory too is just weight
   $('paper-view').classList.remove('with-player');
@@ -1360,6 +1361,7 @@ async function openPaper(item, {at = 0} = {}) {
   if (!paper.item || paper.item.key !== item.key) paper.marks = [];
   $('paper-jump').hidden = true;
   $('paper-finder').hidden = true;
+  showMenu(false);
   $('paper-q').value = '';
   $('paper-found').textContent = '';
   paper.text = [];
@@ -1517,6 +1519,14 @@ async function sharePaper() {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   } catch (_) { toast('이 폰에서는 공유할 수 없습니다'); }
+}
+
+/* The menu over a paper: shown, put away, and never left open behind a screen that closed. */
+function showMenu(on) {
+  const menu = $('paper-menu');
+  if (!menu) return;
+  menu.hidden = !on;
+  $('paper-more').setAttribute('aria-expanded', String(!!on));
 }
 
 /* ---------- settings ---------- */
@@ -1862,8 +1872,19 @@ function wire() {
     localStorage.setItem(NIGHT, on ? 'on' : 'off');
     $('paper-view').classList.toggle('night', on);
     $('paper-night').setAttribute('aria-pressed', String(on));
+    showMenu(false);
   });
-  $('paper-share').addEventListener('click', sharePaper);
+  $('paper-share').addEventListener('click', () => { showMenu(false); sharePaper(); });
+  /* Everything that is not reading itself is behind one button, so the bar over a paper is the
+     paper's name and the page it is on. */
+  $('paper-more').addEventListener('click', () => showMenu($('paper-menu').hidden));
+  $('paper-view').addEventListener('click', () => showMenu(false));
+  // Zooming is the one thing worth pressing twice, so the menu stays up for it.
+  $('listen-more').addEventListener('click', () => {
+    const extra = $('listen-extra');
+    extra.hidden = !extra.hidden;
+    $('listen-more').setAttribute('aria-expanded', String(!extra.hidden));
+  });
   $('paper-find').addEventListener('click', () => {
     const box = $('paper-finder');
     box.hidden = !box.hidden;

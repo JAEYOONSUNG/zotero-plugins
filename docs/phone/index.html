@@ -101,22 +101,27 @@
     <div class="player-meta"><span id="listen-where" class="muted small"></span></div>
     <input id="listen-seek" class="seek" type="range" min="0" max="0" value="0" step="1" aria-label="읽는 위치">
     <div class="player-row">
+      <button id="listen-more" class="icon-btn" type="button" aria-label="듣기 설정" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="17" cy="17" r="2.6"/></svg></button>
+      <span class="grow"></span>
       <button id="listen-prev" class="icon-btn" aria-label="이전 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-7 6 7 6"/><path d="M8 6v12"/></svg></button>
       <button id="listen-play" class="play-btn" aria-label="재생"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
       <button id="listen-next" class="icon-btn" aria-label="다음 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l7 6-7 6"/><path d="M16 6v12"/></svg></button>
+      <span class="grow"></span>
+      <button id="listen-pdf" class="icon-btn" type="button" aria-label="PDF 보기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h4"/></svg></button>
     </div>
     <nav id="listen-rate" class="seg small-seg" role="group" aria-label="속도"></nav>
-    <div class="player-row wrap">
-      <label class="pick"><span class="muted small">목소리</span><select id="listen-voice"></select></label>
-      <nav id="listen-what" class="seg small-seg" role="group" aria-label="읽을 범위"></nav>
-      <button id="listen-pdf" class="secondary small-btn" type="button">PDF</button>
-    </div>
-    <div class="player-row wrap">
-      <label class="pick"><span class="muted small">구간</span><select id="listen-section"></select></label>
-      <label class="pick"><span class="muted small">잠들기</span><select id="listen-sleep">
-        <option value="0">끄기</option><option value="10">10분</option><option value="20">20분</option>
-        <option value="30">30분</option><option value="45">45분</option><option value="section">이 구간까지</option>
-      </select></label>
+    <div id="listen-extra" hidden>
+      <div class="player-row wrap">
+        <label class="pick"><span class="muted small">목소리</span><select id="listen-voice"></select></label>
+        <nav id="listen-what" class="seg small-seg" role="group" aria-label="읽을 범위"></nav>
+      </div>
+      <div class="player-row wrap">
+        <label class="pick"><span class="muted small">구간</span><select id="listen-section"></select></label>
+        <label class="pick"><span class="muted small">잠들기</span><select id="listen-sleep">
+          <option value="0">끄기</option><option value="10">10분</option><option value="20">20분</option>
+          <option value="30">30분</option><option value="45">45분</option><option value="section">이 구간까지</option>
+        </select></label>
+      </div>
     </div>
   </footer>
 </section>
@@ -128,11 +133,14 @@
     <span id="paper-title" class="detail-title"></span>
     <button id="paper-count" class="muted small pdf-count" type="button" aria-label="페이지 이동"></button>
     <button id="paper-find" class="icon-btn" aria-label="본문에서 찾기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
-    <button id="paper-night" class="icon-btn" aria-label="야간 모드" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13A8 8 0 0 1 11 4a8 8 0 1 0 9 9z"/></svg></button>
-    <button id="paper-share" class="icon-btn" aria-label="다른 앱으로 열기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg></button>
-    <button id="paper-out" class="icon-btn" aria-label="축소"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.5-3.5"/></svg></button>
-    <button id="paper-in" class="icon-btn" aria-label="확대"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.5-3.5"/></svg></button>
+    <button id="paper-more" class="icon-btn" aria-label="더 보기" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/></svg></button>
   </header>
+  <div id="paper-menu" class="menu" hidden>
+    <button id="paper-night" class="menu-row" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13A8 8 0 0 1 11 4a8 8 0 1 0 9 9z"/></svg><span>야간 모드</span></button>
+    <button id="paper-in" class="menu-row" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-3.5-3.5"/></svg><span>확대</span></button>
+    <button id="paper-out" class="menu-row" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.5-3.5"/></svg><span>축소</span></button>
+    <button id="paper-share" class="menu-row" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg><span>다른 앱으로 열기</span></button>
+  </div>
   <main id="paper-view" class="pdf" aria-label="본문 PDF"></main>
   <div id="paper-finder" class="finder" hidden>
     <div class="finder-row">

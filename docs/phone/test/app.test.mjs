@@ -1211,3 +1211,53 @@ test('the list is broken up by headings that follow the order it is in', async (
   assert.deepEqual([...open.document.querySelectorAll('#list .group')].map(h => h.textContent),
     ['★★★★', '별점 없음'], 'by rating, the stars themselves');
 });
+
+test('what is not reading itself sits behind one button over a paper', async () => {
+  const {open} = await openPdf();
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click'));
+  const menu = $id('paper-menu');
+  assert.equal(menu.hidden, true, 'the bar over a paper starts clear');
+  assert.equal($id('paper-more').getAttribute('aria-expanded'), 'false');
+  click($id('paper-more'));
+  assert.equal(menu.hidden, false);
+  assert.equal($id('paper-more').getAttribute('aria-expanded'), 'true', 'and it says so to a reader who cannot see it');
+  assert.deepEqual([...menu.querySelectorAll('.menu-row')].map(b => b.textContent.trim()),
+    ['야간 모드', '확대', '축소', '다른 앱으로 열기']);
+  // Turning the page dark is one thing, then the menu is out of the way again.
+  click($id('paper-night'));
+  assert.equal(menu.hidden, true);
+  assert.equal($id('paper-view').classList.contains('night'), true);
+  click($id('paper-more'));
+  click($id('paper-view'));
+  assert.equal(menu.hidden, true, 'and a tap on the paper puts it away');
+  // Nothing is left hanging over the next paper either.
+  click($id('paper-more'));
+  click($id('paper-back'));
+  await open.settle(6);
+  assert.equal(menu.hidden, true, 'a menu never outlives the screen it was opened on');
+});
+
+test('the listening settings are one tap away, not in the way of the buttons', async () => {
+  const open = await boot();
+  await open.settle();
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click'));
+  click([...open.document.querySelectorAll('#list .row')][0]);
+  await open.settle(10);
+  click(open.document.querySelector('#detail .listen-start'));
+  await open.settle(10);
+  const extra = $id('listen-extra');
+  assert.equal(extra.hidden, true, 'the voice, the range, the section and the timer are put away');
+  for (const id of ['listen-voice', 'listen-what', 'listen-section', 'listen-sleep']) {
+    assert.ok(extra.contains($id(id)), `${id} is behind the button`);
+  }
+  for (const id of ['listen-play', 'listen-prev', 'listen-next', 'listen-rate', 'listen-seek', 'listen-pdf']) {
+    assert.ok(!extra.contains($id(id)), `${id} is not`);
+  }
+  click($id('listen-more'));
+  assert.equal(extra.hidden, false);
+  assert.equal($id('listen-more').getAttribute('aria-expanded'), 'true');
+  click($id('listen-more'));
+  assert.equal(extra.hidden, true);
+});
