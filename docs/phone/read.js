@@ -20,24 +20,35 @@
 const PAGE = '\f';
 
 /* ---- the furniture ---- */
+/* Some PDFs come out of extraction with almost no line breaks: a whole page is one line. A rule
+   that looks for a stamp ANYWHERE in a line would then throw the page away for one "| www." in
+   it, so those rules are only allowed to condemn a line short enough to be a stamp itself. */
+const STAMP_LENGTH = 200;
+
 const FURNITURE = [
   /^\s*\d{1,4}\s*$/,                                        // a bare page number
   /^\s*(?:page\s+)?\d{1,4}\s*(?:of|\/)\s*\d{1,4}\s*$/i,
-  /downloaded\s+from/i, /^\s*this content downloaded/i,
-  /all rights reserved/i, /^\s*©|\(c\)\s*\d{4}/i,
+  /^\s*this content downloaded/i,
   /^\s*(?:https?:\/\/|www\.|doi:)\S*\s*$/i,
-  /creativecommons\.org/i,
   /^\s*(?:see discussions|citations:?\s*\d+|reads\s*\d+)\s*$/i,
-  /^\s*author manuscript\b/i, /\bHHS Public Access\b/i,
+  /^\s*author manuscript\b/i,
   /^\s*\[?(?:e|pre)?print\]?\s*$/i,
   /^\s*check for updates\s*$/i,
-  /1234567890\(\)/,                                          // the glyph table some PDFs leave in the text
   /^\s*(?:received|accepted|revised|published(?:\s+online)?|available online)\s*[:,]?\s*(?:\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i,
   /^\s*\d{0,2}\s*(?:department|institute|institut|laborator(?:y|ies)|school|college|faculty|division)\s+(?:of|for|de|,)/i,
   /^\s*keywords?\s*[:：]/i,
-  /\|\s*(?:doi:|www\.|https?:\/\/)/i,                       // a journal citing itself across the top of every page
   /^\s*\*?\s*(?:e-?mail|correspondence|corresponding author|lead contact)\s*[:.]/i,
-  /^\s*\d{0,2}\s*these authors (?:contributed|jointly)/i,
+  /^\s*\d{0,2}\s*these authors (?:contributed|jointly)/i
+];
+
+/* Stamps recognised by what they contain rather than by where they start: only ever applied to a
+   line short enough to be nothing but a stamp. */
+const STAMP_INSIDE = [
+  /downloaded\s+from/i,
+  /all rights reserved/i, /©|\(c\)\s*\d{4}/,
+  /creativecommons\.org/i, /\bHHS Public Access\b/i,
+  /1234567890\(\)/,                                          // the glyph table some PDFs leave in the text
+  /\|\s*(?:doi:|www\.|https?:\/\/)/i,                       // a journal citing itself across the top of every page
   /\blicen[cs]e information\b/i, /\bexclusive licensee\b/i
 ];
 
@@ -118,11 +129,32 @@ export function repeatedLines(pages, {edge = 3, share = 0.5} = {}) {
 
 /* A line of running text, or something that only looks like one? */
 const isJunk = (line, repeats) =>
-  !line || FURNITURE.some(re => re.test(line)) || repeats.has(norm(line)) || REFERENCE_LINE.test(line);
+  !line ||
+  FURNITURE.some(re => re.test(line)) ||
+  (line.length <= STAMP_LENGTH && STAMP_INSIDE.some(re => re.test(line))) ||
+  repeats.has(norm(line)) ||
+  REFERENCE_LINE.test(line);
 
 /* Who wrote it and where — true of a whole block, not of one line, because an affiliation runs
    over several and an address sits on the end of one. */
-export const isFrontMatter = block => FRONT.some(re => re.test(block));
+/* The line of authors under a title: names each carrying the small numbers that point at an
+   affiliation, separated by commas, and never a sentence. It can run very long, so it is
+   recognised by its shape rather than by its length — and only before the paper has begun, where
+   an author list is the only thing that looks like this. */
+export function isAuthorList(line) {
+  const names = (line.match(/\p{Lu}\p{L}{2,}\s*\d{1,2}(?:\s*,\s*\d{1,2})*/gu) || []).length;
+  const commas = (line.match(/,/g) || []).length;
+  const stops = (line.match(/[.!?]\s/g) || []).length;
+  return names >= 4 && commas >= 4 && stops === 0;
+}
+
+export const isFrontMatter = block =>
+  isAuthorList(block) || (block.length <= STAMP_LENGTH * 4 && FRONT.some(re => re.test(block)));
+
+/* The same question of one line. Some PDFs give back a whole page as a single block, so the front
+   matter has to be recognised line by line as well as block by block. */
+export const isFrontLine = line =>
+  isAuthorList(line) || (line.length <= STAMP_LENGTH * 2 && FRONT.some(re => re.test(line)));
 
 /* "trans-\nporter" is one word; "RNA-\nguided" keeps its hyphen. */
 function dehyphenate(text) {
@@ -142,6 +174,38 @@ export function spokenForm(text) {
 
 /* ---- sentences ---- */
 const ABBREVIATION = /(?:^|[\s(])(?:e\.g|i\.e|et al|fig|figs|eq|eqs|ref|refs|vs|cf|approx|dr|prof|no|vol|sec|tab|resp|ca|mr|ms|mrs|st|inc|ltd|co|al|sp|spp|var|subsp)\.$/i;
+export const LONG = 400;
+
+/* A run this long has usually lost its full stops to the PDF, and a voice reading it gives the
+   reader nowhere to get off. It is broken at a semicolon or a colon — never one inside brackets,
+   which in a paper is a list of structures or genes rather than a pause. */
+export function breakLong(text, limit = LONG) {
+  if (text.length <= limit) return [text];
+  // Every pause the writer put in, outside any bracket.
+  const pieces = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth = Math.max(0, depth - 1);
+    else if (depth === 0 && (c === ';' || c === ':') && text[i + 1] === ' ') {
+      pieces.push(text.slice(start, i + 1).trim());
+      start = i + 2;
+    }
+  }
+  const rest = text.slice(start).trim();
+  if (rest) pieces.push(rest);
+  if (pieces.length < 2) return [text];
+  // Put the small ones back together, so the breaking makes breaths rather than scraps.
+  const out = [];
+  for (const piece of pieces) {
+    const last = out[out.length - 1];
+    if (last && last.length + piece.length + 1 <= limit) out[out.length - 1] = `${last} ${piece}`;
+    else out.push(piece);
+  }
+  return out;
+}
+
 export function splitSentences(text) {
   const source = String(text).replace(/\s+/g, ' ').trim();
   if (!source) return [];
@@ -161,7 +225,7 @@ export function splitSentences(text) {
   }
   const rest = source.slice(start).trim();
   if (rest) out.push(rest);
-  return out;
+  return out.flatMap(piece => breakLong(piece));
 }
 
 /* ---- the whole paper ---- */
@@ -184,6 +248,7 @@ export function readable(raw, {title = ''} = {}) {
       const kept = [];
       for (const line of lines) {
         if (isJunk(line, repeats)) { skipped.furniture++; continue; }
+        if (!started && isFrontLine(line)) { skipped.furniture++; continue; }
         kept.push(line);
       }
       if (!kept.length) continue;
@@ -214,7 +279,7 @@ export function readable(raw, {title = ''} = {}) {
       const joined = dehyphenate(kept.join('\n')).replace(/\s{2,}/g, ' ').trim();
       if (joined.length < 3) continue;
       if (CAPTION.test(joined)) { captions.push({text: joined, page: pageNo}); skipped.captions++; continue; }
-      if (LICENCE.test(joined)) { skipped.furniture++; continue; }
+      if (joined.length <= STAMP_LENGTH * 6 && LICENCE.test(joined)) { skipped.furniture++; continue; }
       // The front matter only ever sits before the paper starts; after that an address in the
       // text is part of what is being said.
       if (!started && isFrontMatter(joined)) { skipped.furniture++; continue; }

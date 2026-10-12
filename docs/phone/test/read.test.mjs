@@ -3,7 +3,7 @@
    of lines, figure captions in the middle of the body, and a reference list at the end. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds, stripStamp} from '../read.js';
+import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds, stripStamp, isAuthorList, breakLong} from '../read.js';
 
 const PAPER = [
   // page 1
@@ -240,4 +240,53 @@ The result holds across species.
   assert.ok(/The result holds/.test(said));
   assert.ok(!/H\. Seo/.test(said));
   assert.ok(!/K\. Kim/.test(said));
+});
+
+/* Some PDFs come out of extraction with hardly any line breaks: a whole page arrives as one
+   line. A rule that condemns a line for containing a stamp would then throw the page away. */
+test('a page that arrives as one long line is still read', () => {
+  const page = 'The enzyme was purified to homogeneity and assayed at fifty degrees. ' +
+    'Activity rose with temperature up to sixty degrees, where it fell sharply. ' +
+    'Downloaded from https://www.science.org at Yonsei University on February 11, 2026 ' +
+    'The same pattern was seen for the variant.';
+  const said = units(readable(page)).map(u => u.spoken).join(' ');
+  assert.ok(/purified to homogeneity/.test(said), 'the page is not thrown away');
+  assert.ok(/pattern was seen for the variant/.test(said), 'nor the end of it');
+});
+
+test('a short line that is nothing but a stamp still goes', () => {
+  const paper = 'Introduction\n\nDownloaded from https://www.science.org on 11 February 2026\n\nThe enzyme works.';
+  const said = units(readable(paper)).map(u => u.spoken).join(' ');
+  assert.ok(!/Downloaded from/.test(said));
+  assert.ok(/The enzyme works/.test(said));
+});
+
+test('the line of authors under the title is not read, however long it runs', () => {
+  const line = 'Amika Kikuchi 1,9, Hiroki Onoda1,8,9, Kosuke Yamaguchi2, Satomi Kori1, Shun Matsuzawa1, Yoshie Chiba 3';
+  assert.equal(isAuthorList(line), true);
+  assert.equal(isAuthorList('We tested the enzyme at 30, 40, 50 and 60 degrees. It worked.'), false,
+    'a sentence that happens to list numbers is not an author list');
+  const said = units(readable(`${line}\n\nAbstract\n\nThe enzyme degrades PET.`)).map(u => u.spoken).join(' ');
+  assert.ok(!/Kikuchi/.test(said));
+  assert.ok(/degrades PET/.test(said));
+});
+
+test('a run too long to say in one breath is broken where a reader would pause', () => {
+  const long = 'First we describe the setup in some detail so that it can be repeated in another laboratory without trouble; ' +
+    'then we give the measurements that were taken over the whole range of temperatures studied, in triplicate, on three days; ' +
+    'and finally we set out what we think it means for the field as a whole and for the experiment that ought to come next; ' +
+    'the appendix holds the raw numbers and the scripts that produced every figure in this paper.';
+  assert.ok(long.length > 400, 'the sample is long enough to need breaking');
+  const pieces = breakLong(long);
+  assert.ok(pieces.length >= 2, 'it is broken up');
+  assert.ok(pieces.every(p => p.length < long.length));
+  assert.equal(pieces.join(' ').replace(/\s+/g, ' '), long.replace(/\s+/g, ' '), 'and nothing is lost');
+  assert.deepEqual(breakLong('Short enough already.'), ['Short enough already.']);
+});
+
+test('a semicolon inside brackets is a list, not a pause', () => {
+  const long = 'Previous structures of the enzyme were solved in several states ' + 'x'.repeat(260) +
+    ' (PDB:4DA4, aa:731-1602; 6X9I, aa:729-1600) and all of them agree with what is reported here.';
+  const pieces = breakLong(long);
+  assert.equal(pieces.length, 1, 'it was not cut inside the bracket');
 });
