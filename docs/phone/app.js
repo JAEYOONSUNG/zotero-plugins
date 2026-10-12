@@ -1024,7 +1024,8 @@ function paperTrouble(error) {
   }
 }
 
-const paper = {viewer: null, item: null, following: 0};
+const paper = {viewer: null, item: null, following: 0, pages: 0};
+const NIGHT = 'np.pdf.night';
 
 /* While there is something to say, it stands where the page would be. */
 function showPaperMessage(on) {
@@ -1042,6 +1043,10 @@ function leftPaper() {
 async function openPaper(item, {at = 0} = {}) {
   if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
   paper.following = 0;
+  paper.bytes = null;
+  $('paper-jump').hidden = true;
+  $('paper-view').classList.toggle('night', localStorage.getItem(NIGHT) === 'on');
+  $('paper-night').setAttribute('aria-pressed', String(localStorage.getItem(NIGHT) === 'on'));
   paper.item = item;
   listen.item = item;
   $('paper-title').textContent = clean(item.data.title) || '논문';
@@ -1066,10 +1071,22 @@ async function openPaper(item, {at = 0} = {}) {
     showPaperMessage(false);
     paper.viewer = createViewer({
       root: $('paper-view'), pdfjs,
-      onPage: (n, total) => { $('paper-count').textContent = `${n} / ${total}`; }
+      onPage: (n, total) => {
+        paper.pages = total;
+        $('paper-count').textContent = `${n} / ${total}`;
+        const slider = $('paper-slider');
+        slider.max = String(total);
+        slider.value = String(n);
+        $('paper-jump-at').textContent = `${n} / ${total}`;
+        // Where this paper was left, so it opens there next time.
+        if (paper.item) localStorage.setItem(KEYS.page + paper.item.key, String(n));
+      },
+      onZoom: value => { $('paper-out').disabled = value <= 1.001; }
     });
     await paper.viewer.open(bytes.slice(0), PDF_ASSETS);   // pdf.js takes the buffer over; the kept copy must survive
-    if (at > 0) paper.viewer.goto(at);
+    paper.bytes = bytes;
+    const back = at > 0 ? at : Number(localStorage.getItem(KEYS.page + item.key)) || 0;
+    if (back > 1) paper.viewer.goto(back);
   } catch (error) {
     paperTrouble(error);
     return;
@@ -1104,6 +1121,28 @@ async function readAlong(item, attachment) {
   bar.hidden = false;
   $('paper-view').classList.add('with-player');
   paintReading(listen.player.state());
+}
+
+/* The PDF handed to whatever else the phone can open it with — a reader, mail, Files. */
+async function sharePaper() {
+  if (!paper.bytes || !paper.item) { toast('아직 PDF가 열리지 않았습니다'); return; }
+  const name = `${clean(paper.item.data.title) || 'paper'}`.replace(/[\\/:*?"<>|]/g, ' ').slice(0, 80) + '.pdf';
+  try {
+    const file = new File([paper.bytes], name, {type: 'application/pdf'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) {
+      await navigator.share({files: [file], title: name});
+      return;
+    }
+  } catch (error) { if (error && error.name === 'AbortError') return; }
+  // No share sheet for files: fall back to saving it.
+  try {
+    const url = URL.createObjectURL(new Blob([paper.bytes], {type: 'application/pdf'}));
+    const link = el('a', {href: url, download: name});
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (_) { toast('이 폰에서는 공유할 수 없습니다'); }
 }
 
 /* ---------- settings ---------- */
@@ -1367,6 +1406,23 @@ function wire() {
   $('paper-back').addEventListener('click', () => closeSheet('paper'));
   $('paper-in').addEventListener('click', () => { if (paper.viewer) paper.viewer.zoomBy(1); });
   $('paper-out').addEventListener('click', () => { if (paper.viewer) paper.viewer.zoomBy(-1); });
+  // A long paper is walked with the slider rather than a hundred flicks.
+  $('paper-count').addEventListener('click', () => {
+    const jump = $('paper-jump');
+    jump.hidden = !jump.hidden || !paper.pages;
+  });
+  $('paper-slider').addEventListener('input', event => {
+    const n = Number(event.target.value) || 1;
+    $('paper-jump-at').textContent = `${n} / ${paper.pages}`;
+    if (paper.viewer) paper.viewer.goto(n);
+  });
+  $('paper-night').addEventListener('click', () => {
+    const on = localStorage.getItem(NIGHT) !== 'on';
+    localStorage.setItem(NIGHT, on ? 'on' : 'off');
+    $('paper-view').classList.toggle('night', on);
+    $('paper-night').setAttribute('aria-pressed', String(on));
+  });
+  $('paper-share').addEventListener('click', sharePaper);
   $('paper-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
   $('paper-prev').addEventListener('click', () => { if (listen.player) listen.player.prev(); });
   $('paper-next').addEventListener('click', () => { if (listen.player) listen.player.next(); });

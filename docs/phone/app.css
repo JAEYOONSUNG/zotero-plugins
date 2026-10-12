@@ -236,3 +236,14 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;
         font-size:11px; font-weight:700; flex:none; }
 .held[hidden] { display:none; }
 .held:active { opacity:.8; }
+/* Reading in the dark: the page is turned to light-on-dark without touching the colours of the
+   figures more than it has to. */
+.pdf.night .pdf-page { background:#111; }
+.pdf.night canvas { filter:invert(1) hue-rotate(180deg); }
+.jump { display:flex; align-items:center; gap:10px; padding:8px var(--pad) calc(var(--bottom) + 8px);
+        background:var(--card); border-top:1px solid var(--line); }
+.jump[hidden] { display:none; }
+.jump input { flex:1; accent-color:var(--ink); }
+.pdf-count { font-variant-numeric:tabular-nums; padding:4px 8px; border-radius:8px; }
+.pdf-count:active { background:var(--track); }
+.icon-btn:disabled { opacity:.3; }

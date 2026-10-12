@@ -2,7 +2,8 @@
    canvas; the arithmetic that decides it does not, and that is what goes wrong. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fitScale, nearestPage, nearby, MAX_PIXELS, ZOOMS} from '../pdfview.js';
+import {fitScale, nearestPage, nearby, pinchZoom, fingerGap, isDoubleTap, clampZoom,
+        MAX_PIXELS, ZOOMS, ZOOM_MIN, ZOOM_MAX} from '../pdfview.js';
 
 const A4 = {width: 595, height: 842};
 
@@ -43,4 +44,37 @@ test('only the pages around the reader are held, and never past the ends', () =>
   assert.deepEqual(nearby(20, 20), [19, 20]);
   assert.deepEqual(nearby(1, 1), [1]);
   assert.ok(ZOOMS[0] === 1, 'the first zoom is the page as it fits');
+});
+
+test('two fingers moving apart zoom in, together zoom out, within bounds', () => {
+  assert.equal(pinchZoom(1, 100, 200), 2);
+  assert.equal(pinchZoom(2, 200, 100), 1);
+  assert.equal(pinchZoom(1, 100, 10), ZOOM_MIN, 'it never goes below the page fitting the column');
+  assert.equal(pinchZoom(3, 100, 900), ZOOM_MAX, 'and never past what a canvas can hold');
+  assert.equal(pinchZoom(1.5, 0, 200), 1.5, 'a gap of nothing changes nothing');
+  assert.equal(fingerGap([{clientX: 0, clientY: 0}, {clientX: 30, clientY: 40}]), 50);
+  assert.equal(fingerGap([{clientX: 0, clientY: 0}]), 0, 'one finger is not a pinch');
+});
+
+test('a second tap in the same place soon after the first is a double tap', () => {
+  const first = {at: 1000, x: 100, y: 200};
+  assert.equal(isDoubleTap(first, {at: 1200, x: 104, y: 196}), true);
+  assert.equal(isDoubleTap(first, {at: 1900, x: 100, y: 200}), false, 'too slow');
+  assert.equal(isDoubleTap(first, {at: 1100, x: 300, y: 200}), false, 'too far');
+  assert.equal(isDoubleTap(null, {at: 1, x: 0, y: 0}), false);
+});
+
+test('the buttons step through the named sizes from wherever a pinch left it', () => {
+  // A viewer needs a DOM; the step itself is what matters, so it is checked against the ladder.
+  const step = (from, dir) => {
+    const above = ZOOMS.findIndex(z => z > from + 0.001);
+    return dir > 0 ? (above < 0 ? ZOOMS[ZOOMS.length - 1] : ZOOMS[above])
+                   : ZOOMS[Math.max(0, (above < 0 ? ZOOMS.length : above) - 2)];
+  };
+  assert.equal(step(1, 1), 1.25);
+  assert.equal(step(1.37, 1), 1.5, 'from between two sizes it goes up to the next');
+  assert.equal(step(1.37, -1), 1, 'and down to the one below');
+  assert.equal(step(3, 1), 3, 'the top stays the top');
+  assert.equal(step(1, -1), 1, 'and the bottom the bottom');
+  assert.equal(clampZoom('x'), ZOOM_MIN);
 });
