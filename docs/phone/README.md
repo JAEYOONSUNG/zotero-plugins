@@ -70,6 +70,13 @@ been moved inside the folder is found again by its name.
 - Selecting and searching text on the PDF page itself (the body is already searchable as text in
   the transcript).
 
+## The icon
+
+`icon-180/192/512.png` is Zotero's own iOS app icon, so 논문 sits on the home screen as the thing
+to tap instead of Zotero. It is Zotero's artwork, not this app's drawing. iOS bakes a home-screen
+icon in when the app is added and never looks again, so changing it means removing 논문 from the
+home screen and adding it back.
+
 ## Checking it
 
 ```sh
