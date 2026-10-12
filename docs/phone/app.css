@@ -284,7 +284,9 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
             border-bottom:1px solid var(--line); }
 .mark-row:last-child { border-bottom:0; }
 .mark-row:active { background:var(--track); border-radius:8px; }
-.mark-row .swatch { width:4px; align-self:stretch; min-height:18px; border-radius:999px; flex:none; }
+/* A dot, not a bar down the edge: an edge bar on a rounded row reads as a painted fingernail. */
+.mark-row .swatch { width:9px; height:9px; border-radius:999px; flex:none; margin-top:6px;
+                    box-shadow:0 0 0 1px rgba(0,0,0,.08) inset; }
 .mark-row .mark-text { flex:1; min-width:0; font-size:14px; line-height:1.5; }
 .mark-row .muted { flex:none; padding-top:2px; }
 /* finding a word in the paper */

@@ -749,6 +749,22 @@ test('a PDF Zotero has not indexed says what to do instead of failing silently',
   assert.equal(open.document.getElementById('listen-bar').hidden, true, 'no player is offered');
 });
 
+test('a paper Zotero has not indexed is read from its abstract instead of saying nothing', async () => {
+  const withAbstract = ITEMS.map(item => item.key === 'AAA'
+    ? {...item, data: {...item.data, abstractNote: 'Retrons are bacterial defence systems that abort infection. '.repeat(4)}}
+    : item);
+  const {open} = await openListening({items: withAbstract, fulltext: null});
+  const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.ok(lines.length, 'there is something to read');
+  assert.ok(lines.some(l => /Retrons are bacterial defence/.test(l)), 'the abstract is what is read');
+  assert.match(open.document.getElementById('toast').textContent, /초록/, 'and it says that is what this is');
+});
+
+test('a paper with neither body nor abstract still says what to do', async () => {
+  const {open} = await openListening({fulltext: null});
+  assert.match(open.document.getElementById('listen').textContent, /색인하지 않았습니다/);
+});
+
 test('a paper with no PDF says so', async () => {
   const {open} = await openListening({children: []});
   assert.match(open.document.getElementById('listen-body').textContent, /PDF 첨부가 없습니다/);
@@ -979,4 +995,71 @@ test('the Dropbox connection travels to the home-screen app in the same link as 
   assert.equal(taken.storage.get('np.db.app'), 'APPKEY');
   assert.equal(taken.storage.get('np.db.refresh'), 'RT');
   assert.equal(taken.storage.get('np.db.base'), '/Papers');
+});
+
+/* One session, end to end, the way it is actually used: find a paper, mark it, listen to it, look
+   at it, search inside it, and come back out. The pieces are each checked above; this is whether
+   they still fit together. */
+test('a whole session: find, mark, listen, look, search, and back out again', async () => {
+  const server = fakeServer({children: MARKED, fulltext: FULLTEXT});
+  const open = await boot({server, stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...DROPBOX_ON}});
+  await open.settle();
+  const $ = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  const shown = id => $(id).hidden === false;
+
+  // Find it by a word from its journal, not its title.
+  const box = $('q');
+  box.value = 'science';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  const rows = [...open.document.querySelectorAll('#list .row h2')].map(h => h.textContent);
+  assert.deepEqual(rows, ['Retron Septu defence'], `found by journal (${rows.join(', ')})`);
+
+  // Open it, mark it read, give it four.
+  click(open.document.querySelector('#list .row'));
+  await open.settle();
+  assert.ok(shown('detail'));
+  click([...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === '완료'));
+  await open.settle();
+  click(open.document.querySelectorAll('#detail .rate button')[3]);
+  await open.settle();
+  const writes = server.sent.filter(r => r.method === 'PATCH');
+  assert.equal(writes.length, 2, 'both changes went out');
+  assert.match(String(writes[1].body.extra), /Rating: 4/);
+
+  // Listen to it, and jump to a part of it.
+  click(open.document.querySelector('#detail .listen-start'));
+  await open.settle();
+  assert.ok(shown('listen'), 'the transcript is up');
+  assert.ok(open.document.querySelectorAll('#listen .sent').length > 1);
+  click($('listen-play'));
+  open.speech.start();
+  await open.settle();
+  assert.equal($('listen-play').getAttribute('aria-label'), '일시정지', 'it is reading');
+
+  // Over to the PDF; it stacks on the transcript and carries the same place in the paper.
+  click($('listen-pdf'));
+  await open.settle();
+  assert.ok(shown('paper'), 'the paper is up');
+  assert.ok(shown('listen'), 'and the transcript is still behind it');
+  assert.equal($('paper-bar').hidden, false, 'the voice came with it');
+
+  // Search inside the paper.
+  click($('paper-find'));
+  const find = $('paper-q');
+  find.value = 'microbial';
+  find.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  assert.equal(open.document.querySelectorAll('#paper-found .found').length, 1, 'found in the body');
+
+  // Back out: paper, transcript, paper screen, list — each one at a time, nothing stranded.
+  open.window.history.back(); await open.settle();
+  assert.ok(!shown('paper') && shown('listen'), 'back left the transcript');
+  open.window.history.back(); await open.settle();
+  assert.ok(!shown('listen') && shown('detail'), 'and then the paper');
+  open.window.history.back(); await open.settle();
+  assert.ok(!shown('detail') && shown('main'), 'and then the library');
+  assert.equal(open.document.querySelectorAll('#list .row').length, 1, 'with the search still narrowing it');
+  assert.equal(open.document.getElementById('main').hasAttribute('inert'), false, 'and reachable again');
 });

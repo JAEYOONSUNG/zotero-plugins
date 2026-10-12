@@ -928,6 +928,26 @@ async function fulltextOf(attachmentKey) {
   return content;
 }
 
+/* What there is to read aloud: the body Zotero indexed, or failing that the abstract, which is
+   the paper's own summary and better than silence. Shared by the transcript and the PDF screen so
+   they never disagree about what a paper offers. */
+async function bodyToRead(item) {
+  let text = '', why = null;
+  try {
+    const attachment = await attachmentOf(item.key);
+    if (!attachment) throw new Error('이 문헌에는 PDF 첨부가 없습니다.');
+    text = await fulltextOf(attachment.key);
+    if (!clean(text)) throw Object.assign(new Error('색인된 본문이 비어 있습니다.'), {status: 404});
+  } catch (error) { why = error; }
+  if (!why) return {text, onlyAbstract: false};
+
+  const abstract = clean(item.data.abstractNote);
+  if (abstract.length > 120) return {text: `Abstract\n\n${abstract}`, onlyAbstract: true};
+  throw new Error(why.status === 404
+    ? 'Zotero가 이 PDF의 본문을 아직 색인하지 않았습니다. 맥에서 PDF를 한 번 열고 동기화한 뒤 다시 시도하세요.'
+    : why.message);
+}
+
 const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
                 sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false};
 
@@ -1088,30 +1108,17 @@ async function openListen(item) {
   openSheet('listen', leftListen);
   el('p', {class: 'muted small', text: '본문을 가져오는 중…'}, body);
 
-  let text = '', onlyAbstract = false;
+  let said;
   try {
-    const attachment = await attachmentOf(item.key);
-    if (!attachment) throw new Error('이 문헌에는 PDF 첨부가 없습니다.');
-    text = await fulltextOf(attachment.key);
+    said = await bodyToRead(item);
   } catch (error) {
-    // No indexed body, but an abstract is a paper's own summary and worth hearing.
-    const abstract = clean(item.data.abstractNote);
-    if (abstract.length > 120) { text = `Abstract\n\n${abstract}`; onlyAbstract = true; }
-    else {
     body.textContent = '';
     const card = el('section', {class: 'card'}, body);
     el('h3', {text: '읽을 본문이 없습니다'}, card);
-    el('p', {class: 'muted small', text: error.status === 404
-      ? 'Zotero가 이 PDF의 본문을 아직 색인하지 않았습니다. 맥에서 PDF를 한 번 열고 동기화한 뒤 다시 시도하세요.'
-      : error.message}, card);
-    return;
-    }
-  }
-  if (!clean(text)) {
-    body.textContent = '';
-    el('p', {class: 'muted small', text: '색인된 본문이 비어 있습니다. 맥에서 PDF를 한 번 열어 주세요.'}, body);
+    el('p', {class: 'muted small', text: error.message}, card);
     return;
   }
+  const {text, onlyAbstract} = said;
 
   const paper = readable(text, {title: clean(item.data.title)});
   listen.paper = paper;
@@ -1369,9 +1376,9 @@ async function readAlong(item, attachment) {
   const engine = speechEngine(window);
   if (!engine.available() || !attachment) return;
   let text = '';
-  try { text = await fulltextOf(attachment.key); } catch (error) { sayNoVoice(error.status === 404); return; }
+  try { ({text} = await bodyToRead(item)); } catch (_) { sayNoVoice(true); return; }
   if ($('paper').hidden || paper.item !== item) return;
-  if (!clean(text)) { sayNoVoice(true); return; }
+  void attachment;
 
   listen.paper = readable(text, {title: clean(item.data.title)});
   listen.list = readingUnits(listen.paper, {captions: false});
