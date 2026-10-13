@@ -161,7 +161,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
    sideways is ours. */
 .row.paper { padding:0; overflow:hidden; touch-action:pan-y; }
 .face { position:relative; display:block; background:var(--card); padding:10px 14px 11px 18px;
-        transition:transform 260ms cubic-bezier(.32,.72,0,1); }
+        transition:transform 260ms cubic-bezier(.32,.72,0,1), box-shadow 180ms; }
 .row.swiping .face { transition:none; }
 .row.paper:active .face { background:var(--press); }
 .act { display:none; }
@@ -461,10 +461,21 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
         box-shadow:0 14px 36px rgba(0,0,0,.3),0 0 0 .5px var(--line);
         transform-origin:top right; animation:pop 140ms cubic-bezier(.2,.9,.3,1); }
 .menu[hidden] { display:none; }
+/* What is behind a menu, waiting for the answer. */
+.scrim { position:fixed; inset:0; z-index:39; background:rgba(0,0,0,.13);
+         -webkit-backdrop-filter:blur(1.5px); backdrop-filter:blur(1.5px);
+         animation:fade 140ms ease-out; }
+@keyframes fade { from { opacity:0 } to { opacity:1 } }
+@media (prefers-color-scheme: dark) { .scrim { background:rgba(0,0,0,.34) } }
+@media (prefers-reduced-motion:reduce) { .scrim { animation:none } }
+/* The row the menu belongs to stays out of the dimming, lifted off the card it sits in. */
+.row.lifted-row { z-index:41; overflow:visible; }
+.row.lifted-row .face { border-radius:var(--radius); transform:scale(1.02);
+                        box-shadow:0 14px 30px rgba(0,0,0,.22), 0 0 0 .5px var(--line); }
 @keyframes pop { from { transform:scale(.92); opacity:0 } to { transform:none; opacity:1 } }
 @media (prefers-reduced-motion:reduce) { .menu { animation:none } }
-.menu-row { display:flex; align-items:center; gap:11px; width:100%; text-align:start; padding:10px;
-            border-radius:10px; font-size:15px; }
+.menu-row { display:flex; align-items:center; gap:11px; width:100%; min-height:44px; text-align:start;
+            padding:10px; border-radius:10px; font-size:15px; }
 .menu-row:active { background:var(--track); }
 .menu-row svg { width:19px; height:19px; flex:none; }
 .menu-row[aria-pressed="true"] { color:var(--link); font-weight:600; }

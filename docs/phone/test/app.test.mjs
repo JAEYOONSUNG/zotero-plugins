@@ -1637,6 +1637,39 @@ test('a paper pushed aside is marked, and the same swipe pushed again clears it'
   assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), []);
 });
 
+test('a menu dims what is behind it and leaves its own row lit', async () => {
+  const open = await boot();
+  await open.settle();
+  const row = open.document.querySelectorAll('#list .row.paper')[0];
+  const touch = (type, x = 40, y = 200) => {
+    const event = new open.window.Event(type, {bubbles: true});
+    event.touches = [{clientX: x, clientY: y}];
+    row.dispatchEvent(event);
+  };
+  touch('touchstart');
+  await new Promise(r => setTimeout(r, 560));
+  assert.ok(open.document.querySelector('.menu.float'), 'the marks are offered');
+  assert.ok(open.document.querySelector('body > .scrim'), 'and everything else is dimmed');
+  assert.equal(row.classList.contains('lifted-row'), true, 'but not the row being asked about');
+
+  // Answered, and the screen is itself again.
+  open.document.querySelector('.menu.float .menu-row').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(!open.document.querySelector('body > .scrim'), 'the dimming goes with the menu');
+  assert.ok(!open.document.querySelector('.lifted-row'), 'and so does the lift');
+
+  // A menu put away by a tap elsewhere leaves nothing behind either.
+  touch('touchstart');
+  await new Promise(r => setTimeout(r, 560));
+  open.document.getElementById('count').dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  assert.ok(!open.document.querySelector('body > .scrim'));
+  assert.ok(!open.document.querySelector('.lifted-row'));
+  // The sort menu hangs off a button and lifts nothing, since nothing is being asked about.
+  open.document.getElementById('btn-sort').dispatchEvent(new open.window.Event('click'));
+  assert.ok(open.document.querySelector('.menu.float'));
+  assert.ok(!open.document.querySelector('.lifted-row'), 'a menu about the whole list lifts no row');
+});
+
 test('a mouse asking for the marks does not swallow the next real tap', async () => {
   const open = await boot();
   await open.settle();

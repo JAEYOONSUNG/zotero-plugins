@@ -806,7 +806,7 @@ function wireRows(list) {
     ].map(choice => ({...choice, run: async () => {
       try { await mark(paper() || item, choice.id, choice.label); }
       catch (error) { toast(error.message); }
-    }})), {chosen: statusOf(item)});
+    }})), {chosen: statusOf(item), lift: row});
   };
   const mark = async (item, id, label) => {
     await setStatus(item, id);
@@ -1989,17 +1989,24 @@ const TICK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 
 let floating = null;
 export function closeFloat() {
   if (!floating) return;
-  const {menu, anchor, away} = floating;
+  const {menu, anchor, away, scrim, lift} = floating;
   floating = null;
   menu.remove();
+  if (scrim) scrim.remove();
+  if (lift) lift.classList.remove('lifted-row');
   if (anchor) anchor.setAttribute('aria-expanded', 'false');
   document.removeEventListener('click', away, true);
   document.removeEventListener('touchstart', away, true);
 }
-function floatMenu(anchor, items, {chosen = ''} = {}) {
+/* A menu is a question, and everything else has to wait for the answer: what is behind it is
+   dimmed, and the row the question is about stays lit and lifted above the dimming — which is
+   what this phone does when a finger is held on something. */
+function floatMenu(anchor, items, {chosen = '', lift = null} = {}) {
   const was = floating && floating.anchor === anchor;
   closeFloat();
   if (was) return null;                       // the same button again means put it away
+  const scrim = el('div', {class: 'scrim', 'aria-hidden': 'true'}, document.body);
+  if (lift) lift.classList.add('lifted-row');
   const menu = el('div', {class: 'menu float'}, document.body);
   for (const item of items) {
     const row = el('button', {class: 'menu-row', type: 'button', 'aria-pressed': String(item.id === chosen)}, menu);
@@ -2024,7 +2031,7 @@ function floatMenu(anchor, items, {chosen = ''} = {}) {
   document.addEventListener('click', away, true);
   document.addEventListener('touchstart', away, true);
   anchor.setAttribute('aria-expanded', 'true');
-  floating = {menu, anchor, away};
+  floating = {menu, anchor, away, scrim, lift};
   return menu;
 }
 
