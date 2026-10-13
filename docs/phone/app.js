@@ -23,7 +23,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
-              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last'};
+              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -803,6 +803,7 @@ function swipeRow(row, face, act, item) {
     slide(0);
     if (!go) { paint(''); return; }
     swiped = true;                 // the finger lifting off is not a tap on the paper
+    learned();
     try {
       await setStatus(liveItem(item.key) || item, what.id);
       render({keep: true});
@@ -844,14 +845,14 @@ function drawRow(item, list) {
     }
   }
   /* Held down: the status, without opening the paper and coming back out of it. */
-  const wasHeld = holdToOpen(row, () => floatMenu(row, [
+  const wasHeld = holdToOpen(row, () => (learned(), floatMenu(row, [
     {id: 'unread', label: '안 읽음'}, {id: 'reading', label: '읽는 중'},
     {id: 'done', label: '완료'}, {id: '', label: '표시 없음'}
   ].map(choice => ({...choice, run: async () => {
     const live = liveItem(item.key) || item;
     try { await setStatus(live, choice.id); render({keep: true}); toast(choice.id ? `${choice.label}으로 표시` : '표시를 지웠습니다'); }
     catch (error) { toast(error.message); }
-  }})), {chosen: status}));
+  }})), {chosen: status})));
   const wasSwiped = swipeRow(row, face, act, item);
   row.addEventListener('click', () => {
     if (wasHeld() || wasSwiped()) return;   // what ended a hold or a swipe is not a tap on the paper
@@ -861,6 +862,25 @@ function drawRow(item, list) {
     openDetail(item.key);
   });
   return row;
+}
+
+/* A gesture nobody knows about is a gesture nobody has. The two the library answers to are said
+   once, at the top of it, and the line takes itself off for good the moment either one is used —
+   so it is a thing you are told until you know it, not a thing you have to dismiss. */
+const taught = () => localStorage.getItem(KEYS.tip) === 'off';
+function learned() {
+  if (taught()) return;
+  localStorage.setItem(KEYS.tip, 'off');
+  const line = $('list').querySelector('.tip');
+  if (line) line.remove();
+}
+function drawTip(list) {
+  if (taught() || state.items.length < 5 || state.q) return null;
+  const line = el('div', {class: 'tip'}, list);
+  el('span', {text: '옆으로 밀면 표시, 꾹 누르면 모두'}, line);
+  const off = el('button', {class: 'x', type: 'button', 'aria-label': '안내 닫기', text: '×'}, line);
+  off.addEventListener('click', () => { localStorage.setItem(KEYS.tip, 'off'); line.remove(); });
+  return line;
 }
 
 /* A paper left half heard is the thing most likely to be wanted next, so the library offers it
@@ -1012,6 +1032,7 @@ function render({keep = false} = {}) {
   $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
   paintScope(rows.length);
 
+  drawTip(list);
   drawResume(list);
 
   if (!rows.length) {

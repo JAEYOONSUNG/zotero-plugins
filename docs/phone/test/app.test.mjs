@@ -1419,6 +1419,35 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper did not open behind it');
 });
 
+test('the two gestures are said once, and the line goes the moment one of them is used', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const tip = () => open.document.querySelector('#list .tip');
+  assert.ok(tip(), 'a library that has them says so');
+  assert.match(tip().textContent, /밀면|꾹/);
+
+  // Used once, and it is not said again — not on this screen and not on the next boot.
+  const row = open.document.querySelectorAll('#list .row.paper')[0];
+  const touch = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; row.dispatchEvent(e); };
+  touch('touchstart', 200); touch('touchmove', 100);
+  row.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle();
+  assert.ok(!tip(), 'and once it has been used it goes');
+  assert.equal(open.storage.get('np.tip'), 'off', 'for good');
+
+  const again = await boot({server: fakeServer({items: MANY}),
+    stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.tip': 'off'}});
+  await again.settle();
+  assert.ok(!again.document.querySelector('#list .tip'), 'a phone that knows is not told again');
+
+  // So does closing it by hand.
+  const third = await boot({server: fakeServer({items: MANY})});
+  await third.settle();
+  third.document.querySelector('#list .tip .x').dispatchEvent(new third.window.Event('click'));
+  assert.ok(!third.document.querySelector('#list .tip'));
+  assert.equal(third.storage.get('np.tip'), 'off');
+});
+
 test('a paper pushed aside is marked, and the same swipe pushed again clears it', async () => {
   const server = fakeServer();
   const open = await boot({server});
