@@ -654,6 +654,22 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 /* Safari puts its own clear in a search box; one is enough. */
 .search input::-webkit-search-cancel-button, .finder-row input::-webkit-search-cancel-button { display:none; }
 
+/* ---------- a pointer ---------- */
+/* An iPad with a trackpad, or Safari on a Mac: a thing that can be pressed says so when the
+   pointer is over it. Only where there is a real pointer — a touch screen that reports hover
+   would otherwise leave the last thing tapped looking pressed. */
+@media (hover:hover) and (pointer:fine) {
+  .row.paper:hover .face { background:var(--press); }
+  .row.nav:hover, .menu-row:hover, .found:hover, .mark-row:hover, .sent:hover,
+  button.set-row:hover, .resume button:hover, .recent-row .face:hover { background:var(--press); }
+  .pill:hover, .chip:hover, .scope-chip:hover, .held:hover { background:var(--track-hover); }
+  .icon-btn:hover, .text-btn:hover, .tab:hover, .pdf-count:hover { background:var(--track); }
+  .tab:hover, .seg button:hover, .rail .step:hover, .chev:hover { color:var(--ink); }
+  .primary:hover, .secondary:hover, .listen-start:hover, .paper-start:hover { filter:brightness(.97); }
+  .play-btn:hover { background:var(--track-hover); }
+  .recent-row .x:hover, .tip .x:hover { color:var(--ink); }
+}
+
 /* ---------- a wider screen ---------- */
 /* On an iPad, or Safari on the Mac, a line of text the full width of the window is not a list
    anyone wants to read: the app keeps a phone's measure and sits in the middle. */
@@ -662,4 +678,8 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
   .tabbar { max-width:780px; margin-inline:auto; width:100%; }
   .pair { left:50%; right:auto; transform:translateX(-50%); width:min(520px,calc(100% - 32px)); }
   .player > * { max-width:760px; margin-inline:auto; width:100%; }
+  /* The landmarks belong to the edge of the list, not to the edge of the window: on a wide
+     screen those are nowhere near each other, and a rail by the window is a rail nobody reaches
+     for. The same half-of-the-difference that centres the list moves it. */
+  .rail { right:max(0px, calc(50% - 380px)); }
 }

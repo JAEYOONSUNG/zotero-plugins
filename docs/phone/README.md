@@ -125,6 +125,10 @@ class the app asks for is held against what the stylesheet draws, in both direct
 a status that was styled twice over for two different things is exactly what a broken app looks
 like.
 
+On an iPad or a Mac it keeps a phone's measure and sits in the middle, with everything that is
+pinned to an edge pinned to the edge of that measure rather than of the window; where there is a
+real pointer, everything that can be pressed answers it.
+
 ## The PDF, and why Dropbox
 
 Zotero's API hands over an attachment's bytes only for the files Zotero itself stores. This

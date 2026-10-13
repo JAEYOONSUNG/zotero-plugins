@@ -1655,6 +1655,33 @@ test('every id the app reaches for is on the page', () => {
   assert.deepEqual(twice, [], `these ids are used twice: ${twice.join(', ')}`);
 });
 
+/* On an iPad the app keeps a phone's measure and sits in the middle of the window. Anything
+   pinned to an edge has to be pinned to the edge of that measure instead, or it ends up on its
+   own in the margin. */
+test('a pointer gets a hover, and only a real pointer does', () => {
+  const css = read('app.css');
+  const block = /@media \(hover:hover\) and \(pointer:fine\) \{([\s\S]*?)\n\}/.exec(css);
+  assert.ok(block, 'hover is behind a real pointer');
+  // A touch screen that reports hover would leave the last thing tapped looking pressed.
+  assert.ok(!/^\.row\.paper:hover/m.test(css.replace(block[1], '')), 'nothing hovers unconditionally');
+  for (const what of ['.row.paper:hover', '.menu-row:hover', '.pill:hover', '.icon-btn:hover']) {
+    assert.ok(block[1].includes(what), `${what} answers a pointer`);
+  }
+});
+
+test('on a wide screen, what is pinned to an edge is pinned to the list, not the window', () => {
+  const css = read('app.css');
+  const wide = /@media \(min-width:620px\) \{([\s\S]*?)\n\}/.exec(css);
+  assert.ok(wide, 'there is a wider-screen measure');
+  const block = wide[1];
+  assert.match(block, /\.list[^{]*\{[^}]*max-width:760px/, 'the list keeps a readable measure');
+  assert.match(block, /\.rail \{[^}]*calc\(50% - 380px\)/, 'and the rail comes in with it');
+  // Half of the list's own width, so the two cannot drift apart.
+  const measure = /max-width:(\d+)px/.exec(block)[1];
+  const moved = /calc\(50% - (\d+)px\)/.exec(block)[1];
+  assert.equal(Number(moved) * 2, Number(measure), 'the rail moves by half the measure, exactly');
+});
+
 /* The settings screen was given a .note for its small print while .note was already a paper's
    abstract and its memos, and the second rule quietly made every abstract twelve-pixel grey.
    Two bare rules for one class, each setting a different size, is that mistake exactly. */
