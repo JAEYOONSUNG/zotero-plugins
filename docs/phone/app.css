@@ -15,6 +15,8 @@
   --card-shadow:0 1px 2px rgba(0,0,0,.05);
   --chrome:rgba(246,246,249,.88);
   --link:#0a66e0; --bad:#c6362c; --good:#0f7d41; --warm:#9a6508;
+  /* What is written on top of one of those four as a fill, rather than beside it as ink. */
+  --on-fill:#fff;
   --pad:16px; --gap:12px; --radius:14px; --slide:220ms cubic-bezier(.2,.8,.2,1);
   --top:calc(env(safe-area-inset-top,0px)); --bottom:calc(env(safe-area-inset-bottom,0px)); --kb:0px;
   color-scheme: light dark;
@@ -29,7 +31,10 @@
     --sel:#3a3a3f; --sel-shadow:0 1px 3px rgba(0,0,0,.6);
     --card-shadow:none;
     --chrome:rgba(18,18,20,.86);
+    /* Lighter tints, because they are read as ink on black — so what is written ON them
+       has to turn dark, or a filled pill in the dark says nothing. */
     --link:#5fa0ff; --bad:#ff7d72; --good:#4cd080; --warm:#e0a344;
+    --on-fill:#111113;
   }
 }
 
@@ -105,7 +110,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .search input { flex:1; min-width:0; border:0; background:transparent; color:var(--ink); font-size:16px; outline:none; }
 .search input::placeholder { color:var(--faint); }
 .search svg { width:17px; height:17px; flex:none; stroke-width:2.2; }
-.q-clear { width:20px; height:20px; border-radius:999px; background:var(--faint); color:var(--card);
+.q-clear { width:20px; height:20px; border-radius:999px; background:var(--faint); color:var(--on-fill);
            font-size:14px; line-height:1; flex:none; display:none; }
 .search:focus-within .q-clear, .search input:not(:placeholder-shown) ~ .q-clear { display:block; }
 
@@ -161,7 +166,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .row.paper:active .face { background:var(--press); }
 .act { display:none; }
 .act.on { position:absolute; inset:0; display:flex; align-items:center; gap:7px; padding:0 20px;
-          font-size:13px; font-weight:650; color:#fff; }
+          font-size:13px; font-weight:650; color:var(--on-fill); }
 .act.left { justify-content:flex-end; }
 .act .mark { display:flex; }
 .act svg { width:19px; height:19px; stroke-width:2.4; }
@@ -289,7 +294,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .tab:active { color:var(--ink); background:var(--track); }
 .tab-state { flex:1; min-width:0; text-align:center; font-size:11px; color:var(--faint);
              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.held { height:22px; padding:0 10px; border-radius:999px; background:var(--warm); color:#fff;
+.held { height:22px; padding:0 10px; border-radius:999px; background:var(--warm); color:var(--on-fill);
         font-size:11px; font-weight:700; flex:none; }
 .held[hidden] { display:none; }
 .held:active { opacity:.8; }

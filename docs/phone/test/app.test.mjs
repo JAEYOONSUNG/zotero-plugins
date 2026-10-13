@@ -314,7 +314,7 @@ test('changing the status sends the tags the desktop plugin reads, and keeps the
   const server = fakeServer();
   const open = await boot({server});
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const button = [...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === '완료');
   button.dispatchEvent(new open.window.Event('click'));
@@ -333,7 +333,7 @@ test('a rating is written as the Rating line in Extra, and pressing it again cle
   const server = fakeServer();
   const open = await boot({server});
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const stars = [...open.document.querySelectorAll('#detail .rate button')];
   stars[3].dispatchEvent(new open.window.Event('click'));            // four stars
@@ -347,7 +347,7 @@ test('the note editor posts a child note, escaped, and the paragraphs are kept',
   const server = fakeServer();
   const open = await boot({server});
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const box = open.document.querySelector('#detail textarea');
   box.value = 'first & <b>bold</b>\n\nsecond';
@@ -469,7 +469,7 @@ test('scrolling deep into the library and opening a paper comes back to the same
   list.dispatchEvent(new open.window.Event('scroll'));
   assert.equal(drawn(), before + 60, 'one flick draws one screenful, not one per redraw');
 
-  open.document.querySelectorAll('#list .row')[100].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[100].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   open.document.getElementById('back').dispatchEvent(new open.window.Event('click'));
   await open.settle();
@@ -545,7 +545,7 @@ test('the phone\u2019s back closes the screen on top, one at a time, and leaves 
 test('closing with the button and closing with the gesture end in the same place', async () => {
   const open = await boot();
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   assert.equal(open.document.getElementById('detail').hidden, false);
   open.document.getElementById('back').dispatchEvent(new open.window.Event('click'));
@@ -561,7 +561,7 @@ test('closing with the button and closing with the gesture end in the same place
 /* A change made on a train must not vanish, and a paper someone moved on the Mac must not be
    overwritten with what this phone happened to be holding. */
 async function pressStatus(open, label, rounds = 60) {
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const button = [...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === label);
   assert.ok(button, `${label} is offered`);
@@ -602,7 +602,7 @@ test('two changes made at once are both kept, neither writing over the other', a
   await open.settle();
   signal.on = false;
 
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const done = [...open.document.querySelectorAll('#detail .seg button')].find(b => b.textContent === '완료');
   const stars = open.document.querySelectorAll('#detail .rate button');
@@ -657,7 +657,7 @@ test('a paper shows where it sits, where to read it, and how far it was listened
   const row = [...open.document.querySelectorAll('#list .row')].find(r => /Retron/.test(r.textContent));
   assert.match(row.textContent, /42%/, 'how far the reading got is on the row');
 
-  row.dispatchEvent(new open.window.Event('click'));
+  row.dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const detail = open.document.getElementById('detail');
   assert.match(detail.textContent, /Phage defence/, 'the collection it is in');
@@ -669,7 +669,7 @@ test('a paper shows where it sits, where to read it, and how far it was listened
 test('the marks made in Zotero are listed in the order they appear, and lead into the paper', async () => {
   const open = await boot({server: fakeServer({children: MARKED, fulltext: FULLTEXT})});
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const rows = [...open.document.querySelectorAll('#detail .mark-row')];
   assert.equal(rows.length, 2, 'both marks are there');
@@ -690,7 +690,7 @@ test('a paper hands over a citation worth pasting', async () => {
   Object.defineProperty(globalThis, 'navigator', {
     value: {userAgent: 'test', clipboard: {writeText: async text => { copied = text; }}},
     configurable: true, writable: true});
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const button = [...open.document.querySelectorAll('#detail button')].find(b => b.textContent === '인용 복사');
   assert.ok(button, 'a citation is offered');
@@ -709,7 +709,7 @@ async function openListening(options = {}) {
   const server = fakeServer({children: PDF_CHILD, fulltext: FULLTEXT, ...options});
   const open = await boot({server});
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const start = [...open.document.querySelectorAll('#detail .listen-start')][0];
   start.dispatchEvent(new open.window.Event('click'));
@@ -1023,7 +1023,7 @@ async function openPdf({children = LINKED_CHILD, stored = {}, dropbox = fakeDrop
   }};
   const open = await boot({server, stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...stored}});
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const start = open.document.querySelector('#detail .paper-start');
   assert.ok(start, 'the paper offers its PDF');
@@ -1195,7 +1195,7 @@ test('the phone\'s keyboard neither hides the end of a list nor leaves the app o
 test('a sheet is pulled back off by a finger from the left edge', async () => {
   const open = await boot();
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const detail = open.document.getElementById('detail');
   assert.equal(detail.hasAttribute('hidden'), false, 'the paper is open');
@@ -1238,7 +1238,7 @@ test('a sheet is pulled back off by a finger from the left edge', async () => {
   assert.equal(detail.hasAttribute('hidden'), true);
 
   // And so does taking it slowly past a third of the way across.
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   assert.equal(detail.hasAttribute('hidden'), false);
   drag('touchstart', 8);
@@ -1255,7 +1255,7 @@ test('a sheet is pulled back off by a finger from the left edge', async () => {
 test('a PDF pushed sideways is being read, not dismissed', async () => {
   const open = await boot();
   await open.settle();
-  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const detail = open.document.getElementById('detail');
   // A list of the open sheet that has been scrolled sideways — a zoomed page — keeps its gesture.
@@ -1273,7 +1273,7 @@ test('a PDF pushed sideways is being read, not dismissed', async () => {
 test('the top of a paper reads like its title page', async () => {
   const open = await boot();
   await open.settle();
-  open.document.querySelectorAll('#list .row.paper')[0].dispatchEvent(new open.window.Event('click'));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   const hero = open.document.querySelector('#detail-body .hero');
   assert.ok(hero, 'the paper opens with a title page');
@@ -1439,7 +1439,7 @@ test('the list is broken up by headings that follow the order it is in', async (
     const row = [...open.document.querySelectorAll('.menu.float .menu-row')]
       .find(b => b.textContent.includes(label[how]));
     assert.ok(row, `${label[how]} is offered as an order`);
-    row.dispatchEvent(new open.window.Event('click'));
+    row.dispatchEvent(new open.window.Event('click', {bubbles: true}));
   };
   pick('title');
   const headings = [...open.document.querySelectorAll('#list .group')].map(h => h.textContent);
@@ -1483,7 +1483,7 @@ test('the listening settings are one tap away, not in the way of the buttons', a
   const open = await boot();
   await open.settle();
   const $id = id => open.document.getElementById(id);
-  const click = node => node.dispatchEvent(new open.window.Event('click'));
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
   click([...open.document.querySelectorAll('#list .row')][0]);
   await open.settle(10);
   click(open.document.querySelector('#detail .listen-start'));
@@ -1509,7 +1509,8 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   await open.settle();
   const row = open.document.querySelectorAll('#list .row')[0];      // Retron Septu, 읽는 중
   const touch = (type, x = 40, y = 200) => {
-    const event = new open.window.Event(type);
+    // Bubbling, as a real touch does: the library listens for these on itself, not on each row.
+    const event = new open.window.Event(type, {bubbles: true});
     event.touches = [{clientX: x, clientY: y}];
     row.dispatchEvent(event);
   };
@@ -1536,7 +1537,7 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   // The tap that ended the hold must not also open the paper.
   touch('touchstart');
   await new Promise(r => setTimeout(r, 560));
-  row.dispatchEvent(new open.window.Event('click'));
+  row.dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle(6);
   assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper did not open behind it');
 });
@@ -1550,9 +1551,9 @@ test('the two gestures are said once, and the line goes the moment one of them i
 
   // Used once, and it is not said again — not on this screen and not on the next boot.
   const row = open.document.querySelectorAll('#list .row.paper')[0];
-  const touch = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; row.dispatchEvent(e); };
+  const touch = (type, x) => { const e = new open.window.Event(type, {bubbles: true}); e.touches = [{clientX: x, clientY: 200}]; row.dispatchEvent(e); };
   touch('touchstart', 200); touch('touchmove', 100);
-  row.dispatchEvent(new open.window.Event('touchend'));
+  row.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
   await open.settle();
   assert.ok(!tip(), 'and once it has been used it goes');
   assert.equal(open.storage.get('np.tip'), 'off', 'for good');
@@ -1578,28 +1579,28 @@ test('a paper pushed aside is marked, and the same swipe pushed again clears it'
   const face = row.querySelector('.face'), act = row.querySelector('.act');
   assert.ok(face && act, 'a paper carries a face that slides and something behind it');
   const touch = (type, x, y = 200) => {
-    const event = new open.window.Event(type);
+    const event = new open.window.Event(type, {bubbles: true});
     event.touches = [{clientX: x, clientY: y}];
     row.dispatchEvent(event);
   };
   const swipe = async (to, {lift = true} = {}) => {
     touch('touchstart', 200);
     touch('touchmove', to, 204);
-    if (lift) { row.dispatchEvent(new open.window.Event('touchend')); await open.settle(); }
+    if (lift) { row.dispatchEvent(new open.window.Event('touchend', {bubbles: true})); await open.settle(); }
   };
 
   // A finger that goes down the screen is a scroll: the row must not budge.
   touch('touchstart', 200);
   touch('touchmove', 192, 280);
   assert.equal(face.style.transform, '', 'a scroll never drags a row sideways');
-  row.dispatchEvent(new open.window.Event('touchend'));
+  row.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
 
   // Far enough left, and what the release will do is drawn behind the row before it happens.
   await swipe(100, {lift: false});
   assert.ok(act.classList.contains('on') && act.classList.contains('done'), 'what it would do is shown');
   assert.match(act.textContent, /완료/);
   assert.match(face.style.transform, /translateX\(-\d+px\)/, 'and the row has followed the finger');
-  row.dispatchEvent(new open.window.Event('touchend'));
+  row.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
   await open.settle();
   let write = server.sent.filter(r => r.method === 'PATCH').pop();
   assert.ok(write, 'the mark was written');
@@ -1608,9 +1609,9 @@ test('a paper pushed aside is marked, and the same swipe pushed again clears it'
   // Not far enough is not an answer: the row springs back and nothing is sent.
   const sent = server.sent.filter(r => r.method === 'PATCH').length;
   const again = open.document.querySelectorAll('#list .row')[1];
-  const nudge = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; again.dispatchEvent(e); };
+  const nudge = (type, x) => { const e = new open.window.Event(type, {bubbles: true}); e.touches = [{clientX: x, clientY: 200}]; again.dispatchEvent(e); };
   nudge('touchstart', 200); nudge('touchmove', 170);
-  again.dispatchEvent(new open.window.Event('touchend'));
+  again.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
   await open.settle();
   assert.equal(server.sent.filter(r => r.method === 'PATCH').length, sent, 'a short push asks nothing');
   assert.equal(again.querySelector('.face').style.transform, '', 'and the row is back where it was');
@@ -1618,32 +1619,85 @@ test('a paper pushed aside is marked, and the same swipe pushed again clears it'
   // The other way marks it 안 읽음 — and a paper already 안 읽음 is cleared by it, so the gesture
   // undoes itself rather than needing a second one to learn.
   const third = open.document.querySelectorAll('#list .row')[1];
-  const over = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; third.dispatchEvent(e); };
+  const over = (type, x) => { const e = new open.window.Event(type, {bubbles: true}); e.touches = [{clientX: x, clientY: 200}]; third.dispatchEvent(e); };
   over('touchstart', 100); over('touchmove', 200);
   const plan = third.querySelector('.act');
   assert.ok(plan.classList.contains('unread'), '안 읽음 on the way back');
-  third.dispatchEvent(new open.window.Event('touchend'));
+  third.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
   await open.settle();
   write = server.sent.filter(r => r.method === 'PATCH').pop();
   assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/unread']);
   const fourth = open.document.querySelectorAll('#list .row')[1];
-  const back = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; fourth.dispatchEvent(e); };
+  const back = (type, x) => { const e = new open.window.Event(type, {bubbles: true}); e.touches = [{clientX: x, clientY: 200}]; fourth.dispatchEvent(e); };
   back('touchstart', 100); back('touchmove', 200);
   assert.ok(fourth.querySelector('.act').classList.contains('clear'), 'pushed the same way again, it clears');
-  fourth.dispatchEvent(new open.window.Event('touchend'));
+  fourth.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
   await open.settle();
   write = server.sent.filter(r => r.method === 'PATCH').pop();
   assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), []);
+});
+
+test('a mouse asking for the marks does not swallow the next real tap', async () => {
+  const open = await boot();
+  await open.settle();
+  const row = open.document.querySelectorAll('#list .row.paper')[0];
+  // A right-click asks the same question a held finger does, but it ends in no tap at all.
+  row.dispatchEvent(new open.window.Event('contextmenu', {bubbles: true}));
+  assert.ok(open.document.querySelector('.menu.float'), 'the marks are offered');
+  open.document.querySelector('.menu.float').remove();
+  // A flag left standing would eat the next tap; a moment that has passed does not.
+  await new Promise(r => setTimeout(r, 760));
+  row.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), false, 'the paper opens');
+});
+
+test('the library answers for every row, including the ones scrolled into view later', async () => {
+  const server = fakeServer({items: MANY});
+  const open = await boot({server});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  // Scrolled to the end of what is drawn, so the next pages are drawn too.
+  Object.defineProperty(list, 'scrollTop', {value: 0, configurable: true, writable: true});
+  Object.defineProperty(list, 'clientHeight', {value: 800, configurable: true});
+  Object.defineProperty(list, 'scrollHeight', {value: 1000, configurable: true});
+  for (let i = 0; i < 3; i++) { list.dispatchEvent(new open.window.Event('scroll')); await open.settle(2); }
+  const rows = [...open.document.querySelectorAll('#list .row.paper')];
+  assert.ok(rows.length > 60, 'there are rows the first draw did not make');
+  const late = rows[rows.length - 1];
+
+  /* A finger lands on the title, not on the row's own box, so the gesture has to be answered for
+     whatever inside the row it started on. */
+  const on = late.querySelector('h2');
+  assert.ok(on, 'the title is what a finger actually touches');
+  const touch = (type, x) => {
+    const event = new open.window.Event(type, {bubbles: true});
+    event.touches = [{clientX: x, clientY: 400}];
+    on.dispatchEvent(event);
+  };
+  touch('touchstart', 200);
+  touch('touchmove', 100);
+  on.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
+  await open.settle();
+  const write = server.sent.filter(r => r.method === 'PATCH').pop();
+  assert.ok(write, 'a row drawn long after the list was wired is marked all the same');
+  assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/done']);
+  /* And nothing is hung on a paper's own row to make that work: drawRow returns a row with no
+     listeners on it, which is the whole point — a library scrolled to its end would otherwise be
+     carrying a listener for every gesture times every paper. */
+  const draws = /function drawRow\(item, list\) \{([\s\S]*?)\n\}/.exec(read('app.js'));
+  assert.ok(draws, 'drawRow is there to be read');
+  assert.ok(!/addEventListener/.test(draws[1]), 'and hangs nothing on the row it draws');
 });
 
 test('the swipe that marked a paper does not also open it', async () => {
   const open = await boot();
   await open.settle();
   const row = open.document.querySelectorAll('#list .row')[1];
-  const touch = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; row.dispatchEvent(e); };
+  const touch = (type, x) => { const e = new open.window.Event(type, {bubbles: true}); e.touches = [{clientX: x, clientY: 200}]; row.dispatchEvent(e); };
   touch('touchstart', 200); touch('touchmove', 100);
-  row.dispatchEvent(new open.window.Event('touchend'));
-  row.dispatchEvent(new open.window.Event('click'));
+  row.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
+  row.dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle(6);
   assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper stayed shut');
 });
@@ -1671,7 +1725,7 @@ test('a change made far down the library leaves the reader where they were', asy
   list.scrollTop = 2400;
   const drawn = open.document.querySelectorAll('#list .row').length;
   const row = open.document.querySelectorAll('#list .row')[9];
-  const touch = type => { const e = new open.window.Event(type); e.touches = [{clientX: 40, clientY: 400}]; row.dispatchEvent(e); };
+  const touch = type => { const e = new open.window.Event(type, {bubbles: true}); e.touches = [{clientX: 40, clientY: 400}]; row.dispatchEvent(e); };
   touch('touchstart');
   await new Promise(r => setTimeout(r, 560));
   const done = [...open.document.querySelectorAll('.menu.float .menu-row')].find(b => b.textContent.includes('완료'));
@@ -1900,6 +1954,15 @@ test('every ink the app writes in can be read on the paper it is written on', ()
       const on = contrast(ink[name], ink.canvas);
       assert.ok(on >= 4.5, `${scheme}: --${name} on the canvas is ${on.toFixed(2)}:1, under 4.5`);
     }
+    /* And some of those four are fills rather than ink: what a push aside says it will do, the
+       count of what is waiting to be sent. In the dark they are light tints read as ink on black,
+       so anything written on top of one has to turn dark — a white word on a pale green pill is
+       the sort of thing only a measurement catches. */
+    assert.ok(ink['on-fill'], `${scheme} says what is written on a fill`);
+    for (const name of ['good', 'link', 'faint', 'warm']) {
+      const on = contrast(ink['on-fill'], ink[name]);
+      assert.ok(on >= 4.5, `${scheme}: writing on --${name} is ${on.toFixed(2)}:1, under 4.5`);
+    }
   }
   // Nothing is written smaller than 11px, whatever it is.
   const sizes = [...css.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(m => Number(m[1]));
@@ -1934,7 +1997,7 @@ test('a paper left half heard is offered back at the top of the library', async 
   // Opening one to listen is what makes it the paper to carry on with.
   const fresh = await boot();
   await fresh.settle();
-  fresh.document.querySelectorAll('#list .row')[0].dispatchEvent(new fresh.window.Event('click'));
+  fresh.document.querySelectorAll('#list .row')[0].dispatchEvent(new fresh.window.Event('click', {bubbles: true}));
   await fresh.settle(10);
   fresh.document.querySelector('#detail .listen-start').dispatchEvent(new fresh.window.Event('click'));
   await fresh.settle(10);

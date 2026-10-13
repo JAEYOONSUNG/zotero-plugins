@@ -78,17 +78,21 @@ because the server may have taken the note even though the answer never arrived.
 
 It is meant to feel like an app on the phone rather than a page in a browser: a grouped list on a
 recessed canvas, hairline separators inset to where the title starts, a large title that shrinks
-into the bar as the library is scrolled — taking the search with it, since a tap anywhere on
-that bar scrolls back to the top and brings it out again — a toolbar along the bottom rather than a strip floating
-over the last row, and screens that come in from the right and are pulled back off by a finger
-from the left edge — iOS keeps its own back gesture for Safari, so the home-screen app carries
-one of its own. The chosen thing is a raised white
-pill on a soft grey track, never a solid fill and never a coloured bar down the edge of a row. Pulling the library down
-turns a ring that fills as it goes and keeps turning until the library has actually arrived, and
-a list narrowed to nothing offers the button that un-narrows it rather than being a dead end. In
-the dark it is a true black canvas with the cards lifted off it. Every class the app asks for is
-held against what the stylesheet draws, by a test — a status that was styled twice over for two
-different things is exactly what a broken app looks like.
+into the bar as the library is scrolled — taking the search with it, since a tap anywhere on that
+bar scrolls back to the top and brings it out again — a toolbar along the bottom rather than a
+strip floating over the last row, and screens that come in from the right and are pulled back off
+by a finger from the left edge — iOS keeps its own back gesture for Safari, so the home-screen app
+carries one of its own. The chosen thing is a raised white pill on a soft grey track, never a
+solid fill and never a coloured bar down the edge of a row. Pulling the library down turns a ring
+that fills as it goes and keeps turning until the library has actually arrived, and a list
+narrowed to nothing offers the button that un-narrows it rather than being a dead end. In the dark
+it is a true black canvas with the cards lifted off it. Every colour is measured rather than
+eyeballed: every ink against the paper it is written on, and every word written on top of a fill
+rather than beside it — in the dark those four colours are light tints read as ink on black, so
+what is written on them turns dark, which is the sort of thing only a measurement catches. Every
+class the app asks for is held against what the stylesheet draws, in both directions, by a test —
+a status that was styled twice over for two different things is exactly what a broken app looks
+like.
 
 ## The PDF, and why Dropbox
 
@@ -126,6 +130,10 @@ file moved inside the folder is found again by its name.
 
 Everything but `app.js` is a pure module with no DOM and no network, which is why it can all be
 checked without a phone.
+
+A row of the library carries no listeners of its own: both of its gestures are listened for once,
+on the list, and the row says which paper it is with `data-key`. A library scrolled to the end of
+a few thousand papers would otherwise be holding tens of thousands of listeners.
 
 ## Checking it
 

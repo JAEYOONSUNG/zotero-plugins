@@ -498,15 +498,19 @@ function pullToRefresh(list, run) {
     mark.classList.toggle('ready', distance > PULL);
     mark.classList.toggle('on', distance > 4);
   };
+  let fromX = 0;
   list.addEventListener('touchstart', event => {
     if (busy) { from = null; return; }
     from = list.scrollTop <= 0 && event.touches.length === 1 ? event.touches[0].clientY : null;
+    fromX = event.touches[0] ? event.touches[0].clientX : 0;
     if (from !== null) mark.classList.add('pulling');     // following a finger, so no easing
     show(0);
   }, {passive: true});
   list.addEventListener('touchmove', event => {
     if (from === null || list.scrollTop > 0) { if (!busy) show(0); return; }
     const moved = event.touches[0].clientY - from;
+    // A finger going sideways is pushing a paper aside, not asking for the library again.
+    if (Math.abs(event.touches[0].clientX - fromX) > Math.abs(moved)) { show(0); return; }
     if (moved > 0) show(moved * 0.5);
   }, {passive: true});
   list.addEventListener('touchend', () => {
@@ -737,29 +741,9 @@ function openSortMenu() {
 }
 
 /* Holding a finger on a row is how this phone asks for the things that are not worth a screen of
-   their own. The press is given up the moment the finger moves, so a scroll is never a hold, and
-   the tap that ends it is swallowed so the paper does not open behind the menu. */
+   their own, and the press is given up the moment the finger moves, so a scroll is never a hold.
+   Both of the library's row gestures are listened for in wireRows below. */
 export const HOLD = 480;
-function holdToOpen(row, run) {
-  let timer = null, from = null, held = false;
-  const give = () => { if (timer) clearTimeout(timer); timer = null; from = null; };
-  row.addEventListener('touchstart', event => {
-    const touch = event.touches && event.touches[0];
-    if (!touch) return;
-    from = {x: touch.clientX, y: touch.clientY};
-    timer = setTimeout(() => { timer = null; held = true; run(); }, HOLD);
-  }, {passive: true});
-  row.addEventListener('touchmove', event => {
-    const touch = event.touches && event.touches[0];
-    if (!from || !touch) return;
-    if (Math.abs(touch.clientX - from.x) > 10 || Math.abs(touch.clientY - from.y) > 10) give();
-  }, {passive: true});
-  row.addEventListener('touchend', give, {passive: true});
-  row.addEventListener('touchcancel', give, {passive: true});
-  // A mouse has its own way of asking the same question.
-  row.addEventListener('contextmenu', event => { event.preventDefault(); held = true; run(); });
-  return () => { const was = held; held = false; return was; };
-}
 
 /* Pushed aside, a paper is marked: left is 완료, right is 안 읽음, and a paper already marked that
    way is cleared, so the same swipe undoes itself. What the release will do is drawn behind the
@@ -778,30 +762,81 @@ const SWIPE_MARK = {
    gesture is felt rather than guessed at. */
 const resist = moved => Math.sign(moved) * (Math.abs(moved) <= SWIPE ? Math.abs(moved) : SWIPE + (Math.abs(moved) - SWIPE) * 0.35);
 
-function swipeRow(row, face, act, item) {
-  let from = null, axis = '', at = 0, plan = null, swiped = false;
-  const slide = x => { at = x; face.style.transform = x ? `translateX(${Math.round(x)}px)` : ''; };
+/* ---------- what a row answers to ---------- */
+/* Every paper answers to the same two gestures, so the library listens for them once, on itself,
+   rather than seven times over on every row. A library scrolled to the end of a few thousand
+   papers would otherwise be carrying tens of thousands of listeners, and each row would cost
+   more to draw than it costs to show. */
+function wireRows(list) {
+  let row = null, key = '', from = null, axis = '', at = 0, plan = null, timer = null;
+  /* When a gesture last answered for a row. The tap that ends a hold or a swipe must not also
+     open the paper, and a moment rather than a flag is what says so: a right-click on a desktop
+     ends in no tap at all, and a flag left standing would swallow the next real one. */
+  let answered = 0;
+  const RECENT = 700;
+  const paper = () => liveItem(key);
+  const slide = x => {
+    at = x;
+    const face = row && row.querySelector('.face');
+    if (face) face.style.transform = x ? `translateX(${Math.round(x)}px)` : '';
+  };
   const paint = way => {
-    plan = way ? SWIPE_PLAN(statusOf(liveItem(item.key) || item), way) : null;
+    const act = row && row.querySelector('.act');
+    plan = way && row ? SWIPE_PLAN(statusOf(paper() || {data: {}}), way) : null;
+    if (!act) return;
     act.className = plan ? `act on ${plan.tone} ${way}` : 'act';
     act.textContent = '';
     if (!plan) return;
     el('span', {class: 'mark', html: SWIPE_MARK[plan.tone]}, act);
     el('span', {text: plan.label}, act);
   };
-  row.addEventListener('touchstart', event => {
-    if (!event.touches || event.touches.length !== 1) { from = null; return; }
-    from = {x: event.touches[0].clientX, y: event.touches[0].clientY};
-    axis = ''; swiped = false;
-  }, {passive: true});
-  row.addEventListener('touchmove', event => {
+  const give = () => { if (timer) clearTimeout(timer); timer = null; };
+  const rowAt = event => {
+    const on = event.target;
+    return on && typeof on.closest === 'function' ? on.closest('.row.paper') : null;
+  };
+  /* Held down: the status, without opening the paper and coming back out of it. */
+  const askStatus = () => {
+    const item = paper();
+    if (!row || !item) return;
+    learned();
+    floatMenu(row, [
+      {id: 'unread', label: '안 읽음'}, {id: 'reading', label: '읽는 중'},
+      {id: 'done', label: '완료'}, {id: '', label: '표시 없음'}
+    ].map(choice => ({...choice, run: async () => {
+      try { await mark(paper() || item, choice.id, choice.label); }
+      catch (error) { toast(error.message); }
+    }})), {chosen: statusOf(item)});
+  };
+  const mark = async (item, id, label) => {
+    await setStatus(item, id);
+    render({keep: true});
+    toast(id ? `${label}으로 표시` : '표시를 지웠습니다');
+  };
+
+  list.addEventListener('touchstart', event => {
+    give();
+    row = null; key = ''; from = null; axis = ''; at = 0; plan = null;
     const touch = event.touches && event.touches[0];
-    if (!from || !touch) return;
+    const on = rowAt(event);
+    if (!touch || event.touches.length !== 1 || !on) return;
+    row = on;
+    key = on.getAttribute('data-key') || '';
+    if (!paper()) { row = null; return; }
+    from = {x: touch.clientX, y: touch.clientY};
+    timer = setTimeout(() => { timer = null; answered = Date.now(); askStatus(); }, HOLD);
+  }, {passive: true});
+
+  list.addEventListener('touchmove', event => {
+    const touch = event.touches && event.touches[0];
+    if (!row || !from || !touch) return;
     const dx = touch.clientX - from.x, dy = touch.clientY - from.y;
     /* The first ten pixels decide what the gesture is. A scroll must never drag a row sideways,
-       and a swipe must never be read as a scroll halfway through. */
+       a swipe must never be read as a scroll halfway through, and a finger that has moved at all
+       is no longer a finger held still. */
     if (!axis) {
       if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      give();
       axis = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
       if (axis === 'x') { row.classList.add('swiping'); closeFloat(); }
     }
@@ -809,32 +844,57 @@ function swipeRow(row, face, act, item) {
     slide(resist(dx));
     paint(dx < -10 ? 'left' : dx > 10 ? 'right' : '');
   }, {passive: true});
+
   const end = async () => {
+    give();
+    if (!row) return;
     const go = axis === 'x' && plan && Math.abs(at) > SWIPE;
-    const what = plan;
-    from = null; axis = '';
+    const what = plan, item = paper();
     row.classList.remove('swiping');
     slide(0);
-    if (!go) { paint(''); return; }
-    swiped = true;                 // the finger lifting off is not a tap on the paper
+    paint('');
+    from = null; axis = '';
+    if (!go || !item) return;
+    answered = Date.now();         // the finger lifting off is not a tap on the paper
     learned();
-    try {
-      await setStatus(liveItem(item.key) || item, what.id);
-      render({keep: true});
-      toast(what.id ? `${what.label}으로 표시` : '표시를 지웠습니다');
-    } catch (error) { toast(error.message); }
+    try { await mark(item, what.id, what.label); }
+    catch (error) { toast(error.message); }
   };
-  row.addEventListener('touchend', end, {passive: true});
-  row.addEventListener('touchcancel', () => { from = null; axis = ''; row.classList.remove('swiping'); slide(0); paint(''); }, {passive: true});
-  return () => { const was = swiped; swiped = false; return was; };
+  list.addEventListener('touchend', end, {passive: true});
+  list.addEventListener('touchcancel', () => {
+    give();
+    if (!row) return;
+    row.classList.remove('swiping');
+    slide(0); paint('');
+    from = null; axis = '';
+  }, {passive: true});
+  // A mouse has its own way of asking the same question.
+  list.addEventListener('contextmenu', event => {
+    const on = rowAt(event);
+    if (!on) return;
+    event.preventDefault();
+    row = on; key = on.getAttribute('data-key') || '';
+    answered = Date.now();
+    askStatus();
+  });
+
+  list.addEventListener('click', event => {
+    const on = rowAt(event);
+    if (!on) return;
+    if (Date.now() - answered < RECENT) { answered = 0; return; }
+    // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
+    state.at = list.scrollTop;
+    state.drawn = state.shown;
+    openDetail(on.getAttribute('data-key') || '');
+  });
 }
 
 /* One row. Kept apart so more of them can be added as the list is scrolled without redrawing
-   what is already there. */
+   what is already there. It carries no listeners of its own: the library above answers for it. */
 function drawRow(item, list) {
-  const row = el('button', {class: 'row paper', type: 'button'}, list);
+  const row = el('button', {class: 'row paper', type: 'button', 'data-key': item.key}, list);
   // Behind the row: what pushing it aside would do. Drawn first so the face covers it.
-  const act = el('span', {class: 'act', 'aria-hidden': 'true'}, row);
+  el('span', {class: 'act', 'aria-hidden': 'true'}, row);
   const face = el('span', {class: 'face'}, row);
   // The status is a mark in the margin beside the title: a labelled chip for it cost every row a
   // line of its own, and most of a library has no status at all.
@@ -858,23 +918,6 @@ function drawRow(item, list) {
       el('span', {class: 'muted', text: `${heard}%`}, foot);
     }
   }
-  /* Held down: the status, without opening the paper and coming back out of it. */
-  const wasHeld = holdToOpen(row, () => (learned(), floatMenu(row, [
-    {id: 'unread', label: '안 읽음'}, {id: 'reading', label: '읽는 중'},
-    {id: 'done', label: '완료'}, {id: '', label: '표시 없음'}
-  ].map(choice => ({...choice, run: async () => {
-    const live = liveItem(item.key) || item;
-    try { await setStatus(live, choice.id); render({keep: true}); toast(choice.id ? `${choice.label}으로 표시` : '표시를 지웠습니다'); }
-    catch (error) { toast(error.message); }
-  }})), {chosen: status})));
-  const wasSwiped = swipeRow(row, face, act, item);
-  row.addEventListener('click', () => {
-    if (wasHeld() || wasSwiped()) return;   // what ended a hold or a swipe is not a tap on the paper
-    // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
-    state.at = $('list').scrollTop;
-    state.drawn = state.shown;
-    openDetail(item.key);
-  });
   return row;
 }
 
@@ -891,7 +934,7 @@ function learned() {
 function drawTip(list) {
   if (taught() || state.items.length < 5 || state.q) return null;
   const line = el('div', {class: 'tip'}, list);
-  el('span', {text: '옆으로 밀면 표시, 꾹 누르면 모두'}, line);
+  el('span', {text: '옆으로 밀면 완료 · 안 읽음, 꾹 누르면 전부'}, line);
   const off = el('button', {class: 'x', type: 'button', 'aria-label': '안내 닫기', text: '×'}, line);
   off.addEventListener('click', () => { localStorage.setItem(KEYS.tip, 'off'); line.remove(); });
   return line;
@@ -2238,6 +2281,7 @@ function takePasted(text) {
 function wire() {
   steadyKeyboard();
   wireRail();
+  wireRows($('list'));
   for (const id of SHEET_IDS) dragBack(id);
   const paste = $('setup-paste');
   if (paste) paste.addEventListener('click', async () => {
