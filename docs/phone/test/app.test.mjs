@@ -2562,6 +2562,42 @@ test('a keyboard, for the iPad with one attached', async () => {
   assert.equal(key('/'), false);
 });
 
+test('a search shows what matched, where it matched', async () => {
+  const open = await boot();
+  await open.settle();
+  const {markTerms} = await import(new URL(`../app.js?boot=${boots}`, here));
+  const marked = (text, terms) => {
+    const node = open.document.createElement('p');
+    markTerms(node, text, terms);
+    return [...node.childNodes].map(n => (n.tagName === 'B' ? `[${n.textContent}]` : n.textContent)).join('');
+  };
+  assert.equal(marked('Retron Septu defence', ['septu']), 'Retron [Septu] defence');
+  assert.equal(marked('Retron Septu defence', []), 'Retron Septu defence', 'nothing searched, nothing marked');
+  assert.equal(marked('', ['x']), '');
+  assert.equal(marked('Phage phage', ['phage']), '[Phage] [phage]', 'every time it appears');
+  // Folded, so an accent in the text is still found by a plain letter.
+  assert.equal(marked('Müller and Muller', ['muller']), '[Müller] and [Muller]');
+  // Two words that overlap in the text are one mark, not two nested ones.
+  assert.equal(marked('defences', ['defence', 'ences']), '[defences]');
+  // Korean is not taken apart by the folding, so the indexes still line up.
+  assert.equal(marked('박테리아 면역 체계', ['면역']), '박테리아 [면역] 체계');
+
+  // And it is the rows of the library that show it.
+  const box = open.document.getElementById('q');
+  box.value = 'retron';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  const row = open.document.querySelector('#list .row.paper');
+  assert.equal(row.querySelector('h2 b').textContent, 'Retron', 'the title says what matched');
+  // An author matched shows in the line that has the author in it, not in the title.
+  box.value = 'hong';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  const other = open.document.querySelector('#list .row.paper');
+  assert.equal(other.querySelector('h2 b'), null, 'nothing in the title matched');
+  assert.equal(other.querySelector('.meta b').textContent, 'Hong');
+});
+
 test('the search box remembers what has been searched for before', async () => {
   const open = await boot();
   await open.settle();

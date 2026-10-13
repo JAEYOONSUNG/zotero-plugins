@@ -17,7 +17,7 @@ import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
-import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel} from './list.js';
+import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
@@ -1054,6 +1054,48 @@ function wireRows(list) {
   });
 }
 
+/* What was searched for, shown where it was found. The folding is done one character at a time,
+   so an index into the folded text still points at a character of the original: an accent folds
+   away to nothing and the Turkish dotted I folds into two, so one-for-one cannot be assumed. */
+export function markTerms(parent, text, terms) {
+  const whole = String(text ?? '');
+  const plain = () => { parent.appendChild(document.createTextNode(whole)); return parent; };
+  if (!terms || !terms.length || !whole) return plain();
+  let folded = '';
+  const at = [];
+  for (let i = 0; i < whole.length; i++) {
+    const piece = fold(whole[i]);
+    for (let n = 0; n < piece.length; n++) at.push(i);
+    folded += piece;
+  }
+  at.push(whole.length);
+  const hits = [];
+  for (const term of terms) {
+    let from = 0, found;
+    while (hits.length < 40 && (found = folded.indexOf(term, from)) >= 0) {
+      hits.push([at[found], at[found + term.length]]);
+      from = found + term.length;
+    }
+  }
+  if (!hits.length) return plain();
+  hits.sort((a, b) => a[0] - b[0]);
+  // Two words that overlap in the text are one mark, not two nested ones.
+  const runs = [];
+  for (const [start, end] of hits) {
+    const last = runs[runs.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else runs.push([start, end]);
+  }
+  let cut = 0;
+  for (const [start, end] of runs) {
+    if (start > cut) parent.appendChild(document.createTextNode(whole.slice(cut, start)));
+    el('b', {text: whole.slice(start, end)}, parent);
+    cut = end;
+  }
+  if (cut < whole.length) parent.appendChild(document.createTextNode(whole.slice(cut)));
+  return parent;
+}
+
 /* One row. Kept apart so more of them can be added as the list is scrolled without redrawing
    what is already there. It carries no listeners of its own: the library above answers for it. */
 function drawRow(item, list) {
@@ -1070,8 +1112,9 @@ function drawRow(item, list) {
     row.setAttribute('aria-pressed', String(chosen));
     el('span', {class: `pick-mark${chosen ? ' on' : ''}`, html: chosen ? PICK_MARK : ''}, face);
   }
-  el('h2', {text: clean(item.data.title) || '(제목 없음)'}, face);
-  el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, face);
+  const terms = render.terms || [];
+  markTerms(el('h2', {}, face), clean(item.data.title) || '(제목 없음)', terms);
+  markTerms(el('p', {class: 'meta'}, face), [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · '), terms);
   const rating = ratingOf(item);
   const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
   // How far it got, by either road: the voice through the sentences or a finger through the pages.
@@ -1394,6 +1437,7 @@ function render({keep = false} = {}) {
   render.rows = rows;
   render.group = '';
   render.sizes = countGroups(rows);
+  render.terms = words(state.q);        // so every row can show what matched
   list.textContent = '';
   more = null;
   if (!state.picking) $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';

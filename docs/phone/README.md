@@ -47,7 +47,8 @@ belong to it. A library long enough to be lost in carries landmarks down its
 right edge — the letters, the years, the stars — and a finger laid on them takes it there, saying
 in full what it is over; the orders whose headings are dates have no one-character name, so they
 go without. Search covers the title, authors, journal, year, DOI, tags and the abstract, folds
-accents so Muller finds Müller, and every word has to appear; the box carries 취소 while it is
+accents so Muller finds Müller, marks what matched in the row that matched it, and every word has
+to appear; the box carries 취소 while it is
 open and, when it is open and empty, the last six things that were searched for — each of which
 can be tapped back into or forgotten.
 
