@@ -468,13 +468,17 @@ function showKeyTrouble() {
    hairline only once there is something underneath it — what every list on this phone does. The
    two thresholds are apart so a title cannot flicker on a finger held still. */
 const followed = new WeakMap();
-export function followScroll(list, top) {
+export function followScroll(list, top, {after = 14} = {}) {
   if (!list || !top) return null;
   if (followed.has(list)) { const paint = followed.get(list); paint(); return paint; }
   let small = false;
+  /* How far down the list the big thing has to go before the small one takes its place: a
+     screenful of chrome needs fourteen pixels, a paper's own name needs the whole title block,
+     or it would be said twice over at once. */
+  const back = Math.max(1, after - 10);
   const paint = () => {
     const at = list.scrollTop || 0;
-    if (at > 14) small = true; else if (at < 4) small = false;
+    if (at > after) small = true; else if (at < back) small = false;
     top.classList.toggle('shrunk', small);
     top.classList.toggle('lifted', at > 1);
   };
@@ -691,7 +695,7 @@ function buildFilters() {
       state.status = id;
       for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
       slide(track);
-      render();
+      showing();
     });
   }
   requestAnimationFrame(() => slide(track));
@@ -717,13 +721,13 @@ function paintScope(total) {
     const chip = el('button', {class: 'scope-chip', type: 'button', 'aria-label': `${name} 해제`}, bar);
     el('span', {text: name}, chip);
     el('span', {class: 'x', text: '×'}, chip);
-    chip.addEventListener('click', () => { state.collection = ''; render(); });
+    chip.addEventListener('click', () => { state.collection = ''; showing(); });
   }
   if (state.tag) {
     const chip = el('button', {class: 'scope-chip', type: 'button', 'aria-label': `${state.tag} 해제`}, bar);
     el('span', {text: '#' + state.tag}, chip);
     el('span', {class: 'x', text: '×'}, chip);
-    chip.addEventListener('click', () => { state.tag = ''; render(); });
+    chip.addEventListener('click', () => { state.tag = ''; showing(); });
   }
   // Nothing to say about what is being looked at is itself worth a row of the screen.
   bar.hidden = !bar.firstChild;
@@ -736,9 +740,7 @@ function openSortMenu() {
   floatMenu($('btn-sort'), SORTS.map(([id, label]) => ({id, label, run: () => {
     state.sort = id;
     localStorage.setItem(KEYS.sort, id);
-    state.shown = 0;
-    $('list').scrollTop = 0;
-    render();
+    showing();
   }})), {chosen: state.sort});
 }
 
@@ -1048,15 +1050,22 @@ function drawResume(list) {
   return card;
 }
 
+/* What is being looked at has changed, so the list starts again from the top: three hundred
+   papers down one list is nowhere in particular in another. */
+function showing() {
+  state.shown = 0;
+  const list = $('list');
+  if (list) list.scrollTop = 0;
+  render();
+}
+
 /* Whatever narrowed the library down to nothing is also the way back out of it. */
 function clearNarrowing() {
   state.q = ''; state.collection = ''; state.tag = ''; state.status = '';
   const box = $('q');
   if (box) box.value = '';
-  state.shown = 0;
   buildFilters();
-  $('list').scrollTop = 0;
-  render();
+  showing();
 }
 
 /* The list is drawn a screenful at a time. Everything that matches is counted and reachable; what
@@ -1307,7 +1316,7 @@ async function openDetail(key) {
   body.textContent = '';
   openSheet('detail', leftDetail);
   body.scrollTop = 0;
-  followScroll(body, $('detail').querySelector('.top'));
+  followScroll(body, $('detail').querySelector('.top'), {after: 112});
 
   /* The top of a paper is read like a title page — the name, who wrote it, where it came out —
      rather than as a form with a label against every line. */
@@ -2398,7 +2407,7 @@ function openCollections() {
 
   el('h3', {class: 'group', text: '라이브러리'}, body);
   const all = navRow('전체', state.items.length);
-  all.addEventListener('click', () => { state.collection = ''; closeSheet('collections'); render(); });
+  all.addEventListener('click', () => { state.collection = ''; closeSheet('collections'); showing(); });
 
   // The tags actually in use, so a subject can be picked the way a collection can.
   const tags = usefulTags(state.items);
@@ -2413,7 +2422,7 @@ function openCollections() {
       chip.addEventListener('click', () => {
         state.tag = state.tag === tag ? '' : tag;
         closeSheet('collections');
-        render();
+        showing();
       });
     }
   }
@@ -2422,7 +2431,7 @@ function openCollections() {
   const draw = (parent, depth) => {
     for (const c of (byParent.get(parent) || []).sort((a, b) => a.data.name.localeCompare(b.data.name, 'ko'))) {
       const row = navRow(clean(c.data.name), counts.get(c.key) || 0, depth);
-      row.addEventListener('click', () => { state.collection = c.key; closeSheet('collections'); render(); });
+      row.addEventListener('click', () => { state.collection = c.key; closeSheet('collections'); showing(); });
       draw(c.key, depth + 1);
     }
   };
@@ -2500,7 +2509,7 @@ function wire() {
     state.q = event.target.value;
     clearTimeout(typing);
     // A fast typist would otherwise filter the whole library between every two letters.
-    typing = setTimeout(() => { state.shown = 0; $('list').scrollTop = 0; render(); }, 110);
+    typing = setTimeout(showing, 110);
   });
   $('q').addEventListener('search', () => { state.q = $('q').value; render(); });
   $('btn-sync').addEventListener('click', () => sync());

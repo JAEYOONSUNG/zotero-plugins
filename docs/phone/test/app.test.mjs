@@ -1545,6 +1545,24 @@ test('the big title gives way to the small one as the library is scrolled, and d
   list.scrollTop = 0; paint();
   assert.equal(top.classList.contains('shrunk'), false, 'back at the top, the big title is back');
   assert.equal(followScroll(null, top), null, 'and a screen without a list is no trouble');
+
+  /* A paper's own screen says its name as the first thing on it, so the bar waits for the whole
+     title block to go by rather than for a nudge — or the name would be said twice at once. */
+  const other = open.document.createElement('main');
+  const bar = open.document.createElement('header');
+  other.scrollTop = 0;
+  const far = followScroll(other, bar, {after: 112});
+  other.scrollTop = 40; far();
+  assert.equal(bar.classList.contains('shrunk'), false, 'forty pixels is still the title block');
+  assert.equal(bar.classList.contains('lifted'), true, 'though the line is already drawn');
+  other.scrollTop = 130; far();
+  assert.equal(bar.classList.contains('shrunk'), true, 'past it, the bar takes over the name');
+  other.scrollTop = 105; far();
+  assert.equal(bar.classList.contains('shrunk'), true, 'and does not flicker on the way back');
+  other.scrollTop = 80; far();
+  assert.equal(bar.classList.contains('shrunk'), false);
+  assert.match(read('app.css'), /#detail \.top\.shrunk \.detail-title \{[^}]*opacity:1/,
+    'which is when the name in the bar is drawn');
 });
 
 test('the toolbar at the bottom opens the collections and the settings', async () => {
@@ -2140,6 +2158,44 @@ test('the bar at the top is the way back to the top of the library', async () =>
   tap(open.document.getElementById('btn-sort'));
   assert.equal(list.scrollTop, 1800, 'the sort button is not the title');
   assert.ok(open.document.querySelector('.menu.float'), 'it opens the order instead');
+});
+
+test('changing what is being looked at starts the list again from the top', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  let at = 0;
+  Object.defineProperty(list, 'scrollTop', {get: () => at, set: v => { at = Number(v) || 0; }, configurable: true});
+  const deep = () => { at = 4200; };
+  const tap = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  const filter = label => [...open.document.querySelectorAll('#filters button')].find(b => b.textContent === label);
+
+  // Three hundred papers down one list is nowhere in particular in another.
+  deep();
+  tap(filter('완료'));
+  await open.settle();
+  assert.equal(list.scrollTop, 0, 'a different filter starts at the top');
+
+  deep();
+  tap(filter('전체'));
+  await open.settle();
+  assert.equal(list.scrollTop, 0);
+
+  // So does a different order.
+  deep();
+  tap(open.document.getElementById('btn-sort'));
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '제목').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(list.scrollTop, 0, 'a different order starts at the top');
+
+  // And so does a search, and clearing one.
+  deep();
+  const box = open.document.getElementById('q');
+  box.value = 'number 7';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  assert.equal(list.scrollTop, 0);
 });
 
 test('a library narrowed to nothing offers the way back out of it', async () => {

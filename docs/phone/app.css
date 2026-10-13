@@ -328,8 +328,10 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 #detail .detail-title, #listen .detail-title, #settings .detail-title, #collections .detail-title { text-align:center; }
 /* The paper's own screen opens with its name set large at the top of the page, so the name in the
    bar is held back until that one has been scrolled past. */
+/* The paper's name is already the first thing on the screen; the bar says it only once that
+   has been scrolled past, which is when it stops being said anywhere else. */
 #detail .detail-title { opacity:0; transform:translateY(5px); transition:opacity 180ms, transform 180ms; }
-#detail .top.lifted .detail-title { opacity:1; transform:none; }
+#detail .top.shrunk .detail-title { opacity:1; transform:none; }
 #detail .detail-top::after, #listen .detail-top::after, #settings .detail-top::after {
   content:''; flex:none; width:36px;
 }
