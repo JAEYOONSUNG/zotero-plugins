@@ -497,7 +497,9 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
           -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px);
           border-top:1px solid var(--line); }
 .player[hidden] { display:none; }
-.player-meta { display:flex; justify-content:center; }
+/* Where in the paper on one side, how much of it is left on the other. */
+.player-meta { display:flex; justify-content:space-between; gap:10px; }
+.player-meta span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .player-row { display:flex; align-items:center; justify-content:center; gap:20px; }
 .player-row.wrap { gap:10px; justify-content:space-between; }
 .player-row.wrap + .player-row.wrap { margin-top:1px; }
@@ -508,7 +510,7 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .small-seg button { height:26px; font-size:12px; }
 .pick { display:flex; align-items:center; gap:6px; min-width:0; }
 .player .small-btn { height:28px; padding:0 12px; font-size:13px; border-radius:999px; }
-.seek { width:100%; margin:0; accent-color:var(--ink); height:18px; }
+.seek { width:100%; margin:0 0 -2px; accent-color:var(--ink); height:18px; }
 /* The voice, the range, the section and the sleep timer are set once and then left alone, so they
    are not in the way of the three buttons that are pressed all the time. */
 #listen-extra { display:flex; flex-direction:column; gap:7px; padding-top:3px; }

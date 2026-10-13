@@ -937,6 +937,35 @@ test('how big the words are is the reader\'s own choice, and it is kept', async 
   assert.equal(odd.document.documentElement.style.getPropertyValue('--read'), '1');
 });
 
+test('the player says where in the paper on one side and how much is left on the other', async () => {
+  const {open} = await openListening();
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  open.speech.start();
+  await open.settle();
+  const where = open.document.getElementById('listen-where');
+  const left = open.document.getElementById('listen-left');
+  assert.match(where.textContent, /^1 \/ \d+/, 'which sentence of how many');
+  assert.match(where.textContent, /1쪽/, 'and what page it is on');
+  assert.match(left.textContent, /^남은 \d+분$/, 'how long is left, at the other end');
+  // The slider is above them, as it is in a player, not below.
+  const bar = open.document.getElementById('listen-bar');
+  const order = [...bar.children].map(node => node.id || node.className);
+  assert.ok(order.indexOf('listen-seek') < order.findIndex(name => /player-meta/.test(name)),
+    'the slider is above the two ends it belongs to');
+
+  // A sleep timer takes over the right-hand end, because that is the number that now matters.
+  const sleep = open.document.getElementById('listen-sleep');
+  for (const option of sleep.querySelectorAll('option')) option.selected = option.value === '20';
+  // linkedom's <select>.value is a getter that does not follow option.selected.
+  Object.defineProperty(sleep, 'value', {value: '20', configurable: true});
+  sleep.dispatchEvent(new open.window.Event('change'));
+  await open.settle();
+  assert.match(open.document.getElementById('toast').textContent, /20분 뒤에 멈춥니다/);
+  open.speech.finish(); open.speech.start();
+  await open.settle();
+  assert.match(left.textContent, /^잠들기 \d+분$/, 'the sleep timer is what is counting down now');
+});
+
 test('the sleep timer stops the reading, and says so', async () => {
   const {open} = await openListening();
   const play = open.document.getElementById('listen-play');

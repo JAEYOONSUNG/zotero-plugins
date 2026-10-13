@@ -1705,9 +1705,16 @@ function paintReading(state) {
   }
   const left = remainingSeconds(listen.list, state.index, state.rate);
   const unit = state.unit;
+  /* Where in the paper on one side, how much of it is left on the other — which is where a player
+     puts them, and what a glance is looking for. */
   const line = state.status === 'error'
     ? '이 폰의 목소리가 멈췄습니다. 다시 눌러 주세요.'
-    : `${state.index + 1} / ${state.total}${unit && unit.page ? ` · ${unit.page}쪽` : ''} · 남은 시간 약 ${Math.max(1, Math.round(left / 60))}분`;
+    : `${state.index + 1} / ${state.total}${unit && unit.page ? ` · ${unit.page}쪽` : ''}`;
+  const sleepIn = listen.sleepAt ? Math.max(1, Math.round((listen.sleepAt - Date.now()) / 60000)) : 0;
+  const rest = state.status === 'error' ? ''
+    : sleepIn ? `잠들기 ${sleepIn}분`
+    : listen.sleepSection ? `${listen.sleepSection}까지`
+    : `남은 ${Math.max(1, Math.round(left / 60))}분`;
   if (listen.item) {
     localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
     if (state.total > 1) localStorage.setItem(KEYS.pct + listen.item.key, String(Math.round(state.index / (state.total - 1) * 100)));
@@ -1715,6 +1722,7 @@ function paintReading(state) {
   holdScreen(playing);
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
+    $('listen-left').textContent = rest;
     playMark($('listen-play'), playing);
     const seek = $('listen-seek');
     seek.max = String(Math.max(0, state.total - 1));
@@ -1726,6 +1734,7 @@ function paintReading(state) {
   }
   if (!$('paper').hidden) {
     $('paper-where').textContent = line;
+    $('paper-left').textContent = rest;
     playMark($('paper-play'), playing);
     // The page is turned only while it is being read, so a reader who scrolled away is left alone.
     if (playing && unit && unit.page && paper.viewer && paper.following !== unit.page) {

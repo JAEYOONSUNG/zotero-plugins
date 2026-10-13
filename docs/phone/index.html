@@ -117,8 +117,11 @@
     <button id="listen-here" class="to-now" type="button" hidden>읽는 곳으로</button>
   </main>
   <footer id="listen-bar" class="player" hidden>
-    <div class="player-meta"><span id="listen-where" class="muted small"></span></div>
     <input id="listen-seek" class="seek" type="range" min="0" max="0" value="0" step="1" aria-label="읽는 위치">
+    <div class="player-meta">
+      <span id="listen-where" class="muted small"></span>
+      <span id="listen-left" class="muted small"></span>
+    </div>
     <div class="player-row">
       <button id="listen-more" class="icon-btn" type="button" aria-label="듣기 설정" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="17" cy="17" r="2.6"/></svg></button>
       <span class="grow"></span>
@@ -181,7 +184,10 @@
   </div>
   <div id="paper-msg" class="pdf-msg" hidden></div>
   <footer id="paper-bar" class="player" hidden>
-    <div class="player-meta"><span id="paper-where" class="muted small"></span></div>
+    <div class="player-meta">
+      <span id="paper-where" class="muted small"></span>
+      <span id="paper-left" class="muted small"></span>
+    </div>
     <div class="player-row">
       <button id="paper-prev" class="icon-btn" aria-label="이전 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-7 6 7 6"/><path d="M8 6v12"/></svg></button>
       <button id="paper-play" class="play-btn" aria-label="재생"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
