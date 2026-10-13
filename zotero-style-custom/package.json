@@ -1,6 +1,6 @@
 {
   "name": "zotero-style-custom",
-  "version": "0.59.47",
+  "version": "0.59.48",
   "license": "MIT",
   "private": true,
   "description": "Personal Zotero reading workflow and native title scrolling",
@@ -13,6 +13,7 @@
     "smoke:native": "python3 scripts/smoke.py",
     "verify:improvements": "node scripts/verify-improvements.mjs",
     "preview:design": "node scripts/design-preview.mjs",
+    "preview:reader": "node scripts/reader-preview.mjs",
     "preview:settings": "node scripts/settings-preview.mjs",
     "build:icons": "python3 scripts/build-icons.py",
     "verify:settings": "node scripts/verify-settings.mjs"

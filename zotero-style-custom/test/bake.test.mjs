@@ -236,6 +236,8 @@ test('a paper becomes one file, a sidecar of chapter times, and no leftover scra
   assert.equal(job.state, 'done', job.error || '');
   assert.equal(job.done, 5);
   assert.ok(job.seconds > 0);
+  // What the sync folder has to carry, so the panel can say it before the file is opened.
+  assert.equal(job.bytes, fs.statSync(job.file).size);
 
   assert.deepEqual(fs.readdirSync(out).sort(), ['A paper- part 1.json', 'A paper- part 1.m4b']);
   assert.equal(job.file, path.join(out, 'A paper- part 1.m4b'));

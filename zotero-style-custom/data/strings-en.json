@@ -2929,7 +2929,6 @@
  "이 Mac의 음성 모델이 응답하지 않습니다 (": "The speech model on this Mac did not answer (",
  "). 터미널에서 bridge/install.sh를 다시 실행해 보세요.": "). Run bridge/install.sh again in Terminal.",
  "시스템": "System",
- "운전용 오디오 만들기": "Make audio for the car",
  "이 Mac이 논문 전체를 미리 읽어 오디오북 파일 하나로 만듭니다. 동기화 폴더에 떨어지므로 폰에서 화면을 끄고도, 차에서도 들을 수 있습니다.": "This Mac reads the whole paper ahead of time into one audiobook file. It lands in a sync folder, so the phone can play it with the screen off, and so can the car.",
  "논문 음성": "Paper audio",
  "읽을 본문이 없습니다.": "There is no body text to read.",
@@ -2942,5 +2941,14 @@
  "{0} 분량을 파일로 묶는 중…": "Packing {0} into a file…",
  "만들지 못했습니다": "It could not be made",
  "취소했습니다": "Cancelled",
- "한 번 더 만들면 파일이 하나 더 생깁니다": "Making it again adds another file"
+ "한 번 더 만들면 파일이 하나 더 생깁니다": "Making it again adds another file",
+ "운전용 오디오": "Audio for the car",
+ "논문 전체를 미리 읽어 파일 하나로 만듭니다. 폰 화면을 꺼도, 차에서도 들립니다.": "Reads the whole paper ahead of time into one file. It plays with the phone's screen off, and in the car.",
+ "만든 분량": "How much has been made",
+ "만들기": "Make it",
+ "약 {0} 분량 · 약 {1}MB · 만드는 데 {2}쯤": "about {0} long · about {1}MB · about {2} to make",
+ "▶를 한 번 누르면 분량을 알려줍니다.": "Press ▶ once and it will say how long it is.",
+ "한 번 더 만들기": "Make it again",
+ "{0} · {1}MB · 폴더에 넣었습니다": "{0} · {1}MB · put in the folder",
+ "{0} · 폴더에 넣었습니다": "{0} · put in the folder"
 }

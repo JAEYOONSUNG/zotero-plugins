@@ -23,7 +23,7 @@
  /* Its own column: the reader's view containers end at its left edge (reader-assist.js applyLayout), so the paper is never under it. */
  position:fixed;top:41px;bottom:var(--bottom-placeholder-height,50px);inset-inline-end:0;width:var(--sc-ra-w,372px);z-index:20;
  display:flex;box-sizing:border-box;
- background:var(--sc-canvas);color:var(--sc-ink);border-inline-start:1px solid var(--sc-line);
+ background:var(--sc-canvas);color:var(--sc-ink);border-inline-start:1px solid var(--sc-line);accent-color:var(--sc-link);
  font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue","Apple SD Gothic Neo",sans-serif;text-align:start;overflow:hidden;
 }
 .sc-ra *{box-sizing:border-box}
@@ -79,7 +79,7 @@
 .sc-ra-transport{justify-content:space-between;gap:2px}
 .sc-ra-progress{margin:-2px 0 0;min-width:0;font-size:12px;color:var(--sc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .sc-ra-opts{justify-content:space-between;gap:8px}
-.sc-ra-rate{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sc-muted);min-width:0;flex:1}
+.sc-ra-rate{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sc-muted);min-width:0;flex:1;white-space:nowrap}
 .sc-ra-rate input[type=range]{width:auto;flex:1;min-width:60px;max-width:120px;margin:0}
 .sc-ra-rate-text{min-width:34px;font-variant-numeric:tabular-nums;color:var(--sc-ink)}
 .sc-ra-seg{position:relative;display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--sc-track)}
@@ -91,17 +91,23 @@
 .sc-ra-lang{align-self:flex-start;margin-block-end:var(--sc-row-gap)}
 .sc-ra-lang .sc-ra-seg-btn{flex:0 0 auto;padding:0 12px}
 .sc-ra-more{justify-content:space-between}
-/* Making the car's audio file: the button, and one line saying how far it has got. */
-.sc-ra-bake{align-items:center;gap:8px;flex-wrap:wrap}
-.sc-ra-bake-note{font-size:12px;color:var(--sc-muted);overflow-wrap:anywhere;min-width:0;flex:1}
-.sc-ra-bake-note[data-state="done"]{color:var(--sc-link)}
+/* The car's audio file: its own card, because making it takes minutes. The head carries the folder it
+   lands in, then one line of what it is, the meter while it is being made, and the state. The state is
+   coloured in the text alone -- never a bar along the card's edge. */
+.sc-ra-bake .sc-ra-meter{margin:2px 0}
+.sc-ra-bake-note{margin:0;font-size:12px;color:var(--sc-muted);overflow-wrap:anywhere;min-width:0;font-variant-numeric:tabular-nums}
+.sc-ra-bake-note[data-state="speaking"],.sc-ra-bake-note[data-state="encoding"],.sc-ra-bake-note[data-state="starting"],.sc-ra-bake-note[data-state="waiting"]{color:var(--sc-ink);font-weight:600}
+.sc-ra-bake-note[data-state="done"]{color:var(--sc-ink);font-weight:600}
 .sc-ra-bake-note[data-state="failed"]{color:var(--sc-bad)}
+.sc-ra-bake-row{justify-content:flex-start;gap:var(--sc-row-gap);margin-top:2px}
+/* Where a file lands or came from: the tail of a path, never wider than the card. */
+.sc-ra-where{min-width:0;flex:0 1 auto;font-size:11px;color:var(--sc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-ra-why{margin-top:-2px}
 .sc-ra-why summary{font-size:12px;color:var(--sc-muted);cursor:pointer;width:max-content;max-width:100%}
 .sc-ra-pre{margin:6px 0 0;padding:8px;border-radius:10px;background:var(--sc-soft);font:11px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:160px;overflow:auto;-moz-user-select:text;user-select:text}
 
 /* menus */
-.sc-ra-menu-wrap{position:relative;display:inline-flex}
+.sc-ra-menu-wrap{position:relative;display:inline-flex;min-width:0}
 .sc-ra-pill{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 8px 0 10px;border:0;border-radius:999px;background:var(--sc-soft);font-size:12px;max-width:190px}
 .sc-ra-pill:hover{background:var(--sc-soft2)}
 .sc-ra-pill-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

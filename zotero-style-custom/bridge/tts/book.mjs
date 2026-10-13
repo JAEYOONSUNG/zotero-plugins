@@ -298,7 +298,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
 
   const view = job => ({
     id: job.id, state: job.state, title: job.title, done: job.done, total: job.total,
-    seconds: Number(job.seconds.toFixed(1)), file: job.file, error: job.error,
+    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, error: job.error,
     started: job.started, finished: job.finished
   });
 
@@ -364,6 +364,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         chapters: timed.chapters, marks: job.marks ? timed.marks : undefined
       }, null, 1) + '\n');
       job.file = final;
+      job.bytes = audio.length;
       job.state = 'done';
     } catch (error) {
       try { out.destroy(); } catch (_) {}
@@ -404,7 +405,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         bitrate: Number(request.bitrate) > 0 ? Number(request.bitrate) : BITRATE,
         marks: request.marks !== false,
         tags: {title, ...(request.tags || {})},
-        done: 0, total: pieces.length, seconds: 0, file: null, error: null,
+        done: 0, total: pieces.length, seconds: 0, file: null, bytes: 0, error: null,
         started: 0, finished: 0, cancelled: false
       };
       jobs.set(job.id, job);

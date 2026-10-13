@@ -67,7 +67,7 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  const http={async request(method,url,options){
   requests.push({method,url,options,body:options&&options.body?JSON.parse(options.body):null});
   if(url.endsWith('reader-assist.css'))return {response:fs.readFileSync(new URL('../content/reader-assist.css',import.meta.url),'utf8'),status:200};
-  if(/\/v1\/audio\/voices$/.test(url))return {status:200,response:{available:true,models:[{id:'supertonic',label:'Supertonic 3',langs:['en','ko'],default:'F3',voices:[{id:'F3',style:'clear narrator'},{id:'M5',style:'warm narrator'}]}]}};
+  if(/\/v1\/audio\/voices$/.test(url))return {status:200,response:{available:true,models:[{id:'supertonic',label:'Supertonic 3',langs:['en','ko'],default:'F3',voices:[{id:'F3',style:'clear narrator'},{id:'M5',style:'warm narrator'}]}],bake:{out:'/Users/t/Dropbox/논문 음성',busy:false}}};
   if(/\/v1\/audio\/book$/.test(url)&&method==='POST'){
    if(http.bakeRefuse)return {status:http.bakeRefuse,response:{error:{message:'Paper too long to bake in one file'}}};
    return {status:202,response:{id:'bake1',state:'speaking',title:requests.at(-1).body.title,done:0,total:9,seconds:0,file:null,error:null}};
@@ -1697,7 +1697,7 @@ test('listening credit stops where the reading clock\'s idle window ends, so the
 test('“운전용 오디오 만들기” sends the paper to this Mac as chapters, with the item’s own names on it',async()=>{
  const f=fixture({bridge:true,holdTimers:true});await f.open();
  f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
- const bake=f.byText('Make audio for the car');
+ const bake=f.panel().querySelector('.sc-ra-bake .sc-ra-primary');
  assert.equal(bake.getAttribute('data-writes'),'bake','baking writes a file, so the self-check never presses it');
  f.press(bake);await settle();
 
@@ -1722,12 +1722,21 @@ test('“운전용 오디오 만들기” sends the paper to this Mac as chapter
  assert.match(note(),/3\/9/);
  assert.match(note(),/1 ?m\b|63 ?s/);
 
- f.http.bakeStates=[{state:'done',done:9,total:9,seconds:1830,file:'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b'}];
+ f.http.bakeStates=[{state:'done',done:9,total:9,seconds:1830,bytes:24*1048576,file:'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b'}];
  await f.fire();
  assert.equal(bake.disabled,false,'done: it can be made again');
  assert.match(note(),/31 ?m\b/);
- assert.match(note(),/논문 음성\/Thermostable polymerase evolution\.m4b/);
+ assert.match(note(),/24 ?MB/,'how much the sync folder has to carry');
+ assert.equal(f.panel().querySelector('.sc-ra-bake-note').getAttribute('title'),'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b');
  assert.equal(f.panel().querySelector('.sc-ra-bake-note').getAttribute('data-state'),'done');
+ // The folder it landed in is the card's head, shortened, with the whole path as its tooltip.
+ const chip=f.panel().querySelector('.sc-ra-where');
+ assert.equal(chip.textContent,'Dropbox/논문 음성');
+ assert.equal(chip.getAttribute('title'),'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b');
+ const meter=f.panel().querySelector('.sc-ra-bake .sc-ra-meter');
+ assert.equal(meter.hidden,false);
+ assert.equal(meter.getAttribute('aria-valuenow'),'100');
+ assert.equal(f.panel().querySelector('.sc-ra-bake .sc-ra-link').hidden,true,'nothing left to cancel');
  const asked=f.requests.filter(r=>/audio\/book\//.test(r.url)).length;
  await f.fire();
  assert.equal(f.requests.filter(r=>/audio\/book\//.test(r.url)).length,asked,'nothing keeps polling once it is finished');
@@ -1738,7 +1747,7 @@ test('baking passes on the voice chosen in the panel when it is one of this Mac�
  const f=fixture({bridge:true,holdTimers:true,settings:{readAloudVoice:'supertonic:en:M5',readAloudSpeed:120}});
  await f.open();
  f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
- f.press(f.byText('Make audio for the car'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
  const body=f.requests.find(r=>/\/v1\/audio\/book$/.test(r.url)&&r.method==='POST').body;
  assert.equal(body.model,'supertonic');
  assert.equal(body.voice,'M5');
@@ -1749,12 +1758,12 @@ test('baking passes on the voice chosen in the panel when it is one of this Mac�
 test('with no voices on this Mac, baking says how to install them instead of failing silently',async()=>{
  const f=fixture({holdTimers:true});await f.open();          // no bridge.json
  f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
- f.press(f.byText('Make audio for the car'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
  assert.equal(f.requests.filter(r=>/audio\/book/.test(r.url)).length,0);
  const note=f.panel().querySelector('.sc-ra-bake-note');
  assert.match(note.textContent,/bridge\/install\.sh/);
  assert.equal(note.getAttribute('data-state'),'failed');
- assert.equal(f.byText('Make audio for the car').disabled,false,'it can be tried again');
+ assert.equal(f.panel().querySelector('.sc-ra-bake .sc-ra-primary').disabled,false,'it can be tried again');
  f.stop();
 });
 
@@ -1762,13 +1771,13 @@ test('a bake the bridge refuses, and one that fails while speaking, both say so'
  const f=fixture({bridge:true,holdTimers:true});await f.open();
  f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
  f.http.bakeRefuse=413;
- f.press(f.byText('Make audio for the car'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
  const note=()=>f.panel().querySelector('.sc-ra-bake-note');
  assert.match(note().textContent,/too long|413/);
  assert.equal(note().getAttribute('data-state'),'failed');
 
  f.http.bakeRefuse=0;
- f.press(f.byText('Make audio for the car'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
  f.http.bakeStates=[{state:'failed',error:'the voice gave up'}];
  await f.fire();
  assert.match(note().textContent,/gave up/);
@@ -1781,9 +1790,42 @@ test('a bake the bridge refuses, and one that fails while speaking, both say so'
 test('closing the reader stops the bake poll, so nothing asks about a paper no one is reading',async()=>{
  const f=fixture({bridge:true,holdTimers:true});await f.open();
  f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
- f.press(f.byText('Make audio for the car'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
  const before=f.requests.filter(r=>/audio\/book\//.test(r.url)).length;
  f.stop();await settle();
  await f.fire();
  assert.equal(f.requests.filter(r=>/audio\/book\//.test(r.url)).length,before,'no request after the reader closed');
+});
+
+test('the bake card says what it will cost before anything is made, and shows a meter while it is',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ const card=f.panel().querySelector('.sc-ra-bake');
+ const note=()=>card.querySelector('.sc-ra-bake-note').textContent;
+ const meter=card.querySelector('.sc-ra-meter');
+ // Nothing has been read yet, so it says how to find out rather than inventing a number.
+ assert.match(note(),/▶|Press/);
+ assert.equal(meter.hidden,true);
+ // The folder comes from the bridge, before any bake: that is what decides whether it reaches the phone.
+ assert.equal(card.querySelector('.sc-ra-where').textContent,'Dropbox/논문 음성');
+
+ f.press(f.panel().querySelector('.sc-ra-play'));await settle();   // builds the player, so the paper is measured
+ assert.match(note(),/MB/,'the size is given, because a sync folder has a limit');
+ assert.match(note(),/\d+ ?[ms]\b/);
+
+ f.press(card.querySelector('.sc-ra-primary'));await settle();
+ f.http.bakeStates=[{state:'speaking',done:2,total:8,seconds:30}];
+ await f.fire();
+ assert.equal(meter.hidden,false);
+ assert.equal(meter.getAttribute('aria-valuenow'),'25');
+ assert.equal(card.querySelector('.sc-ra-primary').disabled,true);
+ const stop=card.querySelector('.sc-ra-link');
+ assert.equal(stop.hidden,false,'a bake that takes minutes can be stopped');
+
+ f.press(stop);await settle();
+ assert.equal(card.querySelector('.sc-ra-bake-note').getAttribute('data-state'),'cancelled');
+ assert.ok(f.requests.some(r=>r.method==='DELETE'&&/audio\/book\/bake1$/.test(r.url)),'and the Mac is told to stop');
+ assert.equal(card.querySelector('.sc-ra-primary').disabled,false);
+ assert.equal(stop.hidden,true);
+ f.stop();
 });
