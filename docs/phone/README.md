@@ -75,8 +75,28 @@ stops it after a while or at the end of the part. What has already been heard is
 through a paper the voice is can be seen rather than counted, and a reader who scrolled off to
 look at something is offered the way back to it. With the PDF open the page turns itself as the
 voice moves through — but only while it is playing, so scrolling away leaves you where you are.
-The phone's own voices do the speaking, so it costs nothing. If iOS drops the speech, which it
-does, a watchdog starts the sentence again rather than leaving you looking at one that never ends.
+The sentence being read is kept in the middle of the screen rather than merely on it, every
+sentence, so a glance lands on the same place every time.
+
+The phone's own voices do the speaking, so it costs nothing. Every one of them is offered: the
+paper's own language first and whole, then every other language the phone can speak under its own
+name, each with the good voices first (Siri, 프리미엄, 고품질) and the toy ones last — and
+choosing one says a line in it, because nobody can tell a voice from its name. iOS only downloads
+its good voices when somebody asks for them, so the menu ends with where to ask: 설정 → 손쉬운
+사용 → 콘텐츠 말하기 → 음성. How loud is a slider of its own; the top of it is the phone's own
+volume, which is as loud as any web page is allowed to be. Speeds run to 2×. If iOS drops the
+speech, which it does, a watchdog starts the sentence again rather than leaving you looking at one
+that never ends.
+
+**Driving.** 운전 모드, the car button on the player. The sentence being read is set the size of a
+road sign and held in the middle of the screen, the three buttons that matter become thumb-sized,
+everything else gets out of the way, and the whole page is the pause button — nobody aims at a
+sentence at seventy. The end of a paper is the start of the next one in the library (끝나면 ·
+이어서 계속, which 운전 모드 turns on for you), so a drive is not one paper and then silence. The
+car's own controls — the wheel, the dashboard, the lock screen — are given the player through
+mediaSession, with the paper's name and its authors on the dashboard. The screen is held awake
+while a paper is being read: iOS stops a web page's voice when the phone locks, which is the one
+thing this app cannot do anything about.
 
 **Taking a paper out.** A heading says how many papers are under it. A paper's own screen hands
 it over four ways: the DOI, the link, a line to paste under a slide, and BibTeX — the fields

@@ -129,6 +129,7 @@
     </div>
     <div class="player-row">
       <button id="listen-more" class="icon-btn" type="button" aria-label="듣기 설정" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="17" cy="17" r="2.6"/></svg></button>
+      <button id="listen-drive" class="icon-btn" type="button" aria-label="운전 모드" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16v3h3v-3M17 16v3h3v-3"/><path d="M3 16v-4l2-5h14l2 5v4z"/><path d="M6.5 13h2M15.5 13h2"/></svg></button>
       <span class="grow"></span>
       <button id="listen-prev" class="icon-btn" aria-label="이전 문장"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-7 6 7 6"/><path d="M8 6v12"/></svg></button>
       <button id="listen-play" class="play-btn" aria-label="재생"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
@@ -139,12 +140,23 @@
     <nav id="listen-rate" class="seg small-seg" role="group" aria-label="속도"></nav>
     <div id="listen-extra" hidden>
       <div class="player-row wrap">
-        <label class="pick"><span class="muted small">목소리</span><select id="listen-voice"></select></label>
+        <button id="listen-voice" class="pick-btn" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="muted small">목소리</span><span id="listen-voice-now" class="voice-now">자동</span>
+        </button>
         <nav id="listen-what" class="seg small-seg" role="group" aria-label="읽을 범위"></nav>
+      </div>
+      <div class="player-row wrap">
+        <span class="muted small">소리</span>
+        <input id="listen-vol" class="vol" type="range" min="10" max="100" step="5" value="100" aria-label="소리 크기">
+        <span id="listen-vol-now" class="muted small">최대</span>
       </div>
       <div class="player-row wrap">
         <span class="muted small">글자</span>
         <nav id="listen-size" class="seg small-seg" role="group" aria-label="글자 크기"></nav>
+      </div>
+      <div class="player-row wrap">
+        <span class="muted small">끝나면</span>
+        <nav id="listen-chain" class="seg small-seg" role="group" aria-label="논문이 끝나면"></nav>
       </div>
       <div class="player-row wrap">
         <label class="pick"><span class="muted small">구간</span><select id="listen-section"></select></label>

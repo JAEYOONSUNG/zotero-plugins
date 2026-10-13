@@ -14,7 +14,8 @@
    this phone last saw it is refused rather than overwritten. */
 
 import {readable, units as readingUnits, remainingSeconds} from './read.js';
-import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
+import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES,
+        voiceMenu, voiceTier, TIERS, langName, sampleFor} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
@@ -23,11 +24,12 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v10';
+export const BUILD = 'nonmun-v11';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
-              read: 'np.read', recent: 'np.recent', kind: 'np.lastkind', of: 'np.of.'};
+              read: 'np.read', recent: 'np.recent', kind: 'np.lastkind', of: 'np.of.',
+              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -1857,7 +1859,7 @@ async function bodyToRead(item) {
 
 const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
                 sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false,
-                index: 0, saidTo: 0};
+                index: 0, saidTo: 0, hum: null, chaining: false};
 
 /* Stops reading after a while, or at the end of the part being read, so a paper can be put on at
    night without talking until morning. */
@@ -1895,7 +1897,7 @@ async function holdScreen(on) {
 
 function leftListen() {
   if (listen.player && $('paper').hidden) listen.player.stop();
-  if ($('paper').hidden) setSleep('0');   // a timer belongs to the paper it was set on
+  if ($('paper').hidden) { setSleep('0'); carControls(false); }   // a timer belongs to the paper it was set on
   holdScreen(false);
 }
 
@@ -1919,6 +1921,10 @@ function paintReading(state) {
     toast('구간이 끝나 멈췄습니다');
     return;
   }
+  // The paper has ended. If the reader asked to carry on, the next one in the library starts
+  // rather than leaving a car silent.
+  if (state.status === 'done') playOn();
+  carNowPlaying(listen.item, playing);
   const left = remainingSeconds(listen.list, state.index, state.rate);
   const unit = state.unit;
   /* Where in the paper on one side, how much of it is left on the other — which is where a player
@@ -1960,6 +1966,25 @@ function paintReading(state) {
   }
 }
 
+/* The sentence being read is kept in the middle of the screen rather than merely on it: a glance
+   from a cradle, or over a cup of coffee, lands on the same place every time instead of hunting
+   down the page for a highlight. A little above the middle, because what is coming is worth more
+   room than what is past. */
+const MIDDLE = 0.38, LEFT_ALONE = 6000;
+function centerOn(node, {soft = true} = {}) {
+  const body = $('listen-body');
+  if (!body || !node) return;
+  const height = body.clientHeight || 0;
+  if (!height) return;
+  const want = Math.max(0, Math.round((node.offsetTop || 0) - height * MIDDLE + (node.offsetHeight || 0) / 2));
+  if (Math.abs((body.scrollTop || 0) - want) < 2) return;
+  listen.chasing = true;
+  if (typeof body.scrollTo === 'function') {
+    try { body.scrollTo({top: want, behavior: soft ? 'smooth' : 'auto'}); } catch (_) { body.scrollTop = want; }
+  } else body.scrollTop = want;
+  setTimeout(() => { listen.chasing = false; offerHere(); }, 700);
+}
+
 function paintListen(state) {
   const node = listen.nodes[state.index];
   listen.index = state.index;
@@ -1968,14 +1993,9 @@ function paintListen(state) {
   if (!node) return;
   node.setAttribute('aria-current', 'true');
   offerHere();
-  // Chased only when it has gone off screen, and never while the reader is looking somewhere else.
-  if (Date.now() - listen.scrolledAt < 6000) return;
-  const body = $('listen-body');
-  const top = node.offsetTop, height = body.clientHeight || 0;
-  if (height && top >= body.scrollTop && top < body.scrollTop + height - 80) return;
-  listen.chasing = true;
-  try { node.scrollIntoView?.({block: 'center', behavior: 'smooth'}); } catch (_) { try { node.scrollIntoView?.(); } catch (__) {} }
-  setTimeout(() => { listen.chasing = false; }, 700);
+  // A reader who scrolled off to look at something is left there for a while; a driver never is.
+  if (!driving() && Date.now() - listen.scrolledAt < LEFT_ALONE) return;
+  centerOn(node);
 }
 
 /* A long paper is a couple of thousand sentences. They are built in one fragment and share a
@@ -2028,28 +2048,177 @@ function offerHere() {
   button.hidden = !(top < at - 20 || top > at + height - 40);
 }
 
-function fillVoiceMenu(lang) {
-  const select = $('listen-voice');
-  const same = listen.voices.filter(v => String(v.lang || '').toLowerCase().startsWith(lang));
-  // Best first, by the same reckoning that picks one when nobody has chosen.
-  const pool = (same.length ? same : listen.voices).slice();
-  const order = [];
-  const left = pool.slice();
-  while (left.length && order.length < 60) {
-    const best = pickVoice(left, lang, '') || left[0];
-    order.push(best);
-    left.splice(left.indexOf(best), 1);
-  }
-  const offered = order;
+/* ---- the voices this phone has ----
+   iOS ships one plain voice per language and downloads the good ones only when somebody goes to
+   Settings and asks for them, so no two phones have the same list and most of it is invisible.
+   The menu shows the paper's own language whole, every other language the phone can speak under
+   its own name, says which voices are the good ones, and ends with where to get more. Choosing
+   one speaks a line in it, because nobody can tell a voice from its name. */
+const TIER_NAME = Object.fromEntries(TIERS);
+const shortVoice = name => String(name || '').replace(/\s*\((?:enhanced|premium|고품질|프리미엄)\)/i, '').trim() || '목소리';
+const voiceLabel = voice => {
+  const tier = voiceTier(voice);
+  return tier === 'plain' || tier === 'novelty' ? shortVoice(voice.name) : `${shortVoice(voice.name)} · ${TIER_NAME[tier]}`;
+};
+
+function paintVoice(lang) {
+  const now = $('listen-voice-now');
+  if (!now) return;
   const saved = localStorage.getItem(KEYS.voice + lang) || '';
-  const chosen = offered.some(v => v.voiceURI === saved) ? saved : '';
-  select.textContent = '';
-  const auto = el('option', {value: '', text: '자동'}, select);
-  if (!chosen) auto.selected = true;
-  for (const voice of offered) {
-    const option = el('option', {value: voice.voiceURI, text: `${voice.name}${voice.lang ? ` · ${voice.lang}` : ''}`}, select);
-    if (voice.voiceURI === chosen) option.selected = true;
+  const chosen = listen.voices.find(v => v.voiceURI === saved);
+  const auto = chosen ? null : pickVoice(listen.voices, lang, '');
+  now.textContent = chosen ? shortVoice(chosen.name) : auto ? `자동 · ${shortVoice(auto.name)}` : '자동';
+}
+
+function openVoiceMenu() {
+  const lang = paperLanguage(listen.list);
+  const groups = voiceMenu(listen.voices, lang);
+  const saved = localStorage.getItem(KEYS.voice + lang) || '';
+  const items = [{id: '', label: '자동 (가장 좋은 목소리)', icon: ICON.voice, run: () => chooseVoice('', lang)}];
+  for (const group of groups) {
+    items.push({sep: true}, {head: `${group.name} · ${group.voices.length}`});
+    for (const voice of group.voices) {
+      items.push({id: voice.voiceURI, label: voiceLabel(voice), run: () => chooseVoice(voice.voiceURI, lang)});
+    }
   }
+  items.push({sep: true},
+    {label: '목소리 더 받기', icon: ICON.down, run: () => toast('설정 → 손쉬운 사용 → 콘텐츠 말하기 → 음성')});
+  floatMenu($('listen-voice'), items, {chosen: saved});
+}
+
+function chooseVoice(uri, lang) {
+  if (uri) localStorage.setItem(KEYS.voice + lang, uri);
+  else localStorage.removeItem(KEYS.voice + lang);
+  const voice = listen.voices.find(v => v.voiceURI === uri) || pickVoice(listen.voices, lang, '');
+  if (listen.player) listen.player.setVoice(voice ? voice.voiceURI : '', voice ? voice.lang : lang);
+  paintVoice(lang);
+  // Playing, the sentence starts again in the new voice and that is the demonstration. Stopped,
+  // the voice says a line of its own rather than leaving the reader to imagine it.
+  const playing = listen.player && listen.player.state().status === 'playing';
+  if (!playing) sayVoice(voice, lang);
+}
+
+function sayVoice(voice, lang) {
+  const engine = speechEngine(window);
+  if (!engine.available()) return;
+  try { engine.cancel(); } catch (_) {}
+  engine.speak({text: sampleFor((voice && voice.lang) || lang), lang: (voice && voice.lang) || lang,
+                voiceURI: voice ? voice.voiceURI : '', rate: readRate(), volume: readVolume()});
+}
+
+/* How loud and how fast, as the reader last left them. The loudest a page may ask for is the
+   phone's own volume: there is no way to push a voice past it from in here, which is why the
+   slider says so when it is already at the top. */
+const readRate = () => Number(localStorage.getItem(KEYS.rate)) || 1;
+export const readVolume = () => {
+  // Nothing stored is as loud as the phone goes, not silence: Number(null) is 0, and a 0 here
+  // would have handed the player a voice nobody could hear.
+  const held = localStorage.getItem(KEYS.vol), n = Number(held);
+  return held !== null && Number.isFinite(n) && n >= 0.1 && n <= 1 ? n : 1;
+};
+function setVolume(value) {
+  const volume = Math.min(1, Math.max(0.1, Math.round(value * 20) / 20));
+  localStorage.setItem(KEYS.vol, String(volume));
+  if (listen.player) listen.player.setVolume(volume);
+  paintVolume();
+  return volume;
+}
+function paintVolume() {
+  const slider = $('listen-vol'), said = $('listen-vol-now');
+  const volume = readVolume();
+  if (slider) slider.value = String(Math.round(volume * 100));
+  if (said) said.textContent = volume >= 1 ? '최대' : `${Math.round(volume * 100)}%`;
+}
+
+/* ---- driving ----
+   The phone is in a cradle and is looked at for a second at a time, if at all. So: the sentence
+   being read is as big as the screen will take and stays in the middle of it, the buttons that
+   matter are thumb-sized, a tap anywhere on the page stops and starts the voice rather than
+   jumping to a sentence, and the end of a paper is the start of the next one instead of silence
+   at seventy miles an hour. */
+export const driving = () => localStorage.getItem(KEYS.drive) === '1';
+export const chaining = () => localStorage.getItem(KEYS.chain) === '1';
+
+function setDriving(on) {
+  localStorage.setItem(KEYS.drive, on ? '1' : '0');
+  $('listen').classList.toggle('driving', !!on);
+  const button = $('listen-drive');
+  if (button) button.setAttribute('aria-pressed', String(!!on));
+  if (on && !chaining()) localStorage.setItem(KEYS.chain, '1');
+  buildChain();
+  carControls(on);
+  toast(on ? '운전 모드 · 화면 아무 데나 눌러 멈춤, 끝나면 다음 논문' : '운전 모드를 껐습니다');
+  const node = listen.nodes[listen.index];
+  if (node) centerOn(node, {soft: false});
+}
+
+/* The next paper in the library as it is on screen, so "what comes next" is what the reader can
+   see coming, not an order only the app knows. */
+export function nextAfter(rows, key) {
+  const at = (rows || []).findIndex(row => row && row.key === key);
+  return at >= 0 ? (rows[at + 1] || null) : null;
+}
+
+async function playOn() {
+  if (listen.chaining || !chaining() || !listen.item || $('listen').hidden) return false;
+  const next = nextAfter(render.rows || [], listen.item.key);
+  if (!next) { toast('목록의 마지막 논문까지 다 읽었습니다'); return false; }
+  listen.chaining = true;
+  try {
+    toast(`다음 논문 · ${clean(next.data.title) || '제목 없음'}`);
+    await openListen(next);
+    if (listen.player) listen.player.play();
+  } finally { listen.chaining = false; }
+  return true;
+}
+
+/* The car's own controls: the steering wheel, the dashboard and the lock screen all talk to a web
+   page through mediaSession, and iOS only offers them while the page is making a sound — so a
+   silent loop plays under the voice to hold the session open. Everything here is asked for
+   politely: a phone without any of it loses nothing but the buttons. */
+function silentLoop() {
+  if (listen.hum) return listen.hum;
+  const audio = document.createElement('audio');
+  if (typeof audio.play !== 'function' || typeof Blob !== 'function' || !URL.createObjectURL) return null;
+  const rate = 8000, samples = rate / 2;
+  const bytes = new Uint8Array(44 + samples);
+  const view = new DataView(bytes.buffer);
+  const ascii = (at, text) => { for (let i = 0; i < text.length; i++) bytes[at + i] = text.charCodeAt(i); };
+  ascii(0, 'RIFF'); view.setUint32(4, 36 + samples, true); ascii(8, 'WAVEfmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+  ascii(36, 'data'); view.setUint32(40, samples, true);
+  bytes.fill(128, 44);                       // 8-bit silence is the middle of the range, not zero
+  try { audio.src = URL.createObjectURL(new Blob([bytes], {type: 'audio/wav'})); } catch (_) { return null; }
+  audio.loop = true; audio.volume = 0.01;
+  listen.hum = audio;
+  return audio;
+}
+function carControls(on) {
+  const session = navigator.mediaSession;
+  const hum = on ? silentLoop() : listen.hum;
+  if (hum) { try { if (on) hum.play(); else hum.pause(); } catch (_) {} }
+  if (!session || typeof session.setActionHandler !== 'function') return;
+  const act = fn => () => { if (listen.player) fn(listen.player); };
+  const handlers = on ? {play: act(p => p.play()), pause: act(p => p.pause()),
+                         previoustrack: act(p => p.prev()), nexttrack: act(p => p.next()),
+                         seekbackward: act(p => p.prev()), seekforward: act(p => p.next())}
+                      : {play: null, pause: null, previoustrack: null, nexttrack: null,
+                         seekbackward: null, seekforward: null};
+  for (const [name, handler] of Object.entries(handlers)) {
+    try { session.setActionHandler(name, handler); } catch (_) {}
+  }
+}
+function carNowPlaying(item, playing) {
+  const session = navigator.mediaSession;
+  if (!session) return;
+  try {
+    if (item && typeof MediaMetadata === 'function') {
+      session.metadata = new MediaMetadata({title: clean(item.data.title) || '논문',
+        artist: authorsOf(item) || '논문', album: venueOf(item) || ''});
+    }
+    session.playbackState = playing ? 'playing' : 'paused';
+  } catch (_) {}
 }
 
 async function openListen(item) {
@@ -2090,13 +2259,14 @@ async function openListen(item) {
 
   const lang = paperLanguage(listen.list);
   listen.voices = engine.voices();
-  fillVoiceMenu(lang);
+  paintVoice(lang);
   const chosen = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
-  const rate = Number(localStorage.getItem(KEYS.rate)) || 1;
+  const rate = readRate();
   const at = Math.min(listen.list.length - 1, Math.max(0, Number(localStorage.getItem(KEYS.at + item.key)) || 0));
 
   if (listen.player) listen.player.stop();
-  listen.player = createPlayer({engine, rate, lang: chosen ? chosen.lang : lang, voiceURI: chosen ? chosen.voiceURI : '',
+  listen.player = createPlayer({engine, rate, volume: readVolume(),
+    lang: chosen ? chosen.lang : lang, voiceURI: chosen ? chosen.voiceURI : '',
     onChange: event => paintReading(event.state)});
   listen.player.load(listen.list, {at});
 
@@ -2104,7 +2274,7 @@ async function openListen(item) {
   try {
     speechSynthesis.addEventListener('voiceschanged', () => {
       listen.voices = engine.voices();
-      fillVoiceMenu(lang);
+      paintVoice(lang);
       if (!localStorage.getItem(KEYS.voice + lang)) {
         const better = pickVoice(listen.voices, lang, '');
         if (better) listen.player.setVoice(better.voiceURI, better.lang);
@@ -2115,7 +2285,13 @@ async function openListen(item) {
   buildRates(rate);
   buildSizes();
   buildScope(lang, withCaptions);
+  buildChain();
+  paintVolume();
   buildSections();
+  // Driving is a mode the phone stays in: the cradle it was turned on in is the next drive too.
+  $('listen').classList.toggle('driving', driving());
+  $('listen-drive').setAttribute('aria-pressed', String(driving()));
+  carControls(driving());
   setSleep('0');
   for (const option of $('listen-sleep').querySelectorAll('option')) option.selected = option.value === '0';
   $('listen-bar').hidden = false;
@@ -2173,6 +2349,24 @@ function buildRates(current, track = $('listen-rate')) {
     button.addEventListener('click', () => {
       listen.player.setRate(rate);
       localStorage.setItem(KEYS.rate, String(rate));
+      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(track);
+    });
+  }
+  requestAnimationFrame(() => slide(track));
+}
+
+/* What happens when a paper ends: nothing, or the next one in the library. It is a choice rather
+   than a setting because it is the difference between a phone in a pocket and a phone in a car. */
+function buildChain() {
+  const track = $('listen-chain');
+  if (!track) return;
+  track.textContent = '';
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
+  for (const [id, label] of [['one', '한 편만'], ['on', '이어서 계속']]) {
+    const button = el('button', {type: 'button', 'aria-pressed': String((id === 'on') === chaining()), text: label}, track);
+    button.addEventListener('click', () => {
+      localStorage.setItem(KEYS.chain, id === 'on' ? '1' : '0');
       for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
       slide(track);
     });
@@ -2415,7 +2609,7 @@ async function readAlong(item, attachment) {
   const rate = Number(localStorage.getItem(KEYS.rate)) || 1;
   const place = Math.min(listen.list.length - 1, Math.max(0, Number(localStorage.getItem(KEYS.at + item.key)) || 0));
   if (listen.player) listen.player.stop();
-  listen.player = createPlayer({engine, rate, lang: chosen ? chosen.lang : lang,
+  listen.player = createPlayer({engine, rate, volume: readVolume(), lang: chosen ? chosen.lang : lang,
     voiceURI: chosen ? chosen.voiceURI : '', onChange: event => paintReading(event.state)});
   listen.player.load(listen.list, {at: place});
   buildRates(rate, $('paper-rate'));
@@ -2504,7 +2698,9 @@ const ICON = {
   pdf: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>',
   cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h9a2 2 0 0 1 2 2v12"/><path d="M4 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>',
   share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg>',
-  pick: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12 3 3 5-5"/></svg>'
+  pick: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12 3 3 5-5"/></svg>',
+  voice: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>',
+  down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></svg>'
 };
 let floating = null;
 export function closeFloat() {
@@ -2531,6 +2727,8 @@ function floatMenu(anchor, items, {chosen = '', lift = null} = {}) {
   for (const item of items) {
     // A line between what a paper can be done to and what it can be marked as.
     if (item.sep) { el('span', {class: 'menu-line', 'aria-hidden': 'true'}, menu); continue; }
+    // A long menu is read by its headings: the languages this phone can speak, one above each group.
+    if (item.head) { el('span', {class: 'menu-head', text: item.head}, menu); continue; }
     const row = el('button', {class: `menu-row${item.bad ? ' bad' : ''}`, type: 'button',
       'aria-pressed': item.id === undefined ? null : String(item.id === chosen)}, menu);
     // One slot at the front, holding either the tick or what the row would do.
@@ -2946,9 +3144,12 @@ function wire() {
       ], {lift: null});
     });
   $('listen-body').addEventListener('click', event => {
-    const node = event.target && event.target.closest && event.target.closest('.sent');
-    if (!node || !listen.player) return;
+    if (!listen.player) return;
     if (heldSentence()) return;        // the tap that ended the hold is not a tap on the sentence
+    // Driving, the whole page is the pause button: nobody aims at a sentence at seventy.
+    if (driving()) { listen.player.toggle(); return; }
+    const node = event.target && event.target.closest && event.target.closest('.sent');
+    if (!node) return;
     listen.player.play(Number(node.getAttribute('data-at')) || 0);
   });
   $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });
@@ -2964,14 +3165,11 @@ function wire() {
     if (playing) listen.player.play(at); else listen.player.seek(at);
   });
   $('listen-sleep').addEventListener('change', event => setSleep(event.target.value));
-  $('listen-voice').addEventListener('change', event => {
-    if (!listen.player) return;
-    const uri = event.target.value;
-    const lang = paperLanguage(listen.list);
-    localStorage.setItem(KEYS.voice + lang, uri);
-    const voice = listen.voices.find(v => v.voiceURI === uri) || pickVoice(listen.voices, lang, '');
-    listen.player.setVoice(voice ? voice.voiceURI : '', voice ? voice.lang : lang);
-  });
+  $('listen-voice').addEventListener('click', openVoiceMenu);
+  $('listen-drive').addEventListener('click', () => setDriving(!driving()));
+  for (const type of ['input', 'change']) {
+    $('listen-vol').addEventListener(type, event => setVolume((Number(event.target.value) || 0) / 100));
+  }
   // The screen going away stops the voice rather than leaving it talking to nobody.
   addEventListener('pagehide', () => { if (listen.player) listen.player.stop(); });
   $('collections-back').addEventListener('click', () => closeSheet('collections'));

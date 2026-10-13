@@ -80,13 +80,14 @@ function stopOldTimers() {
 }
 
 /* The phone's voice: utterances are collected, and step() speaks the oldest one through. */
-function fakeSpeech() {
+const ONE_VOICE = [{voiceURI: 'v-sam', name: 'Samantha', lang: 'en-US', localService: true, default: true}];
+function fakeSpeech(voices = ONE_VOICE) {
   const queue = [], spoken = [];
   class Utterance {
     constructor(text) { this.text = text; this.onstart = null; this.onend = null; this.onerror = null; }
   }
   const synth = {
-    getVoices: () => [{voiceURI: 'v-sam', name: 'Samantha', lang: 'en-US', localService: true, default: true}],
+    getVoices: () => voices,
     speak(u) { queue.push(u); },
     cancel() { queue.length = 0; },
     pause() { synth.paused = true; },
@@ -171,7 +172,8 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, 
 }
 
 /* The app, loaded into that phone. Returns the window it runs in. */
-async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np.key': 'k'.repeat(24)}, hash = ''} = {}) {
+async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np.key': 'k'.repeat(24)}, hash = '',
+                     voices = ONE_VOICE, nav = {}} = {}) {
   const {window, document} = parseHTML(read('index.html'));
   const storage = new Map(Object.entries(stored));
   Object.assign(window, {
@@ -211,7 +213,7 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     back() { history.go(-1); }
   };
   window.location = location;
-  const speech = fakeSpeech();
+  const speech = fakeSpeech(voices);
   const globals = {
     window, document, localStorage: window.localStorage, indexedDB: window.indexedDB, fetch: window.fetch,
     requestAnimationFrame: window.requestAnimationFrame, Response, URL, URLSearchParams, location, history,
@@ -220,7 +222,9 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     setInterval: clock.every, clearInterval: clock.stopEvery,
     addEventListener: (type, fn, opts) => window.addEventListener?.(type, fn, opts),
     // No service worker in this test phone, and linkedom's navigator is read-only.
-    navigator: {userAgent: 'test'},
+    navigator: {userAgent: 'test', ...nav},
+    // What a phone hands the lock screen and the car; the page only ever constructs one.
+    MediaMetadata: class { constructor(info) { Object.assign(this, info); } },
     speechSynthesis: speech.synth, SpeechSynthesisUtterance: speech.Utterance
   };
   const put = (name, value) => Object.defineProperty(globalThis, name, {value, configurable: true, writable: true});
@@ -783,9 +787,9 @@ test('a paper hands over a citation worth pasting', async () => {
 /* ---- listening ---- */
 const PDF_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', contentType: 'application/pdf', filename: 'seo.pdf'}}];
 
-async function openListening(options = {}) {
+async function openListening({voices, nav, stored, ...options} = {}) {
   const server = fakeServer({children: PDF_CHILD, fulltext: FULLTEXT, ...options});
-  const open = await boot({server});
+  const open = await boot({server, ...(voices ? {voices} : {}), ...(nav ? {nav} : {}), ...(stored ? {stored} : {})});
   await open.settle();
   open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
@@ -876,6 +880,164 @@ test('a reader who scrolled away from the voice is offered the way back', async 
   assert.ok(went, 'and taking it goes to the sentence being read');
   assert.equal(here.hidden, true, 'the offer closes behind it');
   assert.equal(open.document.querySelector('#listen .to-now'), here, 'it sticks to the bottom of the transcript');
+});
+
+/* iOS downloads its good voices only when somebody goes and asks for them, so what one phone can
+   speak with has nothing to do with the next. Everything it does have is offered. */
+const MANY_VOICES = [
+  {voiceURI: 'v-sam', name: 'Samantha', lang: 'en-US', localService: true, default: true},
+  {voiceURI: 'v-ava', name: 'Ava (Premium)', lang: 'en-US'},
+  {voiceURI: 'v-zarvox', name: 'Zarvox', lang: 'en-US'},
+  {voiceURI: 'v-yuna', name: 'Yuna', lang: 'ko-KR'},
+  {voiceURI: 'v-sora', name: 'Sora (Enhanced)', lang: 'ko-KR'},
+  {voiceURI: 'v-kyoko', name: 'Kyoko', lang: 'ja-JP'}
+];
+
+test('every voice the phone has is offered, by language, best first, and chosen by hearing it', async () => {
+  const {open} = await openListening({voices: MANY_VOICES});
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  assert.equal($id('listen-voice-now').textContent, '자동 · Ava', 'the button says which voice is doing the reading');
+
+  click($id('listen-voice'));
+  const menu = open.document.querySelector('.menu.float');
+  assert.ok(menu, 'the voices are a menu, not a dropdown nobody opens');
+  const heads = [...menu.querySelectorAll('.menu-head')].map(n => n.textContent);
+  assert.equal(heads[0], '영어 · 3', "the paper's own language first, and how many it has");
+  assert.deepEqual(heads.slice(1), ['한국어 · 2', '일본어 · 1'], 'then every other language the phone can speak');
+  const rows = [...menu.querySelectorAll('.menu-row')].map(n => n.textContent);
+  assert.match(rows[0], /^자동/, 'leaving it to the app is the first thing offered');
+  assert.deepEqual(rows.slice(1, 4), ['Ava · 프리미엄', 'Samantha', 'Zarvox'], 'the good one first, the toy one last');
+  assert.match(rows[rows.length - 1], /목소리 더 받기/, 'and where to get more of them');
+
+  // Choosing one speaks a line in it: a voice cannot be told from its name.
+  const before = open.speech.spoken.length;
+  click([...menu.querySelectorAll('.menu-row')].find(n => n.textContent === 'Samantha'));
+  await open.settle();
+  assert.equal(open.storage.get('np.voice.en'), 'v-sam', 'the choice is kept for the next English paper');
+  assert.equal($id('listen-voice-now').textContent, 'Samantha');
+  open.speech.start();
+  assert.ok(open.speech.spoken.length > before, 'and it says a line of its own');
+  assert.match(open.speech.spoken[open.speech.spoken.length - 1], /read your paper/);
+});
+
+test('how loud is the reader\'s own, and the words carry it', async () => {
+  const {open} = await openListening();
+  const $id = id => open.document.getElementById(id);
+  assert.equal($id('listen-vol-now').textContent, '최대', 'as loud as the phone goes, to begin with');
+  const slider = $id('listen-vol');
+  slider.value = '55';
+  slider.dispatchEvent(new open.window.Event('input', {bubbles: true}));
+  await open.settle();
+  assert.equal(open.storage.get('np.vol'), '0.55');
+  assert.equal($id('listen-vol-now').textContent, '55%');
+  $id('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.speech.queue[0].volume, 0.55, 'the loudness travels with the sentence');
+});
+
+test('the sentence being read is kept in the middle of the screen, every sentence', async () => {
+  const {open} = await openListening();
+  const body = open.document.getElementById('listen-body');
+  body.clientHeight = 600;
+  body.scrollTop = 0;
+  const sents = [...open.document.querySelectorAll('#listen .sent')];
+  sents.forEach((node, i) => { node.offsetTop = i * 400; node.offsetHeight = 300; });
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  open.speech.start();
+  await open.settle();
+  // The first sentence is already above the middle, so there is nowhere to scroll to.
+  assert.equal(body.scrollTop, 0);
+  // Every sentence after that is brought to the middle, not merely onto the screen: the old rule
+  // left it wherever it happened to land until it fell off the bottom.
+  for (let i = 1; i < sents.length; i++) {
+    open.speech.finish(); open.speech.start();
+    await open.settle();
+    const at = sents.findIndex(n => n.getAttribute('aria-current') === 'true');
+    if (at !== i) break;
+    const middle = body.scrollTop + 600 * 0.38;
+    assert.ok(Math.abs(sents[at].offsetTop + 150 - middle) <= 2,
+      `sentence ${at} sits at the middle of the screen (scrolled to ${body.scrollTop})`);
+  }
+  assert.ok(body.scrollTop > 0, 'the transcript followed the voice down the paper');
+});
+
+test('운전 모드: the page is one sentence and one pause button', async () => {
+  const {open} = await openListening();
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  assert.equal($id('listen').classList.contains('driving'), false);
+  click($id('listen-drive'));
+  await open.settle();
+  assert.equal($id('listen').classList.contains('driving'), true);
+  assert.equal($id('listen-drive').getAttribute('aria-pressed'), 'true');
+  assert.equal(open.storage.get('np.drive'), '1');
+  assert.equal(open.storage.get('np.chain'), '1', 'and a car is never left in silence at the end of a paper');
+
+  // The whole page is the pause button: nobody aims at a sentence at seventy.
+  click($id('listen-play'));
+  await open.settle();
+  open.speech.start();
+  await open.settle();
+  assert.equal($id('listen-play').getAttribute('aria-label'), '일시정지');
+  click($id('listen-body'));
+  await open.settle();
+  assert.equal($id('listen-play').getAttribute('aria-label'), '재생', 'a tap anywhere stops it');
+  const sents = [...open.document.querySelectorAll('#listen .sent')];
+  const at = sents.findIndex(n => n.getAttribute('aria-current') === 'true');
+  click(sents[sents.length - 1]);
+  await open.settle();
+  assert.equal(sents.findIndex(n => n.getAttribute('aria-current') === 'true'), at, 'and a tap on a sentence does not jump the reading');
+
+  // It is a mode the phone stays in, and one tap leaves it.
+  click($id('listen-drive'));
+  assert.equal($id('listen').classList.contains('driving'), false);
+  assert.equal(open.storage.get('np.drive'), '0');
+});
+
+test('one paper after another, so a drive is not a paper and then silence', async () => {
+  const {open} = await openListening();
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  const on = [...$id('listen-chain').querySelectorAll('button')].find(b => b.textContent === '이어서 계속');
+  assert.ok(on, 'what happens at the end of a paper is a choice on the listening screen');
+  click(on);
+  assert.equal(open.storage.get('np.chain'), '1');
+
+  const sents = [...open.document.querySelectorAll('#listen .sent')];
+  click(sents[sents.length - 1]);            // the last sentence of the paper
+  await open.settle();
+  open.speech.start();
+  await open.settle();
+  open.speech.finish();
+  await open.settle(40);
+  assert.match($id('listen-title').textContent, /PET depolymerase/, 'the next paper in the library begins');
+  assert.equal(open.storage.get('np.lastkind'), 'listen');
+});
+
+test('the car\'s own buttons are given the player while driving', async () => {
+  const handlers = {};
+  const nav = {mediaSession: {setActionHandler: (name, fn) => { handlers[name] = fn; }, metadata: null, playbackState: ''}};
+  const {open} = await openListening({nav});
+  const $id = id => open.document.getElementById(id);
+  $id('listen-drive').dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  assert.deepEqual(Object.keys(handlers).sort(),
+    ['nexttrack', 'pause', 'play', 'previoustrack', 'seekbackward', 'seekforward'].sort(),
+    'the steering wheel and the lock screen can work the player');
+  handlers.play();
+  await open.settle();
+  open.speech.start();
+  await open.settle();
+  assert.equal($id('listen-play').getAttribute('aria-label'), '일시정지', 'a button on the wheel starts it');
+  handlers.nexttrack();
+  await open.settle();
+  assert.equal(nav.mediaSession.playbackState, 'playing', 'and the car is told what is happening');
+  assert.match(nav.mediaSession.metadata.title, /Retron Septu/, 'with the paper on the dashboard');
+  handlers.pause();
+  await open.settle();
+  assert.equal($id('listen-play').getAttribute('aria-label'), '재생');
 });
 
 test('the text Zotero indexed is asked for once and then kept on the phone', async () => {
