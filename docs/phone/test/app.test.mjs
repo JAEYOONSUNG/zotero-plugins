@@ -257,6 +257,26 @@ test('a key carried in the link is taken in on the first launch and wiped from t
   assert.ok(!String(open.location.hash || '').includes('k='), 'the key does not stay in the address');
 });
 
+test('the first screen a new phone sees asks for two things, as rows', async () => {
+  const fresh = await boot({stored: {}});
+  await fresh.settle();
+  const box = fresh.document.querySelector('#setup .setup-box');
+  assert.ok(box.querySelector('.app-mark'), "the app's own mark is at the top of it");
+  assert.equal(box.querySelector('h1').textContent, '논문');
+  // The two things it needs are rows in a card, the way the rest of the app asks for anything.
+  const rows = [...box.querySelectorAll('.card.rows .set-row')];
+  assert.deepEqual(rows.map(r => r.querySelector('.what')?.textContent || r.textContent),
+    ['사용자 번호', 'API 키', '붙여넣기']);
+  assert.equal(box.querySelectorAll('.set-field input').length, 2);
+  assert.equal(box.querySelector('#setup-key').type, 'password', 'a key is not read over a shoulder');
+  assert.equal(box.querySelectorAll('.field').length, 0, 'nothing on this screen is a form field');
+  assert.equal(box.querySelector('#setup-go').textContent, '연결');
+  // Where to get a key, in small print, under the button rather than above it.
+  const note = [...box.querySelectorAll('.set-note')].map(n => n.textContent).join(' ');
+  assert.match(note, /zotero\.org\/settings\/keys/);
+  assert.match(note, /Allow write access/);
+});
+
 test('a link with no key, or a broken one, still shows the setup screen', async () => {
   for (const hash of ['', '#k=short&u=16265664', '#k=' + 'k'.repeat(24) + '&u=abc']) {
     const open = await boot({stored: {}, hash});

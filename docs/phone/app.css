@@ -380,8 +380,6 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .primary:active, .secondary:active { background:var(--track-hover); transform:scale(.985); }
 .primary:disabled, .secondary:disabled { opacity:.45; }
 .actions { display:flex; gap:8px; flex-wrap:wrap; }
-.with-btn { display:flex; gap:8px; align-items:center; }
-.with-btn input { flex:1; min-width:0; }
 .small-btn { height:40px; padding:0 14px; font-size:14px; flex:none; border-radius:10px; }
 a.out { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
 /* Listening and reading: the two things a paper is opened for, so they are the wide buttons. */
@@ -396,13 +394,15 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .play-mark { display:inline-flex; }
 
 /* ---------- first run ---------- */
-.setup-box { margin:auto; width:min(420px,100%); padding:var(--pad); display:flex; flex-direction:column; gap:14px; }
-.setup-box h1 { margin:0; font-size:30px; font-weight:800; letter-spacing:-.03em; }
-.field { display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--muted); }
-.field + .field { margin-top:12px; }
-.field input { height:44px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink);
-                padding:0 12px; font-size:16px; outline:none; }
-.field input:focus { border-color:var(--link); }
+/* The first thing a new phone sees: the app's own mark, its name, one line of what it is for,
+   and then the two things it needs — as rows, the way the rest of the app asks for anything. */
+.setup-box { margin:auto; width:min(420px,100%); padding:var(--pad) var(--pad) calc(var(--bottom) + 24px);
+             display:flex; flex-direction:column; align-items:stretch; gap:13px; }
+.setup-box h1 { margin:0; text-align:center; font-size:30px; font-weight:800; letter-spacing:-.03em; }
+.app-mark { align-self:center; border-radius:17px; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+.setup-said { margin:0 0 4px; text-align:center; font-size:14px; line-height:1.6; color:var(--muted); }
+.setup-box .set-note { margin-inline:4px; }
+.setup-box .msg { margin-inline:4px; }
 .msg { margin:0; font-size:13px; }
 .msg.bad { color:var(--bad); } .msg.good { color:var(--good); }
 .steps { margin:8px 0 0 var(--pad); padding-inline-start:18px; color:var(--faint); font-size:12px; line-height:1.75; }
