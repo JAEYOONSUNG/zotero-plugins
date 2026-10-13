@@ -3258,7 +3258,7 @@ test('운전 모드에서도 설정은 열린다: 목소리, 소리, 읽을 범�
   for (const id of ['listen-voice', 'listen-vol', 'listen-what']) {
     assert.ok($id('listen-extra').contains($id(id)), `${id} is not in the settings sheet`);
   }
-  assert.deepEqual([...$id('listen-what').querySelectorAll('button')].map(b => b.textContent), ['본문만', '캡션까지']);
+  assert.deepEqual([...$id('listen-what').querySelectorAll('button')].map(b => b.textContent), ['본문만', '캡션까지', '참고문헌까지']);
   // Speed comes back while the sheet is open, and goes away again with it.
   assert.match(css, /#listen\.driving:not\(\.settings\) #listen-rate \{ display:none; \}/);
   // Big enough to hit at the wheel: every control in the sheet is sized up while driving.
@@ -3267,4 +3267,41 @@ test('운전 모드에서도 설정은 열린다: 목소리, 소리, 읽을 범�
   click($id('listen-more'));
   await open.settle();
   assert.equal($id('listen').classList.contains('settings'), false);
+});
+
+test('읽을 범위는 세 단계: 본문만, 캡션까지, 참고문헌까지 — 그리고 고른 것이 기억된다', async () => {
+  const {open} = await openListening();
+  const scope = () => [...open.document.querySelectorAll('#listen-what button')];
+  const press = label => { scope().find(b => b.textContent === label).dispatchEvent(new open.window.Event('click')); };
+  const lines = () => [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+
+  assert.deepEqual(scope().map(b => b.textContent), ['본문만', '캡션까지', '참고문헌까지']);
+  assert.equal(scope()[0].getAttribute('aria-pressed'), 'true');
+  assert.ok(!lines().some(l => /coloured by cluster/.test(l)));
+  assert.ok(!lines().some(l => /Nature 500/.test(l)));
+
+  press('캡션까지');
+  await open.settle();
+  assert.ok(lines().some(l => /coloured by cluster/.test(l)), 'the caption is read');
+  assert.ok(!lines().some(l => /Nature 500/.test(l)), 'but not the reference list yet');
+
+  press('참고문헌까지');
+  await open.settle();
+  assert.ok(lines().some(l => /coloured by cluster/.test(l)), 'each step keeps the one before it');
+  assert.ok(lines().some(l => /Nature 500/.test(l)), 'and adds the reference list');
+  assert.equal(scope()[2].getAttribute('aria-pressed'), 'true');
+  assert.equal(scope().filter(b => b.getAttribute('aria-pressed') === 'true').length, 1);
+  assert.equal(open.storage.get('np.reads'), 'references');
+
+  press('본문만');
+  await open.settle();
+  assert.ok(!lines().some(l => /Nature 500/.test(l)));
+  assert.equal(open.storage.get('np.reads'), 'body');
+});
+
+test('참고문헌까지 고른 뒤 다음 논문을 열어도 그대로 읽는다', async () => {
+  const {open} = await openListening({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.reads': 'references'}});
+  assert.equal(open.document.querySelectorAll('#listen-what button')[2].getAttribute('aria-pressed'), 'true');
+  const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.ok(lines.some(l => /Nature 500/.test(l)), 'the choice carried over to this paper');
 });

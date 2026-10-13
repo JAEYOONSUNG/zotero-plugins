@@ -29,7 +29,7 @@ const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scop
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
               read: 'np.read', recent: 'np.recent', kind: 'np.lastkind', of: 'np.of.',
-              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol'};
+              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol', reads: 'np.reads'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -2289,8 +2289,8 @@ async function openListen(item) {
     return;
   }
 
-  const withCaptions = false;
-  listen.list = readingUnits(paper, {captions: withCaptions});
+  const withCaptions = reading();
+  listen.list = readingUnits(paper, unitsFor(withCaptions));
   renderTranscript(listen.list);
 
   const lang = paperLanguage(listen.list);
@@ -2410,19 +2410,27 @@ function buildChain() {
   requestAnimationFrame(() => slide(track));
 }
 
-/* What is read: the body alone, or the figure captions with it. */
-function buildScope(lang, captions) {
+/* What is read: the body alone, the figure captions with it, or the reference list as well.
+   Three steps, the same three the reader panel in Zotero offers, and the choice is remembered. */
+export const SCOPES = [['body', '본문만'], ['captions', '캡션까지'], ['references', '참고문헌까지']];
+export const scopeOf = value => SCOPES.some(([id]) => id === value) ? value : 'body';
+export const unitsFor = scope => ({captions: scope !== 'body', references: scope === 'references'});
+export const reading = () => scopeOf(localStorage.getItem(KEYS.reads));
+
+function buildScope(lang, scope) {
   const track = $('listen-what');
   track.textContent = '';
   el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
-  for (const [id, label] of [['body', '본문만'], ['captions', '캡션까지']]) {
-    const on = (id === 'captions') === captions;
-    const button = el('button', {type: 'button', 'aria-pressed': String(on), text: label}, track);
+  const now = scopeOf(scope);
+  for (const [id, label] of SCOPES) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(id === now), text: label}, track);
     button.addEventListener('click', () => {
       const at = listen.player.state().index;
       const unit = listen.list[at];
-      listen.list = readingUnits(listen.paper, {captions: id === 'captions'});
+      localStorage.setItem(KEYS.reads, id);
+      listen.list = readingUnits(listen.paper, unitsFor(id));
       renderTranscript(listen.list);
+      // Where the reader was stays where the reader was, even though the list around it changed.
       const back = unit ? Math.max(0, listen.list.findIndex(u => u.text === unit.text)) : 0;
       const playing = listen.player.state().status === 'playing';
       listen.player.load(listen.list, {at: back});

@@ -128,12 +128,12 @@ export function repeatedLines(pages, {edge = 3, share = 0.5} = {}) {
 }
 
 /* A line of running text, or something that only looks like one? */
-const isJunk = (line, repeats) =>
+const isJunk = (line, repeats, {inRefs = false} = {}) =>
   !line ||
   FURNITURE.some(re => re.test(line)) ||
   (line.length <= STAMP_LENGTH && STAMP_INSIDE.some(re => re.test(line))) ||
   repeats.has(norm(line)) ||
-  REFERENCE_LINE.test(line);
+  (!inRefs && REFERENCE_LINE.test(line));
 
 /* Who wrote it and where — true of a whole block, not of one line, because an affiliation runs
    over several and an address sits on the end of one. */
@@ -237,8 +237,12 @@ export function readable(raw, {title = ''} = {}) {
   const repeats = repeatedLines(pages);
   const sections = [{heading: '', page: 1, blocks: []}];
   const captions = [];
+  /* The reference list is kept rather than thrown away: it is not read with the body, but a reader
+     who asks for it ("참고문헌까지") wants to hear who was cited. Other back matter -- funding,
+     acknowledgements, competing interests -- is not kept; nobody asks to hear it. */
+  const references = [];
   const skipped = {repeated: repeats.size, furniture: 0, references: 0, captions: 0};
-  let inBack = false, started = false;
+  let inBack = false, backKind = '', started = false;
 
   pages.forEach((page, index) => {
     const pageNo = index + 1;
@@ -247,7 +251,7 @@ export function readable(raw, {title = ''} = {}) {
       if (!lines.length) continue;
       const kept = [];
       for (const line of lines) {
-        if (isJunk(line, repeats)) { skipped.furniture++; continue; }
+        if (isJunk(line, repeats, {inRefs: backKind === 'references'})) { skipped.furniture++; continue; }
         if (!started && isFrontLine(line)) { skipped.furniture++; continue; }
         kept.push(line);
       }
@@ -256,15 +260,22 @@ export function readable(raw, {title = ''} = {}) {
 
       // A heading of its own, or the line that starts the back matter.
       if (kept.length === 1 && kept[0].length < 90) {
-        if (REFERENCES.test(kept[0])) { inBack = true; skipped.references++; continue; }
-        if (BACK.test(kept[0])) { inBack = true; continue; }
+        if (REFERENCES.test(kept[0])) { inBack = true; backKind = 'references'; skipped.references++; continue; }
+        if (BACK.test(kept[0])) { inBack = true; backKind = 'other'; continue; }
         if (HEADING.test(kept[0])) {
-          inBack = false; started = true;
+          inBack = false; backKind = ''; started = true;
           sections.push({heading: kept[0].replace(/^(?:\d+(?:\.\d+)*|[IVX]+)[.)]?\s+/, '').replace(/[:.]\s*$/, ''), page: pageNo, blocks: []});
           continue;
         }
       }
-      if (inBack) { skipped.references++; continue; }
+      if (inBack) {
+        skipped.references++;
+        if (backKind === 'references') {
+          const entry = dehyphenate(kept.join('\n')).replace(/\s{2,}/g, ' ').trim();
+          if (entry.length > 8 && /\p{L}/u.test(entry)) references.push({text: entry, page: pageNo});
+        }
+        continue;
+      }
 
       // A caption often shares a block with the paragraph above it; the block is cut where it begins.
       const breaks = kept.findIndex((line, i) => i > 0 && CAPTION.test(line));
@@ -305,11 +316,11 @@ export function readable(raw, {title = ''} = {}) {
     if (sentences.length) out.push({heading: section.heading, page: section.page, sentences});
   }
   const words = out.reduce((n, s) => n + s.sentences.reduce((m, x) => m + (x.spoken.match(/\S+/g) || []).length, 0), 0);
-  return {sections: out, captions, skipped, stats: {pages: pages.length, sentences: out.reduce((n, s) => n + s.sentences.length, 0), words}};
+  return {sections: out, captions, references, skipped, stats: {pages: pages.length, sentences: out.reduce((n, s) => n + s.sentences.length, 0), words}};
 }
 
 /* One flat list to read, with the section name carried on its first sentence. */
-export function units(paper, {captions = false} = {}) {
+export function units(paper, {captions = false, references = false} = {}) {
   const out = [];
   for (const section of paper.sections) {
     section.sentences.forEach((sentence, i) => {
@@ -318,6 +329,12 @@ export function units(paper, {captions = false} = {}) {
   }
   if (captions) for (const caption of paper.captions) {
     for (const text of splitSentences(caption.text)) out.push({text, spoken: spokenForm(text), page: caption.page, section: '캡션', kind: 'caption'});
+  }
+  /* One entry at a time, not one sentence: "Smith J. 2020. A paper. Nature 1:2-3." is one thing a
+     listener is counting off, and splitting it at the full stops would read as four. A very long
+     entry is still broken, so no single utterance runs past what a voice will take. */
+  if (references) for (const entry of paper.references || []) {
+    for (const text of breakLong(entry.text)) out.push({text, spoken: spokenForm(text), page: entry.page, section: '참고문헌', kind: 'reference'});
   }
   return out.map((unit, index) => ({...unit, index}));
 }

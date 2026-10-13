@@ -3,7 +3,7 @@
    of lines, figure captions in the middle of the body, and a reference list at the end. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds, stripStamp, isAuthorList, breakLong} from '../read.js';
+import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds, stripStamp, isAuthorList, breakLong, LONG} from '../read.js';
 
 const PAPER = [
   // page 1
@@ -289,4 +289,55 @@ test('a semicolon inside brackets is a list, not a pause', () => {
     ' (PDB:4DA4, aa:731-1602; 6X9I, aa:729-1600) and all of them agree with what is reported here.';
   const pieces = breakLong(long);
   assert.equal(pieces.length, 1, 'it was not cut inside the bracket');
+});
+
+test('the reference list is kept, so it can be read when it is asked for', () => {
+  const raw = [
+    'Introduction', '', 'The body is here. It has two sentences.', '',
+    'Acknowledgements', '', 'We thank the funders of this work.', '',
+    'References', '',
+    'Smith J. 2020. A thermostable polymerase. Nature 1:2-3.', '',
+    'Lee K, Park H. 2021. Another paper entirely. Cell 4:5-6.', ''
+  ].join('\n');
+  const paper = readable(raw, {title: ''});
+  // Only the references are kept; funding and acknowledgements are not something anyone asks to hear.
+  assert.deepEqual(paper.references.map(r => r.text), [
+    'Smith J. 2020. A thermostable polymerase. Nature 1:2-3.',
+    'Lee K, Park H. 2021. Another paper entirely. Cell 4:5-6.'
+  ]);
+  assert.ok(!JSON.stringify(paper.sections).includes('thank the funders'));
+  assert.ok(!JSON.stringify(paper.sections).includes('Smith J.'), 'and they are not read with the body');
+
+  // Three steps, each adding to the one before it.
+  const body = units(paper);
+  assert.deepEqual(body.map(u => u.kind || 'body'), ['body', 'body']);
+  const withRefs = units(paper, {captions: true, references: true});
+  assert.deepEqual(withRefs.slice(-2).map(u => u.kind), ['reference', 'reference']);
+  assert.equal(withRefs.at(-1).section, '참고문헌');
+  // An entry is one thing to hear, not four sentences.
+  assert.equal(withRefs.at(-2).text, 'Smith J. 2020. A thermostable polymerase. Nature 1:2-3.');
+  assert.deepEqual(units(paper, {references: false}).map(u => u.kind || 'body'), ['body', 'body']);
+  // The index is still the position in whatever list was asked for.
+  assert.deepEqual(withRefs.map(u => u.index), withRefs.map((_, i) => i));
+});
+
+test('a long entry is broken where its writer paused, and a stray page number is not an entry', () => {
+  // Author lists run long. breakLong cuts at the pauses a writer put in -- never mid-word, and never
+  // at a comma, which in a reference is part of a name rather than a breath.
+  const semis = 'Smith J; Lee K; Park H; ' + 'Kim M; '.repeat(70) + '2024. A paper with very many authors. Journal 9:1-2.';
+  const commas = 'Author A, ' + 'Author B, '.repeat(60) + 'and Author Z. 2024. Another. Cell 4:5-6.';
+  const raw = ['Introduction', '', 'Body sentence here.', '', 'References', '', semis, '', commas, '', '12.', '', 'ibid.', ''].join('\n');
+  const paper = readable(raw, {title: ''});
+  assert.equal(paper.references.length, 2, paper.references.map(r => r.text.slice(0, 30)).join(' | '));
+  // "12." is a stray page number and "ibid." is too short to be an entry.
+  assert.ok(!paper.references.some(r => /^(?:12\.|ibid\.)$/.test(r.text)));
+
+  const list = units(paper, {references: true}).filter(u => u.kind === 'reference');
+  const fromSemis = list.filter(u => u.text.includes('Kim M'));
+  assert.ok(fromSemis.length > 1, 'the one with pauses in it was broken at them');
+  for (const unit of fromSemis) assert.ok(unit.text.length <= LONG, `${unit.text.length} > ${LONG}`);
+  // The one that is all commas stays whole: breaking a name list at a comma reads as a new entry.
+  assert.equal(list.filter(u => u.text.includes('Author B')).length, 1);
+  // Nothing is lost either way.
+  assert.equal(list.map(u => u.text).join(' ').replace(/\s+/g, ' '), `${semis} ${commas}`.replace(/\s+/g, ' '));
 });
