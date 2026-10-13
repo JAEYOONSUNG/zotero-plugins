@@ -43,7 +43,9 @@ looked at shows as chips that take themselves off. A library long enough to be l
 right edge — the letters, the years, the stars — and a finger laid on them takes it there, saying
 in full what it is over; the orders whose headings are dates have no one-character name, so they
 go without. Search covers the title, authors, journal, year, DOI, tags and the abstract, folds
-accents so Muller finds Müller, and every word has to appear.
+accents so Muller finds Müller, and every word has to appear; the box carries 취소 while it is
+open and, when it is open and empty, the last six things that were searched for — each of which
+can be tapped back into or forgotten.
 
 **The PDF.** A tap gives the whole screen to the paper — the bar folds away and the page number
 stands in for it, as this phone's own reader does, and another tap brings it back. Pinch to zoom,

@@ -2160,6 +2160,78 @@ test('the bar at the top is the way back to the top of the library', async () =>
   assert.ok(open.document.querySelector('.menu.float'), 'it opens the order instead');
 });
 
+test('the search box remembers what has been searched for before', async () => {
+  const open = await boot();
+  await open.settle();
+  const box = open.document.getElementById('q');
+  const cancel = open.document.getElementById('q-cancel');
+  const panel = open.document.getElementById('recent');
+  const list = open.document.getElementById('list');
+  // linkedom has no focus of its own, so the field says it is the active one.
+  const focus = node => Object.defineProperty(open.document, 'activeElement', {value: node, configurable: true});
+
+  assert.equal(cancel.hidden, true, 'nothing to cancel until the box is open');
+  focus(box);
+  box.dispatchEvent(new open.window.Event('focus'));
+  assert.equal(cancel.hidden, false, 'open, and there is a way out of searching');
+  assert.equal(panel.hidden, true, 'but nothing has been searched for yet');
+
+  // Searched for, then left: that is a search worth remembering.
+  box.value = 'retron';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  assert.equal(panel.hidden, true, 'what was typed is not in the way of the answer');
+  focus(open.document.body);
+  box.dispatchEvent(new open.window.Event('blur'));
+  await open.settle();
+  assert.deepEqual(JSON.parse(open.storage.get('np.recent')), ['retron']);
+
+  // A second one goes in front of the first, and a keystroke is not a search.
+  box.value = 'phage'; box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  box.dispatchEvent(new open.window.Event('blur'));
+  await open.settle();
+  box.value = 'p'; box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  box.dispatchEvent(new open.window.Event('blur'));
+  await open.settle();
+  assert.deepEqual(JSON.parse(open.storage.get('np.recent')), ['phage', 'retron']);
+
+  // Opened again on an empty box: they stand over the library, newest first.
+  box.value = ''; state_q(box, open);
+  focus(box);
+  box.dispatchEvent(new open.window.Event('focus'));
+  assert.equal(panel.hidden, false, 'they are offered');
+  assert.equal(list.hidden, true, 'over the library, not under it');
+  assert.deepEqual([...panel.querySelectorAll('.recent-row h2')].map(h => h.textContent), ['phage', 'retron']);
+
+  // One of them taps straight back into that search.
+  panel.querySelector('.recent-row .face').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(box.value, 'phage');
+  assert.equal(panel.hidden, true, 'and the panel gets out of the way');
+  assert.equal(list.hidden, false);
+
+  // And one of them can be forgotten.
+  box.value = ''; state_q(box, open);
+  focus(box);
+  box.dispatchEvent(new open.window.Event('focus'));
+  panel.querySelector('.recent-row .x').dispatchEvent(new open.window.Event('click'));
+  assert.deepEqual(JSON.parse(open.storage.get('np.recent')), ['retron']);
+  assert.deepEqual([...panel.querySelectorAll('.recent-row h2')].map(h => h.textContent), ['retron']);
+
+  // 취소 means out of searching altogether.
+  box.value = 'zzz'; box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  cancel.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(box.value, '');
+  assert.equal(cancel.hidden, true);
+  assert.equal(open.document.querySelectorAll('#list .row.paper').length, 3, 'the library is back');
+});
+// The field's value and the app's idea of it are set together, as typing does.
+function state_q(box, open) { box.dispatchEvent(new open.window.Event('input')); }
+
 test('changing what is being looked at starts the list again from the top', async () => {
   const open = await boot({server: fakeServer({items: MANY})});
   await open.settle();

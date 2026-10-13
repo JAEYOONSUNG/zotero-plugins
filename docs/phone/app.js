@@ -24,7 +24,7 @@ const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
-              read: 'np.read'};
+              read: 'np.read', recent: 'np.recent'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -1048,6 +1048,55 @@ function drawResume(list) {
   el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
   go.addEventListener('click', () => openListen(liveItem(key) || item));
   return card;
+}
+
+/* ---------- what has been searched for before ---------- */
+/* A box that remembers is the difference between searching twice and searching once. Kept short,
+   newest first, and only what was typed with intent — two letters is a keystroke, not a search. */
+export const RECENTS = 6;
+function recentList() {
+  try {
+    const held = JSON.parse(localStorage.getItem(KEYS.recent) || '[]');
+    return Array.isArray(held) ? held.filter(text => typeof text === 'string').slice(0, RECENTS) : [];
+  } catch (_) { return []; }
+}
+function remember(text) {
+  const word = clean(text);
+  if (word.length < 2) return;
+  const kept = [word, ...recentList().filter(other => other !== word)].slice(0, RECENTS);
+  try { localStorage.setItem(KEYS.recent, JSON.stringify(kept)); } catch (_) {}
+}
+function forget(text) {
+  const kept = recentList().filter(other => other !== text);
+  try { localStorage.setItem(KEYS.recent, JSON.stringify(kept)); } catch (_) {}
+  drawRecent();
+}
+/* Shown over the library while the box is open and empty, as this phone's own search does. */
+function drawRecent() {
+  const panel = $('recent');
+  if (!panel) return;
+  const words = recentList();
+  const open = document.activeElement === $('q') && !clean(state.q) && words.length > 0;
+  panel.hidden = !open;
+  const list = $('list');
+  if (list) list.hidden = open;
+  if (!open) { panel.textContent = ''; return; }
+  panel.textContent = '';
+  el('h3', {class: 'group', text: '최근 검색'}, panel);
+  for (const word of words) {
+    const row = el('div', {class: 'row paper recent-row'}, panel);
+    const face = el('button', {class: 'face', type: 'button'}, row);
+    el('span', {class: 'ago', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>'}, face);
+    el('h2', {text: word}, face);
+    face.addEventListener('click', () => {
+      $('q').value = word;
+      state.q = word;
+      drawRecent();
+      showing();
+    });
+    const off = el('button', {class: 'x', type: 'button', 'aria-label': `${word} 지우기`, text: '×'}, row);
+    off.addEventListener('click', () => forget(word));
+  }
 }
 
 /* What is being looked at has changed, so the list starts again from the top: three hundred
@@ -2508,10 +2557,33 @@ function wire() {
   $('q').addEventListener('input', event => {
     state.q = event.target.value;
     clearTimeout(typing);
+    drawRecent();
     // A fast typist would otherwise filter the whole library between every two letters.
     typing = setTimeout(showing, 110);
   });
   $('q').addEventListener('search', () => { state.q = $('q').value; render(); });
+  /* The box, open: what was searched for before, and the way out of searching altogether. */
+  $('q').addEventListener('focus', () => { $('q-cancel').hidden = false; drawRecent(); });
+  $('q').addEventListener('blur', () => {
+    remember(state.q);
+    setTimeout(() => {
+      if (document.activeElement === $('q')) return;
+      $('q-cancel').hidden = !clean(state.q);
+      drawRecent();
+    }, 180);
+  });
+  // A tap inside the panel must not take the keyboard away before the tap lands.
+  for (const type of ['pointerdown', 'mousedown']) {
+    $('recent').addEventListener(type, event => { if (event.target !== $('q')) event.preventDefault(); });
+  }
+  $('q-cancel').addEventListener('click', () => {
+    remember(state.q);
+    $('q').value = ''; state.q = '';
+    $('q-cancel').hidden = true;
+    $('q').blur();
+    drawRecent();
+    showing();
+  });
   $('btn-sync').addEventListener('click', () => sync());
   $('btn-collections').addEventListener('click', openCollections);
   $('back').addEventListener('click', () => closeSheet('detail'));
@@ -2578,8 +2650,11 @@ function wire() {
   // The search key on the keyboard means "that is the whole word": the keyboard goes away.
   $('q').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); $('q').blur(); } });
   $('q-clear').addEventListener('click', () => {
-    $('q').value = ''; state.q = ''; state.shown = 0;
-    $('list').scrollTop = 0; render(); $('q').focus();
+    remember(state.q);
+    $('q').value = ''; state.q = '';
+    showing();
+    $('q').focus();
+    drawRecent();
   });
   // Whatever was changed with no signal goes out the moment there is some.
   addEventListener('online', () => flushWrites({quiet: false}));

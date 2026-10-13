@@ -239,6 +239,17 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
           font-size:15px; line-height:1; flex:none; }
 .tip .x:active { background:var(--track-hover); }
 
+/* What was searched for before, over the library while the box is open and empty. */
+.recent[hidden] { display:none; }
+.recent-row { display:flex; align-items:center; }
+.recent-row .face { flex:1; min-width:0; display:flex; align-items:center; gap:11px; padding-inline-start:16px; }
+.recent-row .ago { display:flex; flex:none; color:var(--faint); }
+.recent-row .ago svg { width:18px; height:18px; stroke-width:1.9; }
+.recent-row h2 { -webkit-line-clamp:1; font-weight:500; }
+.recent-row .x { width:44px; align-self:stretch; background:var(--card); color:var(--faint);
+                 font-size:19px; line-height:1; flex:none; }
+.recent-row .x:active { color:var(--ink); }
+
 /* What was left half heard, offered back at the top of the library. */
 .resume { display:block; margin-bottom:14px; background:var(--card); border-radius:var(--radius);
           box-shadow:var(--card-shadow); overflow:hidden; }
