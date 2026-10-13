@@ -45,7 +45,9 @@ in full what it is over; the orders whose headings are dates have no one-charact
 go without. Search covers the title, authors, journal, year, DOI, tags and the abstract, folds
 accents so Muller finds Müller, and every word has to appear.
 
-**The PDF.** Pinch to zoom, double tap for 2×, a slider for the long ones, night mode, and out to
+**The PDF.** A tap gives the whole screen to the paper — the bar folds away and the page number
+stands in for it, as this phone's own reader does, and another tap brings it back. Pinch to zoom,
+double tap for 2×, a slider for the long ones, night mode, and out to
 any other app through the share sheet — the bar over a paper carries its name, the page and a way
 to find a word, and the rest is a menu under one button. A paper opens where it was left. Your own Zotero
 highlights are drawn on the page in their own colours, and listed in order with the page each one

@@ -157,6 +157,8 @@
     <button id="paper-share" class="menu-row" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg><span>다른 앱으로 열기</span></button>
   </div>
   <main id="paper-view" class="pdf" aria-label="본문 PDF"></main>
+  <!-- where you are, shown while the page is moving and whenever the bar is out of the way -->
+  <span id="paper-now" class="page-now" aria-hidden="true" hidden></span>
   <div id="paper-finder" class="finder" hidden>
     <div class="finder-row">
       <input id="paper-q" type="search" placeholder="이 논문에서 찾기" autocomplete="off" enterkeyhint="search">

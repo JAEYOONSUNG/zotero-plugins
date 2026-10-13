@@ -1039,6 +1039,40 @@ test('a paper offers its PDF, and a linked file is fetched from Dropbox by the p
   assert.ok(dropbox.asked.some(a => /oauth2\/token/.test(a.url)), 'a fresh token was fetched first');
 });
 
+test('a tap gives the whole screen to the paper, and a double tap is still a zoom', async () => {
+  const {open} = await openPdf({stored: DROPBOX_ON});
+  const paper = open.document.getElementById('paper');
+  const view = open.document.getElementById('paper-view');
+  const tap = () => view.dispatchEvent(new open.window.Event('click'));
+  assert.equal(paper.classList.contains('bare'), false, 'the bar is there to begin with');
+  // A fake phone never gets as far as rendering a page, so the bar is told what it would say.
+  open.document.getElementById('paper-count').textContent = '3 / 12';
+
+  // One tap, after the moment it waits to see whether a second is coming.
+  tap();
+  await new Promise(r => setTimeout(r, 340));
+  assert.equal(paper.classList.contains('bare'), true, 'the bar folded away');
+  const now = open.document.getElementById('paper-now');
+  assert.equal(now.hidden, false, 'and the page number stands in for it');
+  assert.equal(now.textContent, '3 / 12', 'saying what the bar was saying');
+  tap();
+  await new Promise(r => setTimeout(r, 340));
+  assert.equal(paper.classList.contains('bare'), false, 'another brings it back');
+
+  // Two taps in quick succession are pdf.js zooming, and must not also fold the bar.
+  tap(); tap();
+  await new Promise(r => setTimeout(r, 340));
+  assert.equal(paper.classList.contains('bare'), false, 'a double tap left the bar alone');
+
+  // Leaving puts it back, so the next paper does not open with no bar.
+  tap();
+  await new Promise(r => setTimeout(r, 340));
+  assert.equal(paper.classList.contains('bare'), true);
+  open.document.getElementById('paper-back').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(paper.classList.contains('bare'), false, 'and the bar is back for the next one');
+});
+
 test('a file Zotero itself stores is fetched from Zotero, not from Dropbox', async () => {
   const {zotero, dropbox} = await openPdf({children: STORED_CHILD, stored: DROPBOX_ON});
   assert.ok(zotero.sent.some(r => r.path === '/users/16265664/items/PDF2/file'), 'the bytes came from Zotero');

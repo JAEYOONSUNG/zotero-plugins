@@ -1908,12 +1908,29 @@ const paper = {viewer: null, item: null, following: 0, pages: 0, marks: [], text
 const NIGHT = 'np.pdf.night';
 
 /* While there is something to say, it stands where the page would be. */
+/* The page number, shown while the pages are moving and for a moment after, so a reader with the
+   bar out of the way still knows where they are. */
+let pageNowTimer = null;
+function showPageNow(on) {
+  const now = $('paper-now');
+  if (!now) return;
+  clearTimeout(pageNowTimer);
+  // Whatever the bar was saying, since that is what it is standing in for.
+  if (!now.textContent) now.textContent = $('paper-count') ? $('paper-count').textContent : '';
+  if (!on || !now.textContent) { now.hidden = true; return; }
+  now.hidden = false;
+  now.classList.add('on');
+  pageNowTimer = setTimeout(() => { now.classList.remove('on'); }, 1400);
+}
+
 function showPaperMessage(on) {
   $('paper-msg').hidden = !on;
   $('paper-view').hidden = on;
 }
 
 function leftPaper() {
+  $('paper').classList.remove('bare');
+  showPageNow(false);
   showMenu(false);
   if (paper.viewer) { paper.viewer.destroy(); paper.viewer = null; }
   paper.bytes = null;   // it is in IndexedDB; holding it in memory too is just weight
@@ -1966,6 +1983,9 @@ async function openPaper(item, {at = 0} = {}) {
       onPage: (n, total) => {
         paper.pages = total;
         $('paper-count').textContent = `${n} / ${total}`;
+        $('paper-now').textContent = `${n} / ${total}`;
+        // While the bar is out of the way, where you are has to be said somewhere.
+        if ($('paper').classList.contains('bare')) showPageNow(true);
         const slider = $('paper-slider');
         slider.max = String(total);
         slider.value = String(n);
@@ -2566,7 +2586,25 @@ function wire() {
     else list.scrollTop = 0;
   });
   $('paper-more').addEventListener('click', () => showMenu($('paper-menu').hidden));
-  $('paper-view').addEventListener('click', () => showMenu(false));
+  /* A tap on the page puts the bar away and gives the whole screen to the paper, as this phone's
+     own reader does; another brings it back. A double tap is pdf.js's own way of zooming, so the
+     first tap waits to see whether a second one is coming. */
+  let bareWait = null;
+  $('paper-view').addEventListener('click', () => {
+    showMenu(false);
+    if (!$('paper-finder').hidden || !$('paper-jump').hidden) {
+      $('paper-finder').hidden = true;
+      $('paper-jump').hidden = true;
+      return;
+    }
+    if (bareWait) { clearTimeout(bareWait); bareWait = null; return; }   // the second of a double tap
+    bareWait = setTimeout(() => {
+      bareWait = null;
+      const bare = !$('paper').classList.contains('bare');
+      $('paper').classList.toggle('bare', bare);
+      showPageNow(bare);
+    }, 300);
+  });
   // Zooming is the one thing worth pressing twice, so the menu stays up for it.
   $('listen-more').addEventListener('click', () => {
     const extra = $('listen-extra');
