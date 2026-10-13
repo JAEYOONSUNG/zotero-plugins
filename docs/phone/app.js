@@ -667,16 +667,86 @@ function holdToOpen(row, run) {
   return () => { const was = held; held = false; return was; };
 }
 
+/* Pushed aside, a paper is marked: left is 완료, right is 안 읽음, and a paper already marked that
+   way is cleared, so the same swipe undoes itself. What the release will do is drawn behind the
+   row while the finger is still on it, because a gesture that commits something unseen is one
+   nobody dares use twice. */
+export const SWIPE = 72;
+const SWIPE_PLAN = (status, way) => way === 'left'
+  ? (status === 'done' ? {id: '', label: '표시 없음', tone: 'clear'} : {id: 'done', label: '완료', tone: 'done'})
+  : (status === 'unread' ? {id: '', label: '표시 없음', tone: 'clear'} : {id: 'unread', label: '안 읽음', tone: 'unread'});
+const SWIPE_MARK = {
+  done: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4 10-10"/></svg>',
+  unread: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/></svg>',
+  clear: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+};
+/* Past the threshold the row stops following the finger one pixel for one, so the end of the
+   gesture is felt rather than guessed at. */
+const resist = moved => Math.sign(moved) * (Math.abs(moved) <= SWIPE ? Math.abs(moved) : SWIPE + (Math.abs(moved) - SWIPE) * 0.35);
+
+function swipeRow(row, face, act, item) {
+  let from = null, axis = '', at = 0, plan = null, swiped = false;
+  const slide = x => { at = x; face.style.transform = x ? `translateX(${Math.round(x)}px)` : ''; };
+  const paint = way => {
+    plan = way ? SWIPE_PLAN(statusOf(liveItem(item.key) || item), way) : null;
+    act.className = plan ? `act on ${plan.tone} ${way}` : 'act';
+    act.textContent = '';
+    if (!plan) return;
+    el('span', {class: 'mark', html: SWIPE_MARK[plan.tone]}, act);
+    el('span', {text: plan.label}, act);
+  };
+  row.addEventListener('touchstart', event => {
+    if (!event.touches || event.touches.length !== 1) { from = null; return; }
+    from = {x: event.touches[0].clientX, y: event.touches[0].clientY};
+    axis = ''; swiped = false;
+  }, {passive: true});
+  row.addEventListener('touchmove', event => {
+    const touch = event.touches && event.touches[0];
+    if (!from || !touch) return;
+    const dx = touch.clientX - from.x, dy = touch.clientY - from.y;
+    /* The first ten pixels decide what the gesture is. A scroll must never drag a row sideways,
+       and a swipe must never be read as a scroll halfway through. */
+    if (!axis) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      axis = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
+      if (axis === 'x') { row.classList.add('swiping'); closeFloat(); }
+    }
+    if (axis !== 'x') return;
+    slide(resist(dx));
+    paint(dx < -10 ? 'left' : dx > 10 ? 'right' : '');
+  }, {passive: true});
+  const end = async () => {
+    const go = axis === 'x' && plan && Math.abs(at) > SWIPE;
+    const what = plan;
+    from = null; axis = '';
+    row.classList.remove('swiping');
+    slide(0);
+    if (!go) { paint(''); return; }
+    swiped = true;                 // the finger lifting off is not a tap on the paper
+    try {
+      await setStatus(liveItem(item.key) || item, what.id);
+      render({keep: true});
+      toast(what.id ? `${what.label}으로 표시` : '표시를 지웠습니다');
+    } catch (error) { toast(error.message); }
+  };
+  row.addEventListener('touchend', end, {passive: true});
+  row.addEventListener('touchcancel', () => { from = null; axis = ''; row.classList.remove('swiping'); slide(0); paint(''); }, {passive: true});
+  return () => { const was = swiped; swiped = false; return was; };
+}
+
 /* One row. Kept apart so more of them can be added as the list is scrolled without redrawing
    what is already there. */
 function drawRow(item, list) {
-  const row = el('button', {class: 'row', type: 'button'}, list);
+  const row = el('button', {class: 'row paper', type: 'button'}, list);
+  // Behind the row: what pushing it aside would do. Drawn first so the face covers it.
+  const act = el('span', {class: 'act', 'aria-hidden': 'true'}, row);
+  const face = el('span', {class: 'face'}, row);
   // The status is a mark in the margin beside the title: a labelled chip for it cost every row a
   // line of its own, and most of a library has no status at all.
   const status = statusOf(item);
-  if (status) el('span', {class: `flag ${status}`, 'aria-label': STATUS_WORD[status]}, row);
-  el('h2', {text: clean(item.data.title) || '(제목 없음)'}, row);
-  el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, row);
+  if (status) el('span', {class: `flag ${status}`, 'aria-label': STATUS_WORD[status]}, face);
+  el('h2', {text: clean(item.data.title) || '(제목 없음)'}, face);
+  el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, face);
   const rating = ratingOf(item);
   const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
   // How far the reading got, for the papers that were started and not finished.
@@ -684,7 +754,7 @@ function drawRow(item, list) {
   const part = heard > 1 && heard < 99;
   // The third line is only drawn for a paper that has something to say on it.
   if (rating || tag || part) {
-    const foot = el('div', {class: 'foot'}, row);
+    const foot = el('div', {class: 'foot'}, face);
     if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
     if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
     if (part) {
@@ -702,8 +772,9 @@ function drawRow(item, list) {
     try { await setStatus(live, choice.id); render({keep: true}); toast(choice.id ? `${choice.label}으로 표시` : '표시를 지웠습니다'); }
     catch (error) { toast(error.message); }
   }})), {chosen: status}));
+  const wasSwiped = swipeRow(row, face, act, item);
   row.addEventListener('click', () => {
-    if (wasHeld()) return;           // the tap that ended the hold is not a tap on the paper
+    if (wasHeld() || wasSwiped()) return;   // what ended a hold or a swipe is not a tap on the paper
     // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
     state.at = $('list').scrollTop;
     state.drawn = state.shown;

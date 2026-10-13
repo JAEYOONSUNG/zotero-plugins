@@ -26,8 +26,11 @@ The key stays on the phone (localStorage and IndexedDB). Nothing is sent anywher
 still reaches the end. The papers are one grouped card with hairline separators, under headings
 that say where you are — 오늘, 이번 달, 2024년 11월, the year, the stars, the letter — and the
 headings follow whichever of the six orders the list is in (최근 추가, 최근 본, 최근 변경, 연도,
-별점, 제목; a menu under the button beside the title). Holding a finger on a paper marks it
-안 읽음 · 읽는 중 · 완료 without opening it, and the mark shows in the margin beside the title.
+별점, 제목; a menu under the button beside the title). Pushing a paper aside marks it — left is
+완료, right is 안 읽음, and a paper already marked that way is cleared, so the same swipe undoes
+itself; what the release will do is drawn behind the row while the finger is still on it. Holding
+a finger on one instead opens all three marks, 읽는 중 among them, and the mark shows in the
+margin beside the title.
 Browse by collection (a collection means everything filed under it) or by tag; what is being
 looked at shows as chips that take themselves off. Search covers the title, authors, journal,
 year, DOI, tags and the abstract, folds accents so Muller finds Müller, and every word has to

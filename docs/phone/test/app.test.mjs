@@ -1315,6 +1315,84 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper did not open behind it');
 });
 
+test('a paper pushed aside is marked, and the same swipe pushed again clears it', async () => {
+  const server = fakeServer();
+  const open = await boot({server});
+  await open.settle();
+  const row = open.document.querySelectorAll('#list .row')[1];     // PET depolymerase, 안 읽음
+  const face = row.querySelector('.face'), act = row.querySelector('.act');
+  assert.ok(face && act, 'a paper carries a face that slides and something behind it');
+  const touch = (type, x, y = 200) => {
+    const event = new open.window.Event(type);
+    event.touches = [{clientX: x, clientY: y}];
+    row.dispatchEvent(event);
+  };
+  const swipe = async (to, {lift = true} = {}) => {
+    touch('touchstart', 200);
+    touch('touchmove', to, 204);
+    if (lift) { row.dispatchEvent(new open.window.Event('touchend')); await open.settle(); }
+  };
+
+  // A finger that goes down the screen is a scroll: the row must not budge.
+  touch('touchstart', 200);
+  touch('touchmove', 192, 280);
+  assert.equal(face.style.transform, '', 'a scroll never drags a row sideways');
+  row.dispatchEvent(new open.window.Event('touchend'));
+
+  // Far enough left, and what the release will do is drawn behind the row before it happens.
+  await swipe(100, {lift: false});
+  assert.ok(act.classList.contains('on') && act.classList.contains('done'), 'what it would do is shown');
+  assert.match(act.textContent, /완료/);
+  assert.match(face.style.transform, /translateX\(-\d+px\)/, 'and the row has followed the finger');
+  row.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle();
+  let write = server.sent.filter(r => r.method === 'PATCH').pop();
+  assert.ok(write, 'the mark was written');
+  assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/done']);
+
+  // Not far enough is not an answer: the row springs back and nothing is sent.
+  const sent = server.sent.filter(r => r.method === 'PATCH').length;
+  const again = open.document.querySelectorAll('#list .row')[1];
+  const nudge = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; again.dispatchEvent(e); };
+  nudge('touchstart', 200); nudge('touchmove', 170);
+  again.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle();
+  assert.equal(server.sent.filter(r => r.method === 'PATCH').length, sent, 'a short push asks nothing');
+  assert.equal(again.querySelector('.face').style.transform, '', 'and the row is back where it was');
+
+  // The other way marks it 안 읽음 — and a paper already 안 읽음 is cleared by it, so the gesture
+  // undoes itself rather than needing a second one to learn.
+  const third = open.document.querySelectorAll('#list .row')[1];
+  const over = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; third.dispatchEvent(e); };
+  over('touchstart', 100); over('touchmove', 200);
+  const plan = third.querySelector('.act');
+  assert.ok(plan.classList.contains('unread'), '안 읽음 on the way back');
+  third.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle();
+  write = server.sent.filter(r => r.method === 'PATCH').pop();
+  assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/unread']);
+  const fourth = open.document.querySelectorAll('#list .row')[1];
+  const back = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; fourth.dispatchEvent(e); };
+  back('touchstart', 100); back('touchmove', 200);
+  assert.ok(fourth.querySelector('.act').classList.contains('clear'), 'pushed the same way again, it clears');
+  fourth.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle();
+  write = server.sent.filter(r => r.method === 'PATCH').pop();
+  assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), []);
+});
+
+test('the swipe that marked a paper does not also open it', async () => {
+  const open = await boot();
+  await open.settle();
+  const row = open.document.querySelectorAll('#list .row')[1];
+  const touch = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 200}]; row.dispatchEvent(e); };
+  touch('touchstart', 200); touch('touchmove', 100);
+  row.dispatchEvent(new open.window.Event('touchend'));
+  row.dispatchEvent(new open.window.Event('click'));
+  await open.settle(6);
+  assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true, 'the paper stayed shut');
+});
+
 test('a change made far down the library leaves the reader where they were', async () => {
   const server = fakeServer({items: MANY});
   const open = await boot({server});

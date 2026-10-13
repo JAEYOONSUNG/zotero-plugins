@@ -134,6 +134,24 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
        padding:10px 14px 11px 18px; transition:background 90ms;
        /* A held finger asks this app a question; it must not also summon the phone's own callout. */
        -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+/* A paper carries its own face, which slides aside under a finger; the padding goes with it, and
+   the row keeps only the clip that hides what is behind. Vertical scrolling stays the phone's,
+   sideways is ours. */
+.row.paper { padding:0; overflow:hidden; touch-action:pan-y; }
+.face { position:relative; display:block; background:var(--card); padding:10px 14px 11px 18px;
+        transition:transform 260ms cubic-bezier(.32,.72,0,1); }
+.row.swiping .face { transition:none; }
+.row.paper:active .face { background:var(--press); }
+.act { display:none; }
+.act.on { position:absolute; inset:0; display:flex; align-items:center; gap:7px; padding:0 20px;
+          font-size:13px; font-weight:650; color:#fff; }
+.act.left { justify-content:flex-end; }
+.act .mark { display:flex; }
+.act svg { width:19px; height:19px; stroke-width:2.4; }
+.act.done { background:var(--good); }
+.act.unread { background:var(--link); }
+.act.clear { background:var(--faint); }
+@media (prefers-reduced-motion:reduce) { .face { transition:none } }
 .row:first-of-type, .group + .row { border-radius:var(--radius) var(--radius) 0 0; }
 .row:last-of-type { border-radius:0 0 var(--radius) var(--radius); box-shadow:var(--card-shadow); }
 .row:only-of-type, .group + .row:last-of-type { border-radius:var(--radius); }
@@ -145,6 +163,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
                       background:var(--line); transform:scaleY(.5); transform-origin:top; }
 .row:active { background:var(--press); }
 .row:active::before, .row:active + .row::before { background:transparent; }
+.row.paper:active { background:transparent; }
 .row h2 { margin:0; font-size:15px; font-weight:600; line-height:1.34; letter-spacing:-.012em;
           display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .row .meta { margin:3px 0 0; font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis;
