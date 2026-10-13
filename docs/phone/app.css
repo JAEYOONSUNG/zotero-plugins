@@ -291,12 +291,25 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
    would be shouting beside it. */
 .card h3 { margin:0; font-size:13px; font-weight:700; letter-spacing:-.01em; color:var(--muted); }
 .card p { margin:0; font-size:14px; }
-/* The paper's own name, at the top of its screen, is the one thing set in display size. */
-#detail-body .card:first-child h3 { font-size:20px; font-weight:700; letter-spacing:-.02em;
-                                    text-transform:none; color:var(--ink); line-height:1.3; }
-.kv { display:flex; gap:10px; font-size:13px; line-height:1.5; }
-.kv b { flex:none; width:58px; color:var(--faint); font-weight:500; }
-.kv span { flex:1; min-width:0; overflow-wrap:anywhere; }
+/* The top of a paper reads like its title page, not like a form: the name, then who wrote it,
+   then where it came out, each quieter than the last. */
+.hero { gap:7px; }
+.hero .name { margin:0; font-size:19px; font-weight:750; line-height:1.32; letter-spacing:-.022em; }
+.hero .by { font-size:14px; line-height:1.45; color:var(--ink); }
+.hero .where { font-size:13px; color:var(--muted); }
+.hero .doi { font-size:12px; color:var(--faint); overflow-wrap:anywhere; }
+.hero .tags, .hero .pills { margin-top:3px; }
+
+/* The small things a card offers: read as a row of taps rather than three full-height buttons. */
+.pills { display:flex; flex-wrap:wrap; gap:6px; }
+.pill { display:inline-flex; align-items:center; height:32px; padding:0 13px; border-radius:999px;
+        background:var(--track); font-size:13px; font-weight:600; color:var(--ink); }
+.pill:active { background:var(--track-hover); }
+
+.notes { display:flex; flex-direction:column; align-items:stretch; gap:10px; }
+.note-box { width:100%; border-radius:12px; border:1px solid var(--line); background:var(--canvas);
+            color:var(--ink); padding:10px; font:inherit; font-size:15px; resize:vertical; }
+.note-box:focus { outline:none; border-color:var(--link); }
 .rate-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .rate { display:flex; gap:2px; margin-inline-end:-6px; }
 .rate button { width:36px; height:36px; border-radius:999px; font-size:21px; color:var(--track-hover); }
@@ -325,6 +338,7 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
                               height:48px; border-radius:12px; background:var(--track); font-weight:650;
                               transition:background 90ms, transform 90ms; }
 .listen-start { background:var(--sel); box-shadow:var(--sel-shadow); }
+.listen-start + .paper-start { margin-top:8px; }
 .listen-start:active, .paper-start:active { background:var(--track-hover); transform:scale(.99); }
 .listen-start .play-mark svg { fill:currentColor; stroke:none; width:19px; height:19px; }
 .paper-start svg { width:19px; height:19px; }

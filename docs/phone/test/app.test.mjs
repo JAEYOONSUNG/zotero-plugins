@@ -1221,6 +1221,30 @@ test('a PDF pushed sideways is being read, not dismissed', async () => {
   assert.equal(detail.hasAttribute('hidden'), false, 'and the paper is still open');
 });
 
+test('the top of a paper reads like its title page', async () => {
+  const open = await boot();
+  await open.settle();
+  open.document.querySelectorAll('#list .row.paper')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const hero = open.document.querySelector('#detail-body .hero');
+  assert.ok(hero, 'the paper opens with a title page');
+  assert.match(hero.querySelector('.name').textContent, /Retron Septu/, 'its own name first');
+  assert.equal(hero.querySelector('.by').textContent, 'Seo, H · Kim, K', 'then who wrote it');
+  assert.equal(hero.querySelector('.where').textContent, 'Science · 2025', 'then where it came out');
+  assert.match(hero.querySelector('.doi').textContent, /^doi:10\.1126\//, 'and what it is called');
+  // Not a form: no label stands against any of those lines.
+  assert.equal(hero.querySelector('.kv'), null, 'nothing is labelled like a form');
+  assert.equal(hero.querySelector('b'), null);
+  // What it is filed under, and the taps a paper offers, read as chips rather than wide buttons.
+  assert.deepEqual([...hero.querySelectorAll('.tags .chip')].map(c => c.textContent), ['Phage defence']);
+  assert.deepEqual([...hero.querySelectorAll('.pills > *')].map(c => c.textContent),
+    ['DOI 열기', '링크 복사', '인용 복사']);
+  assert.equal(hero.querySelector('.pills .out').getAttribute('href'), 'https://doi.org/10.1126/science.abc1234');
+  // Nothing on this screen is styled by hand in the markup.
+  assert.equal([...open.document.querySelectorAll('#detail-body [style]')]
+    .filter(node => !node.matches('.heard i, .swatch')).length, 0, 'and nothing carries its own style');
+});
+
 /* ---------- the look ---------- */
 /* The status used to be a labelled dot in the row's third line, and `.dot` was later given a
    second meaning in the settings screen — nine pixels square with a grey fill — which turned every

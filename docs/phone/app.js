@@ -1120,33 +1120,36 @@ async function openDetail(key) {
   body.scrollTop = 0;
   followScroll(body, $('detail').querySelector('.top'));
 
-  const head = el('section', {class: 'card'}, body);
-  el('h3', {text: clean(item.data.title) || '(제목 없음)'}, head);
+  /* The top of a paper is read like a title page — the name, who wrote it, where it came out —
+     rather than as a form with a label against every line. */
+  const head = el('section', {class: 'card hero'}, body);
+  el('h2', {class: 'name', text: clean(item.data.title) || '(제목 없음)'}, head);
+  const by = (item.data.creators || []).filter(c => c.creatorType === 'author')
+    .map(c => clean(`${c.lastName || c.name || ''}${c.firstName ? `, ${c.firstName}` : ''}`)).filter(Boolean);
+  if (by.length) el('p', {class: 'by', text: by.join(' · ')}, head);
+  const where = [venueOf(item), yearOf(item)].filter(Boolean).join(' · ');
+  if (where) el('p', {class: 'where', text: where}, head);
+  const doi = clean(item.data.DOI), link = clean(item.data.url);
+  if (doi) el('p', {class: 'doi', text: `doi:${doi}`}, head);
   const inside = (item.data.collections || [])
     .map(c => state.collections.find(x => x.key === c)?.data?.name)
-    .filter(Boolean).join(' · ');
-  for (const [label, value] of [
-    ['저자', (item.data.creators || []).filter(c => c.creatorType === 'author').map(c => clean(`${c.lastName || c.name || ''}${c.firstName ? `, ${c.firstName}` : ''}`)).join(' · ')],
-    ['연도', yearOf(item)], ['저널', venueOf(item)], ['DOI', clean(item.data.DOI)], ['컬렉션', inside]
-  ]) {
-    if (!value) continue;
-    const row = el('div', {class: 'kv'}, head);
-    el('b', {text: label}, row);
-    el('span', {text: value}, row);
+    .filter(Boolean);
+  if (inside.length) {
+    const filed = el('div', {class: 'tags'}, head);
+    for (const name of inside) el('span', {class: 'chip', text: name}, filed);
   }
-  // Out to the publisher, for the things only the real page has.
-  const doi = clean(item.data.DOI), link = clean(item.data.url);
+  // Out to the publisher, for the things only the real page has, and the two kinds of copy.
+  const out = el('div', {class: 'pills'}, head);
   if (doi || link) {
-    const out = el('div', {class: 'actions'}, head);
     const href = doi ? `https://doi.org/${encodeURI(doi)}` : link;
-    el('a', {class: 'secondary out', href, target: '_blank', rel: 'noopener', text: doi ? 'DOI 열기' : '원문 열기'}, out);
-    const copy = el('button', {class: 'secondary', type: 'button', text: '링크 복사'}, out);
+    el('a', {class: 'pill out', href, target: '_blank', rel: 'noopener', text: doi ? 'DOI 열기' : '원문 열기'}, out);
+    const copy = el('button', {class: 'pill', type: 'button', text: '링크 복사'}, out);
     copy.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(href); toast('복사했습니다'); }
       catch (_) { toast('복사하지 못했습니다'); }
     });
   }
-  const cite = el('button', {class: 'link-btn', type: 'button', text: '인용 복사'}, head);
+  const cite = el('button', {class: 'pill', type: 'button', text: '인용 복사'}, out);
   cite.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(citationOf(item)); toast('인용을 복사했습니다'); }
     catch (_) { toast('복사하지 못했습니다'); }
@@ -1158,7 +1161,7 @@ async function openDetail(key) {
   el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, listenButton);
   el('span', {text: Number(localStorage.getItem(KEYS.at + key)) > 0 ? '본문 이어 듣기' : '본문 듣기'}, listenButton);
   listenButton.addEventListener('click', () => openListen(state.items.find(x => x.key === key) || item));
-  const paperButton = el('button', {type: 'button', class: 'paper-start', style: 'margin-top:8px'}, listenCard);
+  const paperButton = el('button', {type: 'button', class: 'paper-start'}, listenCard);
   el('span', {class: 'play-mark', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h4"/></svg>'}, paperButton);
   el('span', {text: 'PDF 보기'}, paperButton);
   paperButton.addEventListener('click', () => openPaper(state.items.find(x => x.key === key) || item));
@@ -1223,9 +1226,9 @@ async function openDetail(key) {
   // Notes and annotations live as child items; they are fetched only when a paper is opened.
   const childCard = el('section', {class: 'card'}, body);
   el('h3', {text: '메모'}, childCard);
-  const childBody = el('div', {class: 'tags', style: 'flex-direction:column;align-items:stretch;gap:10px'}, childCard);
+  const childBody = el('div', {class: 'notes'}, childCard);
   el('p', {class: 'muted small', text: '불러오는 중…'}, childBody);
-  const noteBox = el('textarea', {rows: '3', placeholder: '새 메모', style: 'width:100%;border-radius:12px;border:1px solid var(--line);background:var(--canvas);color:var(--ink);padding:10px;font:inherit'}, childCard);
+  const noteBox = el('textarea', {class: 'note-box', rows: '3', placeholder: '새 메모'}, childCard);
   const saveRow = el('div', {class: 'actions'}, childCard);
   const save = el('button', {class: 'secondary', type: 'button', text: '메모 저장'}, saveRow);
   save.addEventListener('click', async () => {
