@@ -604,6 +604,9 @@ test('the follow-along mark is one band per line, pulled onto whole pixels, and 
  assert.equal(bands[0].h,bands[1].h,'both bands take the line height, so the stack is even');
  assert.ok(bands[0].l<=99&&bands[0].r>=501,'the band has a little air around the glyphs');
  assert.ok(bands.every(b=>Number.isInteger(b.l)&&Number.isInteger(b.t)),'whole pixels');
+ // The band sits a little below the glyph box, because a font box has more air above the capitals
+ // than below the baseline and the highlight otherwise rides high on the words.
+ assert.ok(bands[0].t>100&&bands[0].t<=102,`the first band starts just under the glyphs, not at ${bands[0].t}`);
 
  // A sentence that carries on in the next column: the gutter must not be bridged.
  const twoColumns=ReaderAssist.mergeBands([pct(60,200,240,16),pct(520,200,240,16)],view);

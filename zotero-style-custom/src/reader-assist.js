@@ -136,6 +136,12 @@
    const h=band.b-band.t;
    if(median>0&&Math.abs(h-median)<=median*0.35){const mid=(band.t+band.b)/2;band.t=mid-median/2;band.b=mid+median/2;}
   }
+  /* A glyph's rectangle is its font box, and a font box has more air over the capitals than under the
+     baseline, so a band drawn straight on it sits high on the words (the reader, 2026-10-13: "형광위치
+     살짝 아래로 내려야될거같은데"). The whole band is moved down a fourteenth of a line, which puts the
+     text in the middle of its own highlight without changing how tall the band is. */
+  const DROP=0.07;
+  for(const band of out){const h=band.b-band.t;band.t+=h*DROP;band.b+=h*DROP;}
   // Edges a hair apart become the same edge, and the band is given a little air around the glyphs.
   const SNAP=2.5,PAD=1.5;
   for(const side of ['l','r']){
