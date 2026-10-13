@@ -76,7 +76,8 @@ because the server may have taken the note even though the answer never arrived.
 
 It is meant to feel like an app on the phone rather than a page in a browser: a grouped list on a
 recessed canvas, hairline separators inset to where the title starts, a large title that shrinks
-into the bar as the library is scrolled, a toolbar along the bottom rather than a strip floating
+into the bar as the library is scrolled — taking the search with it, since a tap anywhere on
+that bar scrolls back to the top and brings it out again — a toolbar along the bottom rather than a strip floating
 over the last row, and screens that come in from the right and are pulled back off by a finger
 from the left edge — iOS keeps its own back gesture for Safari, so the home-screen app carries
 one of its own. The chosen thing is a raised white

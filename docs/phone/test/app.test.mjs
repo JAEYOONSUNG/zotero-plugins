@@ -1267,6 +1267,25 @@ test('every class the app asks for is one the stylesheet draws', () => {
   assert.deepEqual(missing, [], `these classes are used but never styled: ${missing.join(', ')}`);
 });
 
+test('the search folds away with the big title, but never while it is being used', () => {
+  const css = read('app.css');
+  assert.match(css, /\.top\.shrunk \.top-row \{[^}]*max-height:0/, 'scrolled, the search row folds');
+  /* The gap the header puts between its rows has to be taken back with it, or folding the row
+     away leaves its share of the gap behind as a hole. */
+  const gap = /\.top \{[^}]*gap:(\d+)px/.exec(css);
+  const pull = /\.top\.shrunk \.top-row \{[^}]*margin-bottom:-(\d+)px/.exec(css);
+  assert.ok(gap && pull, 'both are set');
+  assert.equal(pull[1], gap[1], 'and the row takes its own gap with it');
+  /* A field being typed into must not fold away under the finger using it. The two guards are
+     rules of their own: a browser that does not know :has() would otherwise throw away the fold
+     itself and leave the header as tall as it ever was. */
+  for (const guard of [':has(#q:focus)', ':has(#q:not(:placeholder-shown))']) {
+    const rule = new RegExp(`\\.top\\.shrunk${guard.replace(/[()#:*+?^$\\.\[\]{}|\/-]/g, '\\$&')} \\.top-row \\{[^}]*max-height:40px`);
+    assert.match(css, rule, `the fold is called off by ${guard}`);
+  }
+  assert.ok(!/\.top-row[^{]*,[^{]*:has\(/.test(css), 'and :has() never stands in a list with a plain selector');
+});
+
 test('a status is a mark in the margin, and the three of them are told apart by colour', () => {
   const css = read('app.css');
   for (const status of ['unread', 'reading', 'done']) {
@@ -1652,6 +1671,25 @@ test('the landmarks are only offered where they would mean something', async () 
   const steps = [...rail.querySelectorAll('.step')];
   assert.ok(steps.length >= 6 && steps.length <= 24, `between six and twenty-four landmarks, not ${steps.length}`);
   for (const step of steps) assert.match(step.textContent, /^\d{2}$/, 'a year is its last two digits');
+});
+
+test('the bar at the top is the way back to the top of the library', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  let at = 1800;
+  Object.defineProperty(list, 'scrollTop', {get: () => at, set: v => { at = Number(v) || 0; }, configurable: true});
+  const tap = on => on.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+
+  // The count beside the name is part of the bar, not a thing of its own.
+  tap(open.document.getElementById('count'));
+  assert.equal(list.scrollTop, 0, 'a tap anywhere on the bar goes back to the top');
+
+  // The two buttons standing in it are still buttons.
+  at = 1800;
+  tap(open.document.getElementById('btn-sort'));
+  assert.equal(list.scrollTop, 1800, 'the sort button is not the title');
+  assert.ok(open.document.querySelector('.menu.float'), 'it opens the order instead');
 });
 
 test('the refresh button says, by turning, that something is happening', async () => {

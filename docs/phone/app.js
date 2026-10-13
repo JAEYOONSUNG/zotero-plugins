@@ -2274,8 +2274,12 @@ function wire() {
   /* Everything that is not reading itself is behind one button, so the bar over a paper is the
      paper's name and the page it is on. */
   $('btn-sort').addEventListener('click', openSortMenu);
-  // The name of the app is the way back to the top of it, as a title bar is on this phone.
-  document.querySelector('#main .big').addEventListener('click', () => {
+  /* The bar at the top is the way back to the top of the library, as a title bar is on this
+     phone — all of it but the two buttons standing in it, so it is a target a thumb can hit.
+     Which matters: the search folds away as the library is scrolled, and this is what unfolds it. */
+  document.querySelector('#main .title-row').addEventListener('click', event => {
+    const on = event.target;
+    if (on && typeof on.closest === 'function' && on.closest('button')) return;
     const list = $('list');
     if (typeof list.scrollTo === 'function') list.scrollTo({top: 0, behavior: 'smooth'});
     else list.scrollTop = 0;

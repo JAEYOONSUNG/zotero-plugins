@@ -81,7 +81,18 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .top.shrunk .big-sub { opacity:0; }
 @media (prefers-reduced-motion:reduce) { .big { transition:none } }
 
-.top-row { display:flex; align-items:center; gap:8px; }
+/* Scrolled, the search folds away with the big title: it is the one row of chrome a reader is
+   not using, and a phone gives that space back to the list. Tapping the name scrolls to the top,
+   which brings it out again — and typing into it always does, so the field cannot fold away
+   under a finger that is using it. */
+.top-row { display:flex; align-items:center; gap:8px; max-height:40px; overflow:hidden;
+           transition:max-height var(--slide), opacity 140ms, margin-bottom var(--slide); }
+.top.shrunk .top-row { max-height:0; opacity:0; margin-bottom:-9px; pointer-events:none; }
+/* Unless something is being searched for, in which case it stays whatever the list is doing.
+   Kept in rules of their own: a browser without :has() would throw away the rules beside them. */
+.top.shrunk:has(#q:focus) .top-row { max-height:40px; opacity:1; margin-bottom:0; pointer-events:auto; }
+.top.shrunk:has(#q:not(:placeholder-shown)) .top-row { max-height:40px; opacity:1; margin-bottom:0; pointer-events:auto; }
+@media (prefers-reduced-motion:reduce) { .top-row { transition:none } }
 .icon-btn { width:36px; height:36px; display:grid; place-items:center; border-radius:999px; color:var(--ink); flex:none;
             transition:background 120ms, opacity 120ms; }
 .icon-btn:active { background:var(--track); opacity:.6; }
