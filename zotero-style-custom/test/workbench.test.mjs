@@ -3123,8 +3123,12 @@ test('the comparison table reads in words and its titles open the paper',async()
 test('reading history opens on the most recently read, thirty to a page, and can sort by time',async()=>{
  const f=fixture();
  const extra=[];
+ /* Dated from today rather than from a fixed September: 이어 읽기 is "read in the last fortnight",
+    so a fixture written against hard-coded dates passes only until the calendar walks past them.
+    The last three were read this week; everything else is well outside the fortnight. */
+ const DAY=864e5,readAt=n=>new Date(Date.now()-(n>=42?45-n:20+(44-n))*DAY).toISOString();
  for(let n=10;n<45;n++){extra.push({...f.papers[0],id:String(n),key:'K'+n,title:'Read '+n});f.refs.set(n,{id:n});
-  f.runtime.cache.items[n]={seconds:n*60,lastRead:`2026-09-${String(n-9).padStart(2,'0')}T10:00:00Z`};}
+  f.runtime.cache.items[n]={seconds:n*60,lastRead:readAt(n)};}
  // Paper 44 was read last; paper 10 was read longest ago but ranks by time below none.
  f.runtime.cache.items[10].seconds=99999;
  f.library.snapshot=async()=>[...f.papers,...extra];
