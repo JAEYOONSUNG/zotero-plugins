@@ -751,6 +751,55 @@ test('pressing play speaks the first sentence without its citation, and the plac
   assert.equal(open.storage.get('np.at.AAA'), '1');
 });
 
+test('what has already been heard is set back, and going back to a sentence undoes that', async () => {
+  const {open} = await openListening();
+  const sents = () => [...open.document.querySelectorAll('#listen .sent')];
+  const said = () => sents().filter(n => n.classList.contains('said')).length;
+  assert.equal(said(), 0, 'nothing has been heard yet');
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  open.speech.start();
+  await open.settle();
+  assert.equal(said(), 0, 'nor while the first one is the one being read');
+  open.speech.finish(); open.speech.start();
+  await open.settle();
+  assert.equal(said(), 1, 'the first has been heard once the second is being read');
+  assert.ok(!sents()[1].classList.contains('said'), 'and the one being read is not');
+
+  // Tapping back to the first sentence takes the mark off everything after it.
+  sents()[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  assert.equal(said(), 0, 'read it again and it has not been heard');
+});
+
+test('a reader who scrolled away from the voice is offered the way back', async () => {
+  const {open} = await openListening();
+  const body = open.document.getElementById('listen-body');
+  const here = open.document.getElementById('listen-here');
+  assert.ok(here, 'the way back is on the screen');
+  assert.equal(here.hidden, true, 'and is not offered while the voice is in view');
+  // A real scroller knows how tall it is and where each line sits; this one is told.
+  body.clientHeight = 500;
+  const sents = [...open.document.querySelectorAll('#listen .sent')];
+  sents.forEach((node, i) => { node.offsetTop = i * 60; });
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  body.scrollTop = 0;
+  body.dispatchEvent(new open.window.Event('scroll'));
+  assert.equal(here.hidden, true, 'the first sentence is in view');
+
+  body.scrollTop = 2000;                       // scrolled a long way past it
+  body.dispatchEvent(new open.window.Event('scroll'));
+  assert.equal(here.hidden, false, 'scrolled away, the way back is offered');
+
+  let went = null;
+  sents[0].scrollIntoView = options => { went = options; };
+  here.dispatchEvent(new open.window.Event('click'));
+  assert.ok(went, 'and taking it goes to the sentence being read');
+  assert.equal(here.hidden, true, 'the offer closes behind it');
+  assert.equal(open.document.querySelector('#listen .to-now'), here, 'it sticks to the bottom of the transcript');
+});
+
 test('the text Zotero indexed is asked for once and then kept on the phone', async () => {
   const {open, server} = await openListening();
   open.document.getElementById('listen-back').dispatchEvent(new open.window.Event('click'));
@@ -1286,6 +1335,36 @@ test('the search folds away with the big title, but never while it is being used
   assert.ok(!/\.top-row[^{]*,[^{]*:has\(/.test(css), 'and :has() never stands in a list with a plain selector');
 });
 
+/* The other way round: a rule for a class nobody asks for any more is a rule nobody will dare
+   touch either, and it was a stale second meaning for one name that broke the list in the first
+   place. The names that are built from a value rather than written out are listed here, because
+   no reading of the source can find them. */
+const FROM_VALUES = [
+  'unread', 'reading', 'done',   // a paper's status, as `flag ${status}`
+  'clear',                       // the push that takes a mark off a paper
+  'left',                        // which way it was pushed
+  'off',                         // the Dropbox light when it is not connected
+  'caption',                     // a sentence that is a figure's caption
+  'underline'                    // what kind of mark was made on the page
+];
+test('every rule in the stylesheet is for a class the app still asks for', () => {
+  const asked = new Set(FROM_VALUES);
+  const text = ['app.js', 'pdfview.js', 'play.js', 'read.js', 'files.js', 'net.js', 'list.js', 'index.html']
+    .map(read).join('\n');
+  const add = value => String(value || '').replace(/\$\{[^}]*\}/g, ' ').split(/[^a-zA-Z0-9-]+/)
+    .forEach(name => { if (/^[a-z][a-z0-9-]*$/.test(name)) asked.add(name); });
+  for (const m of text.matchAll(/class="([^"]*)"/g)) add(m[1]);
+  for (const m of text.matchAll(/class: *'([^']*)'/g)) add(m[1]);
+  for (const m of text.matchAll(/class: *`([^`]*)`/g)) add(m[1]);
+  for (const m of text.matchAll(/classList\.(?:add|remove|toggle|contains)\(([^)]*)\)/g)) add(m[1]);
+  for (const m of text.matchAll(/className *= *[`'"]([^`'"]*)/g)) add(m[1]);
+  for (const m of text.matchAll(/(?:querySelector|querySelectorAll|matches|closest)\('([^']*)'\)/g)) add(m[1]);
+  const styled = new Set();
+  for (const m of read('app.css').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)) styled.add(m[1]);
+  const stale = [...styled].filter(name => !asked.has(name));
+  assert.deepEqual(stale, [], `these are styled but nothing asks for them: ${stale.join(', ')}`);
+});
+
 test('a status is a mark in the margin, and the three of them are told apart by colour', () => {
   const css = read('app.css');
   for (const status of ['unread', 'reading', 'done']) {
@@ -1690,6 +1769,88 @@ test('the bar at the top is the way back to the top of the library', async () =>
   tap(open.document.getElementById('btn-sort'));
   assert.equal(list.scrollTop, 1800, 'the sort button is not the title');
   assert.ok(open.document.querySelector('.menu.float'), 'it opens the order instead');
+});
+
+test('a library narrowed to nothing offers the way back out of it', async () => {
+  const open = await boot();
+  await open.settle();
+  const box = open.document.getElementById('q');
+  box.value = 'zzzz nothing matches this';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  const empty = open.document.querySelector('#list .empty');
+  assert.ok(empty, 'the screen says so');
+  assert.ok(empty.querySelector('.empty-mark svg'), 'with a mark rather than a bare line of text');
+  assert.match(empty.textContent, /찾는 논문이 없습니다/);
+  const out = empty.querySelector('button');
+  assert.equal(out.textContent, '검색과 필터 지우기', 'and a way out');
+  out.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(box.value, '', 'the search is cleared');
+  assert.equal(open.document.querySelectorAll('#list .row.paper').length, 3, 'and the library is back');
+
+  // A filter can empty it too, and the same button clears that.
+  const done = [...open.document.querySelectorAll('#filters button')].find(b => b.textContent === '완료');
+  done.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  // One paper is 완료, so narrow further until nothing is left.
+  box.value = 'zzzz';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  open.document.querySelector('#list .empty button').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.document.querySelectorAll('#list .row.paper').length, 3, 'both are cleared at once');
+  assert.equal(open.document.querySelector('#filters button[aria-pressed="true"]').textContent, '전체',
+    'and the filter row says so');
+});
+
+test('pulling the library down asks for it again, and the ring turns until it has arrived', async () => {
+  const server = fakeServer();
+  const open = await boot({server});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  const mark = open.document.querySelector('#main .pull');
+  assert.ok(mark, 'the ring sits above the list, so it pushes rather than covers');
+  const touch = (type, y) => {
+    const event = new open.window.Event(type);
+    event.touches = [{clientX: 100, clientY: y}];
+    list.dispatchEvent(event);
+  };
+  list.scrollTop = 0;
+  server.sent.length = 0;
+
+  // Pulled a little: it shows, but letting go asks for nothing.
+  touch('touchstart', 100);
+  touch('touchmove', 140);
+  assert.equal(mark.classList.contains('on'), true, 'it follows the finger');
+  assert.equal(mark.classList.contains('pulling'), true, 'exactly, with no easing in the way');
+  assert.equal(mark.classList.contains('ready'), false, 'and does not yet say it would go');
+  list.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle(4);
+  assert.equal(server.sent.length, 0, 'a short pull asks for nothing');
+  assert.equal(mark.style.getPropertyValue('--pull'), '0px', 'and shuts again');
+
+  // Pulled far enough, and it is full round by the time letting go would mean it.
+  touch('touchstart', 100);
+  touch('touchmove', 240);
+  assert.equal(mark.classList.contains('ready'), true, 'it says letting go would go');
+  assert.equal(mark.style.getPropertyValue('--turn'), '290deg', 'the ring is full');
+  list.dispatchEvent(new open.window.Event('touchend'));
+  assert.equal(mark.classList.contains('busy'), true, 'and it keeps turning where it is');
+  assert.equal(mark.style.getPropertyValue('--pull'), '44px', 'held open while it does');
+  await open.settle();
+  assert.ok(server.sent.some(r => /\/items\?/.test(r.path)), 'the library was asked for again');
+  assert.equal(mark.classList.contains('busy'), false, 'and it stops once the library has arrived');
+  assert.equal(mark.style.getPropertyValue('--pull'), '0px');
+
+  // A list already scrolled is being read, not refreshed.
+  list.scrollTop = 300;
+  server.sent.length = 0;
+  touch('touchstart', 100);
+  touch('touchmove', 240);
+  list.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle(4);
+  assert.equal(server.sent.length, 0, 'the gesture belongs to the top of the list only');
 });
 
 test('the refresh button says, by turning, that something is happening', async () => {

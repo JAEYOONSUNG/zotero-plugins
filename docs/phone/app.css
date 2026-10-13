@@ -245,7 +245,13 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
              font-size:15px; font-weight:700; color:var(--ink); white-space:nowrap; letter-spacing:-.01em; }
 .rail:not(.held) .now { display:none; }
 
-.empty { margin:56px auto 0; max-width:280px; text-align:center; color:var(--muted); font-size:14px; line-height:1.6; }
+/* Nothing to show is still a screen: a mark, a line that says what happened, and the way out. */
+.empty { margin:56px auto 0; max-width:280px; display:flex; flex-direction:column; align-items:center;
+         gap:12px; text-align:center; color:var(--muted); font-size:14px; line-height:1.6; }
+.empty p { margin:0; }
+.empty-mark { display:grid; place-items:center; width:54px; height:54px; border-radius:999px;
+              background:var(--track); color:var(--faint); }
+.empty-mark svg { width:25px; height:25px; stroke-width:1.7; }
 .more { height:1px; }
 /* while the first few thousand are arriving */
 .row.ghost { pointer-events:none; padding-top:13px; padding-bottom:14px; }
@@ -256,11 +262,20 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .row.ghost .line.wide { width:88%; height:14px; }
 @keyframes breathe { 0%,100% { opacity:.4 } 50% { opacity:.85 } }
 @media (prefers-reduced-motion:reduce) { .row.ghost .line { animation:none } }
+/* A ring that fills as the list is pulled and turns while the library is on its way, rather than
+   a line of words: what this phone's own lists do. It eases back shut, but follows the finger
+   exactly while the finger is down. */
 .pull { height:var(--pull,0); flex:none; overflow:hidden; display:grid; place-items:center;
-        pointer-events:none; opacity:0; transition:opacity 140ms; }
+        pointer-events:none; opacity:0;
+        transition:opacity 140ms, height 240ms cubic-bezier(.32,.72,0,1); }
+.pull.pulling { transition:opacity 140ms; }
 .pull.on { opacity:1; }
-.pull::after { content:'당겨서 새로 고침'; font-size:11px; color:var(--muted); }
-.pull.ready::after { content:'놓으면 새로 고침'; color:var(--ink); font-weight:650; }
+.pull::after { content:''; box-sizing:border-box; width:19px; height:19px; border-radius:999px;
+               border:2px solid var(--track-hover); border-top-color:var(--muted);
+               transform:rotate(var(--turn,0deg)); }
+.pull.ready::after { border-top-color:var(--ink); }
+.pull.busy::after { animation:turn .9s linear infinite; }
+@media (prefers-reduced-motion:reduce) { .pull { transition:none } .pull.busy::after { animation:none } }
 
 /* ---------- the toolbar along the bottom ---------- */
 .tabbar { position:relative; z-index:3; flex:none; display:flex; align-items:center; gap:6px;
@@ -389,14 +404,27 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 /* The transcript is the paper itself: one sentence a line, the one being read raised onto a white
    card like the chosen pill, so the eye finds it without the page jumping about. */
 .transcript { padding-bottom:calc(var(--bottom) + 240px); }
-.transcript .sec { margin:20px 0 6px; font-size:12px; font-weight:700; letter-spacing:.05em;
-                   text-transform:uppercase; color:var(--faint); }
+/* Not set in capitals, for the reason the cards are not: it would be shouting the one English
+   word on a screen of Korean. */
+.transcript .sec { margin:20px 0 6px; font-size:13px; font-weight:700; letter-spacing:-.01em;
+                   color:var(--muted); }
 .transcript .sent { display:block; width:100%; text-align:start; padding:7px 12px; border-radius:10px;
                     font-size:16px; line-height:1.62; color:var(--ink);
                     transition:background var(--slide), box-shadow var(--slide); }
-.transcript .sent[aria-current="true"] { background:var(--sel); box-shadow:var(--sel-shadow); font-weight:600; }
+/* Heard already, and set back for it — but never the one being read, which comes after this rule
+   so that it wins the colour back at the same weight of selector. */
+.transcript .sent.said { color:var(--faint); }
+.transcript .sent[aria-current="true"] { background:var(--sel); box-shadow:var(--sel-shadow);
+                                         font-weight:600; color:var(--ink); }
 .transcript .sent.caption { color:var(--muted); font-size:14px; }
 .transcript .sent:active { background:var(--track); }
+/* The way back to the voice, stuck to the bottom of what is being looked at. */
+.to-now { position:sticky; bottom:6px; z-index:2; display:block; width:-webkit-fit-content; width:fit-content;
+          margin:10px auto 0; height:34px; padding:0 16px; border-radius:999px; background:var(--card);
+          box-shadow:0 3px 12px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.06);
+          font-size:13px; font-weight:650; color:var(--link); }
+.to-now[hidden] { display:none; }
+.to-now:active { background:var(--press); }
 
 .player { position:absolute; left:0; right:0; bottom:0; z-index:2;
           padding:8px var(--pad) calc(var(--bottom) + 8px);

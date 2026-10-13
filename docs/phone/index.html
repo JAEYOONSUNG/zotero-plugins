@@ -99,7 +99,10 @@
     <button id="listen-back" class="icon-btn" aria-label="뒤로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <span id="listen-title" class="detail-title"></span>
   </header>
-  <main id="listen-body" class="list transcript" aria-live="off"></main>
+  <main id="listen-body" class="list transcript" aria-live="off">
+    <!-- offered only while the voice is somewhere the reader is not looking -->
+    <button id="listen-here" class="to-now" type="button" hidden>읽는 곳으로</button>
+  </main>
   <footer id="listen-bar" class="player" hidden>
     <div class="player-meta"><span id="listen-where" class="muted small"></span></div>
     <input id="listen-seek" class="seek" type="range" min="0" max="0" value="0" step="1" aria-label="읽는 위치">

@@ -51,7 +51,9 @@ accepted dates, the licence paragraph, the figure captions and the reference lis
 out; words broken across a line are put back together; citations are dropped from what is said
 while the sentence on screen keeps them. The sentence being read is marked, tapping one starts
 there, the parts of a paper can be jumped between, a slider shows the place, and a sleep timer
-stops it after a while or at the end of the part. With the PDF open the page turns itself as the
+stops it after a while or at the end of the part. What has already been heard is set back a shade, so how far
+through a paper the voice is can be seen rather than counted, and a reader who scrolled off to
+look at something is offered the way back to it. With the PDF open the page turns itself as the
 voice moves through — but only while it is playing, so scrolling away leaves you where you are.
 The phone's own voices do the speaking, so it costs nothing. If iOS drops the speech, which it
 does, a watchdog starts the sentence again rather than leaving you looking at one that never ends.
@@ -81,7 +83,9 @@ that bar scrolls back to the top and brings it out again — a toolbar along the
 over the last row, and screens that come in from the right and are pulled back off by a finger
 from the left edge — iOS keeps its own back gesture for Safari, so the home-screen app carries
 one of its own. The chosen thing is a raised white
-pill on a soft grey track, never a solid fill and never a coloured bar down the edge of a row. In
+pill on a soft grey track, never a solid fill and never a coloured bar down the edge of a row. Pulling the library down
+turns a ring that fills as it goes and keeps turning until the library has actually arrived, and
+a list narrowed to nothing offers the button that un-narrows it rather than being a dead end. In
 the dark it is a true black canvas with the cards lifted off it. Every class the app asks for is
 held against what the stylesheet draws, by a test — a status that was styled twice over for two
 different things is exactly what a broken app looks like.

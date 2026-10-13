@@ -483,31 +483,45 @@ export function followScroll(list, top) {
 }
 
 /* Dragging a list that is already at the top, far enough, asks for the library again — the
-   gesture every other list on this phone has. */
+   gesture every other list on this phone has. The ring fills as it is pulled and keeps turning
+   where it is until the library has actually arrived: one that vanished the moment the finger
+   left would be saying the work was done. */
+export const PULL = 62;
 function pullToRefresh(list, run) {
-  let from = null, pulled = 0;
+  let from = null, pulled = 0, busy = false;
   const mark = el('div', {class: 'pull', 'aria-hidden': 'true'});
   list.parentNode.insertBefore(mark, list);   // above the list, so it pushes rather than covers
   const show = distance => {
     pulled = distance;
     mark.style.setProperty('--pull', `${Math.min(70, distance)}px`);
-    mark.classList.toggle('ready', distance > 62);
+    mark.style.setProperty('--turn', `${Math.round(Math.min(1, distance / PULL) * 290)}deg`);
+    mark.classList.toggle('ready', distance > PULL);
     mark.classList.toggle('on', distance > 4);
   };
   list.addEventListener('touchstart', event => {
+    if (busy) { from = null; return; }
     from = list.scrollTop <= 0 && event.touches.length === 1 ? event.touches[0].clientY : null;
+    if (from !== null) mark.classList.add('pulling');     // following a finger, so no easing
     show(0);
   }, {passive: true});
   list.addEventListener('touchmove', event => {
-    if (from === null || list.scrollTop > 0) { show(0); return; }
+    if (from === null || list.scrollTop > 0) { if (!busy) show(0); return; }
     const moved = event.touches[0].clientY - from;
     if (moved > 0) show(moved * 0.5);
   }, {passive: true});
   list.addEventListener('touchend', () => {
-    const go = pulled > 62;
+    const go = pulled > PULL;
     from = null;
-    show(0);
-    if (go) run();
+    mark.classList.remove('pulling');
+    if (!go) { show(0); return; }
+    busy = true;
+    mark.classList.add('busy');
+    show(44);
+    Promise.resolve().then(run).catch(() => {}).then(() => {
+      busy = false;
+      mark.classList.remove('busy');
+      show(0);
+    });
   }, {passive: true});
 }
 
@@ -904,6 +918,17 @@ function drawResume(list) {
   return card;
 }
 
+/* Whatever narrowed the library down to nothing is also the way back out of it. */
+function clearNarrowing() {
+  state.q = ''; state.collection = ''; state.tag = ''; state.status = '';
+  const box = $('q');
+  if (box) box.value = '';
+  state.shown = 0;
+  buildFilters();
+  $('list').scrollTop = 0;
+  render();
+}
+
 /* The list is drawn a screenful at a time. Everything that matches is counted and reachable; what
    is on screen is only what has been scrolled to, so a library of thousands opens at once. */
 let more = null;
@@ -1045,9 +1070,23 @@ function render({keep = false} = {}) {
       }
       el('p', {class: 'empty', text: '라이브러리를 처음 받는 중입니다…'}, list);
     } else {
-      el('p', {class: 'empty', text: state.items.length
-        ? '해당하는 논문이 없습니다. 검색어나 필터를 지워 보세요.'
-        : '아직 받은 논문이 없습니다. 오른쪽 위 새로 고침을 누르세요.'}, list);
+      /* A dead end is a screen with nothing on it and nothing to press: whatever emptied the
+         list is also the way out of it, so the way out is put here. */
+      const narrowed = !!(state.q || state.collection || state.tag || state.status);
+      const empty = el('div', {class: 'empty'}, list);
+      el('span', {class: 'empty-mark', 'aria-hidden': 'true', html: narrowed
+        ? '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h4l1.8 2H19a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 19 18H5.5A1.5 1.5 0 0 1 4 16.5z"/></svg>'}, empty);
+      el('p', {text: narrowed
+        ? (state.items.length ? '찾는 논문이 없습니다.' : '논문이 없습니다.')
+        : '아직 받은 논문이 없습니다.'}, empty);
+      if (narrowed) {
+        const out = el('button', {class: 'pill', type: 'button', text: '검색과 필터 지우기'}, empty);
+        out.addEventListener('click', clearNarrowing);
+      } else {
+        const again = el('button', {class: 'pill', type: 'button', text: '새로 고침'}, empty);
+        again.addEventListener('click', () => sync());
+      }
     }
     state.shown = 0;
     paintRail([]);
@@ -1340,7 +1379,8 @@ async function bodyToRead(item) {
 }
 
 const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
-                sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false};
+                sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false,
+                index: 0, saidTo: 0};
 
 /* Stops reading after a while, or at the end of the part being read, so a paper can be put on at
    night without talking until morning. */
@@ -1436,9 +1476,12 @@ function paintReading(state) {
 
 function paintListen(state) {
   const node = listen.nodes[state.index];
+  listen.index = state.index;
+  paintHeard(state.index);
   for (const other of listen.nodes) if (other && other.getAttribute('aria-current')) other.removeAttribute('aria-current');
   if (!node) return;
   node.setAttribute('aria-current', 'true');
+  offerHere();
   // Chased only when it has gone off screen, and never while the reader is looking somewhere else.
   if (Date.now() - listen.scrolledAt < 6000) return;
   const body = $('listen-body');
@@ -1451,10 +1494,20 @@ function paintListen(state) {
 
 /* A long paper is a couple of thousand sentences. They are built in one fragment and share a
    single listener, rather than carrying a closure each. */
+/* Everything one paper put on the screen, but not the way back to the voice: that belongs to the
+   screen itself, and a screen that threw it away would never offer it again. */
+function clearTranscript() {
+  const body = $('listen-body'), here = $('listen-here');
+  for (const node of [...body.children]) if (node !== here) node.remove();
+  if (here) here.hidden = true;
+  return body;
+}
+
 function renderTranscript(list) {
-  const body = $('listen-body');
-  body.textContent = '';
+  const body = clearTranscript();
+  const here = $('listen-here');
   listen.nodes = [];
+  listen.saidTo = 0;
   const batch = document.createDocumentFragment();
   let section = null;
   list.forEach((unit, index) => {
@@ -1463,7 +1516,30 @@ function renderTranscript(list) {
                                'data-at': String(index), text: unit.text}, batch);
     listen.nodes[index] = node;
   });
-  body.appendChild(batch);
+  if (here) { here.hidden = true; body.insertBefore(batch, here); }   // last, so it sticks to the bottom
+  else body.appendChild(batch);
+}
+
+/* What has already been heard is set back a little, so how far through a paper the voice is can
+   be seen rather than counted. Only the sentences between where it was and where it is now are
+   touched: a paper is thousands of lines and this runs on every one of them. */
+function paintHeard(index) {
+  const nodes = listen.nodes, was = listen.saidTo || 0;
+  if (index > was) for (let i = was; i < index && i < nodes.length; i++) nodes[i]?.classList.add('said');
+  else if (index < was) for (let i = index; i < was && i < nodes.length; i++) nodes[i]?.classList.remove('said');
+  listen.saidTo = index;
+}
+
+/* A reader who scrolled back to look at something has lost the voice. The way back is offered
+   only while it is somewhere they are not looking. */
+function offerHere() {
+  const button = $('listen-here'), body = $('listen-body');
+  if (!button) return;
+  const node = listen.nodes[listen.index];
+  const height = body.clientHeight || 0;
+  if (!node || $('listen').hidden || !height) { button.hidden = true; return; }
+  const top = node.offsetTop || 0, at = body.scrollTop || 0;
+  button.hidden = !(top < at - 20 || top > at + height - 40);
 }
 
 function fillVoiceMenu(lang) {
@@ -1494,8 +1570,7 @@ async function openListen(item) {
   listen.item = item;
   localStorage.setItem(KEYS.last, item.key);   // so the library can offer to carry on
   $('listen-title').textContent = clean(item.data.title) || '논문';
-  const body = $('listen-body');
-  body.textContent = '';
+  const body = clearTranscript();
   $('listen-bar').hidden = true;
   openSheet('listen', leftListen);
   el('p', {class: 'muted small', text: '본문을 가져오는 중…'}, body);
@@ -1504,7 +1579,7 @@ async function openListen(item) {
   try {
     said = await bodyToRead(item);
   } catch (error) {
-    body.textContent = '';
+    clearTranscript();
     const card = el('section', {class: 'card'}, body);
     el('h3', {text: '읽을 본문이 없습니다'}, card);
     el('p', {class: 'muted small', text: error.message}, card);
@@ -2188,7 +2263,17 @@ function wire() {
   $('listen-back').addEventListener('click', () => closeSheet('listen'));
   $('listen-body').addEventListener('scroll', () => {
     if (!listen.chasing) listen.scrolledAt = Date.now();
+    offerHere();
   }, {passive: true});
+  $('listen-here').addEventListener('click', () => {
+    const node = listen.nodes[listen.index];
+    if (!node) return;
+    listen.chasing = true;
+    listen.scrolledAt = 0;                 // the reader asked to follow again
+    try { node.scrollIntoView?.({block: 'center', behavior: 'smooth'}); } catch (_) {}
+    setTimeout(() => { listen.chasing = false; offerHere(); }, 700);
+    $('listen-here').hidden = true;
+  });
   $('listen-body').addEventListener('click', event => {
     const node = event.target && event.target.closest && event.target.closest('.sent');
     if (!node || !listen.player) return;
