@@ -108,7 +108,9 @@ carries one of its own. The chosen thing is a raised white pill on a soft grey t
 solid fill and never a coloured bar down the edge of a row. Pulling the library down turns a ring
 that fills as it goes and keeps turning until the library has actually arrived, and a list
 narrowed to nothing offers the button that un-narrows it rather than being a dead end. In the dark
-it is a true black canvas with the cards lifted off it. Every colour is measured rather than
+it is a true black canvas with the cards lifted off it — and since a shadow says nothing on
+black, everything that is lifted off the page is lifted by one of two tokens, which draw a
+shadow in the light and an edge in the dark. Every colour is measured rather than
 eyeballed: every ink against the paper it is written on, and every word written on top of a fill
 rather than beside it — in the dark those four colours are light tints read as ink on black, so
 what is written on them turns dark, which is the sort of thing only a measurement catches. Every

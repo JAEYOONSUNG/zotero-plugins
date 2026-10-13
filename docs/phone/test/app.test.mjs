@@ -2593,6 +2593,39 @@ const contrast = (a, b) => {
 const inksIn = block => Object.fromEntries([...block.matchAll(/--([a-z-]+):\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/g)]
   .map(m => [m[1], m[2].length === 4 ? '#' + [...m[2].slice(1)].map(c => c + c).join('') : m[2]]));
 
+/* A shadow says nothing on a black canvas: anything lifted off the page needs an edge in the
+   dark instead, which is what the two tokens carry. A rule that spells its own shadow out has
+   forgotten the dark, so the only ones allowed to are the two that sit on a grey of their own. */
+test('anything lifted off the page is lifted by a token, so the dark is not forgotten', () => {
+  const css = read('app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const ownShadow = [];
+  for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const selector = m[1].trim(), body = m[2];
+    if (/^:root|^@/.test(selector) || selector.includes('--')) continue;
+    for (const shadow of body.matchAll(/box-shadow:\s*([^;]+)/g)) {
+      if (!/rgba\(/.test(shadow[1])) continue;
+      ownShadow.push(selector.split('\n').pop().trim());
+    }
+  }
+  assert.deepEqual(ownShadow.sort(), ['.mark-row .swatch', '.pdf-page'].sort(),
+    `these spell out a shadow of their own: ${ownShadow.join(', ')}`);
+  // And both tokens exist in both schemes.
+  for (const [scheme, block] of [
+    ['light', /:root \{([\s\S]*?)\n\}/.exec(css)[1]],
+    ['dark', /@media \(prefers-color-scheme: dark\) \{\n  :root \{([\s\S]*?)\n  \}/.exec(css)[1]]
+  ]) {
+    for (const name of ['lift', 'over']) {
+      assert.match(block, new RegExp(`--${name}:`), `${scheme} says what --${name} is`);
+    }
+  }
+  // In the dark they carry an edge, since a shadow there is invisible.
+  const dark = /@media \(prefers-color-scheme: dark\) \{\n  :root \{([\s\S]*?)\n  \}/.exec(css)[1];
+  for (const name of ['lift', 'over']) {
+    const value = new RegExp(`--${name}:([^;]+)`).exec(dark)[1];
+    assert.match(value, /rgba\(255,255,255/, `--${name} draws an edge in the dark`);
+  }
+});
+
 test('every ink the app writes in can be read on the paper it is written on', () => {
   const css = read('app.css');
   const schemes = {
