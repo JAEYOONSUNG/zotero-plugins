@@ -1014,6 +1014,16 @@ test('one paper after another, so a drive is not a paper and then silence', asyn
   await open.settle(40);
   assert.match($id('listen-title').textContent, /PET depolymerase/, 'the next paper in the library begins');
   assert.equal(open.storage.get('np.lastkind'), 'listen');
+  // It begins at ITS beginning, not wherever the paper before it got to.
+  assert.equal(open.storage.get('np.at.AAA'), String(sents.length - 1), 'the paper that ended is remembered where it ended');
+  assert.equal(open.storage.get('np.at.BBB'), '0', 'and the one that follows begins at its own beginning');
+  // Driving, the screen is not where you find out what started: the paper says its own name first.
+  open.speech.start();
+  await open.settle();
+  assert.match(open.speech.spoken[open.speech.spoken.length - 1], /^다음 논문\. PET depolymerase landscape\. Introduction/);
+  open.speech.finish(); open.speech.start();
+  await open.settle();
+  assert.ok(!/다음 논문/.test(open.speech.spoken[open.speech.spoken.length - 1]), 'and only once');
 });
 
 test('the paper after this one is fetched before it is wanted, so a tunnel does not end the drive', async () => {

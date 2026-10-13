@@ -1859,7 +1859,7 @@ async function bodyToRead(item) {
 
 const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
                 sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false,
-                index: 0, saidTo: 0, hum: null, chaining: false, ahead: '', toldCar: ''};
+                index: 0, saidTo: 0, hum: null, chaining: false, ahead: '', toldCar: '', undoLead: null, leadAt: -1};
 
 /* Stops reading after a while, or at the end of the part being read, so a paper can be put on at
    night without talking until morning. */
@@ -1914,6 +1914,10 @@ function playMark(button, playing) {
    once here. */
 function paintReading(state) {
   const playing = state.status === 'playing';
+  /* The paper this is about, held before anything below can change it: carrying on to the next
+     paper swaps listen.item halfway down this function, and the place reached in this one was
+     then written against the next one's key — which opened it at the end of the paper. */
+  const item = listen.item;
   // The part being read has finished and that is where the reader asked to stop.
   if (listen.sleepSection && state.unit && state.unit.section && state.unit.section !== listen.sleepSection) {
     listen.sleepSection = '';
@@ -1921,11 +1925,9 @@ function paintReading(state) {
     toast('구간이 끝나 멈췄습니다');
     return;
   }
-  // The paper has ended. If the reader asked to carry on, the next one in the library starts
-  // rather than leaving a car silent.
-  if (state.status === 'done') playOn();
+  if (listen.undoLead && state.index !== listen.leadAt) listen.undoLead();
   readAhead(state);
-  carNowPlaying(listen.item, playing);
+  carNowPlaying(item, playing);
   const left = remainingSeconds(listen.list, state.index, state.rate);
   const unit = state.unit;
   /* Where in the paper on one side, how much of it is left on the other — which is where a player
@@ -1938,10 +1940,13 @@ function paintReading(state) {
     : sleepIn ? `잠들기 ${sleepIn}분`
     : listen.sleepSection ? `${listen.sleepSection}까지`
     : `남은 ${Math.max(1, Math.round(left / 60))}분`;
-  if (listen.item) {
-    localStorage.setItem(KEYS.at + listen.item.key, String(state.index));
-    if (state.total > 1) localStorage.setItem(KEYS.pct + listen.item.key, String(Math.round(state.index / (state.total - 1) * 100)));
+  if (item) {
+    localStorage.setItem(KEYS.at + item.key, String(state.index));
+    if (state.total > 1) localStorage.setItem(KEYS.pct + item.key, String(Math.round(state.index / (state.total - 1) * 100)));
   }
+  // The paper has ended, and where it got to is written down: now the next one may begin, rather
+  // than leaving a car silent.
+  if (state.status === 'done') playOn();
   holdScreen(playing);
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
@@ -2180,11 +2185,23 @@ async function playOn() {
   if (!next) { toast('목록의 마지막 논문까지 다 읽었습니다'); return false; }
   listen.chaining = true;
   try {
-    toast(`다음 논문 · ${clean(next.data.title) || '제목 없음'}`);
+    const title = clean(next.data.title) || '제목 없음';
+    toast(`다음 논문 · ${title}`);
     await openListen(next);
-    if (listen.player) listen.player.play();
+    if (listen.player) { announce(title); listen.player.play(); }
   } finally { listen.chaining = false; }
   return true;
+}
+
+/* Driving, the screen is not where you find out what started playing: the paper says its own name
+   before its first sentence, once, and the sentence goes back to being itself afterwards. */
+function announce(title) {
+  const at = listen.player.state().index, unit = listen.list[at];
+  if (!unit) return;
+  const was = unit.lead || '';
+  unit.lead = was ? `다음 논문. ${title}. ${was}` : `다음 논문. ${title}`;
+  listen.leadAt = at;
+  listen.undoLead = () => { unit.lead = was; listen.undoLead = null; };
 }
 
 /* The car's own controls: the steering wheel, the dashboard and the lock screen all talk to a web
