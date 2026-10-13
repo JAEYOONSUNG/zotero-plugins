@@ -37,7 +37,9 @@ behind it and that one paper left lit. The mark shows in the margin beside the t
 that menu is 여러 개 선택: the library turns into a shelf with a circle on each paper, the bar at
 the top counts what has been picked and holds the way out, and the bar at the bottom marks or
 rates all of them at once — one write per paper, each still against the paper as the server has
-it, so nothing is overwritten wholesale.
+it, so nothing is overwritten wholesale. Whatever a mark did, the line that says so carries
+되돌리기 for as long as it is up — and a shelf goes back to what each paper was, not all of them
+to one thing.
 Browse by collection (a collection means everything filed under it) or by tag; what is being
 looked at shows as chips that take themselves off. Whichever of the two a paper was last left in the middle of — the
 voice or the page — is offered back at the top of the library, with the verb and the screen that

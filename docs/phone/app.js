@@ -44,11 +44,25 @@ const el = (tag, attrs = {}, parent) => {
 const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim();
 
 let toastTimer = null;
-function toast(text) {
+/* A line about what just happened, and — where what happened can be taken back — the way to take
+   it back, for as long as the line is up. A shelf of papers marked by one tap is exactly the
+   thing worth being able to undo. */
+export const TOAST = 2600, TOAST_UNDO = 6000;
+function toast(text, {undo = null} = {}) {
   const node = $('toast');
-  node.textContent = text; node.hidden = false;
+  node.textContent = '';
+  el('span', {text}, node);
+  if (undo) {
+    const back = el('button', {class: 'undo', type: 'button', text: '되돌리기'}, node);
+    back.addEventListener('click', () => {
+      node.hidden = true;
+      clearTimeout(toastTimer);
+      Promise.resolve().then(undo).catch(error => toast(error.message));
+    });
+  }
+  node.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { node.hidden = true; }, 2600);
+  toastTimer = setTimeout(() => { node.hidden = true; }, undo ? TOAST_UNDO : TOAST);
 }
 
 /* ---------- the phone's own copy ---------- */
@@ -813,6 +827,21 @@ function paintPicked() {
 async function applyPicked(what, value, said) {
   const keys = [...state.picked];
   if (!keys.length) return;
+  // What each of them was, so the whole shelf can be put back the way it was.
+  const was = new Map();
+  for (const key of keys) {
+    const item = liveItem(key);
+    if (item) was.set(key, what === 'status' ? statusOf(item) : ratingOf(item));
+  }
+  const done = await applyMany(what, value, keys);
+  setPicking(false);
+  toast(`${done.toLocaleString()}편을 ${said}`, {undo: async () => {
+    let back = 0;
+    for (const [key, before] of was) back += await applyMany(what, before, [key]);
+    toast(`${back.toLocaleString()}편을 되돌렸습니다`);
+  }});
+}
+async function applyMany(what, value, keys) {
   let done = 0;
   for (const key of keys) {
     const item = liveItem(key);
@@ -820,8 +849,8 @@ async function applyPicked(what, value, said) {
     try { await (what === 'status' ? setStatus(item, value) : setRating(item, value)); done++; }
     catch (error) { toast(error.message); break; }
   }
-  setPicking(false);
-  toast(`${done.toLocaleString()}편을 ${said}`);
+  if (done) render({keep: true});
+  return done;
 }
 function pickMarkMenu() {
   floatMenu($('pick-mark'), [
@@ -895,9 +924,15 @@ function wireRows(list) {
     ], {chosen: statusOf(item), lift: row});
   };
   const mark = async (item, id, label) => {
+    const was = statusOf(item);
     await setStatus(item, id);
     render({keep: true});
-    toast(id ? `${label}으로 표시` : '표시를 지웠습니다');
+    toast(id ? `${label}으로 표시` : '표시를 지웠습니다', was === id ? {} : {undo: async () => {
+      const live = liveItem(item.key) || item;
+      await setStatus(live, was);
+      render({keep: true});
+      toast(was ? `${STATUS_WORD[was]}으로 되돌렸습니다` : '표시를 지운 것을 되돌렸습니다');
+    }});
   };
 
   list.addEventListener('touchstart', event => {

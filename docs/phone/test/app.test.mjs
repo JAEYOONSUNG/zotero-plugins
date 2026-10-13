@@ -2030,6 +2030,62 @@ test('several papers are picked at once and marked together', async () => {
   assert.equal($id('count').textContent, '3편', 'the count is the library again');
 });
 
+test('a mark can be taken back, one paper or a whole shelf of them', async () => {
+  const server = fakeServer();
+  const open = await boot({server});
+  await open.settle();
+  const toast = open.document.getElementById('toast');
+  const rows = () => [...open.document.querySelectorAll('#list .row.paper')];
+
+  // One paper, pushed aside: the line that says so carries the way back.
+  const row = rows()[0];                       // Retron Septu, 읽는 중
+  const touch = (type, x) => {
+    const event = new open.window.Event(type, {bubbles: true});
+    event.touches = [{clientX: x, clientY: 200}];
+    row.dispatchEvent(event);
+  };
+  touch('touchstart', 200); touch('touchmove', 100);
+  row.dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
+  await open.settle();
+  assert.match(toast.textContent, /완료/);
+  const undo = toast.querySelector('.undo');
+  assert.ok(undo, 'the way back is offered');
+  assert.ok(open.document.querySelector('#list .flag.done'), 'it was marked');
+
+  undo.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const back = server.sent.filter(r => r.method === 'PATCH').pop();
+  assert.deepEqual(back.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/reading'],
+    'and what it was before is what it is again');
+  assert.match(toast.textContent, /읽는 중으로 되돌렸습니다/);
+  assert.ok(!toast.querySelector('.undo'), 'and undoing an undo is not offered');
+
+  // A whole shelf: each paper back to what it was, not all to one thing.
+  const event = new open.window.Event('touchstart', {bubbles: true});
+  event.touches = [{clientX: 40, clientY: 200}];
+  rows()[0].dispatchEvent(event);
+  await new Promise(r => setTimeout(r, 560));
+  rows()[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '여러 개 선택').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  open.document.getElementById('pick-all').dispatchEvent(new open.window.Event('click'));
+  open.document.getElementById('pick-mark').dispatchEvent(new open.window.Event('click'));
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '완료').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.match(toast.textContent, /3편을 완료로 표시했습니다/);
+  server.sent.length = 0;
+  toast.querySelector('.undo').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const writes = server.sent.filter(r => r.method === 'PATCH');
+  assert.equal(writes.length, 3, 'one write per paper on the way back too');
+  const put = writes.map(w => w.body.tags.map(t => t.tag).filter(t => t.startsWith('/')).join('')).sort();
+  assert.deepEqual(put, ['/done', '/reading', '/unread'],
+    'each one back to what it was, not all three to one thing');
+  assert.match(toast.textContent, /3편을 되돌렸습니다/);
+});
+
 test('picking the whole library, and letting it all go again', async () => {
   const server = fakeServer();
   const open = await boot({server});
