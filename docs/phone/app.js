@@ -265,7 +265,7 @@ async function sync({full = false} = {}) {
   } finally {
     state.busy = false;
     spinSync(false);
-    setTimeout(() => { if (!state.busy) $('sync-state').textContent = ''; }, 4000);
+    setTimeout(restState, 4000);
   }
 }
 
@@ -2460,6 +2460,16 @@ function paintSettings() {
 }
 const state_items = () => state.items.length.toLocaleString();
 
+/* What the bar along the bottom says when nothing is happening. A blank strip says nothing; this
+   says the two things a reader of a library kept on a phone wants to know — whether it is current
+   and whether this phone can reach anything at all. */
+function restState() {
+  const node = $('sync-state');
+  if (!node || state.busy) return;
+  const off = typeof navigator !== 'undefined' && navigator.onLine === false;
+  node.textContent = off ? '오프라인' : `마지막 업데이트 ${whenSynced()}`;
+}
+
 function whenSynced() {
   const at = Number(localStorage.getItem(KEYS.synced)) || 0;
   if (!at) return '아직 없음';
@@ -2687,11 +2697,37 @@ function wire() {
   $('btn-settings-main').addEventListener('click', () => openSettings());
   $('settings-back').addEventListener('click', () => closeSheet('settings'));
   addEventListener('popstate', onPopState);
+  /* A keyboard, for the iPad with one attached and for Safari on a Mac: the keys the phone's own
+     apps answer to. Nothing fires while something is being typed into. */
   addEventListener('keydown', event => {
-    if (event.key !== 'Escape') return;
-    if (floating) { closeFloat(); return; }
-    if (sheets.length) { closeSheet(sheets[sheets.length - 1].id); return; }
-    if (state.picking) setPicking(false);
+    const into = document.activeElement;
+    const typing = into && (into.tagName === 'INPUT' || into.tagName === 'TEXTAREA' || into.isContentEditable);
+    if (event.key === 'Escape') {
+      if (floating) { closeFloat(); return; }
+      if (typing && into.blur) { into.blur(); return; }
+      if (sheets.length) { closeSheet(sheets[sheets.length - 1].id); return; }
+      if (state.picking) setPicking(false);
+      return;
+    }
+    if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+    const top = sheets.length ? sheets[sheets.length - 1].id : 'main';
+    const reading = (top === 'listen' || top === 'paper') && listen.player;
+    if (reading && (event.key === ' ' || event.key === 'Spacebar')) {
+      event.preventDefault();
+      const playing = listen.player.state().status === 'playing';
+      if (playing) listen.player.pause(); else listen.player.play();
+      return;
+    }
+    if (reading && event.key === 'ArrowLeft') { event.preventDefault(); listen.player.prev(); return; }
+    if (reading && event.key === 'ArrowRight') { event.preventDefault(); listen.player.next(); return; }
+    // The library: what every list on a desktop answers to.
+    if (top !== 'main') return;
+    if (event.key === '/' || event.key === 'f' || event.key === 'F') {
+      event.preventDefault();
+      $('q').focus();
+      return;
+    }
+    if (event.key === 'Enter' && state.picking) setPicking(false);
   });
   pullToRefresh($('list'), () => sync());
   followScroll($('list'), $('main').querySelector('.top'));
@@ -2710,7 +2746,8 @@ function wire() {
     drawRecent();
   });
   // Whatever was changed with no signal goes out the moment there is some.
-  addEventListener('online', () => flushWrites({quiet: false}));
+  addEventListener('online', () => { restState(); flushWrites({quiet: false}); });
+  addEventListener('offline', restState);
   $('held').addEventListener('click', () => flushWrites({quiet: false}));
   // The PDF opens on top of the transcript, so going back lands on the transcript again.
   $('listen-pdf').addEventListener('click', () => {
@@ -2846,6 +2883,7 @@ async function start() {
   buildFilters();
   await loadCache();
   render();
+  restState();
   heldWrites().then(queue => paintHeld(queue.length)).catch(() => {});
   sync();
   if (paired) toast('키가 함께 들어왔습니다');

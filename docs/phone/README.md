@@ -86,7 +86,9 @@ braced so a journal's capitals survive.
 A change is kept as an intention, not as fields to send. So a paper changed on the Mac meanwhile
 is fetched afresh and "mark it done" applied to that, rather than overwriting someone else's
 tags; and a change made with no signal waits in IndexedDB until there is some. The toolbar along
-the bottom says how many are waiting, and tapping that tries again.
+the bottom says how many are waiting, and tapping that tries again. When nothing is happening it
+says how old the library is, or 오프라인 — the two things a reader of a library kept on a phone
+wants to know.
 
 **On a phone's signal.** A busy server (429, 503) is waited out, doubling the wait and believing
 Retry-After when Zotero sends one. A read is tried four times, a change twice, a note once —
@@ -152,6 +154,13 @@ checked without a phone.
 A row of the library carries no listeners of its own: both of its gestures are listened for once,
 on the list, and the row says which paper it is with `data-key`. A library scrolled to the end of
 a few thousand papers would otherwise be holding tens of thousands of listeners.
+
+## A keyboard
+
+For the iPad with one attached, and Safari on a Mac: **space** plays and pauses wherever a paper
+is being read, **←** and **→** are the sentence either side, **/** or **f** is the search box,
+**esc** closes whatever is on top — a menu, then a field, then the screen — and **return** finishes
+picking. Nothing fires while something is being typed into.
 
 ## Checking it
 

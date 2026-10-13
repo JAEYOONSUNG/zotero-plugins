@@ -2199,6 +2199,87 @@ test('the bar at the top is the way back to the top of the library', async () =>
   assert.ok(open.document.querySelector('.menu.float'), 'it opens the order instead');
 });
 
+test('the bar along the bottom says whether the library is current, and whether the phone can reach anything', async () => {
+  const open = await boot();
+  await open.settle();
+  const said = () => open.document.getElementById('sync-state').textContent;
+  assert.match(said(), /갱신|최신/, 'what the sync just did, while it is still news');
+
+  // The phone loses its signal: that is the state, not an error to be waited for.
+  globalThis.navigator = {userAgent: 'test', onLine: false};
+  open.window.dispatchEvent(new open.window.Event('offline'));
+  assert.equal(said(), '오프라인');
+  globalThis.navigator = {userAgent: 'test', onLine: true};
+  open.window.dispatchEvent(new open.window.Event('online'));
+  await open.settle();
+  assert.match(said(), /마지막 업데이트/, 'and back again when it returns');
+  globalThis.navigator = {userAgent: 'test'};
+
+  // An hour-old library says so in hours, and one never synced says that.
+  const old = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24),
+    'np.synced': String(Date.now() - 3 * 3600_000)}});
+  await old.settle();
+  globalThis.navigator = {userAgent: 'test', onLine: true};
+  old.window.dispatchEvent(new old.window.Event('online'));
+  await old.settle();
+  assert.match(old.document.getElementById('sync-state').textContent, /마지막 업데이트/);
+  globalThis.navigator = {userAgent: 'test'};
+});
+
+test('a keyboard, for the iPad with one attached', async () => {
+  const {open} = await openListening();
+  const key = (name, on = open.window) => {
+    const event = new open.window.Event('keydown');
+    event.key = name;
+    let stopped = false;
+    event.preventDefault = () => { stopped = true; };
+    on.dispatchEvent(event);
+    return stopped;
+  };
+  // Space is play and pause, wherever a paper is being read.
+  assert.equal(key(' '), true, 'space is taken');
+  await open.settle();
+  assert.equal(open.speech.queue.length > 0, true, 'the voice started');
+  open.speech.start();
+  await open.settle();
+  assert.equal(open.document.getElementById('listen-play').getAttribute('aria-label'), '일시정지');
+  key(' ');
+  await open.settle();
+  assert.equal(open.document.getElementById('listen-play').getAttribute('aria-label'), '재생', 'and stopped');
+
+  // The arrows are the sentence either side.
+  const at = () => open.storage.get('np.at.AAA');
+  key('ArrowRight');
+  open.speech.start();
+  await open.settle();
+  assert.equal(at(), '1', 'forward one sentence');
+  key('ArrowLeft');
+  open.speech.start();
+  await open.settle();
+  assert.equal(at(), '0', 'and back again');
+
+  // Escape leaves the screen; on the library, a slash is the search box.
+  key('Escape');
+  await open.settle();
+  assert.equal(open.document.getElementById('listen').hidden, true, 'escape closed the transcript');
+  key('Escape');                      // and the paper's own screen under it
+  await open.settle();
+  assert.equal(open.document.getElementById('detail').hasAttribute('hidden'), true);
+  let focused = null;
+  open.document.getElementById('q').focus = () => { focused = 'q'; };
+  key('/');
+  assert.equal(focused, 'q', 'a slash is the search box');
+  key('f');
+  assert.equal(focused, 'q', 'and so is f, as it is in a browser');
+
+  // Nothing fires while something is being typed into.
+  focused = null;
+  Object.defineProperty(open.document, 'activeElement',
+    {value: open.document.getElementById('q'), configurable: true});
+  assert.equal(key(' '), false, 'a space typed into a box is a space');
+  assert.equal(key('/'), false);
+});
+
 test('the search box remembers what has been searched for before', async () => {
   const open = await boot();
   await open.settle();
