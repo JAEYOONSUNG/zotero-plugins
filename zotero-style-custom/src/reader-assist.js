@@ -1583,7 +1583,7 @@
      page when it re-renders (zoom, rotation), so the mark is put back on pagerendered / textlayerrendered. */
   function clearHighlight(session,{keepUnit=false}={}){
    for(const n of session.marks||[]){try{n.remove();}catch(_){}}session.marks=[];session.markedPage=null;
-   if(!keepUnit)session.markedUnit=null;
+   if(!keepUnit){session.markedUnit=null;session.sentTo=null;try{clearTimeout(session.keepTimer);}catch(_){}}
   }
   function liveViewport(session,page,which='primary'){
    try{
@@ -1612,9 +1612,35 @@
    session.markedPage=page;
    return session.marks.length>0;
   }
+  /* pdf.js empties a page as it re-renders it, and a page turn is exactly when it re-renders: a mark
+     drawn in the moment before the render lands is swept away with the old canvas, and the reader is
+     left with an unmarked page until the next sentence happens to redraw it (the reader, 2026-10-13:
+     "페이지 넘어갈때 표시 제대로 안해주는버그있다"). pagerendered puts it back when that event reaches
+     chrome; this watches the mark itself for a second afterwards, which needs nothing from content. */
+  const KEEP_TRIES=4,KEEP_EVERY=220;
+  function keepMark(session){
+   try{clearTimeout(session.keepTimer);}catch(_){}
+   let left=KEEP_TRIES;
+   const check=()=>{
+    if(session.destroyed||!session.markedUnit||uiState().follow===false)return;
+    if(!(session.marks||[]).length||!session.marks.every(m=>m.isConnected))drawMarks(session,session.markedUnit);
+    if(--left>0)session.keepTimer=setTimeout(check,KEEP_EVERY);
+   };
+   session.keepTimer=setTimeout(check,KEEP_EVERY);
+  }
   function highlight(session,unit){
    if(uiState().follow===false)return;
-   drawMarks(session,unit);
+   const drawn=drawMarks(session,unit);
+   /* The voice has gone over onto a page the viewer has not built: there is no element to put the mark
+      in and nothing to scroll to, so the page would stay unmarked until somebody scrolled to it by
+      hand. Asking the reader to go there builds the page, and the render draws the mark on it. */
+   if(!drawn){
+    const page=pageNumberOf(unit),hasRects=Array.isArray(unit&&unit.rects)&&unit.rects.length;
+    if(page&&hasRects&&session.sentTo!==page){session.sentTo=page;goToPage(session,page,unit.rects);}
+    return;
+   }
+   session.sentTo=null;
+   keepMark(session);
    const first=session.marks[0];if(!first)return;
    // Scroll only when the sentence is not on screen.
    let visible=false;
@@ -2179,6 +2205,7 @@
    for(const tok of [session.chatToken,session.summaryToken])try{tok&&tok.cancel();}catch(_){}
    try{session.tr&&session.tr.service.cancel();}catch(_){}
    if(session.followTimer)try{session.doc.defaultView.clearTimeout(session.followTimer);}catch(_){}session.followTimer=null;
+   if(session.keepTimer)try{clearTimeout(session.keepTimer);}catch(_){}session.keepTimer=null;
    if(!session.noSave)try{saveNow(session);}catch(_){}
    clearHighlight(session);
    try{session.open=false;applyLayout(session);}catch(_){}

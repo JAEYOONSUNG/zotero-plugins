@@ -853,6 +853,42 @@ test('a re-render (zoom, rotation) that empties the page gets the highlight back
  f.stop();assert.equal((handlers.pagerendered||[]).length,0,'the listener goes with the panel');
 });
 
+/* A page turn is the moment the mark is most likely to be lost: the page the voice has moved onto may
+   not be built yet, and pdf.js empties a page as it renders it, taking anything drawn on it along. */
+test('a sentence on a page the viewer has not built takes the reader there, and the mark survives the render',async()=>{
+ const f=fixture();
+ const handlers={};const bus={on:(n,fn)=>{(handlers[n]||=[]).push(fn);},off:(n,fn)=>{handlers[n]=(handlers[n]||[]).filter(x=>x!==fn);}};
+ const viewport={width:1224,height:1584,transform:[2,0,0,-2,0,1584]};
+ f.reader._internalReader._primaryView._iframeWindow.PDFViewerApplication={eventBus:bus,pdfViewer:{getPageView:()=>({viewport})}};
+ await f.sync();
+ // The page the voice is about to read is not in the viewer document at all.
+ const page=f.viewDoc.querySelector('.page[data-page-number="3"]');page.remove();
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);f.synth.begin();await settle();
+ assert.equal(f.viewDoc.querySelectorAll('[data-sc-ra-hl]').length,0,'nothing to draw on');
+ assert.equal(f.navs.at(-1)&&f.navs.at(-1).pageIndex,2,'so the reader is sent to that page to build it');
+ const before=f.navs.length;
+ for(const fn of handlers.pagerendered||[])fn({pageNumber:3});
+ assert.equal(f.navs.length,before,'and it is not sent there over and over');
+
+ // Built now: the render event draws the mark that could not be drawn before.
+ f.viewDoc.body.appendChild(page);
+ for(const fn of handlers.pagerendered||[])fn({pageNumber:3});
+ assert.equal(page.querySelectorAll('[data-sc-ra-hl]').length,1,'the mark lands on the page once it exists');
+ f.stop();
+});
+
+test('a render that empties the page without telling anyone still gets the mark back',async()=>{
+ const f=fixture();await f.sync();
+ f.press(f.container.querySelectorAll('button')[1]);await settle(20);f.synth.begin();await settle();
+ const page=f.viewDoc.querySelector('.page[data-page-number="3"]');
+ assert.equal(page.querySelectorAll('[data-sc-ra-hl]').length,1);
+ // PDFPageView.reset(), with no event bus to tell chrome about it.
+ for(const m of [...page.querySelectorAll('[data-sc-ra-hl]')])m.remove();
+ await new Promise(r=>setTimeout(r,300));
+ assert.equal(page.querySelectorAll('[data-sc-ra-hl]').length,1,'the mark is put back without waiting for the next sentence');
+ f.stop();
+});
+
 /* ---- 0.59.24 runtime fixes ------------------------------------------------- */
 /* Zotero 9.0.6 reader.js, copied: utilities isTextBox(), and the parts of FocusManager._handleKeyDown and
    KeyboardManager._handleKeyDown that act on a plain key. Both are window listeners in the CAPTURE phase,
