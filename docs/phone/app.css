@@ -225,6 +225,9 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .row.nav h2 { flex:1; min-width:0; font-size:16px; font-weight:500; -webkit-line-clamp:1; }
 .row.nav .n { flex:none; font-size:14px; color:var(--faint); font-variant-numeric:tabular-nums; }
 .chev { display:flex; flex:none; color:var(--faint); opacity:.7; }
+/* Where you already are: ticked, in the tint, and not pretending to lead anywhere. */
+.row.nav.here h2 { color:var(--link); font-weight:650; }
+.row.nav.here .chev { color:var(--link); opacity:1; }
 .chev svg { width:17px; height:17px; stroke-width:2.4; }
 
 .stars { font-size:11px; color:var(--warm); letter-spacing:.5px; flex:none; }

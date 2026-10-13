@@ -519,6 +519,32 @@ test('the order can be changed, and it is remembered', async () => {
   assert.equal(open.document.querySelectorAll('.menu.float').length, 0);
 });
 
+test('the collections screen says which one you are already in', async () => {
+  const open = await boot();
+  await open.settle();
+  const openIt = async () => {
+    open.document.getElementById('btn-collections').dispatchEvent(new open.window.Event('click'));
+    await open.settle();
+    return [...open.document.querySelectorAll('#collections .row.nav')];
+  };
+  let rows = await openIt();
+  assert.deepEqual(rows.map(r => r.querySelector('h2').textContent), ['전체', 'Phage defence']);
+  assert.equal(rows[0].classList.contains('here'), true, 'the whole library, to begin with');
+  assert.equal(rows[0].getAttribute('aria-current'), 'true', 'and said out loud');
+  assert.equal(rows[1].classList.contains('here'), false);
+  assert.deepEqual(rows.map(r => r.querySelector('.n').textContent), ['3편', '2편'],
+    'with how many are in each, counted as picking one counts');
+
+  // Into a collection, and back in: that is where it says you are.
+  rows[1].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  rows = await openIt();
+  assert.equal(rows[1].classList.contains('here'), true, 'the one being looked at');
+  assert.equal(rows[0].classList.contains('here'), false, 'and no longer the whole library');
+  // What is already where you are does not pretend to lead anywhere: it is ticked, not chevroned.
+  assert.notEqual(rows[1].querySelector('.chev').innerHTML, rows[0].querySelector('.chev').innerHTML);
+});
+
 test('a collection and a tag show as chips that take themselves off again', async () => {
   const open = await boot();
   await open.settle();
@@ -1531,7 +1557,12 @@ test('every rule in the stylesheet is for a class the app still asks for', () =>
   const asked = new Set(FROM_VALUES);
   const text = ['app.js', 'pdfview.js', 'play.js', 'read.js', 'files.js', 'net.js', 'list.js', 'index.html']
     .map(read).join('\n');
-  const add = value => String(value || '').replace(/\$\{[^}]*\}/g, ' ').split(/[^a-zA-Z0-9-]+/)
+  /* A class written inside a template's own ${…} — `row nav${here ? ' here' : ''}` — is still a
+     class the app asks for, so the quoted parts of an interpolation are read rather than thrown
+     away with it. */
+  const add = value => String(value || '')
+    .replace(/\$\{([^}]*)\}/g, (_, inner) => ` ${(inner.match(/'[^']*'/g) || []).join(' ').replace(/'/g, '')} `)
+    .split(/[^a-zA-Z0-9-]+/)
     .forEach(name => { if (/^[a-z][a-z0-9-]*$/.test(name)) asked.add(name); });
   for (const m of text.matchAll(/class="([^"]*)"/g)) add(m[1]);
   for (const m of text.matchAll(/class: *'([^']*)'/g)) add(m[1]);

@@ -2517,17 +2517,19 @@ function openCollections() {
   /* One row the way this phone draws a row that leads somewhere: the name, how many are in it,
      and the mark that says it opens. */
   const CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
-  const navRow = (name, n, depth = 0) => {
-    const row = el('button', {class: 'row nav', type: 'button',
+  const navRow = (name, n, depth = 0, here = false) => {
+    const row = el('button', {class: `row nav${here ? ' here' : ''}`, type: 'button',
+      'aria-current': here ? 'true' : null,
       style: depth ? `padding-inline-start:${18 + depth * 16}px` : null}, body);
     el('h2', {text: name}, row);
     el('span', {class: 'n', text: `${n.toLocaleString()}편`}, row);
-    el('span', {class: 'chev', html: CHEVRON}, row);
+    // The one being looked at is ticked rather than chevroned: it does not lead anywhere new.
+    el('span', {class: 'chev', html: here ? TICK : CHEVRON}, row);
     return row;
   };
 
   el('h3', {class: 'group', text: '라이브러리'}, body);
-  const all = navRow('전체', state.items.length);
+  const all = navRow('전체', state.items.length, 0, !state.collection && !state.tag);
   all.addEventListener('click', () => { state.collection = ''; closeSheet('collections'); showing(); });
 
   // The tags actually in use, so a subject can be picked the way a collection can.
@@ -2551,7 +2553,7 @@ function openCollections() {
   if (state.collections.length) el('h3', {class: 'group', text: '컬렉션'}, body);
   const draw = (parent, depth) => {
     for (const c of (byParent.get(parent) || []).sort((a, b) => a.data.name.localeCompare(b.data.name, 'ko'))) {
-      const row = navRow(clean(c.data.name), counts.get(c.key) || 0, depth);
+      const row = navRow(clean(c.data.name), counts.get(c.key) || 0, depth, state.collection === c.key);
       row.addEventListener('click', () => { state.collection = c.key; closeSheet('collections'); showing(); });
       draw(c.key, depth + 1);
     }
