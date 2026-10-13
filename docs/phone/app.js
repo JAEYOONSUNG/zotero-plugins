@@ -24,7 +24,7 @@ const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
-              read: 'np.read', recent: 'np.recent'};
+              read: 'np.read', recent: 'np.recent', kind: 'np.lastkind', of: 'np.of.'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -1032,21 +1032,50 @@ function drawTip(list) {
 /* A paper left half heard is the thing most likely to be wanted next, so the library offers it
    back rather than making it be found again. Only on the library itself: under a search or a
    filter, a paper that is not in what is being looked at has no business at the top of it. */
+/* Whichever of the two a paper was last left in the middle of — the voice or the page — because
+   a reader coming back to a library wants the thing they were doing, not a choice about it. */
+export function resumeOf({key, kind, heard, page, pages}) {
+  if (!key) return null;
+  if (kind === 'read') {
+    if (!(page > 1)) return null;
+    const pct = pages > 1 ? Math.round(page / pages * 100) : 0;
+    if (pct > 98) return null;
+    return {kind: 'read', said: `이어 읽기 · ${page}쪽`, label: '이어 읽기', pct};
+  }
+  if (!(heard >= 1 && heard <= 98)) return null;
+  return {kind: 'listen', said: `이어 듣기 · ${heard}%`, label: '이어 듣기', pct: heard};
+}
+const RESUME_MARK = {
+  listen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>',
+  read: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z" fill="none" stroke="currentColor"/><path d="M14 3v5h5" fill="none" stroke="currentColor"/></svg>'
+};
 function drawResume(list) {
   const key = localStorage.getItem(KEYS.last) || '';
   if (!key || state.q || state.collection || state.tag || state.status || state.picking) return null;
   const item = state.items.find(paper => paper.key === key);
-  const heard = Number(localStorage.getItem(KEYS.pct + key)) || 0;
-  if (!item || heard < 1 || heard > 98) return null;
+  if (!item) return null;
+  const on = resumeOf({
+    key,
+    kind: localStorage.getItem(KEYS.kind) || 'listen',
+    heard: Number(localStorage.getItem(KEYS.pct + key)) || 0,
+    page: Number(localStorage.getItem(KEYS.page + key)) || 0,
+    pages: Number(localStorage.getItem(KEYS.of + key)) || 0
+  });
+  if (!on) return null;
   const card = el('section', {class: 'resume'}, list);
-  const go = el('button', {type: 'button', 'aria-label': `${clean(item.data.title)} 이어 듣기`}, card);
-  el('span', {class: 'go', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, go);
+  const go = el('button', {type: 'button', 'aria-label': `${clean(item.data.title)} ${on.label}`}, card);
+  el('span', {class: `go ${on.kind}`, html: RESUME_MARK[on.kind]}, go);
   const what = el('span', {class: 'what'}, go);
   el('b', {text: clean(item.data.title) || '(제목 없음)'}, what);
-  el('span', {text: `이어 듣기 · ${heard}%`}, what);
-  const bar = el('span', {class: 'heard'}, go);
-  el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
-  go.addEventListener('click', () => openListen(liveItem(key) || item));
+  el('span', {text: on.said}, what);
+  if (on.pct) {
+    const bar = el('span', {class: 'heard'}, go);
+    el('i', {style: `width:${Math.min(100, on.pct)}%`}, bar);
+  }
+  go.addEventListener('click', () => {
+    const live = liveItem(key) || item;
+    if (on.kind === 'read') openPaper(live); else openListen(live);
+  });
   return card;
 }
 
@@ -1839,6 +1868,7 @@ function fillVoiceMenu(lang) {
 async function openListen(item) {
   listen.item = item;
   localStorage.setItem(KEYS.last, item.key);   // so the library can offer to carry on
+  localStorage.setItem(KEYS.kind, 'listen');
   $('listen-title').textContent = clean(item.data.title) || '논문';
   const body = clearTranscript();
   $('listen-bar').hidden = true;
@@ -2105,6 +2135,9 @@ async function openPaper(item, {at = 0} = {}) {
   $('paper-night').setAttribute('aria-pressed', String(localStorage.getItem(NIGHT) === 'on'));
   paper.item = item;
   listen.item = item;
+  // The library offers back whichever of the two a paper was last left in the middle of.
+  localStorage.setItem(KEYS.last, item.key);
+  localStorage.setItem(KEYS.kind, 'read');
   $('paper-title').textContent = clean(item.data.title) || '논문';
   $('paper-view').textContent = '';
   $('paper-view').classList.remove('with-player');
@@ -2142,7 +2175,10 @@ async function openPaper(item, {at = 0} = {}) {
         slider.value = String(n);
         $('paper-jump-at').textContent = `${n} / ${total}`;
         // Where this paper was left, so it opens there next time.
-        if (paper.item) localStorage.setItem(KEYS.page + paper.item.key, String(n));
+        if (paper.item) {
+          localStorage.setItem(KEYS.page + paper.item.key, String(n));
+          localStorage.setItem(KEYS.of + paper.item.key, String(total));
+        }
       },
       onZoom: value => { $('paper-out').disabled = value <= 1.001; }
     });

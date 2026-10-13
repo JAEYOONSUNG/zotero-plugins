@@ -1551,7 +1551,8 @@ const FROM_VALUES = [
   'left',                        // which way it was pushed
   'off',                         // the Dropbox light when it is not connected
   'caption',                     // a sentence that is a figure's caption
-  'underline'                    // what kind of mark was made on the page
+  'underline',                   // what kind of mark was made on the page
+  'read'                         // which of the two a paper was last left in the middle of
 ];
 test('every rule in the stylesheet is for a class the app still asks for', () => {
   const asked = new Set(FROM_VALUES);
@@ -2592,6 +2593,37 @@ test('every ink the app writes in can be read on the paper it is written on', ()
   // Nothing is written smaller than 11px, whatever it is.
   const sizes = [...css.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(m => Number(m[1]));
   assert.equal(sizes.filter(size => size < 11).length, 0, `smallest is ${Math.min(...sizes)}px`);
+});
+
+test('whichever of the two a paper was left in the middle of is what is offered back', async () => {
+  const open = await boot();
+  await open.settle();
+  const {resumeOf} = await import(new URL(`../app.js?boot=${boots}`, here));
+  // Listening: how far through, as a share of the sentences.
+  assert.deepEqual(resumeOf({key: 'A', kind: 'listen', heard: 42}),
+    {kind: 'listen', said: '이어 듣기 · 42%', label: '이어 듣기', pct: 42});
+  assert.equal(resumeOf({key: 'A', kind: 'listen', heard: 0}), null, 'not started is not half done');
+  assert.equal(resumeOf({key: 'A', kind: 'listen', heard: 99}), null, 'and finished is not either');
+  // Reading: which page, out of how many.
+  assert.deepEqual(resumeOf({key: 'A', kind: 'read', page: 5, pages: 20}),
+    {kind: 'read', said: '이어 읽기 · 5쪽', label: '이어 읽기', pct: 25});
+  assert.equal(resumeOf({key: 'A', kind: 'read', page: 1, pages: 20}), null, 'the first page is not progress');
+  assert.equal(resumeOf({key: 'A', kind: 'read', page: 20, pages: 20}), null, 'nor is the last one');
+  assert.equal(resumeOf({key: '', kind: 'read', page: 5, pages: 20}), null);
+  // A page with no total still carries on, just with no bar to show.
+  assert.deepEqual(resumeOf({key: 'A', kind: 'read', page: 5, pages: 0}).pct, 0);
+
+  // On the library, the card says which it was and goes back to that screen.
+  const reading = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24),
+    'np.last': 'BBB', 'np.lastkind': 'read', 'np.page.BBB': '7', 'np.of.BBB': '14'}});
+  await reading.settle();
+  const card = reading.document.querySelector('#list .resume');
+  assert.ok(card, 'it is offered');
+  assert.match(card.textContent, /이어 읽기 · 7쪽/);
+  assert.ok(card.querySelector('.go.read'), 'with the mark for a page rather than a voice');
+  card.querySelector('button').dispatchEvent(new reading.window.Event('click'));
+  await reading.settle();
+  assert.equal(reading.document.getElementById('paper').hidden, false, 'and it opens the PDF, not the voice');
 });
 
 test('a paper left half heard is offered back at the top of the library', async () => {

@@ -39,7 +39,9 @@ the top counts what has been picked and holds the way out, and the bar at the bo
 rates all of them at once — one write per paper, each still against the paper as the server has
 it, so nothing is overwritten wholesale.
 Browse by collection (a collection means everything filed under it) or by tag; what is being
-looked at shows as chips that take themselves off. A library long enough to be lost in carries landmarks down its
+looked at shows as chips that take themselves off. Whichever of the two a paper was last left in the middle of — the
+voice or the page — is offered back at the top of the library, with the verb and the screen that
+belong to it. A library long enough to be lost in carries landmarks down its
 right edge — the letters, the years, the stars — and a finger laid on them takes it there, saying
 in full what it is over; the orders whose headings are dates have no one-character name, so they
 go without. Search covers the title, authors, journal, year, DOI, tags and the abstract, folds
