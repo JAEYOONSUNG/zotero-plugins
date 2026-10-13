@@ -149,7 +149,10 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 /* The heading stays at the top of the list while its own papers scroll under it. */
 .group { position:sticky; top:0; z-index:1; margin:14px 0 6px; padding:5px 4px 6px;
          background:var(--canvas); font-size:13px; font-weight:700; letter-spacing:-.01em;
-         color:var(--muted); font-variant-numeric:tabular-nums; }
+         color:var(--muted); font-variant-numeric:tabular-nums;
+         display:flex; align-items:baseline; gap:7px; }
+/* How many are under it, in the quieter ink: the one thing a heading can say that its rows cannot. */
+.group .n { font-weight:500; color:var(--faint); }
 .group:first-child { margin-top:0; }
 
 /* One grouped card with the papers as its rows: the separators are inset to where the title starts,

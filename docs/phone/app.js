@@ -1127,17 +1127,33 @@ function drawMore() {
   if (from >= to) return;
   const batch = document.createDocumentFragment();
   for (let i = from; i < to; i++) {
-    // The heading is drawn where the list changes, whichever order it is in.
+    // The heading is drawn where the list changes, whichever order it is in, and says how many
+    // are under it — which is the one thing a heading can say that the rows cannot.
     const under = groupOf(rows[i], state.sort, {seenAt});
     if (under && under !== render.group) {
       render.group = under;
-      el('h3', {class: 'group', text: under}, batch);
+      const head = el('h3', {class: 'group'}, batch);
+      el('span', {text: under}, head);
+      const n = render.sizes ? render.sizes.get(under) : 0;
+      if (n > 1) el('span', {class: 'n', text: `${n.toLocaleString()}편`}, head);
     }
     drawRow(rows[i], batch);
   }
   list.insertBefore(batch, more || null);
   state.shown = to;
   if (more && state.shown >= rows.length) { more.remove(); more = null; }
+}
+
+/* How many papers fall under each heading, counted once for the whole list rather than guessed
+   at as the rows are drawn — the rows arrive a screenful at a time and a heading is drawn before
+   the ones under it exist. */
+function countGroups(rows) {
+  const sizes = new Map();
+  for (const item of rows) {
+    const name = groupOf(item, state.sort, {seenAt});
+    if (name) sizes.set(name, (sizes.get(name) || 0) + 1);
+  }
+  return sizes;
 }
 
 /* ---------- the landmarks down the right edge ---------- */
@@ -1240,6 +1256,7 @@ function render({keep = false} = {}) {
   const rows = visible();
   render.rows = rows;
   render.group = '';
+  render.sizes = countGroups(rows);
   list.textContent = '';
   more = null;
   if (!state.picking) $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
@@ -1330,6 +1347,39 @@ async function shareItem(item) {
 
 /* A line to paste into a mail or under a slide. Not a style anyone has standardised, just the
    five things a reader needs to find the paper again. */
+/* The same paper as a reference manager wants it. Not a full BibTeX writer — a key, the fields
+   Zotero actually holds, and braces around the title so a journal's capitals survive. */
+const BIB_TYPE = {journalArticle: 'article', book: 'book', bookSection: 'incollection',
+                  conferencePaper: 'inproceedings', thesis: 'phdthesis', report: 'techreport',
+                  preprint: 'misc', webpage: 'misc'};
+const bibSafe = text => clean(text).replace(/[{}\\]/g, '');
+export function bibtexOf(item) {
+  const data = item.data || {};
+  const people = (data.creators || []).filter(c => c.creatorType === 'author' || c.creatorType === 'editor');
+  const names = people.map(c => c.lastName ? `${bibSafe(c.lastName)}, ${bibSafe(c.firstName || '')}`.replace(/, $/, '')
+                                           : bibSafe(c.name || '')).filter(Boolean);
+  const year = yearOf(item);
+  const first = clean(people[0] ? people[0].lastName || people[0].name || '' : '').toLowerCase().replace(/[^a-z]/g, '');
+  const word = (clean(data.title).toLowerCase().match(/[a-z]{4,}/) || [''])[0];
+  const key = [first || 'paper', year || '', word].filter(Boolean).join('');
+  const fields = [
+    ['author', names.join(' and ')],
+    ['title', clean(data.title) ? `{${bibSafe(data.title)}}` : ''],
+    ['journal', bibSafe(data.publicationTitle || '')],
+    ['booktitle', bibSafe(data.bookTitle || data.proceedingsTitle || '')],
+    ['publisher', bibSafe(data.publisher || '')],
+    ['volume', bibSafe(data.volume || '')],
+    ['number', bibSafe(data.issue || '')],
+    ['pages', bibSafe(data.pages || '').replace(/\s*[-–—]+\s*/, '--')],
+    ['year', year ? String(year) : ''],
+    ['doi', clean(data.DOI)],
+    ['url', clean(data.DOI) ? '' : clean(data.url)]
+  ].filter(([, value]) => value);
+  const lines = fields.map(([name, value]) => `  ${name} = {${value.replace(/^\{(.*)\}$/, '$1')}}`);
+  const body = lines.length ? `,\n${lines.join(',\n')}` : '';
+  return `@${BIB_TYPE[data.itemType] || 'misc'}{${key}${body}\n}`;
+}
+
 export function citationOf(item) {
   const data = item.data || {};
   const people = (data.creators || []).filter(c => c.creatorType === 'author');
@@ -1397,8 +1447,11 @@ async function openDetail(key) {
     });
   }
   const cite = el('button', {class: 'pill', type: 'button', text: '인용 복사'}, out);
-  cite.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(citationOf(item)); toast('인용을 복사했습니다'); }
+  cite.addEventListener('click', () => copyCitation(item));
+  // The same paper as a reference manager wants it, for the half of writing that is not reading.
+  const bib = el('button', {class: 'pill', type: 'button', text: 'BibTeX'}, out);
+  bib.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(bibtexOf(item)); toast('BibTeX를 복사했습니다'); }
     catch (_) { toast('복사하지 못했습니다'); }
   });
 

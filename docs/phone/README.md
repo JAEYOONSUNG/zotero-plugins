@@ -71,6 +71,11 @@ voice moves through — but only while it is playing, so scrolling away leaves y
 The phone's own voices do the speaking, so it costs nothing. If iOS drops the speech, which it
 does, a watchdog starts the sentence again rather than leaving you looking at one that never ends.
 
+**Taking a paper out.** A heading says how many papers are under it. A paper's own screen hands
+it over four ways: the DOI, the link, a line to paste under a slide, and BibTeX — the fields
+Zotero actually holds, keyed by author, year and the first word of the title, with the title
+braced so a journal's capitals survive.
+
 **Changing things.** Status and rating and notes, in the same places the desktop plugin reads:
 
 | | where it lives |

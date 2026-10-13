@@ -1372,7 +1372,7 @@ test('the top of a paper reads like its title page', async () => {
   // What it is filed under, and the taps a paper offers, read as chips rather than wide buttons.
   assert.deepEqual([...hero.querySelectorAll('.tags .chip')].map(c => c.textContent), ['Phage defence']);
   assert.deepEqual([...hero.querySelectorAll('.pills > *')].map(c => c.textContent),
-    ['DOI 열기', '링크 복사', '인용 복사']);
+    ['DOI 열기', '링크 복사', '인용 복사', 'BibTeX']);
   assert.equal(hero.querySelector('.pills .out').getAttribute('href'), 'https://doi.org/10.1126/science.abc1234');
   // Nothing on this screen is styled by hand in the markup.
   assert.equal([...open.document.querySelectorAll('#detail-body [style]')]
@@ -1409,6 +1409,40 @@ test('the settings screen is groups of rows, not a form', async () => {
   // What can be pressed stands in the tint that says so, and what cannot be undone is red.
   const go = [...body.querySelectorAll('.set-go')].map(b => b.textContent);
   assert.deepEqual(go, ['PDF 비우기', '라이브러리 다시 받기', '연결', '폴더만 저장', '키까지 함께 담기', '키 복사']);
+});
+
+test('a paper comes out as BibTeX a reference manager will take', async () => {
+  const open = await boot();
+  await open.settle();
+  const {bibtexOf} = await import(new URL(`../app.js?boot=${boots}`, here));
+  const out = bibtexOf(ITEMS[0]);
+  assert.match(out, /^@article\{seo2025retron,/, 'an article, keyed by author, year and first word');
+  assert.match(out, /author = \{Seo, H and Kim, K\}/);
+  assert.match(out, /title = \{Retron Septu defence\}/, 'braced, so a journal keeps its capitals');
+  assert.match(out, /journal = \{Science\}/);
+  assert.match(out, /year = \{2025\}/);
+  assert.match(out, /doi = \{10\.1126\/science\.abc1234\}/);
+  assert.ok(!/url = /.test(out), 'a DOI is the link; printing both is noise');
+  assert.match(out, /\n\}$/, 'and it closes');
+
+  // A book is not an article, and a paper with nothing in it still comes out valid.
+  const book = {key: 'Z', data: {itemType: 'book', title: 'Phage', creators: [{creatorType: 'author', name: 'Twort'}],
+    publisher: 'MIT Press', date: '1931', tags: []}};
+  assert.match(bibtexOf(book), /^@book\{twort1931phage,/);
+  assert.match(bibtexOf(book), /publisher = \{MIT Press\}/);
+  assert.match(bibtexOf(book), /author = \{Twort\}/);
+  const bare = bibtexOf({key: 'Y', data: {itemType: 'journalArticle', title: '', creators: [], tags: []}});
+  assert.match(bare, /^@article\{paper\n\}$/, 'nothing to say, and nothing broken');
+
+  // Braces in a title would end the entry early, so they do not survive.
+  const odd = bibtexOf({key: 'X', data: {itemType: 'journalArticle', title: 'A {curly} case', creators: [], tags: []}});
+  assert.match(odd, /title = \{A curly case\}/);
+
+  // And it is one of the things a paper's own screen offers.
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  const pills = [...open.document.querySelectorAll('#detail .hero .pills > *')].map(p => p.textContent);
+  assert.deepEqual(pills, ['DOI 열기', '링크 복사', '인용 복사', 'BibTeX']);
 });
 
 /* ---------- the look ---------- */
@@ -1595,14 +1629,19 @@ test('the list is broken up by headings that follow the order it is in', async (
     row.dispatchEvent(new open.window.Event('click', {bubbles: true}));
   };
   pick('title');
-  const headings = [...open.document.querySelectorAll('#list .group')].map(h => h.textContent);
+  const named = node => node.querySelector('span').textContent;
+  const headings = [...open.document.querySelectorAll('#list .group')].map(named);
   assert.deepEqual(headings, ['I', 'P', 'R'], 'by title, each letter says where it starts');
   // A heading is drawn once, above the first paper under it, never twice over.
   const inOrder = [...open.document.querySelectorAll('#list .group, #list .row')].map(n => n.className);
   assert.ok(!inOrder.some((cls, i) => cls === 'group' && inOrder[i + 1] === 'group'), 'no heading stands alone');
   assert.equal(inOrder[0], 'group', 'the list starts with one');
   pick('rating');
-  assert.deepEqual([...open.document.querySelectorAll('#list .group')].map(h => h.textContent),
+  // A heading says how many are under it; one paper on its own needs no counting.
+  const counts = [...open.document.querySelectorAll('#list .group')]
+    .map(h => h.querySelector('.n')?.textContent || '');
+  assert.deepEqual(counts, ['', '2편'], 'the stars have one paper, the unrated two');
+  assert.deepEqual([...open.document.querySelectorAll('#list .group')].map(named),
     ['★★★★', '별점 없음'], 'by rating, the stars themselves');
 });
 
@@ -2109,7 +2148,7 @@ test('a long library carries landmarks down its right edge, and a finger on them
   assert.equal(steps()[18].classList.contains('on'), true, 'the landmark under the finger is the lit one');
   assert.equal(now.textContent, names[18], 'and the bubble names that same landmark');
   // Reaching it meant drawing the rest of a list that only had its first page: the heading is there.
-  const heads = [...open.document.querySelectorAll('#list .group')].map(h => h.textContent);
+  const heads = [...open.document.querySelectorAll('#list .group')].map(h => h.querySelector('span').textContent);
   assert.ok(heads.includes(now.textContent), `the library was drawn as far as ${now.textContent}`);
   assert.ok(open.document.querySelectorAll('#list .row.paper').length > 60, 'which is more than one page');
 
