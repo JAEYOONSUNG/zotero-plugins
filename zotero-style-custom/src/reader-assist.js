@@ -487,7 +487,7 @@
    const b=el(doc,'button',{type:'button','class':'sc-ra-btn '+cls,title:title?t(title)+(keys?' ('+keys+')':''):(label?t(label):undefined),'aria-label':t(title||label||''),'aria-keyshortcuts':keys?keys.replace('⌥⇧','Alt+Shift+'):undefined},parent);
    // The mark is one of: view | audio | ai | network | memo | note | cache
    if(['view'].includes(mark))b.setAttribute('data-safe','view');
-   else if(['memo','note','cache'].includes(mark))b.setAttribute('data-writes',mark);
+   else if(['memo','note','cache','bake'].includes(mark))b.setAttribute('data-writes',mark);
    else b.setAttribute('data-opens',mark);
    if(iconName)b.appendChild(icon(doc,iconName));
    if(label){const s=el(doc,'span',{'class':'sc-ra-btn-text'},b);s.textContent=t(label);}
@@ -1195,7 +1195,109 @@
    el(doc,'span',{text:t('PDF에서 따라가기')},follow);
    ui.follow.addEventListener('change',()=>{uiState().follow=ui.follow.checked;persistUI();if(!ui.follow.checked)clearHighlight(session);});
    ui.listenNote=el(doc,'p',{'class':'sc-ra-note'},card);
+   buildBake(session,card);
    ui.transcript=group(el(doc,'div',{'class':'sc-ra-transcript'},pane));
+  }
+
+  /* -- an audio file for the car --
+     The panel reads a sentence at a time, which is what a reader wants. A drive wants the whole paper
+     finished: iOS stops a web page's voice when the screen locks, but it does not stop an audio file.
+     So this Mac speaks the paper ahead of time (about four times faster than real time) and leaves one
+     m4b audiobook in a sync folder, named and chaptered, with the position remembered by the phone. */
+  const BAKE_POLL=2000;
+  function buildBake(session,parent){
+   const doc=session.doc,ui=session.ui;
+   const row=el(doc,'div',{'class':'sc-ra-row sc-ra-bake'},parent);
+   ui.bake=button(session,row,{label:'운전용 오디오 만들기',iconName:'play',cls:'sc-ra-link',mark:'bake',
+    title:'이 Mac이 논문 전체를 미리 읽어 오디오북 파일 하나로 만듭니다. 동기화 폴더에 떨어지므로 폰에서 화면을 끄고도, 차에서도 들을 수 있습니다.',
+    onClick:()=>startBake(session)});
+   ui.bakeNote=el(doc,'span',{'class':'sc-ra-bake-note'},row);
+   paintBake(session);
+  }
+  /* The paper as chapters: its own title first, then one chapter per section, in the order the player
+     would read them and with whatever the 본문 / +캡션 / +참고문헌 choice includes. */
+  function bakeChapters(session){
+   const player=session.player;if(!player)return [];
+   const out=[];
+   for(const u of player.units()){
+    const name=u.kind==='caption'?t('캡션'):u.kind==='reference'?t('참고문헌'):u.sectionLabel||t('본문');
+    const last=out[out.length-1];
+    if(!last||last.title!==name)out.push({title:name,parts:[u.text]});
+    else last.parts.push(u.text);
+   }
+   return out.map(c=>({title:c.title,text:c.parts.join(' ')})).filter(c=>c.text.trim());
+  }
+  function bakeNames(session){
+   const item=itemOf(session.reader);
+   const title=fieldOf(item,'title')||t('논문');
+   let artist='';
+   try{
+    const names=(item&&item.getCreators?item.getCreators():[]).map(c=>clean(c.lastName||c.name||'')).filter(Boolean);
+    artist=names.length>3?names[0]+' et al.':names.join(', ');
+   }catch(_){}
+   const year=/\d{4}/.exec(fieldOf(item,'date')||'');
+   return {title,tags:{artist,album:fieldOf(item,'publicationTitle')||t('논문 음성'),year:year?year[0]:'',genre:'Audiobook'}};
+  }
+  async function startBake(session){
+   if(session.bake&&['speaking','encoding','waiting'].includes(session.bake.state))return;
+   session.bake={state:'starting',done:0,total:0};paintBake(session);
+   try{
+    await ensurePlayer(session);
+    const chapters=bakeChapters(session);
+    if(!chapters.length)throw new Error(t('읽을 본문이 없습니다.'));
+    const bridge=await bridgeVoices();
+    if(!bridge)throw Object.assign(new Error(t('이 Mac에 음성 모델이 없습니다. 터미널에서 bridge/install.sh를 실행하세요.')),{own:true});
+    // The voice the panel is set to, when it is one of this Mac's models; otherwise the model's own default.
+    const [kind,,id]=String(session.player.state().voiceURI||'').split(':');
+    const mine=bridge.models.some(m=>m.id===kind);
+    const {title,tags}=bakeNames(session);
+    const body={title,chapters,tags,lang:session.langCode||'en',speed:Number(setting('readAloudSpeed',100))/100,
+     model:mine?kind:'',voice:mine?id:''};
+    const r=await Z.HTTP.request('POST',bridge.config.base+'/v1/audio/book',{headers:{'Content-Type':'application/json',Authorization:'Bearer '+bridge.config.token},
+     body:JSON.stringify(body),responseType:'json',timeout:20000,successCodes:false,errorDelayMax:0});
+    const job=r&&(r.status===202||r.status===200)?r.response:null;
+    if(!job||!job.id)throw new Error(String(r&&r.response&&r.response.error&&r.response.error.message||t('만들기를 시작할 수 없습니다'))+(r?' ('+r.status+')':''));
+    session.bake={...job,config:bridge.config};
+    pollBake(session);
+   }catch(error){
+    session.bake={state:'failed',error:describe(error),done:0,total:0};
+   }
+   paintBake(session);
+  }
+  function pollBake(session){
+   const win=session.doc&&session.doc.defaultView;if(!win)return;
+   if(session.bakeTimer)try{win.clearTimeout(session.bakeTimer);}catch(_){}
+   session.bakeTimer=win.setTimeout(async()=>{
+    session.bakeTimer=null;
+    const bake=session.bake;
+    if(session.destroyed||!bake||!bake.id||!bake.config)return;
+    try{
+     const r=await Z.HTTP.request('GET',bake.config.base+'/v1/audio/book/'+bake.id,{headers:{Authorization:'Bearer '+bake.config.token},
+      responseType:'json',timeout:10000,successCodes:false,errorDelayMax:0});
+     if(session.destroyed||session.bake!==bake)return;
+     if(r&&r.status===200&&r.response&&r.response.id)session.bake={...bake,...r.response};
+     else if(r&&r.status===404)session.bake={...bake,state:'failed',error:t('만들던 작업이 사라졌습니다')};
+    }catch(error){session.bake={...bake,state:'failed',error:describe(error)};}
+    paintBake(session);
+    if(['speaking','encoding','waiting'].includes(session.bake.state))pollBake(session);
+   },BAKE_POLL);
+  }
+  function paintBake(session){
+   const ui=session.ui;if(!ui||!ui.bake)return;
+   const bake=session.bake||{},busy=['starting','waiting','speaking','encoding'].includes(bake.state);
+   ui.bake.disabled=busy;
+   const minutes=s=>s>=90?T('{0}분',Math.round(s/60)):T('{0}초',Math.round(s));
+   let note='';
+   if(bake.state==='starting')note=t('본문을 모으는 중…');
+   else if(bake.state==='waiting')note=t('차례를 기다리는 중…');
+   else if(bake.state==='speaking')note=T('{0}/{1} 문장 · {2} 만들었습니다',bake.done,bake.total,minutes(bake.seconds||0));
+   else if(bake.state==='encoding')note=T('{0} 분량을 파일로 묶는 중…',minutes(bake.seconds||0));
+   else if(bake.state==='done')note=T('{0} · {1}',minutes(bake.seconds||0),bake.file?bake.file.replace(/^.*\/([^/]+\/[^/]+)$/,'$1'):'');
+   else if(bake.state==='failed')note=bake.error||t('만들지 못했습니다');
+   else if(bake.state==='cancelled')note=t('취소했습니다');
+   ui.bakeNote.textContent=note;
+   ui.bakeNote.setAttribute('data-state',bake.state||'');
+   ui.bake.firstChild&&ui.bake.setAttribute('title',t(bake.state==='done'?'한 번 더 만들면 파일이 하나 더 생깁니다':'이 Mac이 논문 전체를 미리 읽어 오디오북 파일 하나로 만듭니다. 동기화 폴더에 떨어지므로 폰에서 화면을 끄고도, 차에서도 들을 수 있습니다.'));
   }
   function renderTranscript(session){
    const ui=session.ui,doc=session.doc,player=session.player;
@@ -2206,6 +2308,7 @@
    try{session.tr&&session.tr.service.cancel();}catch(_){}
    if(session.followTimer)try{session.doc.defaultView.clearTimeout(session.followTimer);}catch(_){}session.followTimer=null;
    if(session.keepTimer)try{clearTimeout(session.keepTimer);}catch(_){}session.keepTimer=null;
+   if(session.bakeTimer)try{session.doc.defaultView.clearTimeout(session.bakeTimer);}catch(_){}session.bakeTimer=null;
    if(!session.noSave)try{saveNow(session);}catch(_){}
    clearHighlight(session);
    try{session.open=false;applyLayout(session);}catch(_){}

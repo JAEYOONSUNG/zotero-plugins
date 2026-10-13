@@ -2928,5 +2928,19 @@
  "Zotero 읽어주기": "Zotero Read Aloud",
  "이 Mac의 음성 모델이 응답하지 않습니다 (": "The speech model on this Mac did not answer (",
  "). 터미널에서 bridge/install.sh를 다시 실행해 보세요.": "). Run bridge/install.sh again in Terminal.",
- "시스템": "System"
+ "시스템": "System",
+ "운전용 오디오 만들기": "Make audio for the car",
+ "이 Mac이 논문 전체를 미리 읽어 오디오북 파일 하나로 만듭니다. 동기화 폴더에 떨어지므로 폰에서 화면을 끄고도, 차에서도 들을 수 있습니다.": "This Mac reads the whole paper ahead of time into one audiobook file. It lands in a sync folder, so the phone can play it with the screen off, and so can the car.",
+ "논문 음성": "Paper audio",
+ "읽을 본문이 없습니다.": "There is no body text to read.",
+ "이 Mac에 음성 모델이 없습니다. 터미널에서 bridge/install.sh를 실행하세요.": "This Mac has no voice model. Run bridge/install.sh in Terminal.",
+ "만들기를 시작할 수 없습니다": "Could not start making it",
+ "만들던 작업이 사라졌습니다": "The job being made has gone",
+ "본문을 모으는 중…": "Gathering the body text…",
+ "차례를 기다리는 중…": "Waiting its turn…",
+ "{0}/{1} 문장 · {2} 만들었습니다": "sentences {0}/{1} · {2} made",
+ "{0} 분량을 파일로 묶는 중…": "Packing {0} into a file…",
+ "만들지 못했습니다": "It could not be made",
+ "취소했습니다": "Cancelled",
+ "한 번 더 만들면 파일이 하나 더 생깁니다": "Making it again adds another file"
 }

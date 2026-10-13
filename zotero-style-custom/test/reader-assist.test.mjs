@@ -35,10 +35,12 @@ function memoryIO(){
   exists:async p=>files.has(p)||p==='/usr/bin/say'&&false,stat:async p=>files.has(p)?{size:files.get(p).length,lastModified:1}:{size:1000,lastModified:5},
   readUTF8:async p=>files.get(p),writeUTF8:async(p,text)=>{files.set(p,text);},makeDirectory:async()=>{},remove:async p=>{files.delete(p);}};
 }
-function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices=null,structCache=true,io=null,runtimeState=null,pdft=null,t4zPrefs={}}={}){
+function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices=null,structCache=true,io=null,runtimeState=null,pdft=null,t4zPrefs={},bridge=false,holdTimers=false}={}){
  const {document:doc,window:win}=parseHTML('<html><head></head><body><div id="split-view"></div></body></html>');
  const define=(name,value)=>Object.defineProperty(win,name,{value,configurable:true,writable:true});
- define('setTimeout',(fn,ms)=>realSetTimeout(fn,ms));define('clearTimeout',id=>realClearTimeout(id));define('navigator',{platform:'MacIntel'});
+ const held=new Map();let heldID=0;
+ define('setTimeout',(fn,ms)=>{if(holdTimers&&ms>=500){held.set(++heldID,fn);return -heldID;}return realSetTimeout(fn,ms);});
+ define('clearTimeout',id=>{if(id<0){held.delete(-id);return;}realClearTimeout(id);});define('navigator',{platform:'MacIntel'});
  define('getComputedStyle',()=>({fontSize:'13px',color:'rgb(30,30,30)',backgroundColor:'rgb(255,255,255)',display:'block',visibility:'visible',overflowX:'visible',colorScheme:''}));
  const viewWin=parseHTML('<html><body></body></html>').window,viewDoc=viewWin.document;
  Object.defineProperty(viewWin,'innerHeight',{value:800,configurable:true});
@@ -50,10 +52,13 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  class Utt{constructor(text){this.text=text;}}
  const navs=[];
  const core={_state:{primaryViewStats:{pageIndex:2,pagesCount:10}},_primaryView:{_iframeWindow:{document:viewDoc}}};
+ if(bridge){define('Blob',class{constructor(parts,opts){this.parts=parts;this.type=opts&&opts.type;}});define('URL',{createObjectURL:()=>'blob:x',revokeObjectURL(){}});
+  define('Audio',class{constructor(url){this.src=url;this.playbackRate=1;}addEventListener(){}removeAttribute(){}load(){}pause(){}play(){return Promise.resolve();}});}
  const frame={document:doc,closed:false,setTimeout:win.setTimeout,navigator:win.navigator};if(withSpeech){frame.speechSynthesis=synth;frame.SpeechSynthesisUtterance=Utt;}
  const reader={type:'pdf',itemID:11,tabID:'t1',_window:win,_iframeWindow:frame,_internalReader:core,navigate:async loc=>{navs.push(loc);}};
  if(doc.defaultView!==win)Object.defineProperty(doc,'defaultView',{configurable:true,get:()=>win});
  const fileIO=io||memoryIO();
+ if(bridge)fileIO.files.set('/home/Library/Application Support/StyleCustomBridge/bridge.json',JSON.stringify({port:47823,token:'k'.repeat(40)}));
  const folder='/data/style-custom-reader/';
  if(structCache)fileIO.files.set(folder+'1-ATT.struct.json',JSON.stringify({v:2,extractor:String(globalThis.StyleCustomPaperText&&globalThis.StyleCustomPaperText.VERSION||'1')+'.2',sig:'1000:5',structured,sizes:sizes(),fallback:false}));
  const attachment={id:11,key:'ATT',libraryID:1,parentID:10,getFilePathAsync:async()=> '/lib/ATT.pdf'};
@@ -62,6 +67,12 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  const http={async request(method,url,options){
   requests.push({method,url,options,body:options&&options.body?JSON.parse(options.body):null});
   if(url.endsWith('reader-assist.css'))return {response:fs.readFileSync(new URL('../content/reader-assist.css',import.meta.url),'utf8'),status:200};
+  if(/\/v1\/audio\/voices$/.test(url))return {status:200,response:{available:true,models:[{id:'supertonic',label:'Supertonic 3',langs:['en','ko'],default:'F3',voices:[{id:'F3',style:'clear narrator'},{id:'M5',style:'warm narrator'}]}]}};
+  if(/\/v1\/audio\/book$/.test(url)&&method==='POST'){
+   if(http.bakeRefuse)return {status:http.bakeRefuse,response:{error:{message:'Paper too long to bake in one file'}}};
+   return {status:202,response:{id:'bake1',state:'speaking',title:requests.at(-1).body.title,done:0,total:9,seconds:0,file:null,error:null}};
+  }
+  if(/\/v1\/audio\/book\/\w+$/.test(url))return {status:200,response:{id:'bake1',state:'speaking',done:3,total:9,seconds:62.5,file:null,error:null,...(http.bakeStates||[]).shift()}};
   if(/deepl\.com/.test(url)){const r=http.deepl?http.deepl(requests.at(-1)):null;if(r)return r;if(method==='GET')return {status:200,response:{character_count:100,character_limit:500000}};return {status:200,response:{translations:requests.at(-1).body.text.map(x=>({text:'KO:'+x}))}};}
   const next=aiReplies.shift();
   if(typeof next==='function')return next(options);
@@ -72,8 +83,8 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  const allSettings={aiLanguage:'English',aiSummaryOnOpen:false,readAloudSpeed:100,readAloudVoice:'',readAloudVoiceKo:'',readAloudHeadings:false,readAloudCredit:true,...settings};
  const remarks=new Map(),memoCalls=[],notes=[],readings=[];
  const copied=[];
- const Z={Items:{get:id=>id===11?attachment:id===10?parent:null},HTTP:http,PDFTranslate:pdft?{api:pdft}:undefined,Prefs:{get:(k)=>k.startsWith('extensions.zotero.ZoteroPDFTranslate.')?t4zPrefs[k.slice(37)]:undefined},Utilities:{Internal:{copyTextToClipboard:t=>copied.push(t)}},DataDirectory:{dir:'/data'},logError:e=>{(Z.errors||(Z.errors=[])).push(e);},Reader:{_readers:[reader]},PDFWorker:{async getFullText(){return {text:'Abstract\n\nPlain text. Second sentence.'};}},isMac:true};
- const runtime={cache:runtimeState||{},dirty:false,rootURI:'file:///plugin/',io:fileIO,paths:{join:(...p)=>p.join('/')},i18n:{isKorean:()=>false},t:I18N.t,
+ const Z={Items:{get:id=>id===11?attachment:id===10?parent:null},HTTP:http,PDFTranslate:pdft?{api:pdft}:undefined,Prefs:{get:(k)=>k.startsWith('extensions.zotero.ZoteroPDFTranslate.')?t4zPrefs[k.slice(37)]:undefined},Utilities:{Internal:{copyTextToClipboard:t=>copied.push(t)}},DataDirectory:{dir:'/data'},logError:e=>{(Z.errors||(Z.errors=[])).push(e);},Reader:{_readers:[reader]},getMainWindow:()=>win,PDFWorker:{async getFullText(){return {text:'Abstract\n\nPlain text. Second sentence.'};}},isMac:true};
+ const runtime={cache:runtimeState||{},dirty:false,rootURI:'file:///plugin/',io:fileIO,paths:{join:(...p)=>p.join('/'),homeDir:bridge?'/home':undefined},i18n:{isKorean:()=>false},t:I18N.t,
   pref:(k,d)=>allPrefs[k]??d,getSetting:k=>allSettings[k],setSetting:async(k,v)=>{allSettings[k]=v;allPrefs[k]=v;},scheduleFlush(){},
   entry:item=>({remark:remarks.get(item.id)||''}),addReading:async(item,seconds,location,shown)=>{readings.push({item:item.id,seconds,location,shown});},
   libraryService:{async setRemark(id,text,{base}){memoCalls.push({id,text,base});if(runtime.staleMemo)return {stale:true};remarks.set(id,text);return {};},async createNoteHTML(id,html){notes.push({id,html});return '1';}}};
@@ -87,7 +98,8 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
  const panel=()=>doc.querySelector('[data-sc-ra]');
  const sync=async()=>{service.sync(win,[reader],'t1');await settle();};
  const sessionOf=()=>service.sessions()[0];
- return {copied,core,win,doc,viewDoc,reader,synth,navs,fileIO,Z,runtime,service,toolbar,container,press,byText,panel,sync,requests,aiReplies,http,remarks,memoCalls,notes,readings,allSettings,allPrefs,sessionOf,folder,
+ const fire=async()=>{const fns=[...held.values()];held.clear();for(const fn of fns)await fn();await settle();};
+ return {copied,core,win,doc,viewDoc,reader,synth,navs,fileIO,Z,runtime,service,toolbar,container,press,byText,panel,sync,requests,aiReplies,http,remarks,memoCalls,notes,readings,allSettings,allPrefs,sessionOf,folder,fire,held,
   open:async()=>{await sync();press(container.querySelector('button[data-safe="view"]'));await settle();},
   stop(){service.stop();}};
 }
@@ -1678,4 +1690,100 @@ test('listening credit stops where the reading clock\'s idle window ends, so the
  await new Promise(r=>setTimeout(r,20));f.sessionOf().lastActivity=Date.now()-10000;f.synth.finish();f.synth.begin();await settle();
  assert.equal(f.readings.length,2,'Zotero in the background: the clock is not counting, the listening is');
  f.stop();
+});
+
+/* -- an audio file for the car -------------------------------------------- */
+
+test('“운전용 오디오 만들기” sends the paper to this Mac as chapters, with the item’s own names on it',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ const bake=f.byText('Make audio for the car');
+ assert.equal(bake.getAttribute('data-writes'),'bake','baking writes a file, so the self-check never presses it');
+ f.press(bake);await settle();
+
+ const post=f.requests.filter(r=>/\/v1\/audio\/book$/.test(r.url)&&r.method==='POST');
+ assert.equal(post.length,1);
+ const body=post[0].body;
+ assert.equal(body.title,'Thermostable polymerase evolution');
+ // One chapter per section, in reading order, each holding that section's sentences.
+ assert.deepEqual(body.chapters.map(c=>c.title),['Introduction','Methods','Results']);
+ assert.match(body.chapters[0].text,/^DNA polymerases drive PCR\. Thermal stability limits/);
+ assert.ok(!JSON.stringify(body.chapters).includes('Smith'),'참고문헌 is not included while the filter says 본문');
+ assert.ok(!JSON.stringify(body.chapters).includes('Residual activity'),'nor are captions');
+ assert.equal(body.lang,'en');
+ assert.equal(body.speed,1);
+ assert.equal(body.tags.album,'Paper audio');   // the item has no journal in this fixture
+ assert.equal(body.tags.genre,'Audiobook');
+
+ // While it is being made the button is held and the line says how far it has got.
+ assert.equal(bake.disabled,true);
+ const note=()=>f.panel().querySelector('.sc-ra-bake-note').textContent;
+ await f.fire();
+ assert.match(note(),/3\/9/);
+ assert.match(note(),/1 ?m\b|63 ?s/);
+
+ f.http.bakeStates=[{state:'done',done:9,total:9,seconds:1830,file:'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b'}];
+ await f.fire();
+ assert.equal(bake.disabled,false,'done: it can be made again');
+ assert.match(note(),/31 ?m\b/);
+ assert.match(note(),/논문 음성\/Thermostable polymerase evolution\.m4b/);
+ assert.equal(f.panel().querySelector('.sc-ra-bake-note').getAttribute('data-state'),'done');
+ const asked=f.requests.filter(r=>/audio\/book\//.test(r.url)).length;
+ await f.fire();
+ assert.equal(f.requests.filter(r=>/audio\/book\//.test(r.url)).length,asked,'nothing keeps polling once it is finished');
+ f.stop();
+});
+
+test('baking passes on the voice chosen in the panel when it is one of this Mac’s own models',async()=>{
+ const f=fixture({bridge:true,holdTimers:true,settings:{readAloudVoice:'supertonic:en:M5',readAloudSpeed:120}});
+ await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.byText('Make audio for the car'));await settle();
+ const body=f.requests.find(r=>/\/v1\/audio\/book$/.test(r.url)&&r.method==='POST').body;
+ assert.equal(body.model,'supertonic');
+ assert.equal(body.voice,'M5');
+ assert.equal(body.speed,1.2);
+ f.stop();
+});
+
+test('with no voices on this Mac, baking says how to install them instead of failing silently',async()=>{
+ const f=fixture({holdTimers:true});await f.open();          // no bridge.json
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.byText('Make audio for the car'));await settle();
+ assert.equal(f.requests.filter(r=>/audio\/book/.test(r.url)).length,0);
+ const note=f.panel().querySelector('.sc-ra-bake-note');
+ assert.match(note.textContent,/bridge\/install\.sh/);
+ assert.equal(note.getAttribute('data-state'),'failed');
+ assert.equal(f.byText('Make audio for the car').disabled,false,'it can be tried again');
+ f.stop();
+});
+
+test('a bake the bridge refuses, and one that fails while speaking, both say so',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.http.bakeRefuse=413;
+ f.press(f.byText('Make audio for the car'));await settle();
+ const note=()=>f.panel().querySelector('.sc-ra-bake-note');
+ assert.match(note().textContent,/too long|413/);
+ assert.equal(note().getAttribute('data-state'),'failed');
+
+ f.http.bakeRefuse=0;
+ f.press(f.byText('Make audio for the car'));await settle();
+ f.http.bakeStates=[{state:'failed',error:'the voice gave up'}];
+ await f.fire();
+ assert.match(note().textContent,/gave up/);
+ const asked=f.requests.filter(r=>/audio\/book\//.test(r.url)).length;
+ await f.fire();
+ assert.equal(f.requests.filter(r=>/audio\/book\//.test(r.url)).length,asked,'a failed bake is not polled again');
+ f.stop();
+});
+
+test('closing the reader stops the bake poll, so nothing asks about a paper no one is reading',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.byText('Make audio for the car'));await settle();
+ const before=f.requests.filter(r=>/audio\/book\//.test(r.url)).length;
+ f.stop();await settle();
+ await f.fire();
+ assert.equal(f.requests.filter(r=>/audio\/book\//.test(r.url)).length,before,'no request after the reader closed');
 });

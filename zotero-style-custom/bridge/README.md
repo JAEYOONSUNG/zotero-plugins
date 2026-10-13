@@ -23,6 +23,7 @@ In Zotero, leave **Settings → Translate·AI → AI server address** empty: the
 |---|---|
 | Address | `127.0.0.1:47823` only (never the network). Change the port with `"port"` in `bridge.json` or `STYLE_CUSTOM_BRIDGE_PORT`. |
 | API | OpenAI-compatible `POST /v1/chat/completions` (`messages`, `model`, `stream`; other fields ignored) and `GET /v1/models`. `GET /health` answers `{ok, providers}` without a token. |
+| Voices | `GET /v1/audio/voices`, `POST /v1/audio/speech` (one sentence → WAV), and the baking endpoints below. |
 | Token | Random, made on first start, kept in `~/Library/Application Support/StyleCustomBridge/bridge.json` (mode 600) as `{port, token, version, providers}`. Every request except `/health` needs `Authorization: Bearer <token>`. |
 | Browsers | A request carrying a web `Origin` (http/https/file) is refused, CORS preflights are refused, and the `Host` must be `127.0.0.1` or `localhost` (DNS rebinding). |
 | Load | At most two CLI processes at once; up to 16 more wait in line. A process is killed when the client disconnects or after 300 s without output. |
@@ -47,6 +48,26 @@ codex exec --skip-git-repo-check --ignore-user-config --ignore-rules --ephemeral
 Both run in an empty folder with no tools, no MCP servers, no hooks, no plugins or skills, no CLAUDE.md / AGENTS.md / memory, and no saved session, so a paper's text cannot make them read or change anything on this Mac, and your own coding instructions do not leak into the answers. Nothing leaves the machine except through these two CLIs, to the services you are logged in to.
 
 Settings by environment variable (put them in the plist's `EnvironmentVariables`): `STYLE_CUSTOM_BRIDGE_PORT`, `CLAUDE_BIN`, `CODEX_BIN`, `STYLE_CUSTOM_BRIDGE_CODEX_EFFORT` (`minimal|low|medium|high`, default `low`).
+
+## An audiobook for the car
+
+iOS stops a web page's voice when the screen locks, but it does not stop an audio file. So the Mac can read a
+whole paper ahead of time and leave one **m4b audiobook** in a sync folder: the phone plays it with the screen
+off, the car's buttons work, and Books remembers where you stopped.
+
+In Zotero this is the **운전용 오디오 만들기 / Make audio for the car** button in the panel's 듣기 (Listen) tab. It sends
+the paper as chapters — one per section, whatever the 본문 / +캡션 / +촸고문헌 choice includes — and shows how far it
+has got. Baking runs about four times faster than real time, so an hour of speech takes a quarter of an hour.
+
+| | |
+|---|---|
+| Start | `POST /v1/audio/book` `{title, chapters:[{title,text}], lang, voice, model, speed, tags:{artist,album,year,genre}}` → `202 {id, state, total, out}`. The bake runs on after the answer. |
+| Follow | `GET /v1/audio/book/<id>` → `{state, done, total, seconds, file, error}`; `state` is `waiting → speaking → encoding → done` (or `failed` / `cancelled`). `GET /v1/audio/book` lists them. |
+| Stop | `DELETE /v1/audio/book/<id>`: one still waiting is dropped, one being spoken stops at the next sentence. |
+| Where it lands | `~/Dropbox/논문 음성/`, else `~/Library/Mobile Documents/com~apple~CloudDocs/논문 음성/`, else `~/Music/논문 음성/`. Set `"audioOut"` in `bridge.json` (or `STYLE_CUSTOM_BRIDGE_AUDIO_OUT`) to choose; it is kept across restarts. |
+| What lands | `<title>.m4b` (mono AAC, 64 kbps — a paper hour is about 30 MB) with its title, authors, journal and year written in as iTunes tags and `stik=2`, so Books treats it as an audiobook. Beside it, `<title>.json` holds the chapter times and every sentence's start, for following along later. A second bake of the same paper becomes `<title> (2).m4b` rather than overwriting the first. |
+| Cost | One paper at a time (one ONNX session), up to eight waiting. The scratch WAV goes to `<support>/bake` and is deleted when the bake ends — an hour of speech is about 300 MB while it is being made. |
+| Needs | `afconvert`, which is part of macOS. No network, and the paper's text is never written to the log (only its length). |
 
 ## Checking it
 

@@ -62,7 +62,7 @@ if [[ "$VOICES" == 1 ]]; then
   REV=aafc6e32416a594460b32413efc49d7fe4ce6d46
   BASE="https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/$REV"
   mkdir -p "$TTS/assets/onnx" "$TTS/assets/voice_styles"
-  install -m 644 "$HERE/tts/speech.mjs" "$HERE/tts/supertonic.mjs" "$HERE/tts/kokoro.mjs" \
+  install -m 644 "$HERE/tts/speech.mjs" "$HERE/tts/book.mjs" "$HERE/tts/supertonic.mjs" "$HERE/tts/kokoro.mjs" \
                  "$HERE/tts/supertonic-helper.mjs" "$HERE/tts/LICENSE-supertonic" "$TTS/"
   printf '%s\n' '{"name":"style-custom-voices","private":true,"type":"module","dependencies":{"onnxruntime-node":"1.30.0","kokoro-js":"1.2.1"}}' > "$TTS/package.json"
   NPM="$(dirname "$NODE")/npm"; [[ -x "$NPM" ]] || NPM="$(command -v npm || true)"

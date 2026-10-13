@@ -38,6 +38,8 @@ const MAX_BODY = 2 * 1024 * 1024;
 const MAX_PROMPT_CHARS = 400000;
 const TTS_DIR = path.join(SUPPORT, 'tts');
 const MAX_SPEECH_CHARS = 1200;
+const MAX_BOOK_CHARS = 600000;                       // a very long paper is 120k; this is room to spare
+const BAKE_TMP = path.join(SUPPORT, 'bake');         // the scratch WAV while a paper is being made
 
 /* ---------- binaries ---------- */
 function which(name, envName) {
@@ -55,6 +57,7 @@ const BIN = {claude: which('claude', 'CLAUDE_BIN'), codex: which('codex', 'CODEX
 const providers = () => ['claude', 'codex'].filter(p => BIN[p]);
 
 /* ---------- config: port + token, mode 600 ---------- */
+let config0 = null;                     // what loadConfig() settled on, for the parts that are not handed it
 function loadConfig() {
   fs.mkdirSync(SUPPORT, {recursive: true, mode: 0o700});
   fs.mkdirSync(WORK, {recursive: true, mode: 0o700});
@@ -65,6 +68,8 @@ function loadConfig() {
     : Number.isInteger(config.port) && config.port > 1023 && config.port < 65536 ? config.port : DEFAULT_PORT;
   const token = typeof config.token === 'string' && /^[A-Za-z0-9_-]{32,}$/.test(config.token) ? config.token : crypto.randomBytes(32).toString('base64url');
   const out = {port, token, version: VERSION, providers: providers()};
+  if (typeof config.audioOut === 'string' && config.audioOut.trim()) out.audioOut = config.audioOut.trim();   // the user's own folder for baked papers, kept across restarts
+  config0 = out;
   const tmp = CONFIG + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(out, null, 2) + '\n', {mode: 0o600});
   fs.renameSync(tmp, CONFIG);
@@ -379,7 +384,76 @@ async function voices(res, meta) {
   meta.status = 200;
   if (!s) return sendJSON(res, 200, {available: false, models: []});
   const models = await s.engine.list().catch(() => []);
-  return sendJSON(res, 200, {available: models.length > 0, models});
+  return sendJSON(res, 200, {available: models.length > 0, models, bake: {out: audioOut(), busy: baker ? baker.busy : false}});
+}
+
+/* ---------- baking a whole paper into an audiobook ---------- */
+/* Where the finished m4b lands. A sync folder by preference, so it is on the phone by the time the car
+   starts; `"audioOut"` in bridge.json overrides it. */
+function audioOut() {
+  const asked = process.env.STYLE_CUSTOM_BRIDGE_AUDIO_OUT || (config0 && config0.audioOut);
+  if (asked) return String(asked).replace(/^~(?=\/|$)/, HOME);
+  for (const base of [path.join(HOME, 'Dropbox'), path.join(HOME, 'Library', 'Mobile Documents', 'com~apple~CloudDocs')]) {
+    if (fs.existsSync(base)) return path.join(base, '논문 음성');
+  }
+  return path.join(HOME, 'Music', '논문 음성');
+}
+
+let baker = null;
+async function bakerFor() {
+  if (baker) return baker;
+  const s = await speechModule().catch(() => null);
+  if (!s) return null;
+  const {createBaker} = await import(path.join(TTS_DIR, 'book.mjs'));
+  baker = createBaker({speech: s.engine, outDir: audioOut(), tmpDir: BAKE_TMP, log});
+  return baker;
+}
+
+/* POST /v1/audio/book {title, chapters:[{title,text}], lang, voice, model, speed, tags}
+   -> {id, state, total}. The bake runs on after the answer; its text is never logged. */
+async function bakeStart(req, res, meta) {
+  let body;
+  try { body = JSON.parse(await readBody(req)); }
+  catch (error) { meta.status = error.status || 400; return fail(res, meta.status, 'Body must be JSON'); }
+  const chapters = Array.isArray(body && body.chapters) ? body.chapters : [];
+  const chars = chapters.reduce((n, c) => n + String(c && c.text || '').length + String(c && c.title || '').length, 0);
+  if (!chars) { meta.status = 400; return fail(res, 400, 'Nothing to say'); }
+  if (chars > MAX_BOOK_CHARS) { meta.status = 413; return fail(res, 413, 'Paper too long to bake in one file'); }
+  const made = await bakerFor();
+  if (!made) { meta.status = 501; return fail(res, 501, 'Read-aloud voices are not installed; run bridge/install.sh', 'not_installed'); }
+  meta.inChars = chars;
+  try {
+    const job = made.start({
+      title: body.title, chapters, tags: body.tags, marks: body.marks,
+      lang: String(body.lang || 'en'), voice: String(body.voice || ''), model: String(body.model || ''),
+      rate: Number(body.speed) || 1
+    });
+    meta.status = 202;
+    log({bake: job.id, start: job.total, chars});
+    return sendJSON(res, 202, {...job, out: audioOut()});
+  } catch (error) {
+    meta.status = error.status || 500;
+    return fail(res, meta.status, String(error && error.message || 'Bake failed'), meta.status === 500 ? 'server_error' : 'invalid_request_error');
+  }
+}
+
+/* GET /v1/audio/book[/<id>] -> one job, or every job this run remembers. */
+async function bakeShow(res, meta, id) {
+  const made = await bakerFor();
+  meta.status = 200;
+  if (!made) return sendJSON(res, 200, id ? {error: {message: 'Read-aloud voices are not installed', type: 'not_installed'}} : {jobs: []});
+  if (!id) return sendJSON(res, 200, {jobs: made.list(), out: audioOut(), busy: made.busy});
+  const job = made.get(id);
+  if (!job) { meta.status = 404; return fail(res, 404, 'No such bake', 'not_found'); }
+  return sendJSON(res, 200, job);
+}
+
+async function bakeStop(res, meta, id) {
+  const made = await bakerFor();
+  const job = made && made.cancel(id);
+  if (!job) { meta.status = 404; return fail(res, 404, 'No such bake', 'not_found'); }
+  meta.status = 200;
+  return sendJSON(res, 200, job);
 }
 /* {input, lang, voice, speed} -> audio/wav. Text is never logged, only its length and the time taken. */
 async function speak(req, res, meta) {
@@ -423,6 +497,10 @@ async function handle(req, res, config, started, meta) {
   if (req.method === 'POST' && meta.path === '/v1/chat/completions') return completions(req, res, config, started, meta);
   if (req.method === 'GET' && meta.path === '/v1/audio/voices') return voices(res, meta);
   if (req.method === 'POST' && meta.path === '/v1/audio/speech') return speak(req, res, meta);
+  if (req.method === 'POST' && meta.path === '/v1/audio/book') return bakeStart(req, res, meta);
+  const bake = /^\/v1\/audio\/book(?:\/([0-9a-f]{4,32}))?$/.exec(meta.path);
+  if (bake && req.method === 'GET') return bakeShow(res, meta, bake[1] || '');
+  if (bake && req.method === 'DELETE' && bake[1]) return bakeStop(res, meta, bake[1]);
   meta.status = 404; fail(res, 404, 'Not found', 'not_found');
 }
 
