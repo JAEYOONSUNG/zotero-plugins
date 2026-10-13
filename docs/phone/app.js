@@ -2173,7 +2173,9 @@ function readAhead(state) {
 }
 
 async function playOn() {
-  if (listen.chaining || !chaining() || !listen.item || $('listen').hidden) return false;
+  // Not while the PDF of this paper is open over it: that is reading, not a drive, and the page
+  // left on screen would no longer be the paper being read.
+  if (listen.chaining || !chaining() || !listen.item || $('listen').hidden || !$('paper').hidden) return false;
   const next = nextAfter(render.rows || [], listen.item.key);
   if (!next) { toast('목록의 마지막 논문까지 다 읽었습니다'); return false; }
   listen.chaining = true;
