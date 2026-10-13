@@ -2,7 +2,8 @@
    interrupts it. No DOM, no phone. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlayer, pickVoice, paperLanguage, speechEngine, spokenSeconds, sectionsOf, WATCH_EVERY} from '../play.js';
+import {createPlayer, pickVoice, paperLanguage, speechEngine, spokenSeconds, sectionsOf, WATCH_EVERY,
+        voiceTier, voiceMenu, langName, sampleFor, RATES} from '../play.js';
 
 /* A voice that speaks when told to: queue(), then finish() ends the oldest utterance. */
 function fakeEngine({supportsPause = true} = {}) {
@@ -171,6 +172,22 @@ test('the rate stays within what a voice can do', () => {
   assert.equal(player.setRate('fast'), 0.5, 'nonsense leaves the rate alone');
 });
 
+test('how loud is asked for with the words, and changing it says the sentence again', () => {
+  const engine = fakeEngine();
+  const player = makePlayer({engine, volume: 0.6});
+  player.load(units('One.', 'Two.'));
+  player.play();
+  const first = engine.start();
+  assert.equal(first.volume, 0.6, 'the loudness travels with the sentence');
+  assert.equal(player.state().volume, 0.6);
+  player.setVolume(1);
+  const again = engine.start();
+  assert.equal(again.volume, 1, 'and the sentence is said again at the new one');
+  assert.equal(player.setVolume(4), 1, 'louder than the phone can go is the phone');
+  assert.equal(player.setVolume(-1), 0);
+  assert.equal(player.setVolume('loud'), 0, 'nonsense leaves it alone');
+});
+
 test('the voice is chosen for the language, the better ones first, and a saved one wins', () => {
   const voices = [
     {voiceURI: 'u-fred', name: 'Fred', lang: 'en-US'},
@@ -187,6 +204,65 @@ test('the voice is chosen for the language, the better ones first, and a saved o
 test('the paper language comes from the body, not from one English line', () => {
   assert.equal(paperLanguage(units('We show that the enzyme degrades PET.')), 'en');
   assert.equal(paperLanguage(units('Abstract', '이 논문은 효소가 플라스틱을 분해함을 보인다.', '방법은 다음과 같다.')), 'ko');
+  assert.equal(paperLanguage(units('本研究では酵素がプラスチックを分解することを示す。')), 'ja');
+  assert.equal(paperLanguage(units('本文研究了酶对塑料的降解作用。')), 'zh');
+  // A Korean paper quotes English and borrows Chinese characters; neither takes it away from Korean.
+  assert.equal(paperLanguage(units('이 논문은 PET depolymerase (分解酵素) 의 활성을 보인다.')), 'ko');
+});
+
+/* iOS ships one tinny voice per language and downloads the good ones on demand, so the only way to
+   tell a 1990s voice from a Siri one is the name it arrives under. */
+test('a voice is sorted by how good it sounds, and a toy voice is never offered as the best', () => {
+  assert.equal(voiceTier({name: 'Siri Voice 4', lang: 'en-US'}), 'siri');
+  assert.equal(voiceTier({name: 'Yuna (Premium)', lang: 'ko-KR'}), 'premium');
+  assert.equal(voiceTier({name: 'Samantha (Enhanced)', lang: 'en-US'}), 'enhanced');
+  assert.equal(voiceTier({name: 'Samantha', lang: 'en-US'}), 'plain');
+  assert.equal(voiceTier({name: 'Zarvox', lang: 'en-US'}), 'novelty');
+  assert.equal(voiceTier({name: '', voiceURI: 'com.apple.voice.premium.ko-KR.Yuna'}), 'premium');
+});
+
+test('a language is named in the reader\'s own words, and an unknown one is still named', () => {
+  assert.equal(langName('ko-KR'), '한국어');
+  assert.equal(langName('en-US'), '영어');
+  assert.equal(langName('en-GB'), '영어 (영국)');
+  assert.equal(langName('pt-BR'), '포르투갈어 (브라질)');
+  assert.equal(langName('fa-IR'), 'FA');
+  assert.equal(langName(''), '');
+  assert.match(sampleFor('ko'), /목소리/);
+  assert.match(sampleFor('de'), /Hello/, 'a language with no line of its own is heard in English');
+});
+
+test('the voices on this phone become a menu: the paper\'s language whole, the others in short', () => {
+  const voices = [
+    {voiceURI: 'u-fred', name: 'Fred', lang: 'en-US'},
+    {voiceURI: 'u-sam', name: 'Samantha', lang: 'en-US', localService: true},
+    {voiceURI: 'u-siri', name: 'Siri Voice 4', lang: 'en-US'},
+    {voiceURI: 'u-ava', name: 'Ava (Premium)', lang: 'en-US'},
+    {voiceURI: 'u-yuna', name: 'Yuna', lang: 'ko-KR'},
+    {voiceURI: 'u-sora', name: 'Sora (Enhanced)', lang: 'ko-KR'},
+    {voiceURI: 'u-kyoko', name: 'Kyoko', lang: 'ja-JP'}
+  ];
+  const menu = voiceMenu(voices, 'ko');
+  assert.equal(menu[0].lang, 'ko', "the paper's own language comes first");
+  assert.equal(menu[0].name, '한국어');
+  assert.deepEqual(menu[0].voices.map(v => v.voiceURI), ['u-sora', 'u-yuna'], 'the better one first');
+  assert.deepEqual(menu.map(g => g.lang), ['ko', 'en', 'ja'], 'then the languages with the most voices');
+  assert.equal(menu[1].voices[0].voiceURI, 'u-siri', 'each language leads with its best');
+  assert.equal(menu[1].voices[menu[1].voices.length - 1].voiceURI, 'u-fred', 'and the toy voice is last');
+
+  // A phone with thirty languages on it is still a menu a thumb can get to the bottom of.
+  const many = [];
+  for (let i = 0; i < 20; i++) for (let j = 0; j < 9; j++) many.push({voiceURI: `v${i}-${j}`, name: `V${j}`, lang: `l${i}-X`});
+  const big = voiceMenu(many, 'l0');
+  assert.equal(big.length, 7, 'the paper\'s language and six others');
+  assert.equal(big[0].voices.length, 9, 'the paper\'s own language is offered whole');
+  assert.ok(big.slice(1).every(g => g.voices.length <= 6), 'the others are cut to the best few');
+  assert.deepEqual(voiceMenu([], 'ko'), [], 'a phone with no voices offers no menu');
+});
+
+test('the speeds go up to what the engine can actually do', () => {
+  assert.equal(RATES[RATES.length - 1], 2);
+  assert.ok(RATES.every(r => r >= 0.5 && r <= 2), 'nothing offered that the player would clamp');
 });
 
 test('the phone engine reports itself unavailable when the phone has no speech', () => {

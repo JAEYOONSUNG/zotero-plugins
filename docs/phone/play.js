@@ -35,10 +35,13 @@ export function speechEngine(win = globalThis) {
     supportsPause: true,
     available() { return !!synth && typeof Utterance === 'function'; },
     voices() { return voices().map(v => ({voiceURI: v.voiceURI, name: v.name, lang: v.lang, localService: !!v.localService, default: !!v.default})); },
-    speak({text, lang, voiceURI, rate, onstart, onend, onerror}) {
+    speak({text, lang, voiceURI, rate, volume, onstart, onend, onerror}) {
       const utterance = new Utterance(text);
       utterance.lang = lang || '';
       utterance.rate = rate || 1;
+      /* The loudest the web can ask for is 1, which is the phone's own volume: a voice cannot be
+         pushed past it from here. It is set anyway so that a quieter one can be asked for. */
+      if (volume !== undefined) utterance.volume = Math.min(1, Math.max(0, Number(volume) || 0));
       if (voiceURI) { const voice = voices().find(v => v.voiceURI === voiceURI); if (voice) utterance.voice = voice; }
       const mine = epoch;
       live.add(utterance);
@@ -65,27 +68,100 @@ export function speechEngine(win = globalThis) {
    the ones that made the desktop read-aloud sound like a toy. */
 const NOVELTY = /\b(?:albert|bad ?news|bahh|bells|boing|bubbles|cellos|deranged|wobble|fred|good ?news|hysterical|jester|junior|organ|princess|superstar|ralph|trinoids|whisper|zarvox)\b/i;
 const FAVOURITE = {en: /^(?:samantha|alex|ava|zoe|siri)\b/i, ko: /^(?:yuna|sora|siri)\b|유나/i};
+
+/* How good a voice sounds, which is the one thing a listener is choosing between. iOS ships a
+   compact voice for every language and downloads the better ones on demand, so the same list can
+   hold a tinny 1990s voice and a Siri one, and the names are the only way to tell them apart. */
+export const TIERS = [['siri', 'Siri'], ['premium', '프리미엄'], ['enhanced', '고품질'], ['plain', '기본'], ['novelty', '장난감']];
+export function voiceTier(voice) {
+  const name = String(voice && voice.name || '');
+  const both = `${name} ${voice && voice.voiceURI || ''}`;
+  if (NOVELTY.test(name)) return 'novelty';
+  if (/siri/i.test(both)) return 'siri';
+  if (/premium/i.test(both)) return 'premium';
+  if (/enhanced|neural/i.test(both)) return 'enhanced';
+  return 'plain';
+}
+const TIER_RANK = {siri: 4, premium: 3, enhanced: 2, plain: 1, novelty: -100};
+
 export function pickVoice(list, lang = 'en', savedURI = '') {
   const voices = Array.isArray(list) ? list : [];
   if (savedURI) { const kept = voices.find(v => v.voiceURI === savedURI); if (kept) return kept; }
-  const code = String(lang).toLowerCase().split(/[-_]/)[0];
-  const same = voices.filter(v => String(v.lang || '').toLowerCase().replace('_', '-').split('-')[0] === code);
+  const code = baseLang(lang);
+  const same = voices.filter(v => baseLang(v.lang) === code);
   if (!same.length) return null;
-  const score = v => {
-    const both = `${v.name || ''} ${v.voiceURI || ''}`;
-    if (NOVELTY.test(v.name || '')) return -100;
-    const tier = /premium|siri/i.test(both) ? 3 : /enhanced|neural/i.test(both) ? 2 : 1;
-    return tier * 10 + (FAVOURITE[code] && FAVOURITE[code].test(v.name || '') ? 3 : 0) + (v.default ? 1 : 0) + (v.localService ? 0.5 : 0);
-  };
-  return same.map((v, i) => ({v, i, s: score(v)})).sort((a, b) => b.s - a.s || a.i - b.i)[0].v;
+  return same.map((v, i) => ({v, i, s: voiceScore(v, code)})).sort((a, b) => b.s - a.s || a.i - b.i)[0].v;
+}
+function voiceScore(v, code) {
+  const tier = TIER_RANK[voiceTier(v)] || 1;
+  if (tier < 0) return -100;
+  return tier * 10 + (FAVOURITE[code] && FAVOURITE[code].test(v.name || '') ? 3 : 0) + (v.default ? 1 : 0) + (v.localService ? 0.5 : 0);
+}
+export const baseLang = lang => String(lang || '').toLowerCase().replace('_', '-').split('-')[0];
+
+/* The languages this app has anything to say about, in the reader's own words. Anything else is
+   shown by its code rather than left blank: a voice nobody can name is still a voice. */
+const LANGS = {ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', de: '독일어', fr: '프랑스어',
+               es: '스페인어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어', nl: '네덜란드어',
+               sv: '스웨덴어', da: '덴마크어', no: '노르웨이어', fi: '핀란드어', pl: '폴란드어',
+               tr: '터키어', ar: '아랍어', hi: '힌디어', th: '태국어', vi: '베트남어', id: '인도네시아어',
+               he: '히브리어', cs: '체코어', el: '그리스어', hu: '헝가리어', ro: '루마니아어', uk: '우크라이나어'};
+const REGIONS = {'en-gb': '영국', 'en-au': '호주', 'en-in': '인도', 'en-ie': '아일랜드', 'en-za': '남아공',
+                 'zh-tw': '대만', 'zh-hk': '홍콩', 'pt-br': '브라질', 'fr-ca': '캐나다', 'es-mx': '멕시코'};
+export function langName(code) {
+  const full = String(code || '').toLowerCase().replace('_', '-');
+  const base = baseLang(full);
+  if (!base) return '';
+  const name = LANGS[base] || base.toUpperCase();
+  const region = REGIONS[full];
+  return region ? `${name} (${region})` : name;
 }
 
-/* The language a paper is in, from the sentences themselves. */
+/* The voices this phone has, as a menu: the paper's own language first and whole, then every other
+   language it can speak, each one headed by its name and cut to the few best in it. The point of
+   showing the others at all is that papers quote, and that a reader may simply prefer a voice. */
+export function voiceMenu(list, lang = 'en', {others = 6, each = 6} = {}) {
+  const voices = (Array.isArray(list) ? list : []).filter(v => v && v.voiceURI);
+  const code = baseLang(lang);
+  const by = new Map();
+  for (const voice of voices) {
+    const key = baseLang(voice.lang) || '?';
+    if (!by.has(key)) by.set(key, []);
+    by.get(key).push(voice);
+  }
+  const order = (group, who) => group
+    .map((v, i) => ({v, i, s: voiceScore(v, who)}))
+    .sort((a, b) => b.s - a.s || a.i - b.i).map(x => x.v);
+  const groups = [];
+  if (by.has(code)) groups.push({lang: code, name: langName(code), voices: order(by.get(code), code)});
+  const rest = [...by.keys()].filter(key => key !== code)
+    .sort((a, b) => by.get(b).length - by.get(a).length || a.localeCompare(b))
+    .slice(0, Math.max(0, others));
+  for (const key of rest) groups.push({lang: key, name: langName(key), voices: order(by.get(key), key).slice(0, Math.max(1, each))});
+  return groups;
+}
+
+/* A line to hear a voice say before it is chosen, in the language it speaks. */
+const SAMPLES = {
+  ko: '안녕하세요. 이 목소리로 논문을 읽어 드립니다.',
+  en: 'Hello. This is the voice that will read your paper.',
+  ja: 'こんにちは。この声で論文を読み上げます。',
+  zh: '你好，我将用这个声音为你朗读论文。'
+};
+export const sampleFor = lang => SAMPLES[baseLang(lang)] || SAMPLES.en;
+
+/* The language a paper is in, from the sentences themselves. Hangul first: a Korean paper quotes
+   enough English, and borrows enough Chinese characters, to be mistaken for either. */
 export function paperLanguage(units) {
   const sample = (Array.isArray(units) ? units : []).slice(0, 400).map(u => u.spoken || u.text || '').join(' ');
-  const hangul = (sample.match(/[가-힣]/g) || []).length;
   const latin = (sample.match(/[A-Za-z]/g) || []).length;
-  return hangul > latin * 0.2 ? 'ko' : 'en';
+  const hangul = (sample.match(/[가-힣]/g) || []).length;
+  if (hangul > latin * 0.2) return 'ko';
+  const kana = (sample.match(/[\u3040-\u30ff]/g) || []).length;
+  if (kana > latin * 0.2) return 'ja';
+  const han = (sample.match(/[\u4e00-\u9fff]/g) || []).length;
+  if (han > latin * 0.2) return 'zh';
+  return 'en';
 }
 
 /* ---- the player ---- */
@@ -100,7 +176,7 @@ export function spokenSeconds(text, rate = 1) {
 export const WATCH_EVERY = 2500;
 
 export function createPlayer({
-  engine, onChange = () => {}, rate = 1, lang = 'en', voiceURI = '',
+  engine, onChange = () => {}, rate = 1, lang = 'en', voiceURI = '', volume = 1,
   now = () => Date.now(),
   every = (fn, ms) => setInterval(fn, ms),
   stopEvery = id => clearInterval(id)
@@ -109,8 +185,10 @@ export function createPlayer({
   let list = [], index = 0, status = 'idle', generation = 0, queuedTo = -1, entered = -1, error = '';
   let heard = 0, watch = null, revivals = 0;
   let speakRate = clamp(rate, RATE_MIN, RATE_MAX, 1), speakLang = lang || 'en', speakVoice = voiceURI || '';
+  let speakVolume = clamp(volume, 0, 1, 1);
   const state = () => ({status, index, total: list.length, unit: list[index] || null,
-                       rate: speakRate, lang: speakLang, voiceURI: speakVoice, error, revivals});
+                       rate: speakRate, lang: speakLang, voiceURI: speakVoice, volume: speakVolume,
+                       error, revivals});
   const emit = type => { try { onChange({type, state: state()}); } catch (_) {} };
   const alive = () => { heard = now(); };
   const sayable = unit => {
@@ -142,7 +220,7 @@ export function createPlayer({
     if (!unit) return;
     queuedTo = at;
     engine.speak({
-      text: sayable(unit), lang: speakLang, voiceURI: speakVoice, rate: speakRate,
+      text: sayable(unit), lang: speakLang, voiceURI: speakVoice, rate: speakRate, volume: speakVolume,
       onstart: () => onStart(mine, at),
       onend: () => onEnd(mine, at),
       onerror: reason => fail(mine, reason)
@@ -233,6 +311,14 @@ export function createPlayer({
       if (status === 'playing') startAt(index); else emit('settings');
       return speakRate;
     },
+    /* Changed while a sentence is being spoken, the sentence starts again: the engine fixed the
+       loudness when it took the words, and there is no way to turn one that is already speaking. */
+    setVolume(value) {
+      const was = speakVolume;
+      speakVolume = clamp(value, 0, 1, speakVolume);
+      if (speakVolume !== was && status === 'playing') startAt(index); else emit('settings');
+      return speakVolume;
+    },
     setVoice(uri, language) {
       speakVoice = uri || '';
       if (language) speakLang = language;
@@ -243,7 +329,9 @@ export function createPlayer({
   return api;
 }
 
-export const RATES = [0.8, 1, 1.2, 1.5, 1.8];
+/* The speeds offered. 2× is the top because that is where the engine stops; it is there for a
+   second listen and for the parts of a paper nobody needs every word of. */
+export const RATES = [0.8, 1, 1.2, 1.5, 1.8, 2];
 
 /* The sections of a paper and where each one starts, for jumping about in a long one. */
 export function sectionsOf(units) {
