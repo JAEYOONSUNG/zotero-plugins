@@ -205,6 +205,22 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .resume .what span { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
 .resume .heard { width:34px; }
 
+/* The landmarks down the right edge: a finger laid on them slides the library to the letter,
+   the year or the stars it is over, and the one it is over is said in full beside it. Only for an
+   order whose headings have a short form, and only when the list is long enough to be lost in. */
+.rail { position:absolute; z-index:2; right:0; bottom:calc(var(--bottom) + 62px);
+        display:flex; flex-direction:column; align-items:center; width:27px; padding:5px 0;
+        touch-action:none; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+.rail[hidden] { display:none; }
+.rail .step { display:block; width:100%; text-align:center; font-size:11px; font-weight:650;
+              line-height:1.32; color:var(--muted); font-variant-numeric:tabular-nums; }
+.rail.held .step { color:var(--faint); }
+.rail .step.on { color:var(--ink); }
+.rail .now { position:absolute; right:31px; top:var(--now,0); transform:translateY(-50%);
+             padding:5px 12px; border-radius:999px; background:var(--card); box-shadow:var(--sel-shadow);
+             font-size:15px; font-weight:700; color:var(--ink); white-space:nowrap; letter-spacing:-.01em; }
+.rail:not(.held) .now { display:none; }
+
 .empty { margin:56px auto 0; max-width:280px; text-align:center; color:var(--muted); font-size:14px; line-height:1.6; }
 .more { height:1px; }
 /* while the first few thousand are arriving */

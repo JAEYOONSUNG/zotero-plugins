@@ -158,6 +158,20 @@ export function dayName(at, now = Date.now()) {
   return `${was.getFullYear()}년 ${was.getMonth() + 1}월`;
 }
 
+/* The rail down the right edge of a long list needs a landmark of one or two characters. A letter
+   is already one, a year is told by its last two digits, a rating by how many stars, and the
+   bucket for what has neither is a dot. A heading with no short form — a date, mostly — returns
+   nothing, and the rail is simply not offered for that order. */
+export function railLabel(group) {
+  const text = String(group ?? '').trim();
+  if (!text) return '';
+  if (/모름|없음|안 봄/.test(text)) return '·';
+  if (/^★+$/.test(text)) return String(text.length);
+  const year = /^(\d{4})년$/.exec(text);
+  if (year) return year[1].slice(2);
+  return text.length <= 2 ? text : '';
+}
+
 export function groupOf(item, how = 'added', {now = Date.now(), seenAt = () => 0} = {}) {
   if (how === 'year') { const year = yearOf(item); return year ? `${year}년` : '연도 모름'; }
   if (how === 'rating') { const n = ratingOf(item); return n ? '★'.repeat(n) : '별점 없음'; }

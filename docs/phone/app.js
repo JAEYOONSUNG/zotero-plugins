@@ -17,7 +17,7 @@ import {readable, units as readingUnits, remainingSeconds} from './read.js';
 import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
-import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf} from './list.js';
+import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
@@ -827,6 +827,98 @@ function drawMore() {
   if (more && state.shown >= rows.length) { more.remove(); more = null; }
 }
 
+/* ---------- the landmarks down the right edge ---------- */
+export const RAIL_MIN = 40, RAIL_MARKS = 6, RAIL_MAX = 24;
+/* Where each heading begins, and the one or two characters that stand for it. An order whose
+   headings have no short form, a list too short to get lost in, or too few landmarks to aim a
+   finger at, gets no rail at all. */
+function railMarks(rows) {
+  const marks = [];
+  let last = '';
+  for (let i = 0; i < rows.length; i++) {
+    const name = groupOf(rows[i], state.sort, {seenAt});
+    if (!name || name === last) continue;
+    last = name;
+    const short = railLabel(name);
+    if (!short) return [];
+    marks.push({at: i, name, short});
+  }
+  if (rows.length < RAIL_MIN || marks.length < RAIL_MARKS) return [];
+  /* More landmarks than there is room for: every nth one is drawn and the finger lands on the
+     nearest of those, which is what a phone does with an alphabet too long for its screen. */
+  const stride = Math.ceil(marks.length / RAIL_MAX);
+  return stride < 2 ? marks : marks.filter((_, i) => i % stride === 0 || i === marks.length - 1);
+}
+
+function paintRail(marks) {
+  const rail = $('rail');
+  if (!rail) return;
+  rail.textContent = '';
+  rail.classList.remove('held');
+  rail.hidden = !marks.length;
+  railAt = marks;
+  if (!marks.length) return;
+  el('span', {class: 'now'}, rail);                 // what the finger is over, said in full
+  for (const mark of marks) el('span', {class: 'step', text: mark.short}, rail);
+}
+
+/* Enough of the list is drawn to reach the landmark, and then the library is put at its heading. */
+function jumpToRow(at) {
+  const list = $('list');
+  while (state.shown <= at + 2) { const before = state.shown; drawMore(); if (state.shown === before) break; }
+  const row = list.querySelectorAll('.row.paper')[at];
+  if (!row) return;
+  const above = row.previousElementSibling;
+  const mark = above && above.classList && above.classList.contains('group') ? above : row;
+  try {
+    const delta = mark.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    list.scrollTop = Math.max(0, (list.scrollTop || 0) + delta);
+  } catch (_) {}
+}
+
+let railAt = [];
+/* A finger laid on the rail is followed: the library goes to whatever landmark it is over, and
+   nothing is committed, so sliding off it costs nothing. The place is taken from the rail's own
+   height rather than each label's, so a rail that has been squeezed still aims true. */
+function wireRail() {
+  const rail = $('rail');
+  if (!rail) return;
+  let chosen = -1;
+  const aim = y => {
+    const steps = [...rail.querySelectorAll('.step')];
+    if (!steps.length || !railAt.length) return;
+    const box = rail.getBoundingClientRect();
+    const part = box.height ? (y - box.top) / box.height : 0;
+    const best = Math.max(0, Math.min(steps.length - 1, Math.floor(part * steps.length)));
+    const now = rail.querySelector('.now');
+    if (now && railAt[best]) {
+      now.textContent = railAt[best].name;
+      now.style.setProperty('--now', `${Math.round((best + 0.5) / steps.length * (box.height || 0))}px`);
+    }
+    steps.forEach((step, i) => step.classList.toggle('on', i === best));
+    if (best === chosen) return;
+    chosen = best;
+    if (railAt[best]) jumpToRow(railAt[best].at);
+  };
+  const take = event => {
+    const touch = event.touches && event.touches[0];
+    if (rail.hidden) return;
+    rail.classList.add('held');
+    closeFloat();
+    aim(touch ? touch.clientY : event.clientY || 0);
+  };
+  rail.addEventListener('touchstart', take, {passive: true});
+  rail.addEventListener('touchmove', take, {passive: true});
+  rail.addEventListener('click', take);
+  const drop = () => {
+    rail.classList.remove('held');
+    chosen = -1;
+    for (const step of rail.querySelectorAll('.step')) step.classList.remove('on');
+  };
+  rail.addEventListener('touchend', drop, {passive: true});
+  rail.addEventListener('touchcancel', drop, {passive: true});
+}
+
 function render({keep = false} = {}) {
   const list = $('list');
   /* Emptying the list puts the scroll back at the top, so a change made from a row three hundred
@@ -857,6 +949,7 @@ function render({keep = false} = {}) {
         : '아직 받은 논문이 없습니다. 오른쪽 위 새로 고침을 누르세요.'}, list);
     }
     state.shown = 0;
+    paintRail([]);
     return;
   }
   const want = keep ? Math.min(rows.length, Math.max(PAGE, state.shown)) : PAGE;
@@ -864,6 +957,7 @@ function render({keep = false} = {}) {
   // A sentinel at the end: when it comes into view there is more to draw.
   more = el('div', {class: 'more', 'aria-hidden': 'true'}, list);
   while (state.shown < want) { const before = state.shown; drawMore(); if (state.shown === before) break; }
+  paintRail(railMarks(rows));
   if (was) { list.scrollTop = was; requestAnimationFrame(() => { list.scrollTop = was; }); }
   watchEnd();
 }
@@ -1963,6 +2057,7 @@ function takePasted(text) {
 }
 
 function wire() {
+  wireRail();
   const paste = $('setup-paste');
   if (paste) paste.addEventListener('click', async () => {
     try {

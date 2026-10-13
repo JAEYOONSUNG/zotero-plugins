@@ -32,9 +32,11 @@ itself; what the release will do is drawn behind the row while the finger is sti
 a finger on one instead opens all three marks, 읽는 중 among them, and the mark shows in the
 margin beside the title.
 Browse by collection (a collection means everything filed under it) or by tag; what is being
-looked at shows as chips that take themselves off. Search covers the title, authors, journal,
-year, DOI, tags and the abstract, folds accents so Muller finds Müller, and every word has to
-appear.
+looked at shows as chips that take themselves off. A library long enough to be lost in carries landmarks down its
+right edge — the letters, the years, the stars — and a finger laid on them takes it there, saying
+in full what it is over; the orders whose headings are dates have no one-character name, so they
+go without. Search covers the title, authors, journal, year, DOI, tags and the abstract, folds
+accents so Muller finds Müller, and every word has to appear.
 
 **The PDF.** Pinch to zoom, double tap for 2×, a slider for the long ones, night mode, and out to
 any other app through the share sheet — the bar over a paper carries its name, the page and a way

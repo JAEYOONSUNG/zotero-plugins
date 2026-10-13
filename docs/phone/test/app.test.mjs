@@ -1426,6 +1426,77 @@ test('a change made far down the library leaves the reader where they were', asy
   assert.equal(open.document.querySelectorAll('#list .row').length, drawn, 'and as much of it is still drawn');
 });
 
+/* A library whose titles spread over twenty letters, Hangul and Latin, five papers each — more
+   than one page of the list, so reaching the last letter means drawing the rest of it. */
+const LETTERS = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차',
+                 '카', '타', '파', '하', 'Alpha', 'Beta', 'Gamma', 'Delta', 'Omega', 'Zeta'];
+const SPREAD = LETTERS.flatMap((word, g) => Array.from({length: 5}, (_, i) => ({
+  key: `S${g}-${i}`, version: 10 + g * 5 + i,
+  data: {key: `S${g}-${i}`, version: 10 + g * 5 + i, itemType: 'journalArticle',
+    title: `${word} ${i} 논문`, date: '2026', dateAdded: '2026-01-01T00:00:00Z',
+    dateModified: '2026-10-01T00:00:00Z', creators: [], publicationTitle: 'Science',
+    tags: [], collections: [], extra: ''}})));
+
+test('a long library carries landmarks down its right edge, and a finger on them moves it', async () => {
+  const open = await boot({server: fakeServer({items: SPREAD}),
+    stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.sort': 'title'}});
+  await open.settle();
+  const rail = open.document.getElementById('rail');
+  assert.equal(rail.hidden, false, 'a library this long is offered the rail');
+  const steps = () => [...rail.querySelectorAll('.step')];
+  assert.equal(steps().length, 20, 'one landmark per letter');
+  assert.deepEqual(steps().map(s => s.textContent.length), Array(20).fill(1), 'each of one character');
+  assert.ok(steps().some(s => /[ㄱ-ㅎ]/.test(s.textContent)), 'Hangul is filed under its leading consonant');
+
+  // The place is taken from the rail's own height, so the fake phone need only say how tall it is.
+  rail.getBoundingClientRect = () => ({top: 100, height: 240, bottom: 340, left: 0, right: 27, width: 27});
+  const touch = (type, y) => {
+    const event = new open.window.Event(type);
+    event.touches = [{clientX: 20, clientY: y}];
+    rail.dispatchEvent(event);
+  };
+  const names = steps().map(s => s.textContent);
+  // Nine tenths of the way down the rail is the nineteenth of twenty landmarks.
+  touch('touchstart', 100 + 240 * 0.92);
+  await open.settle(4);
+  assert.equal(rail.classList.contains('held'), true, 'the rail says it is being used');
+  const now = rail.querySelector('.now');
+  assert.ok(now.textContent, 'and says in full what the finger is over');
+  assert.equal(steps()[18].classList.contains('on'), true, 'the landmark under the finger is the lit one');
+  assert.equal(now.textContent, names[18], 'and the bubble names that same landmark');
+  // Reaching it meant drawing the rest of a list that only had its first page: the heading is there.
+  const heads = [...open.document.querySelectorAll('#list .group')].map(h => h.textContent);
+  assert.ok(heads.includes(now.textContent), `the library was drawn as far as ${now.textContent}`);
+  assert.ok(open.document.querySelectorAll('#list .row.paper').length > 60, 'which is more than one page');
+
+  rail.dispatchEvent(new open.window.Event('touchend'));
+  assert.equal(rail.classList.contains('held'), false, 'and lets go');
+  assert.equal(steps().filter(s => s.classList.contains('on')).length, 0);
+});
+
+test('the landmarks are only offered where they would mean something', async () => {
+  // Three papers: there is nothing to get lost in.
+  const small = await boot();
+  await small.settle();
+  assert.equal(small.document.getElementById('rail').hidden, true, 'a short library has no rail');
+
+  // Dates have no one-character name, so the orders that group by date go without.
+  const dated = await boot({server: fakeServer({items: MANY}),
+    stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.sort': 'added'}});
+  await dated.settle();
+  assert.equal(dated.document.getElementById('rail').hidden, true, '최근 추가 has no rail');
+
+  // Years do: the last two digits of each.
+  const byYear = await boot({server: fakeServer({items: MANY}),
+    stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.sort': 'year'}});
+  await byYear.settle();
+  const rail = byYear.document.getElementById('rail');
+  assert.equal(rail.hidden, false, '연도 does');
+  const steps = [...rail.querySelectorAll('.step')];
+  assert.ok(steps.length >= 6 && steps.length <= 24, `between six and twenty-four landmarks, not ${steps.length}`);
+  for (const step of steps) assert.match(step.textContent, /^\d{2}$/, 'a year is its last two digits');
+});
+
 test('the refresh button says, by turning, that something is happening', async () => {
   const open = await boot();
   await open.settle();

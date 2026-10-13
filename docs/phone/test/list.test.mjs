@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fold, haystack, words, matches, sortRows, filterRows, usefulTags, familyOf, SORTS,
-        groupOf, dayName, initialOf} from '../list.js';
+        groupOf, dayName, initialOf, railLabel} from '../list.js';
 
 const paper = (over = {}) => ({key: over.key || 'K', version: 1, data: {
   itemType: 'journalArticle', title: 'A paper', date: '2024', dateAdded: '2024-01-01T00:00:00Z',
@@ -161,4 +161,19 @@ test('a title is filed under a letter however it is written', () => {
   assert.equal(initialOf(''), '#');
   assert.equal(initialOf(null), '#');
   assert.equal(initialOf('까치'), 'ㄲ');
+});
+
+test('a landmark for the rail is one or two characters, or nothing at all', () => {
+  assert.equal(railLabel('ㄱ'), 'ㄱ');
+  assert.equal(railLabel('A'), 'A');
+  assert.equal(railLabel('#'), '#');
+  assert.equal(railLabel('2024년'), '24', 'a year is told by its last two digits');
+  assert.equal(railLabel('★★★'), '3', 'a rating by how many stars');
+  assert.equal(railLabel('별점 없음'), '·');
+  assert.equal(railLabel('연도 모름'), '·');
+  assert.equal(railLabel('아직 안 봄'), '·');
+  // A date has no short form, which is how the app knows not to offer the rail for those orders.
+  assert.equal(railLabel('2024년 11월'), '');
+  assert.equal(railLabel('이번 주'), '');
+  assert.equal(railLabel(''), '');
 });
