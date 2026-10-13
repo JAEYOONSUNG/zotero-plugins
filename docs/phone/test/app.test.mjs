@@ -886,6 +886,37 @@ test('a long paper can be jumped about in by part, and the place shows on the sl
   assert.equal(marked, open.document.querySelectorAll('#listen .sent')[Number(seek.max)]);
 });
 
+test('how big the words are is the reader\'s own choice, and it is kept', async () => {
+  const {open} = await openListening();
+  open.document.getElementById('listen-more').dispatchEvent(new open.window.Event('click'));
+  const track = open.document.getElementById('listen-size');
+  const buttons = [...track.querySelectorAll('button')];
+  assert.deepEqual(buttons.map(b => b.textContent), ['작게', '보통', '크게', '더 크게']);
+  assert.equal(buttons[1].getAttribute('aria-pressed'), 'true', '보통 to begin with');
+
+  buttons[2].dispatchEvent(new open.window.Event('click'));
+  assert.equal(open.storage.get('np.read'), '1.15', 'the choice is kept');
+  assert.equal(open.document.documentElement.style.getPropertyValue('--read'), '1.15',
+    'and the words it applies to are told');
+  assert.equal(buttons[2].getAttribute('aria-pressed'), 'true');
+  assert.equal(buttons[1].getAttribute('aria-pressed'), 'false');
+
+  // It is only the reading that grows: the chrome is not what anyone is reading.
+  const css = read('app.css');
+  assert.match(css, /\.transcript \.sent \{[^}]*font-size:calc\(16px \* var\(--read\)\)/);
+  assert.match(css, /\.note \{[^}]*font-size:calc\(14px \* var\(--read\)\)/);
+  assert.ok(!/\.row h2 \{[^}]*var\(--read\)/.test(css), 'a row of the library is chrome, not reading');
+
+  // Next time the app opens, that is the size it opens at.
+  const again = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.read': '1.32'}});
+  await again.settle();
+  assert.equal(again.document.documentElement.style.getPropertyValue('--read'), '1.32');
+  // Something nonsensical in the store is not allowed to shrink the app to nothing.
+  const odd = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), 'np.read': '0'}});
+  await odd.settle();
+  assert.equal(odd.document.documentElement.style.getPropertyValue('--read'), '1');
+});
+
 test('the sleep timer stops the reading, and says so', async () => {
   const {open} = await openListening();
   const play = open.document.getElementById('listen-play');
@@ -1429,6 +1460,24 @@ test('every rule in the stylesheet is for a class the app still asks for', () =>
   for (const m of read('app.css').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)) styled.add(m[1]);
   const stale = [...styled].filter(name => !asked.has(name));
   assert.deepEqual(stale, [], `these are styled but nothing asks for them: ${stale.join(', ')}`);
+});
+
+/* The settings screen was given a .note for its small print while .note was already a paper's
+   abstract and its memos, and the second rule quietly made every abstract twelve-pixel grey.
+   Two bare rules for one class, each setting a different size, is that mistake exactly. */
+test('no one class is given two different sizes in two different places', () => {
+  const css = read('app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const sizes = new Map();
+  for (const m of css.matchAll(/^\.([a-z][a-z0-9-]*) \{([^}]*)\}/gm)) {
+    const size = /font-size:\s*([^;]+)/.exec(m[2]);
+    if (!size) continue;
+    const seen = sizes.get(m[1]) || new Set();
+    seen.add(size[1].trim());
+    sizes.set(m[1], seen);
+  }
+  const split = [...sizes].filter(([, seen]) => seen.size > 1)
+    .map(([name, seen]) => `${name} (${[...seen].join(' vs ')})`);
+  assert.deepEqual(split, [], `these classes are sized twice over: ${split.join(', ')}`);
 });
 
 test('a status is a mark in the margin, and the three of them are told apart by colour', () => {

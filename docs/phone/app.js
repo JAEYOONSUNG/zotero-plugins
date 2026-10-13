@@ -23,7 +23,8 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
-              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip'};
+              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
+              read: 'np.read'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -1775,6 +1776,7 @@ async function openListen(item) {
   } catch (_) {}
 
   buildRates(rate);
+  buildSizes();
   buildScope(lang, withCaptions);
   buildSections();
   setSleep('0');
@@ -1795,6 +1797,35 @@ function buildSections() {
     option.dataset.name = name;
   }
   select.disabled = !found.length;
+}
+
+/* How big the words are while a paper is being read. A reader's own choice, kept for next time,
+   and it moves the transcript and a paper's own text — not the chrome, which is not what anyone
+   is reading. */
+export const SIZES = [['0.88', '작게'], ['1', '보통'], ['1.15', '크게'], ['1.32', '더 크게']];
+export const readSize = () => {
+  const held = localStorage.getItem(KEYS.read) || '1';
+  return SIZES.some(([value]) => value === held) ? held : '1';
+};
+function setReadSize(value) {
+  localStorage.setItem(KEYS.read, value);
+  if (document.documentElement) document.documentElement.style.setProperty('--read', value);
+}
+function buildSizes() {
+  const track = $('listen-size');
+  if (!track) return;
+  track.textContent = '';
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
+  const now = readSize();
+  for (const [value, label] of SIZES) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(value === now), text: label}, track);
+    button.addEventListener('click', () => {
+      setReadSize(value);
+      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(track);
+    });
+  }
+  requestAnimationFrame(() => slide(track));
 }
 
 function buildRates(current, track = $('listen-rate')) {
@@ -2216,7 +2247,7 @@ function setGo(card, label, run, {bad = false} = {}) {
   row.addEventListener('click', run);
   return row;
 }
-const setNote = (group, text) => el('p', {class: 'note', text}, group);
+const setNote = (group, text) => el('p', {class: 'set-note', text}, group);
 
 function paintSettings() {
   const body = $('settings-body');
@@ -2292,7 +2323,7 @@ function paintSettings() {
   } else {
     setRow(carry.card, '지금', 'Safari');
     const said = el('p', {class: 'msg', hidden: true}, carry.group);
-    const shown = el('p', {class: 'note', hidden: true}, carry.group);
+    const shown = el('p', {class: 'set-note', hidden: true}, carry.group);
     setGo(carry.card, '키까지 함께 담기', () => {
       carryKeys();
       localStorage.setItem(KEYS.scope, 'paired');
@@ -2662,6 +2693,7 @@ async function takeDropboxReturn() {
 }
 
 async function start() {
+  setReadSize(readSize());            // the size chosen last time, before anything is drawn
   try { history.replaceState({depth: 0}, ''); } catch (_) {}
   const paired = takeKeyFromLink();
   const fromDropbox = await takeDropboxReturn();

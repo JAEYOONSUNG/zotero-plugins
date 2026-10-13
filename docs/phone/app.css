@@ -18,6 +18,8 @@
   /* What is written on top of one of those four as a fill, rather than beside it as ink. */
   --on-fill:#fff;
   --pad:16px; --gap:12px; --radius:14px; --slide:220ms cubic-bezier(.2,.8,.2,1);
+  /* How big the words are in what is being read, as against the chrome around it. */
+  --read:1;
   --top:calc(env(safe-area-inset-top,0px)); --bottom:calc(env(safe-area-inset-bottom,0px)); --kb:0px;
   color-scheme: light dark;
 }
@@ -364,7 +366,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .rate button { width:36px; height:36px; border-radius:999px; font-size:21px; color:var(--track-hover); }
 .rate button[aria-pressed="true"], .rate button.on { color:var(--warm); }
 .tags { display:flex; flex-wrap:wrap; gap:6px; }
-.note { font-size:14px; line-height:1.65; overflow-wrap:anywhere; }
+.note { font-size:calc(14px * var(--read)); line-height:1.65; overflow-wrap:anywhere; }
 .note :is(h1,h2,h3) { font-size:15px; margin:8px 0 4px; }
 .note.clipped { display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
 .link-btn { align-self:flex-start; padding:4px 0; font-size:13px; font-weight:650; color:var(--link); }
@@ -426,8 +428,10 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .set-field input::placeholder { color:var(--faint); }
 .set-go { color:var(--link); font-weight:600; }
 .set-go.bad { color:var(--bad); }
-.note { margin:8px var(--pad) 0; font-size:12px; line-height:1.6; color:var(--faint); }
-.note code { background:var(--track); border-radius:6px; padding:1px 5px; }
+/* Small print under a group of rows. Its own name: .note is a paper's abstract and its memos,
+   and one class with two sizes in it is how a screen quietly comes apart. */
+.set-note { margin:8px var(--pad) 0; font-size:12px; line-height:1.6; color:var(--faint); }
+.set-note code { background:var(--track); border-radius:6px; padding:1px 5px; }
 .set-row .dot { width:9px; height:9px; border-radius:999px; background:var(--muted); flex:none; }
 .set-row .dot.on { background:var(--good); }
 .set-row .dot.off { background:var(--bad); }
@@ -453,14 +457,14 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .transcript .sec { margin:20px 0 6px; font-size:13px; font-weight:700; letter-spacing:-.01em;
                    color:var(--muted); }
 .transcript .sent { display:block; width:100%; text-align:start; padding:7px 12px; border-radius:10px;
-                    font-size:16px; line-height:1.62; color:var(--ink);
+                    font-size:calc(16px * var(--read)); line-height:1.62; color:var(--ink);
                     transition:background var(--slide), box-shadow var(--slide); }
 /* Heard already, and set back for it — but never the one being read, which comes after this rule
    so that it wins the colour back at the same weight of selector. */
 .transcript .sent.said { color:var(--faint); }
 .transcript .sent[aria-current="true"] { background:var(--sel); box-shadow:var(--sel-shadow);
                                          font-weight:600; color:var(--ink); }
-.transcript .sent.caption { color:var(--muted); font-size:14px; }
+.transcript .sent.caption { color:var(--muted); font-size:calc(14px * var(--read)); }
 .transcript .sent:active { background:var(--track); }
 /* The way back to the voice, stuck to the bottom of what is being looked at. */
 .to-now { position:sticky; bottom:6px; z-index:2; display:block; width:-webkit-fit-content; width:fit-content;
