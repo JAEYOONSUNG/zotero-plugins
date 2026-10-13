@@ -1016,6 +1016,25 @@ test('one paper after another, so a drive is not a paper and then silence', asyn
   assert.equal(open.storage.get('np.lastkind'), 'listen');
 });
 
+test('the paper after this one is fetched before it is wanted, so a tunnel does not end the drive', async () => {
+  const {open, server} = await openListening();
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  click([...$id('listen-chain').querySelectorAll('button')].find(b => b.textContent === '이어서 계속'));
+  const asked = () => server.sent.filter(r => /\/items\/BBB\/children/.test(r.path)).length;
+  assert.equal(asked(), 0, 'nothing is fetched for a paper nobody has got to yet');
+  const sents = [...open.document.querySelectorAll('#listen .sent')];
+  click(sents[0]);
+  await open.settle();
+  assert.equal(asked(), 0, 'nor at the top of the one being read');
+  click(sents[sents.length - 1]);        // most of the way through
+  await open.settle(20);
+  assert.equal(asked(), 1, 'the next paper is got ready while this one is still being read');
+  click(sents[Math.max(0, sents.length - 2)]);
+  await open.settle(20);
+  assert.equal(asked(), 1, 'and only once');
+});
+
 test('the car\'s own buttons are given the player while driving', async () => {
   const handlers = {};
   const nav = {mediaSession: {setActionHandler: (name, fn) => { handlers[name] = fn; }, metadata: null, playbackState: ''}};

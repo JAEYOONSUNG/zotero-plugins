@@ -1859,7 +1859,7 @@ async function bodyToRead(item) {
 
 const listen = {player: null, list: [], item: null, nodes: [], paper: null, wake: null, voices: [],
                 sleep: null, sleepAt: 0, sleepSection: '', scrolledAt: 0, chasing: false,
-                index: 0, saidTo: 0, hum: null, chaining: false};
+                index: 0, saidTo: 0, hum: null, chaining: false, ahead: '', toldCar: ''};
 
 /* Stops reading after a while, or at the end of the part being read, so a paper can be put on at
    night without talking until morning. */
@@ -1924,6 +1924,7 @@ function paintReading(state) {
   // The paper has ended. If the reader asked to carry on, the next one in the library starts
   // rather than leaving a car silent.
   if (state.status === 'done') playOn();
+  readAhead(state);
   carNowPlaying(listen.item, playing);
   const left = remainingSeconds(listen.list, state.index, state.rate);
   const unit = state.unit;
@@ -2159,6 +2160,18 @@ export function nextAfter(rows, key) {
   return at >= 0 ? (rows[at + 1] || null) : null;
 }
 
+/* Most of the way through a paper, the next one is quietly fetched and kept, so that the moment it
+   is wanted there is nothing to wait for: a drive goes through tunnels, and the end of a paper is
+   the worst time to find out there is no signal. */
+const AHEAD_AT = 0.6;
+function readAhead(state) {
+  if (!chaining() || !listen.item || listen.ahead === listen.item.key) return;
+  if (!(state.total > 1 && state.index / (state.total - 1) >= AHEAD_AT)) return;
+  listen.ahead = listen.item.key;
+  const next = nextAfter(render.rows || [], listen.item.key);
+  if (next) bodyToRead(next).catch(() => {});   // nothing to say about it: it is only a head start
+}
+
 async function playOn() {
   if (listen.chaining || !chaining() || !listen.item || $('listen').hidden) return false;
   const next = nextAfter(render.rows || [], listen.item.key);
@@ -2212,6 +2225,10 @@ function carControls(on) {
 function carNowPlaying(item, playing) {
   const session = navigator.mediaSession;
   if (!session) return;
+  // Said once per paper and per stop or start, not once per sentence.
+  const said = `${item ? item.key : ''}:${playing}`;
+  if (listen.toldCar === said) return;
+  listen.toldCar = said;
   try {
     if (item && typeof MediaMetadata === 'function') {
       session.metadata = new MediaMetadata({title: clean(item.data.title) || '논문',
