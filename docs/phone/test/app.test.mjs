@@ -1117,6 +1117,84 @@ test('a whole session: find, mark, listen, look, search, and back out again', as
   assert.equal(open.document.getElementById('main').hasAttribute('inert'), false, 'and reachable again');
 });
 
+test('a sheet is pulled back off by a finger from the left edge', async () => {
+  const open = await boot();
+  await open.settle();
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const detail = open.document.getElementById('detail');
+  assert.equal(detail.hasAttribute('hidden'), false, 'the paper is open');
+
+  const drag = (type, x, y = 300, on = detail) => {
+    const event = new open.window.Event(type);
+    event.touches = [{clientX: x, clientY: y}];
+    on.dispatchEvent(event);
+  };
+  // A finger that starts in the middle of the screen is not asking to leave.
+  drag('touchstart', 180);
+  drag('touchmove', 330);
+  assert.equal(detail.style.transform, '', 'only the edge begins it');
+  detail.dispatchEvent(new open.window.Event('touchend'));
+
+  // Nor is one that goes down the screen.
+  drag('touchstart', 8);
+  drag('touchmove', 14, 380);
+  assert.equal(detail.style.transform, '', 'a scroll stays a scroll');
+  detail.dispatchEvent(new open.window.Event('touchend'));
+
+  // Begun at the edge, taken a little way and let go slowly: it springs shut again.
+  drag('touchstart', 8);
+  drag('touchmove', 48);
+  assert.match(detail.style.transform, /translateX\(\d+px\)/, 'it follows the finger');
+  assert.equal(detail.classList.contains('dragging'), true, 'without a transition fighting it');
+  await new Promise(r => setTimeout(r, 300));
+  detail.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle(4);
+  assert.equal(detail.style.transform, '', 'a short pull is undone');
+  assert.equal(detail.hasAttribute('hidden'), false, 'and the paper is still open');
+
+  // The same distance thrown off quickly is a flick, and a flick means it.
+  drag('touchstart', 8);
+  drag('touchmove', 90);
+  await new Promise(r => setTimeout(r, 40));
+  detail.dispatchEvent(new open.window.Event('touchend'));
+  assert.equal(detail.style.transform, 'translateX(100%)', 'a flick sends it off');
+  await open.settle(80);
+  assert.equal(detail.hasAttribute('hidden'), true);
+
+  // And so does taking it slowly past a third of the way across.
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(detail.hasAttribute('hidden'), false);
+  drag('touchstart', 8);
+  drag('touchmove', 300);
+  await new Promise(r => setTimeout(r, 400));
+  detail.dispatchEvent(new open.window.Event('touchend'));
+  assert.equal(detail.style.transform, 'translateX(100%)', 'it leaves by the edge it came in from');
+  await open.settle(80);
+  assert.equal(detail.hasAttribute('hidden'), true, 'and the paper is closed');
+  assert.equal(detail.style.transform, '', 'ready to come back in');
+  assert.equal(open.document.getElementById('main').hasAttribute('inert'), false, 'the library is live again');
+});
+
+test('a PDF pushed sideways is being read, not dismissed', async () => {
+  const open = await boot();
+  await open.settle();
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const detail = open.document.getElementById('detail');
+  // A list of the open sheet that has been scrolled sideways — a zoomed page — keeps its gesture.
+  const body = open.document.getElementById('detail-body');
+  body.scrollLeft = 40;
+  const drag = (type, x) => { const e = new open.window.Event(type); e.touches = [{clientX: x, clientY: 300}]; detail.dispatchEvent(e); };
+  drag('touchstart', 6);
+  drag('touchmove', 300);
+  assert.equal(detail.style.transform, '', 'the screen did not move');
+  detail.dispatchEvent(new open.window.Event('touchend'));
+  await open.settle(4);
+  assert.equal(detail.hasAttribute('hidden'), false, 'and the paper is still open');
+});
+
 /* ---------- the look ---------- */
 /* The status used to be a labelled dot in the row's third line, and `.dot` was later given a
    second meaning in the settings screen — nine pixels square with a grey fill — which turned every

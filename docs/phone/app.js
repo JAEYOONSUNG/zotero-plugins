@@ -568,6 +568,59 @@ function onPopState() {
   while (sheets.length > depth) popped();
 }
 
+/* The home-screen app has no back gesture of its own — iOS keeps that for Safari — so the sheets
+   carry one: a finger from the left edge pulls the screen off to the right and what is under it
+   comes back. Let go past a third of the way, or with a flick, and it goes; short of that it
+   springs shut again, so a gesture started by accident costs nothing. */
+export const BACK_EDGE = 32, BACK_FAR = 0.3, BACK_FLICK = 0.5, BACK_OUT = 200;
+function dragBack(id) {
+  const screen = $(id);
+  if (!screen) return;
+  let from = null, axis = '', at = 0, began = 0;
+  const onTop = () => sheets.length > 0 && sheets[sheets.length - 1].id === id;
+  const move = x => { at = x; screen.style.transform = x ? `translateX(${Math.round(x)}px)` : ''; };
+  screen.addEventListener('touchstart', event => {
+    from = null; axis = ''; at = 0;
+    if (!onTop() || !event.touches || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (touch.clientX > BACK_EDGE) return;
+    // A page pushed sideways is being read, not dismissed: a zoomed PDF keeps its own gesture.
+    for (const box of screen.querySelectorAll('.list, .pdf')) if ((box.scrollLeft || 0) > 0) return;
+    from = {x: touch.clientX, y: touch.clientY};
+    began = Date.now();
+  }, {passive: true});
+  screen.addEventListener('touchmove', event => {
+    const touch = event.touches && event.touches[0];
+    if (!from || !touch) return;
+    const dx = touch.clientX - from.x, dy = touch.clientY - from.y;
+    if (!axis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dy) >= Math.abs(dx)) { from = null; return; }   // a scroll, and it stays one
+      axis = 'x';
+      screen.classList.add('dragging');
+      closeFloat();
+    }
+    move(Math.max(0, dx));
+  }, {passive: true});
+  const end = () => {
+    const moved = at;
+    /* Either taken far enough to mean it, or thrown off fast enough: a flick that covers only a
+       third of the screen is still unmistakably a flick. */
+    const quick = moved > 40 && moved / Math.max(16, Date.now() - began) > BACK_FLICK;
+    const far = Math.max(70, (window.innerWidth || 390) * BACK_FAR);
+    const go = axis === 'x' && (moved > far || quick);
+    from = null; axis = ''; at = 0;
+    screen.classList.remove('dragging');
+    if (!go) { screen.style.transform = ''; return; }
+    // Off the edge first, and only then is the history walked back: a screen that vanished
+    // mid-gesture would look like a crash rather than a way out.
+    screen.style.transform = 'translateX(100%)';
+    setTimeout(() => { screen.style.transform = ''; closeSheet(id); }, BACK_OUT);
+  };
+  screen.addEventListener('touchend', end, {passive: true});
+  screen.addEventListener('touchcancel', () => { from = null; axis = ''; at = 0; screen.classList.remove('dragging'); screen.style.transform = ''; }, {passive: true});
+}
+
 /* ---------- the sliding pill ---------- */
 function slide(track) {
   const chosen = track.querySelector('[aria-pressed="true"]');
@@ -2058,6 +2111,7 @@ function takePasted(text) {
 
 function wire() {
   wireRail();
+  for (const id of SHEET_IDS) dragBack(id);
   const paste = $('setup-paste');
   if (paste) paste.addEventListener('click', async () => {
     try {
