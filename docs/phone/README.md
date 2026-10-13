@@ -57,7 +57,8 @@ double tap for 2×, a slider for the long ones, night mode, and out to
 any other app through the share sheet — the bar over a paper carries its name, the page and a way
 to find a word, and the rest is a menu under one button. A paper opens where it was left. Your own Zotero
 highlights are drawn on the page in their own colours, and listed in order with the page each one
-is on. Finding a word needs no text layer — the indexed sentences know their pages — so a search
+is on — and they come out of the paper in one tap, the citation at the top and then every mark
+with its page and its own note, ready to paste into what you are writing. Finding a word needs no text layer — the indexed sentences know their pages — so a search
 is a list of places to turn to. A paper fetched once opens again with no signal.
 
 **Listening.** The text Zotero indexed, cleaned down to what is worth hearing: the running head,

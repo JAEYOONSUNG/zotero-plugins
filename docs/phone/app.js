@@ -1463,6 +1463,23 @@ function onListScroll() {
   if (list.scrollTop + list.clientHeight > list.scrollHeight - 600) drawMore();
 }
 
+/* The reader's own marks, as something that can be pasted into what they are writing: the paper
+   it came from at the top, then each mark with the page it is on. */
+export function marksAsText(item, placed) {
+  const lines = placed.map(({mark, place}) => {
+    const page = place ? place.page : Number(mark.data.annotationPageLabel) || 0;
+    const text = clean(mark.data.annotationText || '');
+    const note = clean(mark.data.annotationComment || '');
+    const body = [text && `“${text}”`, note && `— ${note}`].filter(Boolean).join(' ');
+    return `${page ? `p.${page} ` : ''}${body || '(그림 주석)'}`;
+  });
+  return [citationOf(item), '', ...lines].join('\n');
+}
+async function copyMarks(item, placed) {
+  try { await navigator.clipboard.writeText(marksAsText(item, placed)); toast(`주석 ${placed.length}개를 복사했습니다`); }
+  catch (_) { toast('복사하지 못했습니다'); }
+}
+
 /* The two things worth taking out of a paper without opening it: the line that finds it again,
    and the link itself, through the phone's own share sheet where there is one. */
 async function copyCitation(item) {
@@ -1712,6 +1729,11 @@ async function openDetail(key) {
         const placed = marks
           .map(mark => ({mark, place: markPlace(mark)}))
           .sort((a, b) => String(a.mark.data.annotationSortIndex || '').localeCompare(String(b.mark.data.annotationSortIndex || '')));
+        /* The marks are the part of a paper that gets written about, so they come out of it in
+           one tap — in the order they appear, each with the page it is on. */
+        const out = el('div', {class: 'pills'}, card);
+        const all = el('button', {class: 'pill', type: 'button', text: '주석 모두 복사'}, out);
+        all.addEventListener('click', () => copyMarks(item, placed));
         for (const {mark, place} of placed.slice(0, 200)) {
           const line = el('button', {class: 'mark-row', type: 'button'}, card);
           el('span', {class: 'swatch', style: `background:${mark.data.annotationColor || 'var(--warm)'}`}, line);

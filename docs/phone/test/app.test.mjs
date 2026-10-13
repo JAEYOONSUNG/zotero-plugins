@@ -712,6 +712,38 @@ test('a paper shows where it sits, where to read it, and how far it was listened
   assert.equal(out.getAttribute('rel'), 'noopener', 'and it is opened safely');
 });
 
+test('the marks come out of a paper in one tap, in the order they appear', async () => {
+  const open = await boot({server: fakeServer({children: MARKED, fulltext: FULLTEXT})});
+  await open.settle();
+  const {marksAsText} = await import(new URL(`../app.js?boot=${boots}`, here));
+  open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  const card = [...open.document.querySelectorAll('#detail .card')]
+    .find(c => /주석/.test(c.querySelector('h3')?.textContent || ''));
+  const pill = card.querySelector('.pills .pill');
+  assert.equal(pill.textContent, '주석 모두 복사');
+
+  let copied = '';
+  globalThis.navigator = {userAgent: 'test', clipboard: {writeText: async text => { copied = text; }}};
+  pill.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  globalThis.navigator = {userAgent: 'test'};
+  const lines = copied.split('\n');
+  assert.match(lines[0], /^Seo & Kim \(2025\)/, 'the paper it came from, at the top');
+  assert.equal(lines[1], '', 'then a blank line, then the marks');
+  assert.match(lines[2], /^p\.1 “first thing said”$/, 'the earlier one first');
+  assert.match(lines[3], /^p\.3 “the enzyme degrades PET”$/);
+  assert.match(open.document.getElementById('toast').textContent, /주석 2개를 복사했습니다/);
+
+  // A mark with a note of its own carries it; one with no text at all still says what it is.
+  const withNote = marksAsText({data: {title: 'T', creators: [], date: '2020'}}, [
+    {mark: {data: {annotationText: 'said', annotationComment: 'my note'}}, place: {page: 4}},
+    {mark: {data: {}}, place: null}
+  ]).split('\n');
+  assert.equal(withNote[2], 'p.4 “said” — my note');
+  assert.equal(withNote[3], '(그림 주석)');
+});
+
 test('the marks made in Zotero are listed in the order they appear, and lead into the paper', async () => {
   const open = await boot({server: fakeServer({children: MARKED, fulltext: FULLTEXT})});
   await open.settle();
