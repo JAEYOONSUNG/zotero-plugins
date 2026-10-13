@@ -21,6 +21,9 @@ import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel} f
 import {withRetry, isOffline, mergeQueue} from './net.js';
 
 const API = 'https://api.zotero.org';
+/* Which build of the app this is. It is the name the service worker keeps its copy of the shell
+   under, so the two cannot drift: a test holds them to each other. */
+export const BUILD = 'nonmun-v9';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -2500,6 +2503,22 @@ function paintSettings() {
   setRow(who.card, '사용자 번호', String(account.user || ''));
   setRow(who.card, 'API 키', account.key ? '이 폰에 저장됨' : '없음');
   setNote(who.group, '키는 이 폰의 저장 공간에만 있습니다. api.zotero.org와 Dropbox 외에는 어디로도 가지 않습니다.');
+
+  /* Which build this is, and the way to ask for a newer one — because the usual answer to "is it
+     the new version?" should not be "close the app completely and open it again". */
+  const about = setGroup(body, '앱');
+  setRow(about.card, '버전', BUILD.replace(/^nonmun-/, ''));
+  const check = setGo(about.card, '업데이트 확인', async () => {
+    check.disabled = true;
+    try {
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+      if (!reg) { toast('이 브라우저에는 설치되어 있지 않습니다'); return; }
+      await reg.update();
+      if (reg.installing || reg.waiting) { toast('새 버전을 받았습니다. 다시 엽니다'); setTimeout(() => location.reload(), 900); }
+      else toast('최신입니다');
+    } catch (error) { toast(error.message || '확인하지 못했습니다'); }
+    finally { check.disabled = false; }
+  });
 
   // What this phone is holding, and the two ways of asking for it again.
   const store = setGroup(body, '라이브러리');

@@ -1441,7 +1441,7 @@ test('the settings screen is groups of rows, not a form', async () => {
   await open.settle();
   const body = open.document.getElementById('settings-body');
   const heads = [...body.querySelectorAll('.set-head')].map(h => h.textContent);
-  assert.deepEqual(heads, ['Zotero', '라이브러리', 'Dropbox — PDF 원본', '홈 화면 앱'],
+  assert.deepEqual(heads, ['Zotero', '앱', '라이브러리', 'Dropbox — PDF 원본', '홈 화면 앱'],
     'who this phone is first, then what it holds');
   // Every group is a card of rows with a quiet label above it and the explaining below.
   for (const group of body.querySelectorAll('.set-group')) {
@@ -1463,7 +1463,8 @@ test('the settings screen is groups of rows, not a form', async () => {
   assert.equal(body.querySelectorAll('.set-field input').length, 2, 'the app key and the folder are rows');
   // What can be pressed stands in the tint that says so, and what cannot be undone is red.
   const go = [...body.querySelectorAll('.set-go')].map(b => b.textContent);
-  assert.deepEqual(go, ['PDF 비우기', '라이브러리 다시 받기', '연결', '폴더만 저장', '키까지 함께 담기', '키 복사']);
+  assert.deepEqual(go, ['업데이트 확인', 'PDF 비우기', '라이브러리 다시 받기', '연결', '폴더만 저장',
+    '키까지 함께 담기', '키 복사']);
 });
 
 test('a paper comes out as BibTeX a reference manager will take', async () => {
@@ -1529,6 +1530,36 @@ test('what changed is said once and quietly, not a thousand papers over again', 
   // It is said, never drawn: out of the flow, but still in the accessibility tree.
   assert.match(read('app.css'), /\.said \{[^}]*clip-path:inset\(50%\)/);
   assert.ok(!/\.said \{[^}]*display:none/.test(read('app.css')), 'display:none would take it out of the tree');
+});
+
+/* The usual answer to "is the new version on my phone?" should not be "close the app completely
+   and open it again". The build is on the settings screen, and the service worker keeps the shell
+   under that same name — so if the two ever drift, the number on screen is a lie. */
+test('the build on the settings screen is the one the service worker keeps', async () => {
+  const open = await boot();
+  await open.settle();
+  const {BUILD} = await import(new URL(`../app.js?boot=${boots}`, here));
+  const cache = /const CACHE = '([^']+)'/.exec(read('sw.js'))[1];
+  assert.equal(BUILD, cache, 'the app and its shell are the same build');
+
+  open.document.getElementById('btn-settings-main').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const rows = [...open.document.querySelectorAll('#settings-body .set-row')];
+  const version = rows.find(r => r.querySelector('.what')?.textContent === '버전');
+  assert.ok(version, 'it is on the screen');
+  assert.equal(version.querySelector('.val').textContent, cache.replace(/^nonmun-/, ''));
+
+  // And it can be asked for a newer one rather than being closed and opened again.
+  let asked = 0;
+  globalThis.navigator = {userAgent: 'test', serviceWorker: {
+    getRegistration: async () => ({update: async () => { asked++; }})
+  }};
+  const check = rows.find(r => r.textContent === '업데이트 확인');
+  check.dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(asked, 1, 'the shell was asked whether there is a newer one');
+  assert.match(open.document.getElementById('toast').textContent, /최신입니다/);
+  globalThis.navigator = {userAgent: 'test'};
 });
 
 /* ---------- the look ---------- */
@@ -1606,6 +1637,22 @@ test('every rule in the stylesheet is for a class the app still asks for', () =>
   for (const m of read('app.css').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)) styled.add(m[1]);
   const stale = [...styled].filter(name => !asked.has(name));
   assert.deepEqual(stale, [], `these are styled but nothing asks for them: ${stale.join(', ')}`);
+});
+
+/* $ returns null for an id that is not there, and almost everything in this app then quietly
+   does nothing — a renamed id would not throw, it would just stop working. So every id the app
+   reaches for is held against the page. */
+test('every id the app reaches for is on the page', () => {
+  const html = read('index.html'), js = read('app.js');
+  const onPage = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+  const wanted = [...new Set([...js.matchAll(/\$\('([^']+)'\)/g)].map(m => m[1]))];
+  assert.ok(wanted.length > 80, `there are a great many of them (${wanted.length})`);
+  const missing = wanted.filter(id => !onPage.has(id));
+  assert.deepEqual(missing, [], `these are looked up but not on the page: ${missing.join(', ')}`);
+  // And nothing on the page is given an id twice over, which would make $ a coin toss.
+  const all = [...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]);
+  const twice = all.filter((id, at) => all.indexOf(id) !== at);
+  assert.deepEqual(twice, [], `these ids are used twice: ${twice.join(', ')}`);
 });
 
 /* The settings screen was given a .note for its small print while .note was already a paper's

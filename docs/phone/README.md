@@ -98,6 +98,11 @@ wants to know.
 Retry-After when Zotero sends one. A read is tried four times, a change twice, a note once —
 because the server may have taken the note even though the answer never arrived.
 
+설정 also shows which build is on the phone and will ask for a newer one — the answer to "is the
+new version on here?" should not be "close the app completely and open it again". The build is
+the name the service worker keeps the shell under, so the number on screen cannot drift from what
+is actually installed.
+
 ## The look
 
 It is meant to feel like an app on the phone rather than a page in a browser: a grouped list on a
