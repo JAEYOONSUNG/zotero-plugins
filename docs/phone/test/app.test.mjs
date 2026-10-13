@@ -1500,6 +1500,37 @@ test('a paper comes out as BibTeX a reference manager will take', async () => {
   assert.deepEqual(pills, ['DOI 열기', '링크 복사', '인용 복사', 'BibTeX']);
 });
 
+test('what changed is said once and quietly, not a thousand papers over again', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const list = open.document.getElementById('list');
+  const said = open.document.getElementById('said');
+  // A live region over the list itself would read every row out on every redraw.
+  assert.equal(list.hasAttribute('aria-live'), false, 'the list is not a live region');
+  assert.equal(said.getAttribute('aria-live'), 'polite');
+  assert.equal(said.getAttribute('role'), 'status');
+  await open.settle(140);                 // it waits for the drawing to settle before speaking
+  assert.match(said.textContent, /^900편$/, 'what is being looked at, as a number');
+
+  // Narrowed, and the number is said again; marking one paper changes nothing to say.
+  const box = open.document.getElementById('q');
+  box.value = 'number 7';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  await open.settle(140);
+  const narrowed = said.textContent;
+  assert.notEqual(narrowed, '900편');
+  assert.match(narrowed, /편$/);
+  box.value = 'zzzz nothing';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle(140);
+  assert.equal(said.textContent, '해당하는 논문이 없습니다');
+
+  // It is said, never drawn: out of the flow, but still in the accessibility tree.
+  assert.match(read('app.css'), /\.said \{[^}]*clip-path:inset\(50%\)/);
+  assert.ok(!/\.said \{[^}]*display:none/.test(read('app.css')), 'display:none would take it out of the tree');
+});
+
 /* ---------- the look ---------- */
 /* The status used to be a labelled dot in the row's third line, and `.dot` was later given a
    second meaning in the settings screen — nine pixels square with a grey fill — which turned every

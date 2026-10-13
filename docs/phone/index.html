@@ -69,7 +69,10 @@
     <div id="scope" class="scope"></div>
   </header>
 
-  <main id="list" class="list" aria-live="polite"></main>
+  <main id="list" class="list"></main>
+  <!-- what changed, said once and quietly: a live region over the list itself would read a
+       thousand papers out on every redraw -->
+  <p id="said" class="said" role="status" aria-live="polite"></p>
   <!-- what has been searched for before, while the box is open and empty -->
   <div id="recent" class="list recent" hidden></div>
   <!-- the landmarks down the right edge, for an order a finger can aim at -->

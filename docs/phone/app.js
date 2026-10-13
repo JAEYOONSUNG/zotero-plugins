@@ -955,7 +955,7 @@ function wireRows(list) {
     const id = on.getAttribute('data-key') || '';
     if (state.picked.has(id)) state.picked.delete(id); else state.picked.add(id);
     const chosen = state.picked.has(id);
-    on.setAttribute('aria-selected', String(chosen));
+    on.setAttribute('aria-pressed', String(chosen));
     const spot = on.querySelector('.pick-mark');
     if (spot) { spot.className = `pick-mark${chosen ? ' on' : ''}`; spot.innerHTML = chosen ? PICK_MARK : ''; }
     paintPicked();
@@ -986,7 +986,7 @@ function drawRow(item, list) {
   if (status) el('span', {class: `flag ${status}`, 'aria-label': STATUS_WORD[status]}, face);
   if (state.picking) {
     const chosen = state.picked.has(item.key);
-    row.setAttribute('aria-selected', String(chosen));
+    row.setAttribute('aria-pressed', String(chosen));
     el('span', {class: `pick-mark${chosen ? ' on' : ''}`, html: chosen ? PICK_MARK : ''}, face);
   }
   el('h2', {text: clean(item.data.title) || '(제목 없음)'}, face);
@@ -1126,6 +1126,21 @@ function drawRecent() {
     const off = el('button', {class: 'x', type: 'button', 'aria-label': `${word} 지우기`, text: '×'}, row);
     off.addEventListener('click', () => forget(word));
   }
+}
+
+/* How many papers are being looked at, said out loud once the drawing has settled. A live region
+   over the list itself would read a thousand papers out every time one of them was marked; what a
+   reader who cannot see the list needs is the number. */
+let sayTimer = null, saidLast = -1;
+function sayCount(n) {
+  const node = $('said');
+  if (!node) return;
+  clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => {
+    if (n === saidLast) return;
+    saidLast = n;
+    node.textContent = n ? `${n.toLocaleString()}편` : '해당하는 논문이 없습니다';
+  }, 400);
 }
 
 /* What is being looked at has changed, so the list starts again from the top: three hundred
@@ -1289,6 +1304,7 @@ function render({keep = false} = {}) {
   list.textContent = '';
   more = null;
   if (!state.picking) $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
+  sayCount(rows.length);
   paintScope(rows.length);
 
   drawTip(list);
