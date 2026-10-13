@@ -2626,6 +2626,35 @@ test('every ink the app writes in can be read on the paper it is written on', ()
   assert.equal(sizes.filter(size => size < 11).length, 0, `smallest is ${Math.min(...sizes)}px`);
 });
 
+test('how far a paper got is one number, whichever road it got there by', async () => {
+  const open = await boot();
+  await open.settle();
+  const {shareOf} = await import(new URL(`../app.js?boot=${boots}`, here));
+  assert.equal(shareOf({heard: 42}), 42, 'the sentences the voice has said');
+  assert.equal(shareOf({page: 5, pages: 20}), 25, 'or the pages a finger has turned');
+  assert.equal(shareOf({heard: 42, page: 18, pages: 20}), 90, 'whichever is further on');
+  assert.equal(shareOf({page: 1, pages: 20}), 0, 'the first page is not progress');
+  assert.equal(shareOf({page: 7}), 0, 'and a page out of nothing known is not a share');
+  assert.equal(shareOf(), 0);
+
+  // A paper read in the PDF shows its progress in the library, as a heard one does.
+  const read1 = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24),
+    'np.page.BBB': '9', 'np.of.BBB': '12'}});
+  await read1.settle();
+  const row = [...read1.document.querySelectorAll('#list .row.paper')]
+    .find(r => /PET depolymerase/.test(r.textContent));
+  assert.match(row.textContent, /75%/, 'three quarters of the way through, from the pages alone');
+  assert.ok(row.querySelector('.foot .heard'), 'with the bar that says so');
+
+  // And the paper's own 읽기 card says it in words, both ways if both happened.
+  row.dispatchEvent(new read1.window.Event('click', {bubbles: true}));
+  await read1.settle();
+  const card = [...read1.document.querySelectorAll('#detail .card')]
+    .find(c => /읽기/.test(c.querySelector('h3')?.textContent || ''));
+  assert.match(card.textContent, /9쪽까지 봄 \(12쪽 중\)/);
+  assert.ok(!/들음/.test(card.textContent), 'nothing was heard, so nothing is claimed');
+});
+
 test('whichever of the two a paper was left in the middle of is what is offered back', async () => {
   const open = await boot();
   await open.settle();

@@ -993,8 +993,8 @@ function drawRow(item, list) {
   el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, face);
   const rating = ratingOf(item);
   const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
-  // How far the reading got, for the papers that were started and not finished.
-  const heard = Number(localStorage.getItem(KEYS.pct + item.key)) || 0;
+  // How far it got, by either road: the voice through the sentences or a finger through the pages.
+  const heard = progressOf(item.key);
   const part = heard > 1 && heard < 99;
   // The third line is only drawn for a paper that has something to say on it.
   if (rating || tag || part) {
@@ -1032,6 +1032,18 @@ function drawTip(list) {
 /* A paper left half heard is the thing most likely to be wanted next, so the library offers it
    back rather than making it be found again. Only on the library itself: under a search or a
    filter, a paper that is not in what is being looked at has no business at the top of it. */
+/* How far through a paper someone got, whichever road they took: the share of the sentences the
+   voice has said, or the share of the pages a finger has turned, whichever is further on. */
+export function shareOf({heard = 0, page = 0, pages = 0} = {}) {
+  const turned = page > 1 && pages > 1 ? Math.round(page / pages * 100) : 0;
+  return Math.max(heard, turned);
+}
+const progressOf = key => shareOf({
+  heard: Number(localStorage.getItem(KEYS.pct + key)) || 0,
+  page: Number(localStorage.getItem(KEYS.page + key)) || 0,
+  pages: Number(localStorage.getItem(KEYS.of + key)) || 0
+});
+
 /* Whichever of the two a paper was last left in the middle of — the voice or the page — because
    a reader coming back to a library wants the thing they were doing, not a choice about it. */
 export function resumeOf({key, kind, heard, page, pages}) {
@@ -1544,6 +1556,16 @@ async function openDetail(key) {
     });
   }
   paint(ratingOf(item));
+
+  /* And how far it actually got, which is the other half of what "읽기" means. */
+  const wasHeard = Number(localStorage.getItem(KEYS.pct + key)) || 0;
+  const onPage = Number(localStorage.getItem(KEYS.page + key)) || 0;
+  const ofPages = Number(localStorage.getItem(KEYS.of + key)) || 0;
+  const sofar = [
+    wasHeard > 1 ? `${wasHeard}% 들음` : '',
+    onPage > 1 ? `${onPage}쪽까지 봄${ofPages > 1 ? ` (${ofPages}쪽 중)` : ''}` : ''
+  ].filter(Boolean).join(' · ');
+  if (sofar) el('p', {class: 'muted small', text: sofar}, statusCard);
 
   const abstract = clean(item.data.abstractNote);
   if (abstract) {
