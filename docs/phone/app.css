@@ -563,8 +563,9 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 #listen.driving .transcript .sent[aria-current="true"] { font-size:calc(27px * var(--read)); line-height:1.44;
                                                          font-weight:680; color:var(--ink); padding:16px 14px; }
 #listen.driving .transcript .sec { display:none; }
-#listen.driving #listen-more, #listen.driving #listen-pdf, #listen.driving #listen-rate,
-#listen.driving .player-meta { display:none; }
+#listen.driving #listen-more, #listen.driving #listen-pdf, #listen.driving #listen-rate { display:none; }
+/* How far in and how much is left stay — at a glance from a cradle they are the whole dashboard. */
+#listen.driving .player-meta span { font-size:15px; font-weight:600; }
 #listen.driving .play-btn { width:88px; height:88px; }
 #listen.driving .play-btn svg { width:40px; height:40px; }
 #listen.driving .player-row .icon-btn { width:68px; height:68px; }
