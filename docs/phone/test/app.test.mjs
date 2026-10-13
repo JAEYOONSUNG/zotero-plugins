@@ -2564,6 +2564,32 @@ test('pulling the library down asks for it again, and the ring turns until it ha
   assert.equal(server.sent.length, 0, 'the gesture belongs to the top of the list only');
 });
 
+test('a first sync of thousands says how much has arrived, not just that something is happening', async () => {
+  const open = await boot({server: fakeServer({items: MANY})});
+  await open.settle();
+  const {showSyncBar} = await import(new URL(`../app.js?boot=${boots}`, here));
+  const bar = open.document.getElementById('syncbar');
+  const share = () => Number(bar.style.getPropertyValue('--done'));
+  // A fake server answers in no time, so the middle of a sync is asked for rather than caught.
+  assert.equal(bar.hidden, true, 'nothing to wait for, nothing drawn');
+  showSyncBar(120, 900);
+  assert.equal(bar.hidden, false, 'while it is arriving, the line is drawn');
+  assert.ok(Math.abs(share() - 120 / 900) < 0.01, 'as the share that has arrived');
+  showSyncBar(600, 900);
+  assert.ok(share() > 0.6, 'and it grows with it');
+  showSyncBar(900, 900);
+  assert.equal(bar.hidden, true, 'and goes when there is nothing left to wait for');
+  // Something always shows, so a line that has only just started is not an invisible one.
+  showSyncBar(0, 900);
+  assert.ok(share() > 0, 'a sync that has just begun still draws something');
+  // A library that fits in one page has nothing to wait for.
+  showSyncBar(10, 40);
+  assert.equal(bar.hidden, true);
+  showSyncBar(0, 0);
+  assert.equal(bar.hidden, true);
+  assert.match(read('app.css'), /\.syncbar i \{[^}]*scaleX\(var\(--done,0\)\)/, 'drawn by a transform, not a width');
+});
+
 test('the refresh button says, by turning, that something is happening', async () => {
   const open = await boot();
   await open.settle();

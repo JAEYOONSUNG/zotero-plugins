@@ -240,6 +240,7 @@ async function sync({full = false} = {}) {
       seen = done;
       await DB.put('items', rows);
       $('sync-state').textContent = `${done.toLocaleString()} / ${total.toLocaleString()}`;
+      showSyncBar(done, total);
     });
 
     // What was deleted elsewhere goes too, so the phone does not keep ghosts.
@@ -265,8 +266,20 @@ async function sync({full = false} = {}) {
   } finally {
     state.busy = false;
     spinSync(false);
+    showSyncBar(0, 0);
     setTimeout(restState, 4000);
   }
+}
+
+/* A few thousand papers take a moment the first time, and a spinning button says only that
+   something is happening. This says how much of it has arrived, along the foot of the bar, and
+   only while there is more than one page of it to wait for. */
+export function showSyncBar(done, total) {
+  const bar = $('syncbar');
+  if (!bar) return;
+  if (!total || total <= PAGE || done >= total) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.style.setProperty('--done', String(Math.max(0.02, Math.min(1, done / total))));
 }
 
 /* ---------- writing back ---------- */

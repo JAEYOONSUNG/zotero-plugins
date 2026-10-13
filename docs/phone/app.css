@@ -82,6 +82,13 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .top::after { content:''; position:absolute; left:0; right:0; bottom:0; height:1px; background:var(--line);
               transform:scaleY(.5); transform-origin:bottom; opacity:0; transition:opacity 160ms; }
 .top.lifted::after { opacity:1; }
+/* How much of a first sync has arrived: a line along the foot of the bar, where this phone draws
+   the progress of something it is in the middle of. */
+.syncbar { position:absolute; left:0; right:0; bottom:0; height:2px; overflow:hidden; }
+.syncbar[hidden] { display:none; }
+.syncbar i { display:block; height:100%; background:var(--link); transform-origin:left;
+             transform:scaleX(var(--done,0)); transition:transform 260ms ease-out; }
+@media (prefers-reduced-motion:reduce) { .syncbar i { transition:none } }
 
 .title-row { display:flex; align-items:baseline; gap:8px; min-height:38px; }
 .big { margin:0; font-size:30px; font-weight:800; letter-spacing:-.03em; line-height:1.15;
