@@ -1117,6 +1117,32 @@ test('a whole session: find, mark, listen, look, search, and back out again', as
   assert.equal(open.document.getElementById('main').hasAttribute('inert'), false, 'and reachable again');
 });
 
+test('the phone\'s keyboard neither hides the end of a list nor leaves the app off the top', async () => {
+  const open = await boot();
+  await open.settle();
+  const {keyboardGap} = await import(new URL(`../app.js?boot=${boots}`, here));
+  // Nothing up: the viewport is the whole screen.
+  assert.equal(keyboardGap(844, {height: 844, offsetTop: 0}), 0);
+  // Up: what is below the visible viewport is under the keys.
+  assert.equal(keyboardGap(844, {height: 508, offsetTop: 0}), 336);
+  // And when the page itself has been lifted, that counts too.
+  assert.equal(keyboardGap(844, {height: 508, offsetTop: 40}), 296);
+  assert.equal(keyboardGap(844, null), 0, 'a phone that does not report one is no trouble');
+
+  // iOS lifts the whole page to make room; the app is put back where it belongs.
+  let put = 0;
+  open.window.scrollY = 120;
+  open.window.scrollTo = (x, y) => { put++; open.window.scrollY = y; };
+  open.window.dispatchEvent(new open.window.Event('scroll'));
+  assert.equal(put, 1, 'a page that has been lifted is put back');
+  assert.equal(open.window.scrollY, 0);
+  open.window.dispatchEvent(new open.window.Event('scroll'));
+  assert.equal(put, 1, 'and one that is where it should be is left alone');
+
+  // The end of the list stays reachable while the keyboard is up.
+  assert.match(read('app.css'), /\.list \{[^}]*padding:[^;]*var\(--kb/, 'the list keeps clear of the keys');
+});
+
 test('a sheet is pulled back off by a finger from the left edge', async () => {
   const open = await boot();
   await open.settle();

@@ -511,6 +511,33 @@ function pullToRefresh(list, run) {
   }, {passive: true});
 }
 
+/* ---------- the phone's own keyboard ---------- */
+/* How much of the screen the keyboard has taken. iOS does not shrink a layout pinned to the
+   screen; it reports the smaller visible viewport instead, and anything below that line is
+   simply under the keys. */
+export const keyboardGap = (height, view) =>
+  Math.max(0, Math.round((height || 0) - ((view?.height || height || 0) + (view?.offsetTop || 0))));
+
+/* And it lifts the whole page to put the field it is about to fill above the keys — which in a
+   layout pinned to the screen leaves the app sitting half off the top with a strip of nothing
+   under it. The page is put back where it belongs, and what the keyboard covers is published so
+   the end of a list stays reachable while it is up. */
+function steadyKeyboard() {
+  const put = () => { try { if (window.scrollY || window.pageYOffset) window.scrollTo(0, 0); } catch (_) {} };
+  try {
+    window.addEventListener('scroll', put, {passive: true});
+    window.addEventListener('focusout', () => setTimeout(put, 0), true);
+  } catch (_) {}
+  const view = window.visualViewport;
+  if (!view || !document.documentElement) return;
+  const measure = () => {
+    document.documentElement.style.setProperty('--kb', `${keyboardGap(window.innerHeight, view)}px`);
+    put();
+  };
+  try { view.addEventListener('resize', measure); view.addEventListener('scroll', measure); } catch (_) {}
+  measure();
+}
+
 /* ---------- the screens on top of the list ---------- */
 /* Each sheet puts an entry in the history, so the phone's own back — the swipe from the edge in
    the home-screen app, the back button in Safari — closes it instead of leaving the app. A sheet
@@ -2110,6 +2137,7 @@ function takePasted(text) {
 }
 
 function wire() {
+  steadyKeyboard();
   wireRail();
   for (const id of SHEET_IDS) dragBack(id);
   const paste = $('setup-paste');
