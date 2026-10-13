@@ -1162,7 +1162,7 @@ test('a paper with nothing to add draws no third line, and one with a rating dra
   assert.match(rated.querySelector('.stars').textContent, /^★★★★☆$/);
   const plain = byTitle('Immune sensing');                     // done, nothing else to say
   assert.ok(plain.querySelector('.flag.done'));
-  assert.equal(plain.querySelector('.foot'), null, 'nothing to say, so no line to say it on');
+  assert.ok(!plain.querySelector('.foot'), 'nothing to say, so no line to say it on');
 });
 
 test('the big title gives way to the small one as the library is scrolled, and does not flicker', async () => {
@@ -1200,7 +1200,7 @@ test('the toolbar at the bottom opens the collections and the settings', async (
   assert.equal(open.document.getElementById('settings').hasAttribute('hidden'), false);
   // The count moved up beside the title; the bar now carries what the library is doing.
   assert.ok(bar.querySelector('#sync-state'), 'the state of the sync is still shown');
-  assert.equal(bar.querySelector('#count'), null, 'the count is no longer down here');
+  assert.ok(!bar.querySelector('#count'), 'the count is no longer down here');
   assert.ok(open.document.querySelector('.title-row #count'), 'it is beside the title');
 });
 
@@ -1399,4 +1399,39 @@ test('every ink the app writes in can be read on the paper it is written on', ()
   // Nothing is written smaller than 11px, whatever it is.
   const sizes = [...css.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(m => Number(m[1]));
   assert.equal(sizes.filter(size => size < 11).length, 0, `smallest is ${Math.min(...sizes)}px`);
+});
+
+test('a paper left half heard is offered back at the top of the library', async () => {
+  const open = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24),
+    'np.last': 'BBB', 'np.pct.BBB': '42'}});
+  await open.settle();
+  const card = open.document.querySelector('#list .resume');
+  assert.ok(card, 'it is there');
+  assert.match(card.textContent, /PET depolymerase/);
+  assert.match(card.textContent, /이어 듣기 · 42%/);
+  assert.ok(open.document.querySelector('#list .row'), 'and the library is still under it');
+
+  // Under a search or a filter it would be a paper that is not in what is being looked at.
+  const box = open.document.getElementById('q');
+  box.value = 'retron';
+  box.dispatchEvent(new open.window.Event('input'));
+  await open.settle();
+  // assert.ok rather than assert.equal(…, null): a DOM node in a failure message is walked by
+  // node's own inspector until the stack runs out, and the real reason is never printed.
+  assert.ok(!open.document.querySelector('#list .resume'), 'so it stays out of the way');
+
+  // A paper heard to the end is finished, not half heard.
+  const done = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24),
+    'np.last': 'BBB', 'np.pct.BBB': '99'}});
+  await done.settle();
+  assert.ok(!done.document.querySelector('#list .resume'), 'a paper heard to the end is not offered back');
+
+  // Opening one to listen is what makes it the paper to carry on with.
+  const fresh = await boot();
+  await fresh.settle();
+  fresh.document.querySelectorAll('#list .row')[0].dispatchEvent(new fresh.window.Event('click'));
+  await fresh.settle(10);
+  fresh.document.querySelector('#detail .listen-start').dispatchEvent(new fresh.window.Event('click'));
+  await fresh.settle(10);
+  assert.equal(fresh.storage.get('np.last'), 'AAA');
 });

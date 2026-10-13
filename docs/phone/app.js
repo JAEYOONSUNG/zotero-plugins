@@ -23,7 +23,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
-              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced'};
+              pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -712,6 +712,27 @@ function drawRow(item, list) {
   return row;
 }
 
+/* A paper left half heard is the thing most likely to be wanted next, so the library offers it
+   back rather than making it be found again. Only on the library itself: under a search or a
+   filter, a paper that is not in what is being looked at has no business at the top of it. */
+function drawResume(list) {
+  const key = localStorage.getItem(KEYS.last) || '';
+  if (!key || state.q || state.collection || state.tag || state.status) return null;
+  const item = state.items.find(paper => paper.key === key);
+  const heard = Number(localStorage.getItem(KEYS.pct + key)) || 0;
+  if (!item || heard < 1 || heard > 98) return null;
+  const card = el('section', {class: 'resume'}, list);
+  const go = el('button', {type: 'button', 'aria-label': `${clean(item.data.title)} 이어 듣기`}, card);
+  el('span', {class: 'go', html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>'}, go);
+  const what = el('span', {class: 'what'}, go);
+  el('b', {text: clean(item.data.title) || '(제목 없음)'}, what);
+  el('span', {text: `이어 듣기 · ${heard}%`}, what);
+  const bar = el('span', {class: 'heard'}, go);
+  el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
+  go.addEventListener('click', () => openListen(liveItem(key) || item));
+  return card;
+}
+
 /* The list is drawn a screenful at a time. Everything that matches is counted and reachable; what
    is on screen is only what has been scrolled to, so a library of thousands opens at once. */
 let more = null;
@@ -747,6 +768,8 @@ function render({keep = false} = {}) {
   more = null;
   $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
   paintScope(rows.length);
+
+  drawResume(list);
 
   if (!rows.length) {
     if (!state.items.length && state.busy) {
@@ -1200,6 +1223,7 @@ function fillVoiceMenu(lang) {
 
 async function openListen(item) {
   listen.item = item;
+  localStorage.setItem(KEYS.last, item.key);   // so the library can offer to carry on
   $('listen-title').textContent = clean(item.data.title) || '논문';
   const body = $('listen-body');
   body.textContent = '';

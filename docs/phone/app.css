@@ -90,7 +90,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .search input { flex:1; min-width:0; border:0; background:transparent; color:var(--ink); font-size:16px; outline:none; }
 .search input::placeholder { color:var(--faint); }
 .search svg { width:17px; height:17px; flex:none; stroke-width:2.2; }
-.q-clear { width:20px; height:20px; border-radius:999px; background:var(--track-hover); color:var(--card);
+.q-clear { width:20px; height:20px; border-radius:999px; background:var(--faint); color:var(--card);
            font-size:14px; line-height:1; flex:none; display:none; }
 .search:focus-within .q-clear, .search input:not(:placeholder-shown) ~ .q-clear { display:block; }
 
@@ -122,14 +122,14 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 /* ---------- the library ---------- */
 .list { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain;
         padding:12px var(--pad) calc(var(--bottom) + 20px); }
-/* One grouped card with the papers as its rows: the separators are inset to where the title starts,
-   the way a list on this phone draws them. */
 /* The heading stays at the top of the list while its own papers scroll under it. */
 .group { position:sticky; top:0; z-index:1; margin:14px 0 6px; padding:5px 4px 6px;
          background:var(--canvas); font-size:13px; font-weight:700; letter-spacing:-.01em;
          color:var(--muted); font-variant-numeric:tabular-nums; }
 .group:first-child { margin-top:0; }
 
+/* One grouped card with the papers as its rows: the separators are inset to where the title starts,
+   the way a list on this phone draws them. */
 .row { position:relative; display:block; width:100%; text-align:start; background:var(--card);
        padding:10px 14px 11px 18px; transition:background 90ms;
        /* A held finger asks this app a question; it must not also summon the phone's own callout. */
@@ -170,6 +170,21 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
          background:var(--track-hover); overflow:hidden; vertical-align:middle; flex:none; }
 .heard i { position:absolute; inset:0 auto 0 0; background:var(--warm); border-radius:999px; }
 .foot .muted { font-size:11px; font-variant-numeric:tabular-nums; }
+
+/* What was left half heard, offered back at the top of the library. */
+.resume { display:block; margin-bottom:14px; background:var(--card); border-radius:var(--radius);
+          box-shadow:var(--card-shadow); overflow:hidden; }
+.resume button { display:flex; align-items:center; gap:12px; width:100%; text-align:start; padding:11px 14px;
+                 -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+.resume button:active { background:var(--press); }
+.resume .go { width:38px; height:38px; border-radius:999px; background:var(--sel); box-shadow:var(--sel-shadow);
+              display:grid; place-items:center; flex:none; }
+.resume .go svg { width:17px; height:17px; fill:currentColor; stroke:none; }
+.resume .what { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.resume .what b { font-size:15px; font-weight:600; line-height:1.3; letter-spacing:-.012em;
+                  display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+.resume .what span { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.resume .heard { width:34px; }
 
 .empty { margin:56px auto 0; max-width:280px; text-align:center; color:var(--muted); font-size:14px; line-height:1.6; }
 .more { height:1px; }
