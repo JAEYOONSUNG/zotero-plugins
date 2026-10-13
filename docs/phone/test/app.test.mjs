@@ -932,6 +932,34 @@ test('a long paper can be jumped about in by part, and the place shows on the sl
   assert.equal(marked, open.document.querySelectorAll('#listen .sent')[Number(seek.max)]);
 });
 
+test('a held sentence offers the two things that are not starting the voice there', async () => {
+  const {open} = await openListening();
+  const sent = open.document.querySelectorAll('#listen .sent')[0];
+  const event = new open.window.Event('touchstart', {bubbles: true});
+  event.touches = [{clientX: 40, clientY: 200}];
+  sent.dispatchEvent(event);
+  await new Promise(r => setTimeout(r, 560));
+  const rows = [...open.document.querySelectorAll('.menu.float .menu-row')].map(r => r.textContent.trim());
+  assert.deepEqual(rows, ['문장 복사', '여기서부터 듣기', '1쪽 보기'],
+    'copy it, read from it, or go to the page it is on');
+
+  // Copying takes the sentence as the voice says it, not as the screen has broken it up.
+  let copied = '';
+  globalThis.navigator = {userAgent: 'test', clipboard: {writeText: async text => { copied = text; }}};
+  [...open.document.querySelectorAll('.menu.float .menu-row')][0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.match(copied, /Microbial decomposers/);
+  globalThis.navigator = {userAgent: 'test'};
+
+  // And the tap that ended the hold does not also start the voice there.
+  sent.dispatchEvent(event);
+  await new Promise(r => setTimeout(r, 560));
+  open.document.querySelector('.menu.float .menu-row').dispatchEvent(new open.window.Event('click'));
+  sent.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle(6);
+  assert.equal(open.speech.queue.length, 0, 'nothing was spoken by the tap that let go');
+});
+
 test('how big the words are is the reader\'s own choice, and it is kept', async () => {
   const {open} = await openListening();
   open.document.getElementById('listen-more').dispatchEvent(new open.window.Event('click'));

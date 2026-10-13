@@ -796,6 +796,36 @@ const SWIPE_MARK = {
    gesture is felt rather than guessed at. */
 const resist = moved => Math.sign(moved) * (Math.abs(moved) <= SWIPE ? Math.abs(moved) : SWIPE + (Math.abs(moved) - SWIPE) * 0.35);
 
+/* A held finger, on a list that has no swiping to share the touch stream with. The library's own
+   rows are in wireRows below, where the same press has to be told apart from a push aside. */
+function holdWithin(node, find, run) {
+  let timer = null, from = null, on = null, answered = 0;
+  const give = () => { if (timer) clearTimeout(timer); timer = null; };
+  node.addEventListener('touchstart', event => {
+    give();
+    const touch = event.touches && event.touches[0];
+    on = find(event);
+    if (!touch || event.touches.length !== 1 || !on) { on = null; return; }
+    from = {x: touch.clientX, y: touch.clientY};
+    timer = setTimeout(() => { timer = null; answered = Date.now(); run(on); }, HOLD);
+  }, {passive: true});
+  node.addEventListener('touchmove', event => {
+    const touch = event.touches && event.touches[0];
+    if (!from || !touch) return;
+    if (Math.abs(touch.clientX - from.x) > 10 || Math.abs(touch.clientY - from.y) > 10) give();
+  }, {passive: true});
+  node.addEventListener('touchend', give, {passive: true});
+  node.addEventListener('touchcancel', give, {passive: true});
+  node.addEventListener('contextmenu', event => {
+    const found = find(event);
+    if (!found) return;
+    event.preventDefault();
+    answered = Date.now();
+    run(found);
+  });
+  return () => Date.now() - answered < 700;
+}
+
 /* ---------- picking several papers at once ---------- */
 /* One paper at a time is a swipe; a shelf of them is this. Begun from a paper's own menu, as it
    is on this phone — the bar at the top counts what has been picked and holds the way out, and
@@ -2816,9 +2846,28 @@ function wire() {
     setTimeout(() => { listen.chasing = false; offerHere(); }, 700);
     $('listen-here').hidden = true;
   });
+  /* Held on a sentence: the two things worth doing with one that are not starting the voice
+     there, which is what a tap already does. */
+  const heldSentence = holdWithin($('listen-body'),
+    event => (event.target && event.target.closest ? event.target.closest('.sent') : null),
+    node => {
+      const at = Number(node.getAttribute('data-at')) || 0;
+      const unit = (listen.list || [])[at] || {};
+      floatMenu(node, [
+        {label: '문장 복사', icon: ICON.cite, run: async () => {
+          try { await navigator.clipboard.writeText(clean(unit.text || node.textContent)); toast('복사했습니다'); }
+          catch (_) { toast('복사하지 못했습니다'); }
+        }},
+        {label: '여기서부터 듣기', icon: ICON.listen, run: () => { if (listen.player) listen.player.play(at); }},
+        ...(unit.page ? [{label: `${unit.page}쪽 보기`, icon: ICON.pdf, run: () => {
+          if (listen.item) openPaper(liveItem(listen.item.key) || listen.item, {at: unit.page});
+        }}] : [])
+      ], {lift: null});
+    });
   $('listen-body').addEventListener('click', event => {
     const node = event.target && event.target.closest && event.target.closest('.sent');
     if (!node || !listen.player) return;
+    if (heldSentence()) return;        // the tap that ended the hold is not a tap on the sentence
     listen.player.play(Number(node.getAttribute('data-at')) || 0);
   });
   $('listen-play').addEventListener('click', () => { if (listen.player) listen.player.toggle(); });

@@ -65,7 +65,7 @@ the download stamp, the page numbers, the author block, the e-mail addresses, th
 accepted dates, the licence paragraph, the figure captions and the reference list are all left
 out; words broken across a line are put back together; citations are dropped from what is said
 while the sentence on screen keeps them. The sentence being read is marked, tapping one starts
-there, the parts of a paper can be jumped between, a slider shows the place, how big the words
+there, holding one offers to copy it or to turn the PDF to the page it is on, the parts of a paper can be jumped between, a slider shows the place, how big the words
 are is the reader's own choice in four steps (it moves the transcript and a paper's own text,
 never the chrome), and a sleep timer
 stops it after a while or at the end of the part. What has already been heard is set back a shade, so how far
