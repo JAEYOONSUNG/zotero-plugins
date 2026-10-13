@@ -2272,6 +2272,18 @@ function paperTrouble(error) {
 
 const paper = {viewer: null, item: null, following: 0, pages: 0, marks: [], text: []};
 const NIGHT = 'np.pdf.night';
+/* A paper read in a dark room should not open as a white rectangle. Until a reader says
+   otherwise, the page follows the phone itself; once they have said, that is what it does. */
+export function nightWanted(held, dark) {
+  if (held === 'on') return true;
+  if (held === 'off') return false;
+  return !!dark;
+}
+const nightOn = () => {
+  let dark = false;
+  try { dark = !!(matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); } catch (_) {}
+  return nightWanted(localStorage.getItem(NIGHT), dark);
+};
 
 /* While there is something to say, it stands where the page would be. */
 /* The page number, shown while the pages are moving and for a moment after, so a reader with the
@@ -2316,8 +2328,9 @@ async function openPaper(item, {at = 0} = {}) {
   $('paper-q').value = '';
   $('paper-found').textContent = '';
   paper.text = [];
-  $('paper-view').classList.toggle('night', localStorage.getItem(NIGHT) === 'on');
-  $('paper-night').setAttribute('aria-pressed', String(localStorage.getItem(NIGHT) === 'on'));
+  const night = nightOn();
+  $('paper-view').classList.toggle('night', night);
+  $('paper-night').setAttribute('aria-pressed', String(night));
   paper.item = item;
   listen.item = item;
   // The library offers back whichever of the two a paper was last left in the middle of.
@@ -3037,7 +3050,7 @@ function wire() {
     if (paper.viewer) paper.viewer.goto(n);
   });
   $('paper-night').addEventListener('click', () => {
-    const on = localStorage.getItem(NIGHT) !== 'on';
+    const on = !nightOn();
     localStorage.setItem(NIGHT, on ? 'on' : 'off');
     $('paper-view').classList.toggle('night', on);
     $('paper-night').setAttribute('aria-pressed', String(on));

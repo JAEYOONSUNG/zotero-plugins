@@ -54,8 +54,9 @@ can be tapped back into or forgotten.
 
 **The PDF.** A tap gives the whole screen to the paper — the bar folds away and the page number
 stands in for it, as this phone's own reader does, and another tap brings it back. Pinch to zoom,
-double tap for 2×, a slider for the long ones, night mode, and out to
-any other app through the share sheet — the bar over a paper carries its name, the page and a way
+double tap for 2×, a slider for the long ones, night mode — which follows the phone itself until
+you say otherwise, so a paper opened in a dark room does not open as a white rectangle — and out
+to any other app through the share sheet — the bar over a paper carries its name, the page and a way
 to find a word, and the rest is a menu under one button. A paper opens where it was left. Your own Zotero
 highlights are drawn on the page in their own colours, and listed in order with the page each one
 is on — and they come out of the paper in one tap, the citation at the top and then every mark

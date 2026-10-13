@@ -1205,6 +1205,29 @@ test('a paper offers its PDF, and a linked file is fetched from Dropbox by the p
   assert.ok(dropbox.asked.some(a => /oauth2\/token/.test(a.url)), 'a fresh token was fetched first');
 });
 
+test('a paper opened in the dark opens dark, until the reader says otherwise', async () => {
+  const {open} = await openPdf({stored: DROPBOX_ON});
+  const {nightWanted} = await import(new URL(`../app.js?boot=${boots}`, here));
+  // Nothing said: the page follows the phone.
+  assert.equal(nightWanted(null, true), true, 'a dark phone opens a dark page');
+  assert.equal(nightWanted(null, false), false);
+  // Said once, and that is what it does, whatever the phone is doing.
+  assert.equal(nightWanted('off', true), false, 'turned off, it stays off in the dark');
+  assert.equal(nightWanted('on', false), true, 'and on, it stays on in the light');
+
+  // The button says which way it is, and turning it over is remembered.
+  const view = open.document.getElementById('paper-view');
+  const button = open.document.getElementById('paper-night');
+  assert.equal(view.classList.contains('night'), false, 'this fake phone is a light one');
+  assert.equal(button.getAttribute('aria-pressed'), 'false');
+  button.dispatchEvent(new open.window.Event('click'));
+  assert.equal(view.classList.contains('night'), true);
+  assert.equal(button.getAttribute('aria-pressed'), 'true');
+  assert.equal(open.storage.get('np.pdf.night'), 'on', 'and the choice is kept');
+  button.dispatchEvent(new open.window.Event('click'));
+  assert.equal(open.storage.get('np.pdf.night'), 'off', 'turning it back off is a choice too');
+});
+
 test('a tap gives the whole screen to the paper, and a double tap is still a zoom', async () => {
   const {open} = await openPdf({stored: DROPBOX_ON});
   const paper = open.document.getElementById('paper');
