@@ -113,24 +113,26 @@ recessed canvas, hairline separators inset to where the title starts, a large ti
 into the bar as the library is scrolled — taking the search with it, since a tap anywhere on that
 bar scrolls back to the top and brings it out again — a toolbar along the bottom rather than a
 strip floating over the last row, and screens that come in from the right and are pulled back off
-by a finger from the left edge — iOS keeps its own back gesture for Safari, so the home-screen app
-carries one of its own. The chosen thing is a raised white pill on a soft grey track, never a
-solid fill and never a coloured bar down the edge of a row. Pulling the library down turns a ring
-that fills as it goes and keeps turning until the library has actually arrived, and a list
-narrowed to nothing offers the button that un-narrows it rather than being a dead end. In the dark
-it is a true black canvas with the cards lifted off it — and since a shadow says nothing on
-black, everything that is lifted off the page is lifted by one of two tokens, which draw a
-shadow in the light and an edge in the dark. Every colour is measured rather than
-eyeballed: every ink against the paper it is written on, and every word written on top of a fill
-rather than beside it — in the dark those four colours are light tints read as ink on black, so
-what is written on them turns dark, which is the sort of thing only a measurement catches. Every
-class the app asks for is held against what the stylesheet draws, in both directions, by a test —
-a status that was styled twice over for two different things is exactly what a broken app looks
-like.
+by a finger from the left edge, because iOS keeps its own back gesture for Safari. A menu dims
+what is behind it and leaves the row it is about lit and lifted. The chosen thing is a raised
+white pill on a soft grey track, never a solid fill and never a coloured bar down the edge of a
+row. Pulling the library down turns a ring that fills as it goes and keeps turning until the
+library has actually arrived; a first sync of thousands draws how much of it is in along the foot
+of the bar; and a list narrowed to nothing offers the button that un-narrows it rather than being
+a dead end. In the dark it is a true black canvas with the cards lifted off it — and since a
+shadow says nothing on black, everything lifted off the page is lifted by one of two tokens,
+which draw a shadow in the light and an edge in the dark. On an iPad or a Mac it keeps a phone's
+measure in the middle of the window, with everything pinned to an edge pinned to the edge of that
+measure, and where there is a real pointer everything that can be pressed answers it.
 
-On an iPad or a Mac it keeps a phone's measure and sits in the middle, with everything that is
-pinned to an edge pinned to the edge of that measure rather than of the window; where there is a
-real pointer, everything that can be pressed answers it.
+Every colour is measured rather than eyeballed: every ink against the paper it is written on, and
+every word written on top of a fill rather than beside it — in the dark those four colours are
+light tints read as ink on black, so what is written on them turns dark, which is the sort of
+thing only a measurement catches. Every class the app asks for is held against what the
+stylesheet draws, in both directions; no one class may be given two different sizes in two
+different places; and every id the app reaches for is held against the page — a status that was
+styled twice over for two different things is exactly what a broken app looks like, and $ on a
+renamed id does not throw, it just quietly stops working.
 
 ## The PDF, and why Dropbox
 

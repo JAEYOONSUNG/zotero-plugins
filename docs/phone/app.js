@@ -23,7 +23,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v9';
+export const BUILD = 'nonmun-v10';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -991,7 +991,9 @@ function wireRows(list) {
     if (!axis) {
       if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
       give();
-      axis = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
+      // While a shelf is being picked, a finger across a row is not a mark: the taps mean
+      // something else entirely, and marking one of them under the others would be a surprise.
+      axis = !state.picking && Math.abs(dx) > Math.abs(dy) * 1.3 ? 'x' : 'y';
       if (axis === 'x') { row.classList.add('swiping'); closeFloat(); }
     }
     if (axis !== 'x') return;
@@ -1147,7 +1149,7 @@ function learned() {
 function drawTip(list) {
   if (taught() || state.items.length < 5 || state.q || state.picking) return null;
   const line = el('div', {class: 'tip'}, list);
-  el('span', {text: '옆으로 밀면 완료 · 안 읽음, 꾹 누르면 전부'}, line);
+  el('span', {text: '옆으로 밀면 완료 · 안 읽음, 꾹 누르면 듣기 · 보기 · 선택'}, line);
   const off = el('button', {class: 'x', type: 'button', 'aria-label': '안내 닫기', text: '×'}, line);
   off.addEventListener('click', () => { localStorage.setItem(KEYS.tip, 'off'); line.remove(); });
   return line;

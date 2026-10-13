@@ -2160,6 +2160,18 @@ test('several papers are picked at once and marked together', async () => {
   assert.ok(rows()[0].querySelector('.pick-mark.on'), 'and says so');
   assert.ok(!rows()[1].querySelector('.pick-mark.on'), 'the others do not');
 
+  // A finger across a row is not a mark while a shelf is being picked.
+  const across = (type, x) => {
+    const event = new open.window.Event(type, {bubbles: true});
+    event.touches = [{clientX: x, clientY: 300}];
+    rows()[1].dispatchEvent(event);
+  };
+  across('touchstart', 200); across('touchmove', 90);
+  assert.equal(rows()[1].querySelector('.face').style.transform, '', 'the row did not budge');
+  rows()[1].dispatchEvent(new open.window.Event('touchend', {bubbles: true}));
+  await open.settle();
+  assert.equal(server.sent.filter(r => r.method === 'PATCH').length, 0, 'and nothing was marked');
+
   // A tap picks rather than opens.
   tap(rows()[1]);
   assert.equal($id('count').textContent, '2편 선택');
