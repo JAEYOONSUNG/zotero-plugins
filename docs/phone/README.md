@@ -91,7 +91,9 @@ that never ends.
 **Driving.** 운전 모드, the car button on the player. The sentence being read is set the size of a
 road sign and held in the middle of the screen, the three buttons that matter become thumb-sized,
 everything else gets out of the way, and the whole page is the pause button — nobody aims at a
-sentence at seventy. The end of a paper is the start of the next one in the library (끝나면 ·
+sentence at seventy. **☰ stays**, because the voice, the volume and 본문만 / 캡션까지 all live
+behind it and driving mode is exactly when they are wanted; opened, the settings carry their own
+size, big enough to hit at the wheel, and the speed strip comes back with them. The end of a paper is the start of the next one in the library (끝나면 ·
 이어서 계속, which 운전 모드 turns on for you), so a drive is not one paper and then silence. The
 car's own controls — the wheel, the dashboard, the lock screen — are given the player through
 mediaSession, with the paper's name and its authors on the dashboard. The screen is held awake
@@ -224,6 +226,15 @@ node docs/phone/tools/coverage.mjs ~/Zotero/storage 200   # what is no longer re
 
 On 2026-10-13 the first went from 564 sentences read per paper to 401 as the front matter was
 dealt with, and the second holds at 75.5% of a file's words read, no paper below a quarter.
+
+## When the phone will not let go of an old copy
+
+The version this phone is running is at the bottom of 설정 · 앱, and **업데이트 확인** asks the
+server for a newer one and reloads if there is one. iOS can hold a home-screen app on its own copy
+of the shell for days regardless, so **앱 새로 받기** beside it throws the cached files away,
+unregisters the service worker and fetches the lot again. It leaves the library alone — that is in
+IndexedDB, not in the cache — and it waits for signal, because with none it would leave nothing to
+open.
 
 ## Still to come
 

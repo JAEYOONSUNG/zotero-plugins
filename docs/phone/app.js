@@ -24,7 +24,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v11';
+export const BUILD = 'nonmun-v12';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -2864,6 +2864,21 @@ function paintSettings() {
     } catch (error) { toast(error.message || '확인하지 못했습니다'); }
     finally { check.disabled = false; }
   });
+  /* When a phone holds on to an old copy anyway — iOS can keep a home-screen app on its own shell for
+     days — this throws the shell away and fetches it again. The library is in IndexedDB and is not
+     touched; only the cached files are. Offline it would leave nothing to open, so it waits for signal. */
+  const again = setGo(about.card, '앱 새로 받기', async () => {
+    if (navigator.onLine === false) { toast('신호가 있을 때 눌러 주세요'); return; }
+    again.disabled = true;
+    try {
+      if (self.caches) for (const name of await caches.keys()) await caches.delete(name);
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.unregister();
+      toast('다시 받는 중…');
+      setTimeout(() => location.reload(), 600);
+    } catch (error) { again.disabled = false; toast(error.message || '다시 받지 못했습니다'); }
+  });
+  setNote(about.group, '설정을 바꾸려면 듣는 화면 아래 ☰ 를 누르세요. 목소리, 소리 크기, 본문만 읽을지 캡션까지 읽을지가 그 안에 있습니다.');
 
   // What this phone is holding, and the two ways of asking for it again.
   const store = setGroup(body, '라이브러리');
@@ -3331,6 +3346,8 @@ function wire() {
     const extra = $('listen-extra');
     extra.hidden = !extra.hidden;
     $('listen-more').setAttribute('aria-expanded', String(!extra.hidden));
+    // Driving strips the bar down to what a thumb needs; the settings carry their own size while open.
+    $('listen').classList.toggle('settings', !extra.hidden);
   });
   $('paper-find').addEventListener('click', () => {
     const box = $('paper-finder');

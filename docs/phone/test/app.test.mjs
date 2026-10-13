@@ -1737,7 +1737,7 @@ test('the settings screen is groups of rows, not a form', async () => {
   assert.equal(body.querySelectorAll('.set-field input').length, 2, 'the app key and the folder are rows');
   // What can be pressed stands in the tint that says so, and what cannot be undone is red.
   const go = [...body.querySelectorAll('.set-go')].map(b => b.textContent);
-  assert.deepEqual(go, ['업데이트 확인', 'PDF 비우기', '라이브러리 다시 받기', '연결', '폴더만 저장',
+  assert.deepEqual(go, ['업데이트 확인', '앱 새로 받기', 'PDF 비우기', '라이브러리 다시 받기', '연결', '폴더만 저장',
     '키까지 함께 담기', '키 복사']);
 });
 
@@ -3230,4 +3230,41 @@ test('a paper left half heard is offered back at the top of the library', async 
   fresh.document.querySelector('#detail .listen-start').dispatchEvent(new fresh.window.Event('click'));
   await fresh.settle(10);
   assert.equal(fresh.storage.get('np.last'), 'AAA');
+});
+
+/* Driving mode strips the bar down to a thumb's worth of buttons, and it had stripped away the one
+   button that opens the settings — so the voice, the volume and what is read were all behind a door
+   that driving mode had taken off its hinges. Someone who leaves driving mode on, which is the point
+   of it, could never change any of them. */
+test('운전 모드에서도 설정은 열린다: 목소리, 소리, 읽을 범위', async () => {
+  const {open} = await openListening();
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  const css = read('app.css');
+
+  click($id('listen-drive'));
+  await open.settle();
+  assert.equal($id('listen').classList.contains('driving'), true);
+  // The door is still there, and nothing in the stylesheet takes it away.
+  assert.ok(!/#listen\.driving[^{]*#listen-more[^{]*\{[^}]*display:\s*none/.test(css), 'driving mode hides the settings button');
+  assert.match(css, /#listen\.driving #listen-pdf \{ display:none; \}/, 'the PDF button is still put away');
+
+  click($id('listen-more'));
+  await open.settle();
+  assert.equal($id('listen-extra').hidden, false);
+  assert.equal($id('listen-more').getAttribute('aria-expanded'), 'true');
+  assert.equal($id('listen').classList.contains('settings'), true, 'so the sheet can carry its own size');
+  // The three the reader came for are inside it.
+  for (const id of ['listen-voice', 'listen-vol', 'listen-what']) {
+    assert.ok($id('listen-extra').contains($id(id)), `${id} is not in the settings sheet`);
+  }
+  assert.deepEqual([...$id('listen-what').querySelectorAll('button')].map(b => b.textContent), ['본문만', '캡션까지']);
+  // Speed comes back while the sheet is open, and goes away again with it.
+  assert.match(css, /#listen\.driving:not\(\.settings\) #listen-rate \{ display:none; \}/);
+  // Big enough to hit at the wheel: every control in the sheet is sized up while driving.
+  assert.match(css, /#listen\.driving #listen-extra \.small-seg button \{[^}]*height:46px/);
+
+  click($id('listen-more'));
+  await open.settle();
+  assert.equal($id('listen').classList.contains('settings'), false);
 });
