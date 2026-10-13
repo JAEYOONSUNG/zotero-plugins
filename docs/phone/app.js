@@ -198,7 +198,8 @@ const isPaper = item => REGULAR.test(item.data?.itemType || '') && !item.data?.p
 /* `shown` is how far down the list has been drawn: a library of a few thousand is put on screen
    a screenful at a time, so opening it is instant and scrolling to the end still reaches the end. */
 const state = {items: [], collections: [], status: '', collection: '', tag: '', q: '',
-               sort: localStorage.getItem('np.sort') || 'added', shown: 0, busy: false, at: 0};
+               sort: localStorage.getItem('np.sort') || 'added', shown: 0, busy: false, at: 0,
+               picking: false, picked: new Set()};
 const PAGE = 60;
 
 /* ---------- sync ---------- */
@@ -762,6 +763,64 @@ const SWIPE_MARK = {
    gesture is felt rather than guessed at. */
 const resist = moved => Math.sign(moved) * (Math.abs(moved) <= SWIPE ? Math.abs(moved) : SWIPE + (Math.abs(moved) - SWIPE) * 0.35);
 
+/* ---------- picking several papers at once ---------- */
+/* One paper at a time is a swipe; a shelf of them is this. Begun from a paper's own menu, as it
+   is on this phone — the bar at the top counts what has been picked and holds the way out, and
+   the bar at the bottom holds what can be done to them. */
+const PICK_MARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>';
+function setPicking(on, first = '') {
+  state.picking = !!on;
+  state.picked = new Set(on && first ? [first] : []);
+  const main = $('main');
+  if (main) main.classList.toggle('picking', state.picking);
+  render({keep: true});
+  paintPicked();
+}
+function paintPicked() {
+  const on = state.picking, n = state.picked.size;
+  for (const id of ['btn-sort', 'btn-sync']) { const node = $(id); if (node) node.hidden = on; }
+  const done = $('btn-picked');
+  if (done) done.hidden = !on;
+  const bar = $('pickbar');
+  if (bar) bar.hidden = !on;
+  const tabs = $('statusbar');
+  if (tabs) tabs.hidden = on;
+  const all = $('pick-all');
+  if (all) all.textContent = n && n >= (render.rows || []).length ? '해제' : '모두';
+  for (const id of ['pick-mark', 'pick-rate']) { const node = $(id); if (node) node.disabled = !n; }
+  if (!on) return;
+  const count = $('count');
+  if (count) count.textContent = n ? `${n.toLocaleString()}편 선택` : '선택';
+}
+/* Marked one after another rather than all at once: each write is its own intention against the
+   paper as it stands on the server, which is what keeps a change made on the Mac meanwhile. */
+async function applyPicked(what, value, said) {
+  const keys = [...state.picked];
+  if (!keys.length) return;
+  let done = 0;
+  for (const key of keys) {
+    const item = liveItem(key);
+    if (!item) continue;
+    try { await (what === 'status' ? setStatus(item, value) : setRating(item, value)); done++; }
+    catch (error) { toast(error.message); break; }
+  }
+  setPicking(false);
+  toast(`${done.toLocaleString()}편을 ${said}`);
+}
+function pickMarkMenu() {
+  floatMenu($('pick-mark'), [
+    {id: 'x-unread', label: '안 읽음', run: () => applyPicked('status', 'unread', '안 읽음으로 표시했습니다')},
+    {id: 'x-reading', label: '읽는 중', run: () => applyPicked('status', 'reading', '읽는 중으로 표시했습니다')},
+    {id: 'x-done', label: '완료', run: () => applyPicked('status', 'done', '완료로 표시했습니다')},
+    {id: 'x-none', label: '표시 없음', run: () => applyPicked('status', '', '표시를 지웠습니다')}
+  ]);
+}
+function pickRateMenu() {
+  floatMenu($('pick-rate'), [5, 4, 3, 2, 1].map(n => ({
+    id: `x-${n}`, label: '★'.repeat(n), run: () => applyPicked('rating', n, `${n}점을 주었습니다`)
+  })).concat([{id: 'x-0', label: '별점 없음', run: () => applyPicked('rating', 0, '별점을 지웠습니다')}]));
+}
+
 /* ---------- what a row answers to ---------- */
 /* Every paper answers to the same two gestures, so the library listens for them once, on itself,
    rather than seven times over on every row. A library scrolled to the end of a few thousand
@@ -799,7 +858,7 @@ function wireRows(list) {
      out of it — the two screens it leads to, the two things worth copying, and the marks. */
   const askStatus = () => {
     const item = paper();
-    if (!row || !item) return;
+    if (!row || !item || state.picking) return;
     learned();
     const marks = [
       {id: 'unread', label: '안 읽음'}, {id: 'reading', label: '읽는 중'},
@@ -814,7 +873,9 @@ function wireRows(list) {
       {label: '인용 복사', icon: ICON.cite, run: () => copyCitation(paper() || item)},
       {label: '공유', icon: ICON.share, run: () => shareItem(paper() || item)},
       {sep: true},
-      ...marks
+      ...marks,
+      {sep: true},
+      {label: '여러 개 선택', icon: ICON.pick, run: () => setPicking(true, item.key)}
     ], {chosen: statusOf(item), lift: row});
   };
   const mark = async (item, id, label) => {
@@ -887,10 +948,21 @@ function wireRows(list) {
     askStatus();
   });
 
+  const toggle = on => {
+    const id = on.getAttribute('data-key') || '';
+    if (state.picked.has(id)) state.picked.delete(id); else state.picked.add(id);
+    const chosen = state.picked.has(id);
+    on.setAttribute('aria-selected', String(chosen));
+    const spot = on.querySelector('.pick-mark');
+    if (spot) { spot.className = `pick-mark${chosen ? ' on' : ''}`; spot.innerHTML = chosen ? PICK_MARK : ''; }
+    paintPicked();
+  };
   list.addEventListener('click', event => {
     const on = rowAt(event);
     if (!on) return;
     if (Date.now() - answered < RECENT) { answered = 0; return; }
+    // While several are being picked, a tap picks rather than opens.
+    if (state.picking) { toggle(on); return; }
     // Remembered so going back lands on the same row, not at the top of a freshly drawn list.
     state.at = list.scrollTop;
     state.drawn = state.shown;
@@ -909,6 +981,11 @@ function drawRow(item, list) {
   // line of its own, and most of a library has no status at all.
   const status = statusOf(item);
   if (status) el('span', {class: `flag ${status}`, 'aria-label': STATUS_WORD[status]}, face);
+  if (state.picking) {
+    const chosen = state.picked.has(item.key);
+    row.setAttribute('aria-selected', String(chosen));
+    el('span', {class: `pick-mark${chosen ? ' on' : ''}`, html: chosen ? PICK_MARK : ''}, face);
+  }
   el('h2', {text: clean(item.data.title) || '(제목 없음)'}, face);
   el('p', {class: 'meta', text: [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · ')}, face);
   const rating = ratingOf(item);
@@ -941,7 +1018,7 @@ function learned() {
   if (line) line.remove();
 }
 function drawTip(list) {
-  if (taught() || state.items.length < 5 || state.q) return null;
+  if (taught() || state.items.length < 5 || state.q || state.picking) return null;
   const line = el('div', {class: 'tip'}, list);
   el('span', {text: '옆으로 밀면 완료 · 안 읽음, 꾹 누르면 전부'}, line);
   const off = el('button', {class: 'x', type: 'button', 'aria-label': '안내 닫기', text: '×'}, line);
@@ -954,7 +1031,7 @@ function drawTip(list) {
    filter, a paper that is not in what is being looked at has no business at the top of it. */
 function drawResume(list) {
   const key = localStorage.getItem(KEYS.last) || '';
-  if (!key || state.q || state.collection || state.tag || state.status) return null;
+  if (!key || state.q || state.collection || state.tag || state.status || state.picking) return null;
   const item = state.items.find(paper => paper.key === key);
   const heard = Number(localStorage.getItem(KEYS.pct + key)) || 0;
   if (!item || heard < 1 || heard > 98) return null;
@@ -1106,7 +1183,7 @@ function render({keep = false} = {}) {
   render.group = '';
   list.textContent = '';
   more = null;
-  $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
+  if (!state.picking) $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
   paintScope(rows.length);
 
   drawTip(list);
@@ -2019,7 +2096,8 @@ const ICON = {
   listen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></svg>',
   pdf: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>',
   cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h9a2 2 0 0 1 2 2v12"/><path d="M4 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>',
-  share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg>'
+  share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg>',
+  pick: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12 3 3 5-5"/></svg>'
 };
 let floating = null;
 export function closeFloat() {
@@ -2342,6 +2420,16 @@ function takePasted(text) {
 }
 
 function wire() {
+  $('btn-picked').addEventListener('click', () => setPicking(false));
+  $('pick-mark').addEventListener('click', pickMarkMenu);
+  $('pick-rate').addEventListener('click', pickRateMenu);
+  $('pick-all').addEventListener('click', () => {
+    const rows = render.rows || [];
+    const every = state.picked.size >= rows.length;
+    state.picked = every ? new Set() : new Set(rows.map(item => item.key));
+    render({keep: true});
+    paintPicked();
+  });
   steadyKeyboard();
   wireRail();
   wireRows($('list'));
@@ -2417,7 +2505,8 @@ function wire() {
   addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     if (floating) { closeFloat(); return; }
-    if (sheets.length) closeSheet(sheets[sheets.length - 1].id);
+    if (sheets.length) { closeSheet(sheets[sheets.length - 1].id); return; }
+    if (state.picking) setPicking(false);
   });
   pullToRefresh($('list'), () => sync());
   followScroll($('list'), $('main').querySelector('.top'));

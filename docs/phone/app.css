@@ -197,6 +197,24 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .flag.reading { background:var(--warm); }
 .flag.done { background:var(--good); }
 
+/* ---------- picking several at once ---------- */
+/* The circle on the leading edge, where this phone puts it. The status mark steps aside while it
+   is there: what is being changed is what the taps are for. */
+.pick-mark { position:absolute; left:14px; top:50%; transform:translateY(-50%); width:22px; height:22px;
+             border-radius:999px; box-shadow:inset 0 0 0 1.5px var(--line); display:grid; place-items:center;
+             color:var(--on-fill); }
+.pick-mark.on { background:var(--link); box-shadow:none; }
+.pick-mark svg { width:15px; height:15px; stroke-width:2.6; }
+.picking .face { padding-inline-start:48px; }
+.picking .flag { display:none; }
+.picking .row.paper { touch-action:pan-y; }
+.text-btn { height:34px; padding:0 8px; border-radius:9px; font-size:16px; font-weight:600; color:var(--link); flex:none; }
+.text-btn:active { background:var(--track); }
+.text-btn:disabled { opacity:.4; }
+.text-btn[hidden] { display:none; }
+.pick-bar { gap:4px; padding-inline:8px; }
+.pick-bar[hidden] { display:none; }
+
 /* A row that leads somewhere: the name, how many, and the mark that says it opens. */
 .row.nav { display:flex; align-items:center; gap:10px; padding-top:13px; padding-bottom:13px; }
 .row.nav h2 { flex:1; min-width:0; font-size:16px; font-weight:500; -webkit-line-clamp:1; }

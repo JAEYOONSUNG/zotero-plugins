@@ -1558,14 +1558,14 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   assert.ok(menu, 'holding it does');
   const rows = [...menu.querySelectorAll('.menu-row')];
   assert.deepEqual(rows.map(r => r.textContent.trim()),
-    ['본문 듣기', 'PDF 보기', '인용 복사', '공유', '안 읽음', '읽는 중', '완료', '표시 없음'],
+    ['본문 듣기', 'PDF 보기', '인용 복사', '공유', '안 읽음', '읽는 중', '완료', '표시 없음', '여러 개 선택'],
     'everything the paper can be done to from here, then what it can be marked as');
-  assert.equal(menu.querySelectorAll('.menu-line').length, 1, 'with a line between the two');
+  assert.equal(menu.querySelectorAll('.menu-line').length, 2, 'with a line around the marks');
   for (const at of [0, 1, 2, 3]) {
     assert.equal(rows[at].hasAttribute('aria-pressed'), false, 'an action is not a state');
     assert.ok(rows[at].querySelector('.tick svg'), 'and says what it would do');
   }
-  const marks = rows.slice(4);
+  const marks = rows.slice(4, 8);
   assert.equal(marks[1].getAttribute('aria-pressed'), 'true', 'with a tick against what it is now');
   marks[2].dispatchEvent(new open.window.Event('click'));
   await open.settle();
@@ -1721,6 +1721,101 @@ test('a paper is listened to, read or handed over without being opened first', a
   await open.settle();
   assert.deepEqual(shared, {title: 'Retron Septu defence', url: 'https://doi.org/10.1126/science.abc1234'});
   globalThis.navigator = {userAgent: 'test'};
+});
+
+test('several papers are picked at once and marked together', async () => {
+  const server = fakeServer();
+  const open = await boot({server});
+  await open.settle();
+  const rows = () => [...open.document.querySelectorAll('#list .row.paper')];
+  const tap = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  const $id = id => open.document.getElementById(id);
+
+  // The way in is the paper's own menu, as it is on this phone.
+  const event = new open.window.Event('touchstart', {bubbles: true});
+  event.touches = [{clientX: 40, clientY: 200}];
+  rows()[0].dispatchEvent(event);
+  await new Promise(r => setTimeout(r, 560));
+  // The finger lifting off the hold is a tap the row swallows; then the menu is used.
+  rows()[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '여러 개 선택').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+
+  assert.equal(open.document.getElementById('main').classList.contains('picking'), true);
+  assert.equal($id('pickbar').hidden, false, 'what can be done to them is along the bottom');
+  assert.equal($id('statusbar').hidden, true, 'and the usual bar steps aside');
+  assert.equal($id('btn-sort').hidden, true, 'as do the two buttons at the top');
+  assert.equal($id('btn-picked').hidden, false, 'with the way out in their place');
+  assert.equal($id('count').textContent, '1편 선택', 'the one it was begun from is already picked');
+  assert.ok(rows()[0].querySelector('.pick-mark.on'), 'and says so');
+  assert.ok(!rows()[1].querySelector('.pick-mark.on'), 'the others do not');
+
+  // A tap picks rather than opens.
+  tap(rows()[1]);
+  assert.equal($id('count').textContent, '2편 선택');
+  assert.equal($id('detail').hasAttribute('hidden'), true, 'and nothing was opened');
+  tap(rows()[1]);
+  assert.equal($id('count').textContent, '1편 선택', 'tapped again it is let go');
+  tap(rows()[1]);
+
+  // Marked together: one write per paper, each against the paper as the server has it.
+  tap($id('pick-mark'));
+  const marks = [...open.document.querySelectorAll('.menu.float .menu-row')].map(r => r.textContent.trim());
+  assert.deepEqual(marks, ['안 읽음', '읽는 중', '완료', '표시 없음']);
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '완료').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const writes = server.sent.filter(r => r.method === 'PATCH');
+  assert.equal(writes.length, 2, 'two papers, two writes');
+  for (const write of writes) {
+    assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), ['/done']);
+  }
+  assert.match($id('toast').textContent, /2편을 완료로 표시했습니다/);
+  // And the picking is over, because the thing it was for has been done.
+  assert.equal(open.document.getElementById('main').classList.contains('picking'), false);
+  assert.equal($id('statusbar').hidden, false);
+  assert.equal($id('count').textContent, '3편', 'the count is the library again');
+});
+
+test('picking the whole library, and letting it all go again', async () => {
+  const server = fakeServer();
+  const open = await boot({server});
+  await open.settle();
+  const $id = id => open.document.getElementById(id);
+  const event = new open.window.Event('touchstart', {bubbles: true});
+  event.touches = [{clientX: 40, clientY: 200}];
+  open.document.querySelector('#list .row.paper').dispatchEvent(event);
+  await new Promise(r => setTimeout(r, 560));
+  open.document.querySelector('#list .row.paper').dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '여러 개 선택').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+
+  $id('pick-all').dispatchEvent(new open.window.Event('click'));
+  assert.equal($id('count').textContent, '3편 선택', 'all of what is being looked at');
+  assert.equal($id('pick-all').textContent, '해제', 'and the button turns into the way back');
+  assert.equal(open.document.querySelectorAll('#list .pick-mark.on').length, 3);
+  $id('pick-all').dispatchEvent(new open.window.Event('click'));
+  assert.equal($id('count').textContent, '선택', 'nothing picked');
+  assert.equal($id('pick-mark').disabled, true, 'and nothing to do with it');
+
+  // 별점 gives all of them the same number of stars.
+  $id('pick-all').dispatchEvent(new open.window.Event('click'));
+  $id('pick-rate').dispatchEvent(new open.window.Event('click'));
+  const stars = [...open.document.querySelectorAll('.menu.float .menu-row')].map(r => r.textContent.trim());
+  assert.deepEqual(stars, ['★★★★★', '★★★★', '★★★', '★★', '★', '별점 없음']);
+  [...open.document.querySelectorAll('.menu.float .menu-row')]
+    .find(r => r.textContent.trim() === '★★★').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const writes = server.sent.filter(r => r.method === 'PATCH');
+  assert.equal(writes.length, 3);
+  for (const write of writes) assert.match(write.body.extra, /^Rating: 3$|\nRating: 3|Rating: 3/);
+  assert.match($id('toast').textContent, /3편을 3점을 주었습니다|3편을/);
+
+  // And the way out puts everything back.
+  assert.equal($id('btn-picked').hidden, true);
+  assert.equal($id('btn-sync').hidden, false);
 });
 
 test('a menu dims what is behind it and leaves its own row lit', async () => {

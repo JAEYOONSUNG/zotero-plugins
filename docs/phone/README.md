@@ -33,7 +33,11 @@ headings follow whichever of the six orders the list is in (최근 추가, 최�
 itself; what the release will do is drawn behind the row while the finger is still on it. Holding
 a finger on one instead opens everything that can be done to it from where you are — 본문 듣기,
 PDF 보기, 인용 복사, 공유, and then all three marks, 읽는 중 among them — with the library dimmed
-behind it and that one paper left lit. The mark shows in the margin beside the title.
+behind it and that one paper left lit. The mark shows in the margin beside the title. The last thing in
+that menu is 여러 개 선택: the library turns into a shelf with a circle on each paper, the bar at
+the top counts what has been picked and holds the way out, and the bar at the bottom marks or
+rates all of them at once — one write per paper, each still against the paper as the server has
+it, so nothing is overwritten wholesale.
 Browse by collection (a collection means everything filed under it) or by tag; what is being
 looked at shows as chips that take themselves off. A library long enough to be lost in carries landmarks down its
 right edge — the letters, the years, the stars — and a finger laid on them takes it there, saying

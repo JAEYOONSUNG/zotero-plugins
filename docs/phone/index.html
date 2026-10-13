@@ -53,6 +53,8 @@
       <span class="grow"></span>
       <button id="btn-sort" class="icon-btn" type="button" aria-label="정렬" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20V5M4 8l3-3 3 3"/><path d="M17 4v15M14 16l3 3 3-3"/></svg></button>
       <button id="btn-sync" class="icon-btn" aria-label="새로 고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></svg></button>
+      <!-- while several papers are being picked, the two buttons above give way to this one -->
+      <button id="btn-picked" class="text-btn" type="button" hidden>완료</button>
     </div>
     <div class="top-row">
       <div class="search">
@@ -76,6 +78,13 @@
       <button id="pair-hide" class="secondary" type="button">나중에</button>
     </div>
   </div>
+  <!-- what to do with the papers that have been picked -->
+  <footer class="tabbar pick-bar" id="pickbar" hidden>
+    <button id="pick-all" class="text-btn" type="button">모두</button>
+    <span class="grow"></span>
+    <button id="pick-mark" class="text-btn" type="button" aria-haspopup="true" aria-expanded="false">표시</button>
+    <button id="pick-rate" class="text-btn" type="button" aria-haspopup="true" aria-expanded="false">별점</button>
+  </footer>
   <footer class="tabbar" id="statusbar">
     <button id="btn-collections" class="tab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.8 2H19a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 19 18H4.5A1.5 1.5 0 0 1 3 16.5z"/></svg><span>컬렉션</span></button>
     <span id="sync-state" class="tab-state"></span>
