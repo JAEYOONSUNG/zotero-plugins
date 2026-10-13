@@ -479,8 +479,11 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .menu-row:active { background:var(--track); }
 .menu-row svg { width:19px; height:19px; flex:none; }
 .menu-row[aria-pressed="true"] { color:var(--link); font-weight:600; }
+.menu-row.bad { color:var(--bad); }
+/* A line between what a paper can be done to and what it can be marked as. */
+.menu-line { height:1px; margin:4px 10px; background:var(--line); flex:none; }
 /* A menu that hangs off a button is put where the button is, by the hand that opened it. */
-.menu.float { position:fixed; z-index:40; width:186px; }
+.menu.float { position:fixed; z-index:40; width:196px; max-height:min(66vh,440px); overflow-y:auto; }
 .menu-row .tick { width:17px; flex:none; display:flex; color:var(--link); }
 .menu-row .tick svg { width:17px; height:17px; stroke-width:2.4; }
 

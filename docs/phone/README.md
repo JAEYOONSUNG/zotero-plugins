@@ -29,8 +29,9 @@ headings follow whichever of the six orders the list is in (최근 추가, 최�
 별점, 제목; a menu under the button beside the title). Pushing a paper aside marks it — left is
 완료, right is 안 읽음, and a paper already marked that way is cleared, so the same swipe undoes
 itself; what the release will do is drawn behind the row while the finger is still on it. Holding
-a finger on one instead opens all three marks, 읽는 중 among them, and the mark shows in the
-margin beside the title.
+a finger on one instead opens everything that can be done to it from where you are — 본문 듣기,
+PDF 보기, 인용 복사, 공유, and then all three marks, 읽는 중 among them — with the library dimmed
+behind it and that one paper left lit. The mark shows in the margin beside the title.
 Browse by collection (a collection means everything filed under it) or by tag; what is being
 looked at shows as chips that take themselves off. A library long enough to be lost in carries landmarks down its
 right edge — the letters, the years, the stars — and a finger laid on them takes it there, saying

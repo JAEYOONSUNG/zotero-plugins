@@ -795,18 +795,27 @@ function wireRows(list) {
     const on = event.target;
     return on && typeof on.closest === 'function' ? on.closest('.row.paper') : null;
   };
-  /* Held down: the status, without opening the paper and coming back out of it. */
+  /* Held down: everything a paper can be done to from here, without opening it and coming back
+     out of it — the two screens it leads to, the two things worth copying, and the marks. */
   const askStatus = () => {
     const item = paper();
     if (!row || !item) return;
     learned();
-    floatMenu(row, [
+    const marks = [
       {id: 'unread', label: '안 읽음'}, {id: 'reading', label: '읽는 중'},
       {id: 'done', label: '완료'}, {id: '', label: '표시 없음'}
     ].map(choice => ({...choice, run: async () => {
       try { await mark(paper() || item, choice.id, choice.label); }
       catch (error) { toast(error.message); }
-    }})), {chosen: statusOf(item), lift: row});
+    }}));
+    floatMenu(row, [
+      {label: '본문 듣기', icon: ICON.listen, run: () => openListen(paper() || item)},
+      {label: 'PDF 보기', icon: ICON.pdf, run: () => openPaper(paper() || item)},
+      {label: '인용 복사', icon: ICON.cite, run: () => copyCitation(paper() || item)},
+      {label: '공유', icon: ICON.share, run: () => shareItem(paper() || item)},
+      {sep: true},
+      ...marks
+    ], {chosen: statusOf(item), lift: row});
   };
   const mark = async (item, id, label) => {
     await setStatus(item, id);
@@ -1161,6 +1170,26 @@ function watchEnd() {
 function onListScroll() {
   const list = $('list');
   if (list.scrollTop + list.clientHeight > list.scrollHeight - 600) drawMore();
+}
+
+/* The two things worth taking out of a paper without opening it: the line that finds it again,
+   and the link itself, through the phone's own share sheet where there is one. */
+async function copyCitation(item) {
+  try { await navigator.clipboard.writeText(citationOf(item)); toast('인용을 복사했습니다'); }
+  catch (_) { toast('복사하지 못했습니다'); }
+}
+export function linkOf(item) {
+  const doi = clean(item.data?.DOI);
+  return doi ? `https://doi.org/${encodeURI(doi)}` : clean(item.data?.url);
+}
+async function shareItem(item) {
+  const url = linkOf(item), title = clean(item.data?.title) || '논문';
+  try {
+    if (navigator.share) { await navigator.share(url ? {title, url} : {title, text: citationOf(item)}); return; }
+  } catch (error) { if (error && error.name === 'AbortError') return; }
+  // No share sheet: the line itself is the next best thing to hand over.
+  try { await navigator.clipboard.writeText(url || citationOf(item)); toast('복사했습니다'); }
+  catch (_) { toast('이 폰에서는 공유할 수 없습니다'); }
 }
 
 /* A line to paste into a mail or under a slide. Not a style anyone has standardised, just the
@@ -1986,6 +2015,12 @@ async function sharePaper() {
 /* A menu that belongs to a button rather than to a screen: it is put where the button is, it takes
    the next tap anywhere else as a way of saying no, and it never leaves two of itself about. */
 const TICK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>';
+const ICON = {
+  listen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></svg>',
+  pdf: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>',
+  cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h9a2 2 0 0 1 2 2v12"/><path d="M4 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6h14v-6"/></svg>'
+};
 let floating = null;
 export function closeFloat() {
   if (!floating) return;
@@ -2009,8 +2044,12 @@ function floatMenu(anchor, items, {chosen = '', lift = null} = {}) {
   if (lift) lift.classList.add('lifted-row');
   const menu = el('div', {class: 'menu float'}, document.body);
   for (const item of items) {
-    const row = el('button', {class: 'menu-row', type: 'button', 'aria-pressed': String(item.id === chosen)}, menu);
-    el('span', {class: 'tick', html: item.id === chosen ? TICK : ''}, row);
+    // A line between what a paper can be done to and what it can be marked as.
+    if (item.sep) { el('span', {class: 'menu-line', 'aria-hidden': 'true'}, menu); continue; }
+    const row = el('button', {class: `menu-row${item.bad ? ' bad' : ''}`, type: 'button',
+      'aria-pressed': item.id === undefined ? null : String(item.id === chosen)}, menu);
+    // One slot at the front, holding either the tick or what the row would do.
+    el('span', {class: 'tick', html: item.id !== undefined && item.id === chosen ? TICK : (item.icon || '')}, row);
     el('span', {text: item.label}, row);
     row.addEventListener('click', () => { closeFloat(); item.run(); });
   }

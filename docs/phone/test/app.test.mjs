@@ -1525,9 +1525,17 @@ test('a paper is marked without opening it, by holding a finger on its row', asy
   const menu = open.document.querySelector('.menu.float');
   assert.ok(menu, 'holding it does');
   const rows = [...menu.querySelectorAll('.menu-row')];
-  assert.deepEqual(rows.map(r => r.textContent.trim()), ['안 읽음', '읽는 중', '완료', '표시 없음']);
-  assert.equal(rows[1].getAttribute('aria-pressed'), 'true', 'with a tick against what it is now');
-  rows[2].dispatchEvent(new open.window.Event('click'));
+  assert.deepEqual(rows.map(r => r.textContent.trim()),
+    ['본문 듣기', 'PDF 보기', '인용 복사', '공유', '안 읽음', '읽는 중', '완료', '표시 없음'],
+    'everything the paper can be done to from here, then what it can be marked as');
+  assert.equal(menu.querySelectorAll('.menu-line').length, 1, 'with a line between the two');
+  for (const at of [0, 1, 2, 3]) {
+    assert.equal(rows[at].hasAttribute('aria-pressed'), false, 'an action is not a state');
+    assert.ok(rows[at].querySelector('.tick svg'), 'and says what it would do');
+  }
+  const marks = rows.slice(4);
+  assert.equal(marks[1].getAttribute('aria-pressed'), 'true', 'with a tick against what it is now');
+  marks[2].dispatchEvent(new open.window.Event('click'));
   await open.settle();
   const write = server.sent.find(r => r.method === 'PATCH');
   assert.ok(write, 'the mark was written');
@@ -1635,6 +1643,52 @@ test('a paper pushed aside is marked, and the same swipe pushed again clears it'
   await open.settle();
   write = server.sent.filter(r => r.method === 'PATCH').pop();
   assert.deepEqual(write.body.tags.map(t => t.tag).filter(t => t.startsWith('/')), []);
+});
+
+test('a paper is listened to, read or handed over without being opened first', async () => {
+  const open = await boot();
+  await open.settle();
+  const hold = async at => {
+    const row = open.document.querySelectorAll('#list .row.paper')[at];
+    const event = new open.window.Event('touchstart', {bubbles: true});
+    event.touches = [{clientX: 40, clientY: 200}];
+    row.dispatchEvent(event);
+    await new Promise(r => setTimeout(r, 560));
+    return [...open.document.querySelectorAll('.menu.float .menu-row')];
+  };
+  const take = label => {
+    const found = [...open.document.querySelectorAll('.menu.float .menu-row')]
+      .find(r => r.textContent.trim() === label);
+    assert.ok(found, `${label} is offered`);
+    found.dispatchEvent(new open.window.Event('click'));
+  };
+
+  // Listening is two taps away through the paper's own screen; here it is one hold and one tap.
+  await hold(0);
+  take('본문 듣기');
+  await open.settle();
+  assert.equal(open.document.getElementById('listen').hidden, false, 'the voice started from the library');
+  open.window.history.back();
+  await open.settle();
+
+  // The line that finds the paper again, copied without opening anything.
+  let copied = '';
+  open.window.navigator = undefined;
+  globalThis.navigator = {userAgent: 'test', clipboard: {writeText: async text => { copied = text; }}};
+  await hold(0);
+  take('인용 복사');
+  await open.settle();
+  assert.match(copied, /Seo & Kim \(2025\)/, 'the citation went to the clipboard');
+  assert.match(open.document.getElementById('toast').textContent, /인용/);
+
+  // Handed over through the phone's own share sheet, with the link rather than the file.
+  let shared = null;
+  globalThis.navigator = {userAgent: 'test', share: async what => { shared = what; }};
+  await hold(0);
+  take('공유');
+  await open.settle();
+  assert.deepEqual(shared, {title: 'Retron Septu defence', url: 'https://doi.org/10.1126/science.abc1234'});
+  globalThis.navigator = {userAgent: 'test'};
 });
 
 test('a menu dims what is behind it and leaves its own row lit', async () => {
