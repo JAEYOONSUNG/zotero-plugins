@@ -10,6 +10,8 @@ A web app you add to the iPhone home screen. No store, no account of its own, no
    access** and **Allow write access** both ticked.
 2. Open the address above in Safari, paste the key, and press 연결.
 3. 설정 (the gear at the bottom right) → **키까지 함께 담기**, then 공유 → **홈 화면에 추가**.
+   (설정 is groups of rows, as this phone's own settings are: what each thing is on the left, what
+   it says on the right, and the explaining in small print under the group.)
 
 That last step matters: iOS gives a home-screen web app its own storage, separate from Safari's,
 so the key has to travel in the address. The icon added that way carries it, and keeps carrying it

@@ -385,13 +385,34 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .field input:focus { border-color:var(--link); }
 .msg { margin:0; font-size:13px; }
 .msg.bad { color:var(--bad); } .msg.good { color:var(--good); }
-.steps { margin:8px 0 0; padding-inline-start:20px; color:var(--muted); font-size:13px; line-height:1.7; }
+.steps { margin:8px 0 0 var(--pad); padding-inline-start:18px; color:var(--faint); font-size:12px; line-height:1.75; }
 .steps code { background:var(--track); border-radius:6px; padding:1px 5px; font-size:12px;
               user-select:all; -webkit-user-select:all; word-break:break-all; }
-.settings-state { display:flex; align-items:center; gap:8px; font-size:14px; }
-.settings-state .dot { width:9px; height:9px; border-radius:999px; background:var(--muted); flex:none; }
-.settings-state .dot.on { background:var(--good); }
-.settings-state .dot.off { background:var(--bad); }
+/* ---------- a settings screen ---------- */
+/* Groups of rows with a quiet label above each and the explaining in small print below, which is
+   what this phone's own settings look like — not a form with a legend against every box. */
+.set-group + .set-group { margin-top:24px; }
+.set-head { margin:0 0 7px var(--pad); font-size:13px; font-weight:600; letter-spacing:-.01em; color:var(--muted); }
+.card.rows { padding:0; gap:0; overflow:hidden; }
+.set-row { position:relative; display:flex; align-items:center; gap:12px; width:100%; min-height:47px;
+           text-align:start; padding:10px var(--pad); font-size:15px; }
+.set-row + .set-row::before { content:''; position:absolute; top:0; left:var(--pad); right:0; height:1px;
+                              background:var(--line); transform:scaleY(.5); transform-origin:top; }
+button.set-row:active { background:var(--press); }
+button.set-row:active::before, button.set-row:active + .set-row::before { background:transparent; }
+.set-row .what { flex:none; }
+.set-row .val { flex:1; min-width:0; text-align:end; color:var(--muted);
+                font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.set-field input { flex:1; min-width:0; border:0; background:transparent; color:var(--ink);
+                   font:inherit; font-size:15px; text-align:end; outline:none; }
+.set-field input::placeholder { color:var(--faint); }
+.set-go { color:var(--link); font-weight:600; }
+.set-go.bad { color:var(--bad); }
+.note { margin:8px var(--pad) 0; font-size:12px; line-height:1.6; color:var(--faint); }
+.note code { background:var(--track); border-radius:6px; padding:1px 5px; }
+.set-row .dot { width:9px; height:9px; border-radius:999px; background:var(--muted); flex:none; }
+.set-row .dot.on { background:var(--good); }
+.set-row .dot.off { background:var(--bad); }
 
 /* the card that carries the key into the home-screen app */
 .pair { position:absolute; left:var(--pad); right:var(--pad); bottom:calc(var(--bottom) + 68px);

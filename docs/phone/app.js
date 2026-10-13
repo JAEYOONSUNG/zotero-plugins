@@ -2089,96 +2089,121 @@ function openSettings() {
 }
 
 /* Drawn afresh whenever something in it changes, without stacking another way back. */
+/* ---------- the settings screen ---------- */
+/* A settings screen on this phone is groups of rows: a quiet label above the group, what each
+   row is on the left, what it says on the right, and the rows that do something standing in the
+   tint that says they can be pressed. The explaining goes underneath in small print, not in the
+   middle of the list. */
+function setGroup(body, title) {
+  const group = el('section', {class: 'set-group'}, body);
+  if (title) el('h3', {class: 'set-head', text: title}, group);
+  const card = el('div', {class: 'card rows'}, group);
+  return {group, card};
+}
+function setRow(card, what, value) {
+  const row = el('div', {class: 'set-row'}, card);
+  el('span', {class: 'what', text: what}, row);
+  const said = el('span', {class: 'val', text: typeof value === 'string' ? value : ''}, row);
+  return {row, said};
+}
+function setField(card, what, value, placeholder) {
+  const row = el('label', {class: 'set-row set-field'}, card);
+  el('span', {class: 'what', text: what}, row);
+  const box = el('input', {type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder}, row);
+  box.value = value || '';
+  return box;
+}
+function setGo(card, label, run, {bad = false} = {}) {
+  const row = el('button', {class: `set-row set-go${bad ? ' bad' : ''}`, type: 'button', text: label}, card);
+  row.addEventListener('click', run);
+  return row;
+}
+const setNote = (group, text) => el('p', {class: 'note', text}, group);
+
 function paintSettings() {
   const body = $('settings-body');
   body.textContent = '';
 
-  const card = el('section', {class: 'card'}, body);
-  el('h3', {text: 'Dropbox — PDF 원본'}, card);
-  const state = el('p', {class: 'settings-state'}, card);
-  el('span', {class: `dot ${dropbox.linked ? 'on' : 'off'}`}, state);
-  el('span', {text: dropbox.linked ? '연결되어 있습니다.' : '연결되어 있지 않습니다.'}, state);
-  el('p', {class: 'muted small', text:
-    '이 라이브러리의 PDF는 Zotero 서버가 아니라 Dropbox 폴더에 있습니다. 그래서 Zotero 키만으로는 원본을 열 수 없고, ' +
-    '폰이 Dropbox에 직접 물어봐야 합니다. 아래 앱은 이 폰과 내 Dropbox 사이에만 쓰이고, 토큰은 이 폰에만 저장됩니다.'}, card);
+  /* Who this phone is, first: it is the one thing a reader might be asked for. */
+  const who = setGroup(body, 'Zotero');
+  setRow(who.card, '사용자 번호', String(account.user || ''));
+  setRow(who.card, 'API 키', account.key ? '이 폰에 저장됨' : '없음');
+  setNote(who.group, '키는 이 폰의 저장 공간에만 있습니다. api.zotero.org와 Dropbox 외에는 어디로도 가지 않습니다.');
 
-  const appKey = el('label', {class: 'field'}, card);
-  el('span', {text: 'Dropbox 앱 키'}, appKey);
-  const appInput = el('input', {type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'App key'}, appKey);
-  appInput.value = dropbox.appKey;
-
-  const baseField = el('label', {class: 'field'}, card);
-  el('span', {text: '라이브러리 폴더 (Dropbox 안의 경로)'}, baseField);
-  const baseInput = el('input', {type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: DEFAULT_BASE}, baseField);
-  baseInput.value = dropbox.base;
-
-  const steps = el('ol', {class: 'steps'}, card);
-  el('li', {html: '<a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a>에서 <b>Create app</b> → Scoped access → <b>Full Dropbox</b>.'}, steps);
-  el('li', {html: 'Permissions 탭에서 <b>files.metadata.read</b>와 <b>files.content.read</b>를 켜고 Submit.'}, steps);
-  el('li', {html: `Settings 탭의 <b>Redirect URIs</b>에 <code>${redirectUri()}</code>를 넣고 Add.`}, steps);
-  el('li', {html: '같은 탭의 <b>App key</b>를 위에 붙여넣고 아래 연결을 누릅니다.'}, steps);
-
-  const row = el('div', {class: 'actions'}, card);
-  const connect = el('button', {class: 'primary', type: 'button', text: dropbox.linked ? '다시 연결' : '연결'}, row);
-  connect.addEventListener('click', async () => {
-    dropbox.appKey = appInput.value;
-    dropbox.base = baseInput.value || DEFAULT_BASE;
-    if (!dropbox.appKey) { toast('앱 키를 넣어 주세요'); return; }
-    try { location.assign(await dropbox.begin(redirectUri())); }
-    catch (error) { toast(error.message); }
-  });
-  const save = el('button', {class: 'secondary', type: 'button', text: '폴더만 저장'}, row);
-  save.addEventListener('click', () => {
-    dropbox.appKey = appInput.value;
-    dropbox.base = baseInput.value || DEFAULT_BASE;
-    toast('저장했습니다');
-  });
-  if (dropbox.linked) {
-    const drop = el('button', {class: 'secondary', type: 'button', text: '연결 끊기'}, row);
-    drop.addEventListener('click', () => { dropbox.forget(); toast('Dropbox 연결을 끊었습니다'); paintSettings(); });
-  }
-
-  // What this phone is holding.
-  const store = el('section', {class: 'card'}, body);
-  el('h3', {text: '이 폰에 받아 둔 것'}, store);
-  const line = el('p', {class: 'muted small', text: '세는 중…'}, store);
-  const storeRow = el('div', {class: 'actions'}, store);
-  const wipe = el('button', {class: 'secondary', type: 'button', text: 'PDF 비우기'}, storeRow);
-  wipe.addEventListener('click', async () => {
+  // What this phone is holding, and the two ways of asking for it again.
+  const store = setGroup(body, '라이브러리');
+  setRow(store.card, '논문', `${state_items()}편`);
+  setRow(store.card, '컬렉션', `${state.collections.length}개`);
+  const files = setRow(store.card, '받아 둔 PDF', '세는 중…');
+  setRow(store.card, '마지막 동기화', whenSynced());
+  setGo(store.card, 'PDF 비우기', async () => {
     await DB.clear('files').catch(() => {});
     toast('받아 둔 PDF를 지웠습니다');
     paintSettings();
   });
-  const again = el('button', {class: 'secondary', type: 'button', text: '라이브러리 다시 받기'}, storeRow);
-  again.addEventListener('click', async () => {
+  setGo(store.card, '라이브러리 다시 받기', async () => {
     account.version = 0;
     closeSheet('settings');
     await sync({full: true});
   });
   DB.all('files').then(rows => {
     const size = rows.reduce((sum, row) => sum + (row.size || 0), 0);
-    line.textContent = `PDF ${rows.length}개 · ${(size / 1048576).toFixed(1)} MB · 논문 ${state_items()}편 · 컬렉션 ${state.collections.length}개`;
-  }).catch(() => { line.textContent = `논문 ${state_items()}편`; });
-  el('p', {class: 'muted small', text: `마지막 동기화 ${whenSynced()}`}, store);
+    files.said.textContent = `${rows.length}개 · ${(size / 1048576).toFixed(1)} MB`;
+  }).catch(() => { files.said.textContent = '알 수 없음'; });
 
-  // The home-screen app has its own storage, and deleting the icon empties it. This puts the
-  // keys back into the address so adding the icon again carries them, however often that happens.
-  const carry = el('section', {class: 'card'}, body);
-  el('h3', {text: '홈 화면 앱'}, carry);
+  // Dropbox: where the PDFs actually are.
+  const drop = setGroup(body, 'Dropbox — PDF 원본');
+  const linked = setRow(drop.card, '연결', dropbox.linked ? '연결됨' : '안 됨');
+  // A light beside the word, because "연결됨" and "안 됨" are read at a glance and a colour faster.
+  const dot = el('span', {class: `dot ${dropbox.linked ? 'on' : 'off'}`, 'aria-hidden': 'true'});
+  linked.row.insertBefore(dot, linked.said);
+  const appInput = setField(drop.card, '앱 키', dropbox.appKey, 'App key');
+  const baseInput = setField(drop.card, '폴더', dropbox.base, DEFAULT_BASE);
+  setGo(drop.card, dropbox.linked ? '다시 연결' : '연결', async () => {
+    dropbox.appKey = appInput.value;
+    dropbox.base = baseInput.value || DEFAULT_BASE;
+    if (!dropbox.appKey) { toast('앱 키를 넣어 주세요'); return; }
+    try { location.assign(await dropbox.begin(redirectUri())); }
+    catch (error) { toast(error.message); }
+  });
+  setGo(drop.card, '폴더만 저장', () => {
+    dropbox.appKey = appInput.value;
+    dropbox.base = baseInput.value || DEFAULT_BASE;
+    toast('저장했습니다');
+  });
+  if (dropbox.linked) setGo(drop.card, '연결 끊기', () => {
+    dropbox.forget();
+    toast('Dropbox 연결을 끊었습니다');
+    paintSettings();
+  }, {bad: true});
+  setNote(drop.group,
+    '이 라이브러리의 PDF는 Zotero 서버가 아니라 Dropbox 폴더에 있습니다. 그래서 Zotero 키만으로는 원본을 열 수 없고, ' +
+    '폰이 Dropbox에 직접 물어봐야 합니다. 아래 앱은 이 폰과 내 Dropbox 사이에만 쓰이고, 토큰은 이 폰에만 저장됩니다.');
+  const steps = el('ol', {class: 'steps'}, drop.group);
+  el('li', {html: '<a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a>에서 <b>Create app</b> → Scoped access → <b>Full Dropbox</b>.'}, steps);
+  el('li', {html: 'Permissions 탭에서 <b>files.metadata.read</b>와 <b>files.content.read</b>를 켜고 Submit.'}, steps);
+  el('li', {html: `Settings 탭의 <b>Redirect URIs</b>에 <code>${redirectUri()}</code>를 넣고 Add.`}, steps);
+  el('li', {html: '같은 탭의 <b>App key</b>를 위에 붙여넣고 연결을 누릅니다.'}, steps);
+
+  /* The home-screen app has its own storage, and deleting the icon empties it. This puts the
+     keys back into the address so adding the icon again carries them, however often that happens. */
+  const carry = setGroup(body, '홈 화면 앱');
   if (standalone()) {
-    el('p', {class: 'muted small', text:
-      '지금 홈 화면 앱으로 열려 있습니다. 키를 다시 담으려면 Safari에서 같은 주소를 열고 이 화면으로 오세요.'}, carry);
+    setRow(carry.card, '지금', '홈 화면 앱');
+    setNote(carry.group, '키를 다시 담으려면 Safari에서 같은 주소를 열고 이 화면으로 오세요.');
   } else {
-    el('p', {class: 'muted small', text:
-      '홈 화면 앱은 Safari와 저장 공간이 따로입니다. 아래를 누르면 Zotero 키와 Dropbox 연결이 주소에 담기고, ' +
-      '그 상태로 공유 → 홈 화면에 추가를 하면 새 아이콘이 열릴 때 전부 자동으로 들어갑니다.'}, carry);
-    const said = el('p', {class: 'msg', hidden: true}, carry);
-    const row = el('div', {class: 'actions'}, carry);
-    const go = el('button', {class: 'primary', type: 'button', text: '키까지 함께 담기'}, row);
+    setRow(carry.card, '지금', 'Safari');
+    const said = el('p', {class: 'msg', hidden: true}, carry.group);
+    const shown = el('p', {class: 'note', hidden: true}, carry.group);
+    setGo(carry.card, '키까지 함께 담기', () => {
+      carryKeys();
+      localStorage.setItem(KEYS.scope, 'paired');
+      said.hidden = false;
+      said.className = 'msg good';
+      said.innerHTML = `주소에 담았습니다${dropbox.linked ? ' (Dropbox 연결까지)' : ''}. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 먼저 홈 화면의 옛 아이콘은 지워 주세요.`;
+    });
     // If the address will not carry it, one string will: copied here, pasted on the other side.
-    const copy = el('button', {class: 'secondary', type: 'button', text: '키 복사'}, row);
-    const shown = el('p', {class: 'muted small', hidden: true}, carry);
-    copy.addEventListener('click', async () => {
+    setGo(carry.card, '키 복사', async () => {
       const both = `${account.user}:${account.key}`;
       try {
         await navigator.clipboard.writeText(both);
@@ -2188,18 +2213,10 @@ function paintSettings() {
         shown.innerHTML = `길게 눌러 복사하세요: <code>${both}</code>`;
       }
     });
-    go.addEventListener('click', () => {
-      carryKeys();
-      localStorage.setItem(KEYS.scope, 'paired');
-      said.hidden = false;
-      said.className = 'msg good';
-      said.innerHTML = `주소에 담았습니다${dropbox.linked ? ' (Dropbox 연결까지)' : ''}. 이제 아래 <b>공유 버튼 → 홈 화면에 추가</b>를 누르세요. 먼저 홈 화면의 옛 아이콘은 지워 주세요.`;
-    });
+    setNote(carry.group,
+      '홈 화면 앱은 Safari와 저장 공간이 따로입니다. 키까지 함께 담으면 Zotero 키와 Dropbox 연결이 주소에 담기고, ' +
+      '그 상태로 공유 → 홈 화면에 추가를 하면 새 아이콘이 열릴 때 전부 자동으로 들어갑니다.');
   }
-
-  const zotero = el('section', {class: 'card'}, body);
-  el('h3', {text: 'Zotero'}, zotero);
-  el('p', {class: 'muted small', text: `사용자 번호 ${account.user} · 키는 이 폰에만 있습니다.`}, zotero);
 }
 const state_items = () => state.items.length.toLocaleString();
 

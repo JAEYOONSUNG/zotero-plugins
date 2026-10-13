@@ -1294,6 +1294,38 @@ test('the top of a paper reads like its title page', async () => {
     .filter(node => !node.matches('.heard i, .swatch')).length, 0, 'and nothing carries its own style');
 });
 
+test('the settings screen is groups of rows, not a form', async () => {
+  const open = await boot();
+  await open.settle();
+  open.document.getElementById('btn-settings-main').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const body = open.document.getElementById('settings-body');
+  const heads = [...body.querySelectorAll('.set-head')].map(h => h.textContent);
+  assert.deepEqual(heads, ['Zotero', '라이브러리', 'Dropbox — PDF 원본', '홈 화면 앱'],
+    'who this phone is first, then what it holds');
+  // Every group is a card of rows with a quiet label above it and the explaining below.
+  for (const group of body.querySelectorAll('.set-group')) {
+    assert.ok(group.querySelector('.card.rows'), 'a card of rows');
+    assert.ok(group.querySelector('.card.rows .set-row'), 'with rows in it');
+  }
+  const said = row => [...row.childNodes].map(n => n.textContent).join(' ');
+  const rows = [...body.querySelectorAll('.set-row')];
+  const find = what => rows.find(r => r.querySelector('.what')?.textContent === what);
+  assert.match(said(find('사용자 번호')), /16265664/);
+  assert.match(said(find('논문')), /3편/);
+  assert.match(said(find('컬렉션')), /1개/);
+  assert.ok(find('받아 둔 PDF'), 'and what has been downloaded');
+  // The light beside 연결 comes before the word, and says which way it is.
+  const linked = find('연결');
+  assert.ok(linked.querySelector('.dot.off'), 'not connected, and the light says so');
+  // The two text boxes are rows themselves, right-aligned, not boxed-off fields.
+  assert.equal(body.querySelectorAll('.field').length, 0, 'nothing is a form field any more');
+  assert.equal(body.querySelectorAll('.set-field input').length, 2, 'the app key and the folder are rows');
+  // What can be pressed stands in the tint that says so, and what cannot be undone is red.
+  const go = [...body.querySelectorAll('.set-go')].map(b => b.textContent);
+  assert.deepEqual(go, ['PDF 비우기', '라이브러리 다시 받기', '연결', '폴더만 저장', '키까지 함께 담기', '키 복사']);
+});
+
 /* ---------- the look ---------- */
 /* The status used to be a labelled dot in the row's third line, and `.dot` was later given a
    second meaning in the settings screen — nine pixels square with a grey fill — which turned every
