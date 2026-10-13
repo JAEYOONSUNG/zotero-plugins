@@ -152,6 +152,62 @@ export function pcmOf(wav) {
   return {pcm: data, sampleRate: rate};
 }
 
+/* ---- level and edges ----
+   Two things make a baked paper hard to listen to in a car. The model leaves a little silence at the
+   head and tail of every piece, which stacks up into a gap after every sentence; and it speaks each
+   piece at whatever level that sentence came out at, so one paper is loud and the next is faint. A
+   phone cannot play louder than its own volume, so the only way to be heard over an engine is for the
+   file itself to be as loud as it can be without clipping. */
+
+export const QUIET = 0.012;            // below this a sample is silence (−38 dBFS)
+export const EDGE_KEEP = 0.04;         // seconds of the quiet left at each end, so nothing is clipped off
+export const PEAK = 0.89;              // what the loudest sample of the paper becomes
+export const LOUDEST_LIFT = 12;        // never lift a piece by more than this, or a breath becomes a roar
+
+/* Where the speech in this piece starts and ends, in samples. */
+export function speechEdges(pcm, {quiet = QUIET} = {}) {
+  const count = Math.floor(pcm.length / 2), cut = Math.round(quiet * 32767);
+  let from = 0, to = count;
+  while (from < count && Math.abs(pcm.readInt16LE(from * 2)) <= cut) from++;
+  while (to > from && Math.abs(pcm.readInt16LE((to - 1) * 2)) <= cut) to--;
+  return {from, to};
+}
+
+/* The piece with its silent head and tail taken off, bar a little, so sentences follow each other at
+   the distance the timeline says and not at twice it. A piece that is silence all through is dropped. */
+export function trimEdges(pcm, sampleRate, {quiet = QUIET, keep = EDGE_KEEP} = {}) {
+  const {from, to} = speechEdges(pcm, {quiet});
+  if (from >= to) return pcm.subarray(0, 0);
+  const pad = Math.round(keep * sampleRate);
+  const start = Math.max(0, from - pad), end = Math.min(Math.floor(pcm.length / 2), to + pad);
+  return pcm.subarray(start * 2, end * 2);
+}
+
+/* The loudest sample in a piece, 0..1. */
+export function peakOf(pcm) {
+  let top = 0;
+  for (let i = 0; i + 1 < pcm.length; i += 2) { const v = Math.abs(pcm.readInt16LE(i)); if (v > top) top = v; }
+  return top / 32767;
+}
+
+/* One number for the whole paper: what every sample is multiplied by so the loudest moment lands at
+   PEAK. Taken from the paper's own loudest piece, so the quiet sentences stay quieter than the loud
+   ones -- a paper is levelled, never flattened. */
+export function gainFor(peak, {target = PEAK, limit = LOUDEST_LIFT} = {}) {
+  if (!(peak > 0)) return 1;
+  return Math.min(limit, target / peak);
+}
+
+/* In place: every sample scaled, and clamped so a rounding error cannot wrap a sample to the opposite sign. */
+export function applyGain(pcm, gain) {
+  if (gain === 1) return pcm;
+  for (let i = 0; i + 1 < pcm.length; i += 2) {
+    const v = Math.round(pcm.readInt16LE(i) * gain);
+    pcm.writeInt16LE(v > 32767 ? 32767 : v < -32768 ? -32768 : v, i);
+  }
+  return pcm;
+}
+
 export function silence(seconds, sampleRate) {
   const samples = Math.max(0, Math.round((Number(seconds) || 0) * sampleRate));
   return Buffer.alloc(samples * 2);
@@ -196,6 +252,29 @@ export function ilst(tags = {}) {
     items.push(atom('trkn', dataAtom(0, body)));
   }
   return atom('ilst', ...items);
+}
+
+/* Nero-style chapter list (moov/udta/chpl): one entry per section, so the car's skip button and Books'
+   chapter list move by section instead of by whole paper. Times are in 100-nanosecond units.
+   This is the list every player that reads chapters at all reads; a QuickTime chapter *track* would
+   need its own trak, and nothing on a phone asks for one. */
+export function chpl(chapters = []) {
+  const rows = (Array.isArray(chapters) ? chapters : [])
+    .filter(c => c && Number.isFinite(Number(c.at)) && Number(c.at) >= 0)
+    .slice(0, 255);
+  const head = Buffer.alloc(9);
+  head.writeUInt32BE(0x01000000, 0);          // version 1, flags 0
+  head.writeUInt32BE(0, 4);                   // reserved
+  head.writeUInt8(rows.length, 8);
+  const body = rows.map((c, i) => {
+    const name = Buffer.from(String(c.title || `${i + 1}`).slice(0, 80), 'utf8').subarray(0, 255);
+    const row = Buffer.alloc(9 + name.length);
+    row.writeBigUInt64BE(BigInt(Math.round(Number(c.at) * 1e7)), 0);
+    row.writeUInt8(name.length, 8);
+    name.copy(row, 9);
+    return row;
+  });
+  return atom('chpl', head, ...body);
 }
 
 function metaAtom(tags) {
@@ -243,7 +322,7 @@ function shiftOffsets(moov, moved, delta) {
 
 /* The same m4a with iTunes names on it. Anything unexpected throws, and the caller keeps the plain
    file: a paper that plays under a dull name beats no paper. */
-export function withTags(m4a, tags = {}) {
+export function withTags(m4a, tags = {}, chapters = null) {
   const buf = Buffer.isBuffer(m4a) ? m4a : Buffer.from(m4a);
   const top = children(buf, 0, buf.length);
   const moov = find(top, 'moov');
@@ -251,15 +330,20 @@ export function withTags(m4a, tags = {}) {
   const inside = children(buf, moov.body, moov.bodyEnd);
   const udta = find(inside, 'udta');
   const meta = metaAtom(tags);
+  const marks = chapters && chapters.length ? chpl(chapters) : null;
+  const added = marks ? Buffer.concat([meta, marks]) : meta;
 
   let body;                                                    // the new moov body
-  if (!udta) body = Buffer.concat([buf.subarray(moov.body, moov.bodyEnd), atom('udta', meta)]);
+  if (!udta) body = Buffer.concat([buf.subarray(moov.body, moov.bodyEnd), atom('udta', added)]);
   else {
-    const old = find(children(buf, udta.body, udta.bodyEnd), 'meta');
-    const kept = old
-      ? Buffer.concat([buf.subarray(udta.body, old.start), meta, buf.subarray(old.end, udta.bodyEnd)])
-      : Buffer.concat([buf.subarray(udta.body, udta.bodyEnd), meta]);
-    body = Buffer.concat([buf.subarray(moov.body, udta.start), atom('udta', kept), buf.subarray(udta.end, moov.bodyEnd)]);
+    const inUdta = children(buf, udta.body, udta.bodyEnd);
+    /* Whatever was there before is replaced, never stacked: tagging twice leaves one meta and one chpl. */
+    const drop = [find(inUdta, 'meta'), find(inUdta, 'chpl')].filter(Boolean).sort((a, b) => a.start - b.start);
+    const parts = [];
+    let at = udta.body;
+    for (const gone of drop) { parts.push(buf.subarray(at, gone.start)); at = gone.end; }
+    parts.push(buf.subarray(at, udta.bodyEnd), added);
+    body = Buffer.concat([buf.subarray(moov.body, udta.start), atom('udta', Buffer.concat(parts)), buf.subarray(udta.end, moov.bodyEnd)]);
   }
 
   const built = atom('moov', body);
@@ -295,10 +379,13 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
   const jobs = new Map();
   let running = null;
   const order = [];
+  /* Nothing in the scratch folder can belong to this process yet, so whatever a killed bake left is swept. */
+  try { for (const name of fs.readdirSync(tmpDir)) if (/^bake-[0-9a-f]+\.(wav|m4a)$/.test(name)) fs.unlinkSync(path.join(tmpDir, name)); } catch (_) {}
 
   const view = job => ({
     id: job.id, state: job.state, title: job.title, done: job.done, total: job.total,
-    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, error: job.error,
+    ahead: job.state === 'waiting' ? order.map(id => jobs.get(id)).filter(other => other && other.state === 'waiting' && order.indexOf(other.id) < order.indexOf(job.id)).length + (running ? 1 : 0) : 0,
+    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, gain: job.gain, error: job.error,
     started: job.started, finished: job.finished
   });
 
@@ -315,7 +402,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
     const stem = path.join(tmpDir, `bake-${job.id}`);
     const wavPath = `${stem}.wav`;
     const m4aPath = `${stem}.m4a`;
-    let bytes = 0, rate = 0;
+    let bytes = 0, rate = 0, loudest = 0;
     const out = fs.createWriteStream(wavPath);
     const write = piece => new Promise((resolve, reject) => out.write(piece, error => error ? reject(error) : resolve()));
     try {
@@ -326,9 +413,13 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         if (job.cancelled) throw Object.assign(new Error('cancelled'), {cancelled: true});
         const piece = job.pieces[i];
         const said = await speech.say({model: job.model, text: piece.text, lang: job.lang, voice: job.voice, rate: job.rate});
-        const {pcm, sampleRate} = pcmOf(said.audio);
+        const said2 = pcmOf(said.audio), sampleRate = said2.sampleRate;
         if (!rate) rate = sampleRate;
         else if (sampleRate !== rate) throw new Error('the voice changed its sample rate mid-paper');
+        const pcm = job.trim === false ? said2.pcm : trimEdges(said2.pcm, rate);
+        if (!pcm.length) { lengths.push(0); job.done = i + 1; continue; }   // the model said nothing
+        const peak = peakOf(pcm);
+        if (peak > loudest) loudest = peak;
         await write(pcm);
         bytes += pcm.length;
         lengths.push(pcm.length / 2 / rate);
@@ -342,7 +433,25 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
       if (!rate) throw new Error('nothing to say');
 
       const handle = await fs.promises.open(wavPath, 'r+');
-      try { await handle.write(wavHeader(bytes, rate), 0, 44, 0); } finally { await handle.close(); }
+      try {
+        await handle.write(wavHeader(bytes, rate), 0, 44, 0);
+        /* One pass to bring the paper up to a level a car can be heard over. The gain comes from the
+           paper's own loudest moment, so the quiet sentences stay quieter than the loud ones. */
+        const gain = job.level === false ? 1 : gainFor(loudest);
+        job.gain = Number(gain.toFixed(3));
+        if (gain !== 1) {
+          const slab = Buffer.alloc(1 << 20);
+          for (let at = 44; at < 44 + bytes;) {
+            const want = Math.min(slab.length, 44 + bytes - at);
+            const {bytesRead} = await handle.read(slab, 0, want - (want % 2), at);
+            if (!bytesRead) break;
+            const part = slab.subarray(0, bytesRead);
+            applyGain(part, gain);
+            await handle.write(part, 0, bytesRead, at);
+            at += bytesRead;
+          }
+        }
+      } finally { await handle.close(); }
 
       job.state = 'encoding';
       if (job.cancelled) throw Object.assign(new Error('cancelled'), {cancelled: true});
@@ -351,7 +460,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
       const timed = timeline(job.pieces, lengths);
       job.seconds = timed.total;
       let audio = await fs.promises.readFile(m4aPath);
-      try { audio = withTags(audio, {...job.tags, comment: job.tags.comment || `Supertonic ${job.voice || ''}`.trim(), audiobook: true}); }
+      try { audio = withTags(audio, {...job.tags, comment: job.tags.comment || `Supertonic ${job.voice || ''}`.trim(), audiobook: true}, timed.chapters); }
       catch (error) { log({bake: job.id, tags: String(error && error.message || error).slice(0, 80)}); }
 
       fs.mkdirSync(outDir, {recursive: true});
@@ -389,7 +498,24 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
     bake(next);
   }
 
+  /* What is already in the folder for this title: the first file of its name, with when it was made. */
+  function made(title) {
+    const base = safeName(title);
+    let names = [];
+    try { names = fs.readdirSync(outDir); } catch (_) { return null; }
+    const mine = names.filter(n => n === base + '.m4b' || n.startsWith(base + ' (') && n.endsWith(').m4b')).sort();
+    if (!mine.length) return null;
+    const out = [];
+    for (const name of mine) {
+      try { const st = fs.statSync(path.join(outDir, name)); out.push({file: path.join(outDir, name), name, bytes: st.size, at: st.mtimeMs}); } catch (_) {}
+    }
+    if (!out.length) return null;
+    out.sort((a, b) => b.at - a.at);
+    return {...out[0], copies: out.length};
+  }
+
   return {
+    made,
     /* {title, chapters:[{title,text}], lang, voice, model, rate, tags, marks} -> the job, already queued */
     start(request = {}) {
       const waiting = order.map(id => jobs.get(id)).filter(job => job && job.state === 'waiting').length;
@@ -403,7 +529,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         voice: String(request.voice || ''), model: String(request.model || ''),
         rate: Number(request.rate) > 0 ? Number(request.rate) : 1,
         bitrate: Number(request.bitrate) > 0 ? Number(request.bitrate) : BITRATE,
-        marks: request.marks !== false,
+        marks: request.marks !== false, trim: request.trim !== false, level: request.level !== false, gain: 1,
         tags: {title, ...(request.tags || {})},
         done: 0, total: pieces.length, seconds: 0, file: null, bytes: 0, error: null,
         started: 0, finished: 0, cancelled: false

@@ -268,9 +268,9 @@ test('the WAV handed to the encoder is a real one: header, gaps and all the spee
   assert.equal(sampleRate, 1000);
   // 'abcd.' and 'efgh.' are 5 characters each -> 50 samples each, with one sentence gap between them.
   assert.equal(pcm.length / 2, 50 + Math.round(B.GAP_SENTENCE * 1000) + 50);
-  assert.equal(pcm.readInt16LE(0), 0x0707);                   // speech, not silence
+  assert.ok(Math.abs(pcm.readInt16LE(0)) > 1000, 'speech, not silence');
   assert.equal(pcm.readInt16LE(100), 0);                      // the gap
-  assert.equal(pcm.readInt16LE(pcm.length - 2), 0x0707);
+  assert.ok(Math.abs(pcm.readInt16LE(pcm.length - 2)) > 1000);
 });
 
 test('a bake whose voice fails is reported as failed, with no half file left in the folder', async () => {
@@ -362,4 +362,150 @@ test('afconvert and the hand-written tags make a file macOS reads as an audioboo
   const tagged = fs.readFileSync(job.file);
   assert.ok(tagged.includes(Buffer.from('형광펜 논문', 'utf8')));
   assert.ok(tagged.includes(Buffer.from('Zotero · 논문 음성', 'utf8')));
+  // The chapter list rides in the same file, so the car's skip button moves by section.
+  const chplAt = tagged.indexOf(Buffer.from('chpl', 'latin1'));
+  assert.ok(chplAt > 0, 'no chapter list in the finished file');
+  assert.equal(tagged.readUInt8(chplAt + 12), 1, 'one section, so one chapter');
+  assert.ok(tagged.includes(Buffer.from('초록', 'utf8')));
+  assert.equal(job.bytes, fs.statSync(job.file).size);
+});
+
+/* ---------- level, edges, chapters, housekeeping ---------- */
+
+/* A voice whose pieces have real silence at each end and a level the test chooses, so trimming and
+   levelling can be measured rather than guessed at. */
+function voiceWith({rate = 1000, lead = 0.1, tail = 0.1, body = 0.3, peak = 0.1} = {}) {
+  return {
+    async say({text}) {
+      const n = s => Math.round(s * rate);
+      const samples = n(lead) + n(body) + n(tail);
+      const pcm = Buffer.alloc(samples * 2);
+      const top = Math.round(peak * 32767);
+      for (let i = n(lead); i < n(lead) + n(body); i++) pcm.writeInt16LE(i % 2 ? top : -top, i * 2);
+      return {audio: Buffer.concat([B.wavHeader(pcm.length, rate), pcm]), seconds: samples / rate, said: text};
+    }
+  };
+}
+
+test('the silence a voice leaves at each end of a piece is cut back, so a gap is the gap that was asked for', () => {
+  const rate = 1000, pcm = Buffer.alloc(1000 * 2);
+  for (let i = 300; i < 700; i++) pcm.writeInt16LE(8000, i * 2);     // speech from 0.3 s to 0.7 s
+  assert.deepEqual(B.speechEdges(pcm), {from: 300, to: 700});
+  const trimmed = B.trimEdges(pcm, rate, {keep: 0.04});
+  assert.equal(trimmed.length / 2, 400 + 80);                        // 40 ms left at each end
+  assert.notEqual(trimmed.readInt16LE(80 * 2), 0);                   // the speech is all still there
+  assert.equal(trimmed.readInt16LE(0), 0);
+  // A piece that never rises above the noise floor is nothing at all.
+  assert.equal(B.trimEdges(Buffer.alloc(2000), rate).length, 0);
+  // Quiet is a floor, not zero: a faint hiss is still silence.
+  const hiss = Buffer.alloc(200); for (let i = 0; i < 100; i++) hiss.writeInt16LE(i % 2 ? 90 : -90, i * 2);
+  assert.equal(B.trimEdges(hiss, rate).length, 0);
+});
+
+test('a paper is brought up to a level a car can be heard over, from its own loudest moment', () => {
+  const quiet = Buffer.alloc(100); for (let i = 0; i < 50; i++) quiet.writeInt16LE(i % 2 ? 3277 : -3277, i * 2);
+  assert.ok(Math.abs(B.peakOf(quiet) - 0.1) < 0.001);
+  // 0.1 peak -> 8.9x, inside the limit; a silent piece is left alone; a loud one is barely touched.
+  assert.ok(Math.abs(B.gainFor(0.1) - 8.9) < 0.001);
+  assert.equal(B.gainFor(0), 1);
+  assert.ok(Math.abs(B.gainFor(0.89) - 1) < 0.001);
+  // Nothing is lifted past LOUDEST_LIFT, or a breath between sentences becomes a roar.
+  assert.equal(B.gainFor(0.0001), B.LOUDEST_LIFT);
+  // And nothing is pushed over the top: a sample at the ceiling stays at the ceiling, same sign.
+  const hot = Buffer.alloc(4); hot.writeInt16LE(30000, 0); hot.writeInt16LE(-30000, 2);
+  B.applyGain(hot, 4);
+  assert.equal(hot.readInt16LE(0), 32767);
+  assert.equal(hot.readInt16LE(2), -32768);
+});
+
+test('a quiet paper comes out of the bake loud, and the file says by how much', async () => {
+  const dir = scratch(), out = path.join(dir, 'out');
+  const baker = B.createBaker({speech: voiceWith({peak: 0.1, lead: 0.2, tail: 0.2, body: 0.4}), outDir: out, tmpDir: path.join(dir, 'tmp'), afconvert: fakeEncoder(dir)});
+  const job = await settle(baker, baker.start({title: 'Quiet', chapters: [{title: '', text: 'One. Two.'}]}).id);
+  assert.equal(job.state, 'done', job.error || '');
+  assert.ok(Math.abs(job.gain - 8.9) < 0.01, `gain ${job.gain}`);
+  const {pcm} = B.pcmOf(fs.readFileSync(job.file));
+  assert.ok(Math.abs(B.peakOf(pcm) - B.PEAK) < 0.01, 'the loudest moment lands just under the ceiling');
+  // Each piece was 0.8 s with 0.4 s of speech; trimmed to 0.4 s + 40 ms at each end, plus one gap.
+  assert.equal(pcm.length / 2, 2 * (400 + 80) + Math.round(B.GAP_SENTENCE * 1000));
+
+  // Levelling can be turned off, and then nothing is touched.
+  const plain = B.createBaker({speech: voiceWith({peak: 0.1}), outDir: path.join(dir, 'out2'), tmpDir: path.join(dir, 'tmp2'), afconvert: fakeEncoder(dir)});
+  const flat = await settle(plain, plain.start({title: 'Quiet2', level: false, trim: false, chapters: [{title: '', text: 'One.'}]}).id);
+  assert.equal(flat.gain, 1);
+  assert.ok(Math.abs(B.peakOf(B.pcmOf(fs.readFileSync(flat.file)).pcm) - 0.1) < 0.01);
+});
+
+test('the chapter list is written where a car and Books look for it', () => {
+  const marks = B.chpl([{at: 0, title: 'Abstract'}, {at: 12.5, title: '결과'}]);
+  assert.equal(marks.toString('latin1', 4, 8), 'chpl');
+  assert.equal(marks.readUInt32BE(8), 0x01000000);                   // version 1
+  assert.equal(marks.readUInt8(16), 2);                              // two chapters
+  // The second entry starts at 12.5 s, in 100-nanosecond units, and keeps its Korean name.
+  const first = Buffer.from('Abstract', 'utf8');
+  const at = 17 + 8 + 1 + first.length;
+  assert.equal(marks.readBigUInt64BE(17), 0n);
+  assert.equal(marks.readBigUInt64BE(at), 125000000n);
+  assert.ok(marks.includes(Buffer.from('결과', 'utf8')));
+  // A chapter with no heading is still a chapter you can skip to.
+  assert.ok(B.chpl([{at: 0, title: ''}]).includes(Buffer.from('1', 'latin1')));
+  assert.equal(B.chpl([]).length, 8 + 9);
+  assert.equal(B.chpl([{at: -1, title: 'x'}, {at: NaN, title: 'y'}]).readUInt8(16), 0);
+});
+
+test('tagging a file twice leaves one set of names and one chapter list, not two', () => {
+  const {file} = tinyMp4();
+  const once = B.withTags(file, {title: 'A'}, [{at: 0, title: 'One'}, {at: 5, title: 'Two'}]);
+  assert.equal([...once.toString('latin1').matchAll(/chpl/g)].length, 1);
+  const twice = B.withTags(once, {title: 'B'}, [{at: 0, title: 'Only'}]);
+  assert.equal([...twice.toString('latin1').matchAll(/chpl/g)].length, 1);
+  assert.equal([...twice.toString('latin1').matchAll(/ilst/g)].length, 1);
+  assert.ok(twice.includes(Buffer.from('Only', 'utf8')) && !twice.includes(Buffer.from('Two', 'utf8')));
+  // And the audio still ends up where the offset table says it does.
+  const stco = twice.indexOf(Buffer.from('stco', 'latin1'));
+  assert.equal(twice.readUInt32BE(stco + 12), twice.indexOf(Buffer.from('mdat', 'latin1')) + 4);
+});
+
+test('a paper already in the folder is found, newest first, and counted', async () => {
+  const dir = scratch(), out = path.join(dir, 'out');
+  const baker = B.createBaker({speech: fakeVoice(), outDir: out, tmpDir: path.join(dir, 'tmp'), afconvert: fakeEncoder(dir)});
+  assert.equal(baker.made('Nothing here'), null);
+  const first = await settle(baker, baker.start({title: 'Twice baked', chapters: [{title: '', text: 'One.'}]}).id);
+  assert.equal(first.state, 'done');
+  const have = baker.made('Twice baked');
+  assert.equal(have.name, 'Twice baked.m4b');
+  assert.equal(have.copies, 1);
+  assert.equal(have.bytes, fs.statSync(first.file).size);
+  assert.ok(have.at > 0);
+  const second = await settle(baker, baker.start({title: 'Twice baked', chapters: [{title: '', text: 'Two.'}]}).id);
+  assert.equal(path.basename(second.file), 'Twice baked (2).m4b');
+  assert.equal(baker.made('Twice baked').copies, 2);
+  // The newest copy is the one reported, and the title is matched the way the file was named
+  // (through safeName) rather than character for character.
+  assert.equal(baker.made('Twice baked').name, 'Twice baked (2).m4b');
+  assert.equal(baker.made('Twice baked?').copies, 2);
+});
+
+test('a paper waiting its turn knows how many are in front of it', async () => {
+  const dir = scratch();
+  const long = {title: '', text: Array.from({length: 60}, (_, i) => `Sentence ${i}.`).join(' ')};
+  const baker = B.createBaker({speech: fakeVoice(), outDir: path.join(dir, 'out'), tmpDir: path.join(dir, 'tmp'), afconvert: fakeEncoder(dir)});
+  const running = baker.start({title: 'A', chapters: [long]});
+  const next = baker.start({title: 'B', chapters: [long]});
+  const last = baker.start({title: 'C', chapters: [long]});
+  assert.equal(running.ahead, 0, 'the one being made is not waiting');
+  assert.equal(baker.get(next.id).ahead, 1);
+  assert.equal(baker.get(last.id).ahead, 2);
+  await settle(baker, last.id, 8000);
+  assert.equal(baker.get(last.id).ahead, 0);
+});
+
+test('a bake killed halfway leaves no 300 MB scratch file for the next one to trip over', async () => {
+  const dir = scratch(), tmp = path.join(dir, 'tmp');
+  fs.mkdirSync(tmp, {recursive: true});
+  fs.writeFileSync(path.join(tmp, 'bake-deadbeef12345678.wav'), 'what a killed bake left');
+  fs.writeFileSync(path.join(tmp, 'bake-deadbeef12345678.m4a'), 'and its half-encoded file');
+  fs.writeFileSync(path.join(tmp, 'keep-me.txt'), 'not ours');
+  B.createBaker({speech: fakeVoice(), outDir: path.join(dir, 'out'), tmpDir: tmp, afconvert: fakeEncoder(dir)});
+  assert.deepEqual(fs.readdirSync(tmp), ['keep-me.txt'], 'only this bakery’s own leftovers are swept');
 });

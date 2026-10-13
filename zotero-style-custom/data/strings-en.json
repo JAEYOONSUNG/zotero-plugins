@@ -2950,5 +2950,7 @@
  "▶를 한 번 누르면 분량을 알려줍니다.": "Press ▶ once and it will say how long it is.",
  "한 번 더 만들기": "Make it again",
  "{0} · {1}MB · 폴더에 넣었습니다": "{0} · {1}MB · put in the folder",
- "{0} · 폴더에 넣었습니다": "{0} · put in the folder"
+ "{0} · 폴더에 넣었습니다": "{0} · put in the folder",
+ "앞에 {0}편 · 차례를 기다리는 중…": "papers in front: {0} · waiting its turn…",
+ "이미 있습니다 · {0}MB · {1}": "already there · {0}MB · {1}"
 }

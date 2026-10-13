@@ -73,6 +73,7 @@ function fixture({prefs={},settings={},structured=paper(),withSpeech=true,voices
    return {status:202,response:{id:'bake1',state:'speaking',title:requests.at(-1).body.title,done:0,total:9,seconds:0,file:null,error:null}};
   }
   if(/\/v1\/audio\/book\/\w+$/.test(url))return {status:200,response:{id:'bake1',state:'speaking',done:3,total:9,seconds:62.5,file:null,error:null,...(http.bakeStates||[]).shift()}};
+  if(/\/v1\/audio\/book(\?|$)/.test(url)&&method==='GET')return {status:200,response:{jobs:http.bakeJobs||[],out:'/Users/t/Dropbox/논문 음성',busy:false,have:http.bakeHave||null}};
   if(/deepl\.com/.test(url)){const r=http.deepl?http.deepl(requests.at(-1)):null;if(r)return r;if(method==='GET')return {status:200,response:{character_count:100,character_limit:500000}};return {status:200,response:{translations:requests.at(-1).body.text.map(x=>({text:'KO:'+x}))}};}
   const next=aiReplies.shift();
   if(typeof next==='function')return next(options);
@@ -1706,9 +1707,11 @@ test('“운전용 오디오 만들기” sends the paper to this Mac as chapter
  const body=post[0].body;
  assert.equal(body.title,'Thermostable polymerase evolution');
  // One chapter per section, in reading order, each holding that section's sentences.
- assert.deepEqual(body.chapters.map(c=>c.title),['Introduction','Methods','Results']);
- assert.match(body.chapters[0].text,/^DNA polymerases drive PCR\. Thermal stability limits/);
- assert.ok(!JSON.stringify(body.chapters).includes('Smith'),'참고문헌 is not included while the filter says 본문');
+ // The file opens by saying which paper it is -- in a car, that is all that tells one file from the next.
+ assert.deepEqual(body.chapters.map(c=>c.title),['','Introduction','Methods','Results']);
+ assert.equal(body.chapters[0].text,'Thermostable polymerase evolution.','no authors or journal on this item, so nothing is invented');
+ assert.match(body.chapters[1].text,/^DNA polymerases drive PCR\. Thermal stability limits/);
+ assert.ok(!JSON.stringify(body.chapters.slice(1)).includes('Smith'),'참고문헌 is not included while the filter says 본문');
  assert.ok(!JSON.stringify(body.chapters).includes('Residual activity'),'nor are captions');
  assert.equal(body.lang,'en');
  assert.equal(body.speed,1);
@@ -1827,5 +1830,66 @@ test('the bake card says what it will cost before anything is made, and shows a 
  assert.ok(f.requests.some(r=>r.method==='DELETE'&&/audio\/book\/bake1$/.test(r.url)),'and the Mac is told to stop');
  assert.equal(card.querySelector('.sc-ra-primary').disabled,false);
  assert.equal(stop.hidden,true);
+ f.stop();
+});
+
+test('the file is read the way the panel reads it: citations out, units and addresses in words',async()=>{
+ const spoken=structuredClone(paper());
+ // A sentence as a page shows it, and the citation-free `spoken` the extraction module makes beside it.
+ spoken.sections[0].paragraphs[0].sentences[0]={...sent('Activity held at 95 °C (Kim et al., 2020; doi:10.1038/s41586-020-1234-5).',0,100),
+  spoken:'Activity held at 95 °C.'};
+ const f=fixture({bridge:true,holdTimers:true,structured:spoken});await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
+ const body=f.requests.find(r=>/\/v1\/audio\/book$/.test(r.url)&&r.method==='POST').body;
+ const all=JSON.stringify(body.chapters);
+ assert.ok(!all.includes('Kim et al.'),'the citation is not spoken');
+ assert.ok(!all.includes('10.1038'),'nor is the DOI said digit by digit');
+ assert.match(body.chapters[1].text,/95 degrees Celsius/,'the temperature is said in words, as the panel says it');
+ f.stop();
+});
+
+test('a bake still running on the Mac is picked back up when the paper is opened again',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});
+ f.http.bakeJobs=[{id:'bake1',state:'speaking',title:'Thermostable polymerase evolution',done:120,total:400,seconds:900}];
+ await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ const note=()=>f.panel().querySelector('.sc-ra-bake-note').textContent;
+ assert.match(note(),/120\/400/,'the panel joins the bake that was already going');
+ assert.equal(f.panel().querySelector('.sc-ra-bake .sc-ra-primary').disabled,true);
+ assert.equal(f.panel().querySelector('.sc-ra-bake .sc-ra-link').hidden,false,'and can still stop it');
+ // It polls that job rather than starting a second one for the same paper.
+ f.http.bakeStates=[{state:'done',done:400,total:400,seconds:1800,bytes:14*1048576,file:'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b'}];
+ await f.fire();
+ assert.match(note(),/14 ?MB/);
+ assert.equal(f.requests.filter(r=>r.method==='POST'&&/audio\/book$/.test(r.url)).length,0,'no second bake was started');
+ f.stop();
+});
+
+test('a paper already in the folder says so, with when, instead of quietly making another copy',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});
+ f.http.bakeHave={file:'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b',name:'Thermostable polymerase evolution.m4b',bytes:9*1048576,at:Date.now()-3*86400000,copies:1};
+ await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ const card=f.panel().querySelector('.sc-ra-bake');
+ // The same shape as the finished line: how big, how long ago, and the path in the tooltip.
+ assert.match(card.querySelector('.sc-ra-bake-note').textContent,/9 ?MB/);
+ assert.match(card.querySelector('.sc-ra-bake-note').textContent,/3/,'and how long ago');
+ assert.equal(card.querySelector('.sc-ra-bake-note').getAttribute('title'),'/Users/t/Dropbox/논문 음성/Thermostable polymerase evolution.m4b');
+ assert.match(card.querySelector('.sc-ra-primary').textContent,/again|한 번 더/,'so a press is a decision');
+ assert.equal(card.querySelector('.sc-ra-primary').disabled,false);
+ f.stop();
+});
+
+test('a paper waiting behind others says how many, so the wait is not a blank',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
+ f.http.bakeStates=[{state:'waiting',ahead:2,done:0,total:400}];
+ await f.fire();
+ assert.match(f.panel().querySelector('.sc-ra-bake-note').textContent,/2/);
+ f.http.bakeStates=[{state:'waiting',ahead:0,done:0,total:400}];
+ await f.fire();
+ assert.match(f.panel().querySelector('.sc-ra-bake-note').textContent,/Waiting|차례/);
  f.stop();
 });

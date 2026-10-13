@@ -1,5 +1,5 @@
 {
-  "version": "0.59.48",
+  "version": "0.59.49",
   "minimumRequestedRounds": 10,
   "rounds": [
     {
@@ -4139,8 +4139,260 @@
           "name": "이 문헌 주석에서 노트 만들기: data-writes, and a second press with the same annotations opens no duplicate note (a double press while it runs is ignored)"
         }
       ],
-      "status": "implemented",
+      "status": "verified",
       "review": "설정 맨 위 ‘먼저 할 것’이 이미 찾은 것(이 Mac의 AI 브리지, Translate for Zotero, ZotPoP에 넣은 OpenAlex 키)은 묻지 않고 ‘자동으로 찾음’으로 알려 주며, Zotero가 한국어인데 언어를 고른 적이 없으면 한국어를 먼저 권한다. 설정 설명 열여 곳을 코드에 맞게 고쳤다. 라운드 사이 회귀 일곱 가지(⌘클릭 별점, 저자 합치기, 이 쪽만 번역의 이어 번역, AI 번역 저장·보호 용어, 연도 필터, 노트 중복)를 테스트로 고정했다. 실제 Zotero에서는 아직 확인하지 않았다."
+    },
+    {
+      "round": "R159",
+      "title": "구운 파일이 패널과 똑같이 읽힌다",
+      "gap": "The baked file was read from the page's own words: DOIs letter by letter, \"(Kim et al., 2020)\" in full, \"95 °C\" as a glyph — while the panel beside it read the citation-free sentence with every unit, power and address turned into words. One paper, two voices.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오 만들기",
+      "sources": [
+        {
+          "file": "src/reader-assist.js",
+          "marker": "const said=RA.speechText(RA.sayable(u),lang);"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-assist.test.mjs",
+          "name": "the file is read the way the panel reads it: citations out, units and addresses in words"
+        }
+      ],
+      "status": "verified",
+      "review": "구운 파일이 인용 표시를 읽지 않고, 95 °C를 ‘95 degrees Celsius’로, DOI를 ‘digital object identifier’로 말한다. 패널이 읽어 주는 것과 같은 소리다."
+    },
+    {
+      "round": "R160",
+      "title": "차 안에서 들리도록, 논문 전체의 음량을 올린다",
+      "gap": "Supertonic speaks at whatever level a sentence came out at, which peaked around 0.44 of full scale. A phone cannot play louder than its own volume, so a faint file is simply inaudible over an engine — the user said the whole thing felt too quiet.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오 만들기",
+      "sources": [
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "export function gainFor("
+        },
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "export function applyGain("
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bake.test.mjs",
+          "name": "a paper is brought up to a level a car can be heard over, from its own loudest moment"
+        },
+        {
+          "file": "test/bake.test.mjs",
+          "name": "a quiet paper comes out of the bake loud, and the file says by how much"
+        }
+      ],
+      "status": "verified",
+      "review": "논문의 가장 큰 순간을 기준으로 한 번만 곱하므로 조용한 문장은 조용한 채로 남는다. 실측 논문에서 2.04배(약 6 dB) 커졌고, 작업 기록에 배율이 남는다."
+    },
+    {
+      "round": "R161",
+      "title": "문장 끝의 묵음을 잘라, 간격이 의도한 간격이 된다",
+      "gap": "The model leaves silence at the head and tail of every piece. Added to the pause the timeline already puts between sentences, the gap after each sentence was about twice what was intended, and the chapter times drifted from the audio.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오 만들기",
+      "sources": [
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "export function trimEdges("
+        },
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "export function speechEdges("
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bake.test.mjs",
+          "name": "the silence a voice leaves at each end of a piece is cut back, so a gap is the gap that was asked for"
+        }
+      ],
+      "status": "verified",
+      "review": "문장 사이 간격이 일정해지고, 사이드카의 시각이 실제 소리와 맞는다. 양 끝 40 ms는 남겨 말이 잘리지 않는다."
+    },
+    {
+      "round": "R162",
+      "title": "챕터 표시가 파일 안에 들어가, 핸들 버튼이 섹션을 넘긴다",
+      "gap": "The file was one unbroken hour: the car's skip button and Books' chapter list had nothing to move by, so going back to Results meant scrubbing blindly.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오 만들기 → 완성된 m4b",
+      "sources": [
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "export function chpl("
+        },
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "const marks = chapters && chapters.length ? chpl(chapters) : null;"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bake.test.mjs",
+          "name": "the chapter list is written where a car and Books look for it"
+        },
+        {
+          "file": "test/bake.test.mjs",
+          "name": "tagging a file twice leaves one set of names and one chapter list, not two"
+        },
+        {
+          "file": "test/bake.test.mjs",
+          "name": "afconvert and the hand-written tags make a file macOS reads as an audiobook"
+        }
+      ],
+      "status": "verified",
+      "review": "완성된 파일 안에 섹션마다 챕터가 들어 있다. 애플 파서가 읽는 것을 실제 파일로 확인했고, 두 번 태그해도 챕터 목록은 하나로 남는다."
+    },
+    {
+      "round": "R163",
+      "title": "리더를 다시 열면 굽던 작업을 이어 받는다",
+      "gap": "The bake runs on the Mac whether or not the panel is open, but the panel forgot it the moment the reader closed: reopening the paper offered to start a second bake of the same thing.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오",
+      "sources": [
+        {
+          "file": "src/reader-assist.js",
+          "marker": "async function catchUpBake(session,bridge){"
+        },
+        {
+          "file": "bridge/ai-bridge.mjs",
+          "marker": "have: title ? made.made(title) : null"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-assist.test.mjs",
+          "name": "a bake still running on the Mac is picked back up when the paper is opened again"
+        }
+      ],
+      "status": "verified",
+      "review": "논문을 다시 열면 진행 중이던 굽기의 진행률이 그대로 이어지고, 취소도 그대로 된다. 같은 논문을 두 번 굽지 않는다."
+    },
+    {
+      "round": "R164",
+      "title": "이미 구운 논문은 그렇다고 말한다",
+      "gap": "Pressing the button again silently made a second copy — \"Paper (2).m4b\" — with no way to know the folder already held one, or when it was made.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오",
+      "sources": [
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "function made(title) {"
+        },
+        {
+          "file": "src/reader-assist.js",
+          "marker": "session.bakeHave"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bake.test.mjs",
+          "name": "a paper already in the folder is found, newest first, and counted"
+        },
+        {
+          "file": "test/reader-assist.test.mjs",
+          "name": "a paper already in the folder says so, with when, instead of quietly making another copy"
+        }
+      ],
+      "status": "verified",
+      "review": "폴더에 이미 있으면 파일 이름과 만든 날을 먼저 보여주고, 버튼은 ‘한 번 더 만들기’가 된다. 한 번 더 만드는 것은 이제 선택이다."
+    },
+    {
+      "round": "R165",
+      "title": "기다리는 동안 앞에 몇 편이 있는지 말한다",
+      "gap": "A queued paper said only \"waiting its turn\" — with up to eight papers in line and each taking a quarter of an hour, that is a blank where a number belongs.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오",
+      "sources": [
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "ahead: job.state === 'waiting'"
+        },
+        {
+          "file": "src/reader-assist.js",
+          "marker": "앞에 {0}편"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bake.test.mjs",
+          "name": "a paper waiting its turn knows how many are in front of it"
+        },
+        {
+          "file": "test/reader-assist.test.mjs",
+          "name": "a paper waiting behind others says how many, so the wait is not a blank"
+        }
+      ],
+      "status": "verified",
+      "review": "줄을 선 논문이 ‘앞에 2편’이라고 말하고, 차례가 오면 그 수가 사라진다."
+    },
+    {
+      "round": "R166",
+      "title": "중단된 굽기가 남긴 300MB를 치운다",
+      "gap": "The scratch WAV is about 300 MB an hour. A bake stopped by a restart, a crash or a logout left the whole thing in Application Support, where nothing would ever remove it.",
+      "entryPoint": "~/Library/Application Support/StyleCustomBridge/bake",
+      "sources": [
+        {
+          "file": "bridge/tts/book.mjs",
+          "marker": "bake-[0-9a-f]+\\.(wav|m4a)"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/bake.test.mjs",
+          "name": "a bake killed halfway leaves no 300 MB scratch file for the next one to trip over"
+        }
+      ],
+      "status": "verified",
+      "review": "브리지가 시작할 때 자기 스크래치 파일만 쓸어낸다. 남의 파일은 건드리지 않는다."
+    },
+    {
+      "round": "R167",
+      "title": "개선 레저가 다시 검증된다",
+      "gap": "The ledger verifier threw on every run since R79 and was not part of `npm test`, so nothing it recorded was being checked: its round-id pattern allowed only two digits, and its \"does this file hold tests\" check only knew node:test's `test(`, which no Python test file contains. R158 had also been left marked `implemented`.",
+      "entryPoint": "npm test · npm run verify:improvements",
+      "sources": [
+        {
+          "file": "scripts/verify-improvements.mjs",
+          "marker": "const HOLDS_TESTS"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/improvement-rounds.test.mjs",
+          "name": "every round still points at code that is there and a test that runs"
+        },
+        {
+          "file": "test/improvement-rounds.test.mjs",
+          "name": "three-digit rounds are rounds, and a Python test counts as a test"
+        },
+        {
+          "file": "test/improvement-rounds.test.mjs",
+          "name": "the verifier refuses a round whose evidence has gone"
+        }
+      ],
+      "status": "verified",
+      "review": "168개 라운드 전부가 실재하는 코드와 실행되는 테스트를 가리키는지 `npm test`가 매번 확인한다. 이름이 바뀐 테스트를 가리키면 그 자리에서 실패한다."
+    },
+    {
+      "round": "R168",
+      "title": "파일이 자기가 어느 논문인지 먼저 말한다",
+      "gap": "The audio opened on the first section heading. In a car, in a folder of papers, nothing said which paper was playing — and the next file in a playlist began mid-thought.",
+      "entryPoint": "리더 패널 → 듣기 → 운전용 오디오 만들기",
+      "sources": [
+        {
+          "file": "src/reader-assist.js",
+          "marker": "const said=[title,artist,[venue,year?year[0]:''].filter(Boolean).join(' ')]"
+        }
+      ],
+      "tests": [
+        {
+          "file": "test/reader-assist.test.mjs",
+          "name": "“운전용 오디오 만들기” sends the paper to this Mac as chapters, with the item’s own names on it"
+        }
+      ],
+      "status": "verified",
+      "review": "파일이 제목·저자·학술지와 연도를 먼저 말하고 본문으로 들어간다. 항목에 없는 것은 지어내지 않는다."
     }
   ],
   "introducedInVersion": "0.6.0"

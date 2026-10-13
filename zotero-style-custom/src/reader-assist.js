@@ -1220,7 +1220,7 @@
    ui.bake=button(session,row,{label:'만들기',title:BAKE_TIP,cls:'sc-ra-primary',mark:'bake',onClick:()=>startBake(session)});
    ui.bakeStop=button(session,row,{label:'취소',cls:'sc-ra-link',mark:'view',onClick:()=>stopBake(session)});
    paintBake(session);
-   bridgeVoices().then(bridge=>{if(!bridge||!bridge.out||session.destroyed)return;session.bakeOut=bridge.out;paintBake(session);}).catch(()=>{});
+   bridgeVoices().then(bridge=>{if(!bridge||session.destroyed)return;if(bridge.out)session.bakeOut=bridge.out;paintBake(session);return catchUpBake(session,bridge);}).catch(()=>{});
   }
   /* How long the file will be, and how big, before anything is made: the panel already measures the
      paper for "약 N분 남음", and a bake runs at about four times real time. 64 kbps mono is 8 KB a second. */
@@ -1237,14 +1237,25 @@
      would read them and with whatever the 본문 / +캡션 / +참고문헌 choice includes. */
   function bakeChapters(session){
    const player=session.player;if(!player)return [];
+   const lang=session.langCode||'en';
    const out=[];
    for(const u of player.units()){
     const name=u.kind==='caption'?t('캡션'):u.kind==='reference'?t('참고문헌'):u.sectionLabel||t('본문');
+    /* Exactly what the panel says out loud, not what the page shows: the extraction module's
+       citation-free sentence, then the symbols, units, powers, temperatures and addresses turned into
+       words (RA.speechText). Without this the file read "10.1038/s41586" as a string of digits and
+       "95 °C" as a glyph, while the panel beside it read them properly. */
+    const said=RA.speechText(RA.sayable(u),lang);
+    if(!said)continue;
     const last=out[out.length-1];
-    if(!last||last.title!==name)out.push({title:name,parts:[u.text]});
-    else last.parts.push(u.text);
+    if(!last||last.title!==name)out.push({title:name,parts:[said]});
+    else last.parts.push(said);
    }
-   return out.map(c=>({title:c.title,text:c.parts.join(' ')})).filter(c=>c.text.trim());
+   /* The file says which paper it is before it starts: in a car, in a list of papers, that is the only
+      thing that tells one file from the next. */
+   const {said}=bakeNames(session);
+   const chapters=out.map(c=>({title:c.title,text:c.parts.join(' ')})).filter(c=>c.text.trim());
+   return chapters.length?[{title:'',text:said+'.'},...chapters]:[];
   }
   function bakeNames(session){
    const item=itemOf(session.reader);
@@ -1255,7 +1266,11 @@
     artist=names.length>3?names[0]+' et al.':names.join(', ');
    }catch(_){}
    const year=/\d{4}/.exec(fieldOf(item,'date')||'');
-   return {title,tags:{artist,album:fieldOf(item,'publicationTitle')||t('논문 음성'),year:year?year[0]:'',genre:'Audiobook'}};
+   const venue=fieldOf(item,'publicationTitle');
+   /* What the file says first. Only what the item actually holds: a filler like "논문 음성" is a shelf
+      label, not something to read out. */
+   const said=[title,artist,[venue,year?year[0]:''].filter(Boolean).join(' ')].filter(Boolean).join('. ');
+   return {title,said,tags:{artist,album:venue||t('논문 음성'),year:year?year[0]:'',genre:'Audiobook'}};
   }
   async function startBake(session){
    if(session.bake&&['speaking','encoding','waiting'].includes(session.bake.state))return;
@@ -1314,7 +1329,7 @@
 
    let note='',at=0;
    if(bake.state==='starting')note=t('본문을 모으는 중…');
-   else if(bake.state==='waiting')note=t('차례를 기다리는 중…');
+   else if(bake.state==='waiting')note=bake.ahead?T('앞에 {0}편 · 차례를 기다리는 중…',bake.ahead):t('차례를 기다리는 중…');
    else if(bake.state==='speaking'){
     at=bake.total?Math.round(bake.done/bake.total*100):0;
     note=T('{0}/{1} 문장 · {2} 만들었습니다',bake.done,bake.total,minutes(bake.seconds||0));
@@ -1327,20 +1342,42 @@
    }
    else if(bake.state==='failed')note=bake.error||t('만들지 못했습니다');
    else if(bake.state==='cancelled')note=t('취소했습니다');
+   else if(session.bakeHave){
+    const have=session.bakeHave,days=Math.floor((Date.now()-have.at)/86400000);
+    note=T('이미 있습니다 · {0}MB · {1}',Math.max(1,Math.round((have.bytes||0)/1048576)),days<=0?t('오늘'):T('{0}일 전',days));
+   }
    else if(size)note=T('약 {0} 분량 · 약 {1}MB · 만드는 데 {2}쯤',minutes(size.seconds),Math.max(1,Math.round(size.megabytes)),minutes(size.making));
    else note=t('▶를 한 번 누르면 분량을 알려줍니다.');
 
    ui.bakeNote.textContent=note;
    ui.bakeNote.setAttribute('data-state',bake.state||'');
-   ui.bakeNote.setAttribute('title',bake.file||'');
+   ui.bakeNote.setAttribute('title',bake.file||session.bakeHave&&session.bakeHave.file||'');
    ui.bakeMeter.hidden=!busy&&bake.state!=='done';
    ui.bakeFill.style.width=at+'%';
    ui.bakeMeter.setAttribute('aria-valuenow',String(at));
    ui.bake.disabled=busy;
    ui.bakeStop.hidden=!busy;
    const label=ui.bake.querySelector('.sc-ra-btn-text');
-   if(label)label.textContent=t(bake.state==='done'?'한 번 더 만들기':'만들기');
+   if(label)label.textContent=t(bake.state==='done'||session.bakeHave&&!bake.state?'한 번 더 만들기':'만들기');
    ui.bake.setAttribute('title',t(bake.state==='done'?'한 번 더 만들면 파일이 하나 더 생깁니다':BAKE_TIP));
+  }
+  /* A bake runs on this Mac whether or not the panel is open, so reopening a paper picks its bake back
+     up rather than offering to start a second one. The same request says whether the folder already
+     holds this paper. */
+  async function catchUpBake(session,bridge){
+   const {title}=bakeNames(session);
+   if(!title||session.destroyed)return;
+   let body=null;
+   try{
+    const r=await Z.HTTP.request('GET',bridge.config.base+'/v1/audio/book?title='+encodeURIComponent(title),
+     {headers:{Authorization:'Bearer '+bridge.config.token},responseType:'json',timeout:8000,successCodes:false,errorDelayMax:0});
+    body=r&&r.status===200?r.response:null;
+   }catch(_){return;}
+   if(!body||session.destroyed)return;
+   session.bakeHave=body.have||null;
+   const mine=(body.jobs||[]).find(job=>job&&job.title===title&&['waiting','speaking','encoding'].includes(job.state));
+   if(mine&&!session.bake){session.bake={...mine,config:bridge.config,out:body.out};pollBake(session);}
+   paintBake(session);
   }
   /* Stop it: one still waiting is dropped, one being spoken stops at the next sentence. */
   async function stopBake(session){

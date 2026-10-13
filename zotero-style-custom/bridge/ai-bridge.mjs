@@ -438,11 +438,12 @@ async function bakeStart(req, res, meta) {
 }
 
 /* GET /v1/audio/book[/<id>] -> one job, or every job this run remembers. */
-async function bakeShow(res, meta, id) {
+async function bakeShow(res, meta, id, title = '') {
   const made = await bakerFor();
   meta.status = 200;
   if (!made) return sendJSON(res, 200, id ? {error: {message: 'Read-aloud voices are not installed', type: 'not_installed'}} : {jobs: []});
-  if (!id) return sendJSON(res, 200, {jobs: made.list(), out: audioOut(), busy: made.busy});
+  // ?title= asks two more things: is this paper already in the folder, and is one being made for it now.
+  if (!id) return sendJSON(res, 200, {jobs: made.list(), out: audioOut(), busy: made.busy, have: title ? made.made(title) : null});
   const job = made.get(id);
   if (!job) { meta.status = 404; return fail(res, 404, 'No such bake', 'not_found'); }
   return sendJSON(res, 200, job);
@@ -499,7 +500,11 @@ async function handle(req, res, config, started, meta) {
   if (req.method === 'POST' && meta.path === '/v1/audio/speech') return speak(req, res, meta);
   if (req.method === 'POST' && meta.path === '/v1/audio/book') return bakeStart(req, res, meta);
   const bake = /^\/v1\/audio\/book(?:\/([0-9a-f]{4,32}))?$/.exec(meta.path);
-  if (bake && req.method === 'GET') return bakeShow(res, meta, bake[1] || '');
+  if (bake && req.method === 'GET') {
+    let title = '';
+    try { title = new URL(req.url, 'http://127.0.0.1').searchParams.get('title') || ''; } catch (_) {}
+    return bakeShow(res, meta, bake[1] || '', title.slice(0, 300));
+  }
   if (bake && req.method === 'DELETE' && bake[1]) return bakeStop(res, meta, bake[1]);
   meta.status = 404; fail(res, 404, 'Not found', 'not_found');
 }
