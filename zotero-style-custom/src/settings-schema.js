@@ -877,6 +877,14 @@
       "description": "새 절이 시작될 때 ‘Results’처럼 절 제목을 먼저 짧게 읽고, 문단과 절이 바뀔 때 잠깐 쉽니다."
     },
     {
+      "key": "audioFolder",
+      "category": "reader",
+      "label": "구운 오디오 폴더",
+      "type": "text",
+      "default": "",
+      "description": "운전용 오디오와 폰에 보낼 라이브러리 정보가 들어가는 폴더의 전체 경로입니다. bridge.json의 audioOut을 바꿨다면 같은 곳을 가리키게 하세요. 비워 두면 Dropbox의 ‘논문 음성’을 씁니다."
+    },
+    {
       "key": "shareLibraryFacts",
       "category": "reader",
       "label": "폰에 라이브러리 정보 내보내기",

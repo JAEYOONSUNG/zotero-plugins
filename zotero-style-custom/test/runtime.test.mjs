@@ -5509,3 +5509,117 @@ test('the orphan rating repair skips notes and trashed items, and a failed save 
  await assert.rejects(plugin.removeOrphanRatingTags(['7']),/disk full/);
  assert.deepEqual(failing.getTags().map(t=>t.tag),['style-custom:rating:4','keep'],'the tag is back on the item in memory');
 });
+
+test('how far each paper was read: Zotero’s own bookmark, this plugin’s page times, and the page count its index kept',async()=>{
+ const {plugin,item,Z}=fixture();plugin.active=true;
+ const paper=item(1),other=item(2),gone=item(3);
+ // 1 has a PDF Zotero left on page 12 of 18 and four pages this plugin watched being read;
+ // 2 has only Zotero's bookmark; 3 is a row in the cache whose paper is no longer in the library.
+ const attachments={1:[100,101],2:[200],3:[]};
+ const places={100:11,200:2};
+ const pdf={100:true,101:false,200:true};
+ const attachment=id=>({id,deleted:false,isPDFAttachment:()=>!!pdf[id],
+   getAttachmentLastPageIndex:()=>(id in places?places[id]:null)});
+ for(const ref of [paper,other,gone])ref.getAttachments=()=>attachments[ref.id];
+ Z.Items={get:id=>attachment(id),getByLibraryAndKey:(library,key)=>({1:paper,2:other}[key]||false)};
+ Z.DB={...Z.DB,queryAsync:async sql=>{assert.match(sql,/fulltextItems/);return [{itemID:100,totalPages:18},{itemID:200,totalPages:9}];}};
+ await plugin.addReading(paper,40,{attachmentID:100,pageIndex:0,totalPages:18});
+ plugin.cache.items['1:2']={};plugin.cache.items['1:3']={seconds:5};
+ const facts=await plugin.readingFacts();
+ assert.deepEqual(Object.keys(facts).sort(),['1:1','1:2']);
+ assert.equal(facts['1:1'].page,12,'Zotero’s bookmark is one page further on than its index');
+ assert.equal(facts['1:1'].pages,18);
+ assert.equal(facts['1:1'].read,67);
+ assert.equal(facts['1:1'].seconds,40);
+ assert.ok(facts['1:1'].at,'the day it was last read rides along');
+ assert.deepEqual(facts['1:2'],{read:33,page:3,pages:9},'a paper this plugin never watched still says how far it got');
+ // The page counts are one query, not one per file, and they are not asked for again straight away.
+ let queries=0;Z.DB.queryAsync=async()=>{queries++;return [];};
+ await plugin.readingFacts();assert.equal(queries,0,'the page counts are kept for ten minutes');
+ plugin.pageCounts={at:0,map:new Map()};
+ await plugin.readingFacts();assert.equal(queries,1);
+ // A full-text index that cannot be read loses the page counts, not the reading record: the two
+ // records of the same PDF are one place, so the plugin's own count stands in for the bookmark.
+ plugin.pageCounts=null;Z.DB.queryAsync=async()=>{throw new Error('no such table');};
+ const without=await plugin.readingFacts();
+ assert.equal(without['1:1'].page,12);assert.equal(without['1:1'].pages,18);
+ assert.deepEqual(without['1:2'],{page:3},'a page with nothing to measure it against is still a page');
+});
+
+test('a journal travels to the phone in its own signature ink, and an unknown journal travels without one',()=>{
+ const {plugin}=fixture();
+ const registry=require('../src/journal-identity.js');
+ registry.loadRegistry({journals:[],subjects:[]});
+ const science=plugin.journalInk('Science');
+ assert.match(science.ink,/^#|^hsl/);assert.match(science.inkDark,/^#|^hsl/);
+ assert.notEqual(science.ink,science.inkDark,'a colour that reads on white does not read on black');
+ // The panel paints a journal it does not know in grey; grey is absence, and absence is not sent.
+ assert.equal(plugin.journalInk('Journal of Things Nobody Published'),null);
+ assert.equal(plugin.journalInk(''),null);
+ assert.equal(plugin.journalInk(null),null);
+ // Nature's masthead is black and the plugin says so by leaving it colourless; the phone is told
+ // nothing rather than told grey, or every journal would look alike on it.
+ assert.equal(plugin.journalInk('Nature'),null);
+ assert.equal(plugin.journalInk('Scientific Reports'),null);
+ // The same colour the library cards use, not a second palette.
+ const known=registry.identify('Science');
+ assert.equal(science.ink,registry.colours(known,{dark:false}).ink);
+ assert.equal(science.inkDark,registry.colours(known,{dark:true}).ink);
+});
+
+test('the file the phone reads carries the reading progress and the journal inks, and the setting still turns it off',async()=>{
+ const {plugin,item,Z}=fixture();plugin.active=true;
+ const written=new Map();
+ plugin.io={writeUTF8:async(path,text)=>{written.set(path,text);},makeDirectory:async()=>{}};
+ plugin.paths={join:(...parts)=>parts.join('/'),homeDir:'/Users/test'};
+ const paper=item(1);paper.getAttachments=()=>[100];
+ plugin.getSetting=key=>({shareLibraryFacts:true,audioFolder:''}[key]);
+ Z.Items={get:()=>({id:100,deleted:false,isPDFAttachment:()=>true,getAttachmentLastPageIndex:()=>5}),
+   getByLibraryAndKey:()=>paper};
+ Z.DB={...Z.DB,queryAsync:async()=>[{itemID:100,totalPages:20}]};
+ require('../src/journal-identity.js').loadRegistry({journals:[],subjects:[]});
+ const snapshot={items:{'1:1':{metrics:{impactFactor:50}}},works:{'1:1':{venue:'Science',year:2026}},journalMetrics:{}};
+ plugin.shareFacts(snapshot);
+ await new Promise(resolve=>setTimeout(resolve,20));
+ const text=written.get('/Users/test/Dropbox/논문 음성/library.json');
+ const facts=JSON.parse(text);
+ assert.equal(facts.v,2);
+ assert.equal(facts.papers['1'].read,30,'6 pages of 20');
+ assert.equal(facts.papers['1'].page,6);
+ assert.ok(facts.journals.Science.ink&&facts.journals.Science.inkDark,'the journal travels in its own ink');
+ // Off is off: the setting is the only door, and a second save inside the minute does not reopen it.
+ written.clear();plugin.factsAt=0;
+ plugin.getSetting=key=>(key==='shareLibraryFacts'?false:'');
+ plugin.shareFacts(snapshot);
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(written.size,0);
+});
+
+test('the reading history the old plugin left in notes is brought in once, and never read twice',async()=>{
+ const {plugin,item,Z}=fixture();plugin.active=true;
+ let runs=0;
+ plugin.importLegacyReading=async()=>{runs++;return {notes:3,imported:2,skipped:1,unresolved:0,seconds:7200};};
+ plugin.flush=async()=>{};
+ const result=await plugin.adoptLegacyReading({delay:0});
+ assert.equal(runs,1);assert.equal(result.imported,2);
+ assert.match(String(plugin.cache.legacyReadingImported),/^\d{4}-\d{2}-\d{2}T/,'the day it was done is the flag');
+ // The phone's copy is wanted straight after, not a minute later.
+ assert.equal(plugin.factsAt,0);
+ await plugin.adoptLegacyReading({delay:0});
+ assert.equal(runs,1,'a second copy of the notes is not read again');
+ // A plugin shut down before the wait is over leaves the notes alone.
+ const fresh=fixture();fresh.plugin.active=false;fresh.plugin.importLegacyReading=async()=>{throw new Error('must not run');};
+ assert.equal(await fresh.plugin.adoptLegacyReading({delay:0}),null);
+});
+
+test('the folder the phone and the car share is asked for once, and a settings store that has never heard of it does not take it down',()=>{
+ const {plugin}=fixture();
+ plugin.paths={join:(...parts)=>parts.join('/'),homeDir:'/Users/test'};
+ // The export runs on the save path. A throw here wrote no file at all and said nothing.
+ plugin.getSetting=()=>{throw new Error('Unknown setting: audioFolder');};
+ assert.equal(plugin.audioFolder(),'/Users/test/Dropbox/논문 음성');
+ plugin.getSetting=key=>(key==='audioFolder'?'  /Volumes/Audio/papers  ':'');
+ assert.equal(plugin.audioFolder(),'/Volumes/Audio/papers','what the reader asked for wins');
+ plugin.getSetting=()=>'';
+ assert.equal(plugin.audioFolder(),'/Users/test/Dropbox/논문 음성');
+});

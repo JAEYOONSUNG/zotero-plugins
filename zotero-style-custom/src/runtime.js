@@ -423,6 +423,10 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     try { this.dedupeStoredNews(); this.reclassifyStoredNews(); } catch (error) { this.Z.logError?.(error); }
     try { this.dedupePaperPeople(); } catch (error) { this.Z.logError?.(error); }
     try { if (this.recheckStoredLinks()) this.dirty = true; } catch (error) { this.Z.logError?.(error); }
+    // The reading history the old plugin left in its notes is this plugin's own to keep. Brought
+    // in once, well after the library has opened, so 읽은 시간, 쪽 and the phone all know what
+    // was read before this plugin arrived. Style Custom's own clock still wins every paper.
+    if (!this.cache.legacyReadingImported) this.adoptLegacyReading();
     for (const entry of Object.values(loaded.items)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Invalid Style Custom item cache");
       if (entry.citationPending) { delete entry.citationPending; this.dirty=true; }
@@ -3056,6 +3060,25 @@ var CustomStyleRuntime = class CustomStyleRuntime {
   }
 
   // --- Taking ownership of the reading history ---
+
+  /* The one-time run of the import below. Off the path of a library opening, once per library:
+     the flag is the date it was done, so a second copy of the notes is never read twice. */
+  adoptLegacyReading({delay = 20000} = {}) {
+    this.legacyReadingAdoption = Promise.resolve().then(async () => {
+      if (delay > 0) await this.pause(delay);
+      if (!this.active || this.cache.legacyReadingImported) return null;
+      const result = await this.importLegacyReading();
+      this.cache.legacyReadingImported = new Date().toISOString();
+      this.dirty = true;
+      // The phone's copy of the library is a minute stale at most; this is worth not waiting for.
+      this.factsAt = 0;
+      await this.flush();
+      if (result.imported) this.Z.debug?.(`Style Custom: brought in reading history for ${result.imported} papers (${Math.round(result.seconds / 3600)}h)`);
+      return result;
+    }).catch(error => { this.Z.logError?.(error); return null; });
+    return this.legacyReadingAdoption;
+  }
+
 
   // The only copy of this history is in another plugin's notes, so it has to be
   // read out before that plugin goes. Style Custom's own tracking always wins:
@@ -7345,7 +7368,8 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     if (this.factsAt && now - this.factsAt < 60000) return;
     this.factsAt = now;
     Promise.resolve().then(async () => {
-      const facts = this.factTools.libraryFacts(snapshot);
+      const reading = await this.readingFacts(snapshot && snapshot.items);
+      const facts = this.factTools.libraryFacts({...snapshot, reading}, {inkOf: name => this.journalInk(name)});
       if (!Object.keys(facts.papers).length) return;
       const folder = this.audioFolder();
       if (!folder) return;
@@ -7356,9 +7380,96 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       await io.writeUTF8(paths.join(folder, 'library.json'), JSON.stringify(facts));
     }).catch(error => { this.factsAt = 0; this.Z.logError?.(error); });
   }
+  /* A journal's own signature ink, the colour the library cards and the inbox paint its name in,
+     so the phone can paint it the same. Both themes travel together; the phone's stylesheet picks
+     one. A journal the registry never heard of is drawn grey here, and a grey that means nothing
+     is not worth sending, so it is left out. */
+  journalInk(name) {
+    const J = this.journalIdentity;
+    if (!J?.identify || !J.colours) return null;
+    let known = null;
+    try { known = J.identify(String(name || '').trim()); } catch (error) { return null; }
+    if (!known || !(known.known || known.exact)) return null;
+    const light = J.colours(known, {dark: false}) || {}, dark = J.colours(known, {dark: true}) || {};
+    if (!light.ink || !dark.ink) return null;
+    // A journal in the families but with no colour of its own comes back grey, as near-black ink
+    // on the page: that is this plugin's way of saying nothing, and nothing is not worth sending.
+    const grey = value => /^hsl\(\s*\d+(\.\d+)?\s+0%/.test(String(value));
+    if (grey(light.ink) && grey(dark.ink)) return null;
+    return {ink: light.ink, inkDark: dark.ink};
+  }
+
+  /* The page count Zotero's full-text index recorded for every PDF, in one read-only query
+     (Zotero.Fulltext.getPages reads the same table, one await per file). Kept for ten minutes:
+     a page count changes only when a file is indexed again. */
+  async pdfPageCounts() {
+    const now = Date.now();
+    if (this.pageCounts && now - this.pageCounts.at < 600000) return this.pageCounts.map;
+    const map = new Map();
+    try {
+      const rows = await this.Z.DB?.queryAsync?.('SELECT itemID, totalPages FROM fulltextItems WHERE totalPages > 0');
+      for (const row of rows || []) {
+        const total = Number(row.totalPages) || 0;
+        if (total > 0 && total <= 100000) map.set(Number(row.itemID), total);
+      }
+    } catch (error) { this.Z.logError?.(error); }
+    this.pageCounts = {at: now, map};
+    return map;
+  }
+
+  /* Where each PDF of this paper was last left, as Zotero itself recorded it. The plugin's own
+     clock only knows the papers it watched being read; this knows every paper ever opened in the
+     reader, which is most of a library. */
+  readingPlaces(item, counts = new Map()) {
+    const places = [];
+    for (const attachmentID of item.getAttachments?.() || []) {
+      let attachment = null;
+      try { attachment = this.Z.Items.get(attachmentID); } catch (error) { attachment = null; }
+      if (!attachment || attachment.deleted) continue;
+      let index = null;
+      try { if (attachment.isPDFAttachment?.()) index = attachment.getAttachmentLastPageIndex?.(); }
+      catch (error) { index = null; }
+      if (!Number.isInteger(index) || index < 0) continue;
+      places.push({page: index + 1, pages: counts.get(Number(attachmentID)) || 0, file: Number(attachmentID)});
+    }
+    return places;
+  }
+
+  /* How far through each paper the reader got, for the file the phone reads: this plugin's page
+     times and Zotero's own bookmarks, merged by the rule in library-facts. */
+  readingFacts(items = null) {
+    const rows = items && typeof items === 'object' ? items : (this.cache.items || {});
+    return this.pdfPageCounts().then(counts => {
+      const out = {};
+      for (const [id, entry] of Object.entries(rows)) {
+        const at = id.indexOf(':');
+        let item = null;
+        if (at > 0) {
+          try { item = this.Z.Items.getByLibraryAndKey?.(Number(id.slice(0, at)), id.slice(at + 1)) || null; }
+          catch (error) { item = null; }
+        }
+        if (!item || !this.isRegular(item)) continue;
+        const own = this.pageProgress(item);
+        const places = this.readingPlaces(item, counts);
+        if (Number.isInteger(own.lastPageIndex) && own.lastPageIndex >= 0) {
+          places.push({page: own.lastPageIndex + 1, pages: Number(own.total) || 0,
+                       file: Number(own.attachmentID) || 0});
+        }
+        const record = this.factTools.readingOf({places, visited: Number(own.visited) || 0,
+          total: Number(own.total) || 0, seconds: Number(entry?.seconds) || 0, at: String(entry?.lastRead || '')});
+        if (record) out[id] = record;
+      }
+      return out;
+    }).catch(error => { this.Z.logError?.(error); return {}; });
+  }
+
   /* Where the bridge leaves the baked audio, and where the phone looks for both. */
   audioFolder() {
-    const asked = String(this.getSetting?.('audioFolder') || '').trim();
+    /* A settings store that does not know this key must not take the folder down with it: this
+       is asked for on the save path, and a throw here once stopped the phone's copy of the
+       library being written at all. */
+    let asked = '';
+    try { asked = String(this.getSetting?.('audioFolder') || '').trim(); } catch (error) { asked = ''; }
     if (asked) return asked;
     const paths = this.paths || (typeof PathUtils !== 'undefined' ? PathUtils : null);
     let home = '';
