@@ -255,7 +255,8 @@ the name the baker gave it, keeps it once fetched, and offers **맥 음성** bes
 
 It is not only a better voice. A real audio file keeps playing with the screen off and answers the
 car's buttons, and a web page's own speech does neither — which was the one thing this app could not
-do. The sidecar the baker writes beside the file says where every sentence begins, so the list still
+do. The folder is listed once per session rather than guessed at per paper: asking Dropbox for each
+possible name cost eight round trips for every paper that had never been baked. The sidecar the baker writes beside the file says where every sentence begins, so the list still
 follows along and a tap on a sentence still moves the voice to it; without that sidecar the file is
 not offered, because a paper you cannot steer is worse than one read by the phone.
 

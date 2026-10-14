@@ -1,6 +1,6 @@
 /* The app shell, so 논문 opens with no signal. The library itself lives in IndexedDB, and every
    request to api.zotero.org goes to the network: a cached answer would show a stale library. */
-const CACHE = 'nonmun-v14';
+const CACHE = 'nonmun-v15';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js',
                'read.js', 'play.js', 'files.js', 'pdfview.js', 'list.js', 'net.js', 'i18n.js', 'en.js',
                'manifest.webmanifest', 'icon-192.png?v=3', 'icon-512.png?v=3', 'icon-180.png?v=3'];

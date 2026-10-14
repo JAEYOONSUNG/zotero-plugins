@@ -3511,6 +3511,10 @@ function bakedDropbox({has = ['/논문 음성/Retron Septu defence.m4b'], marks 
     paths,
     handle: async (url, init = {}) => {
       if (/oauth2\/token/.test(url)) return new Response(JSON.stringify({access_token: 'AT', expires_in: 14400}), {status: 200});
+      if (/files\/list_folder/.test(url)) {
+        paths.push('list');
+        return new Response(JSON.stringify({entries: has.map(p => ({'.tag': 'file', name: p.split('/').pop(), path_display: p, size: 24}))}), {status: 200});
+      }
       const arg = init.headers && init.headers['Dropbox-API-Arg'];
       const path = arg ? JSON.parse(arg).path : '';
       paths.push(path);
@@ -3552,6 +3556,17 @@ test('맥이 구운 음성이 있으면 폰이 그것으로 읽는다 — 화면
   [...open.document.querySelectorAll('#listen .sent')][2].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
   assert.equal(audio.currentTime, 6.4);
+
+  // Back to the paper itself: the phone's own voice reads again, and the file stops.
+  [...row.querySelectorAll('button')][0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(audio.paused, true, 'the file was left behind, not left playing');
+  const back = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.ok(back.some(l => /Microbial decomposers can degrade newly/.test(l)), 'the paper is back');
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(open.speech.queue.length > 0, 'and it is the phone speaking it, not the file');
+  assert.equal(open.storage.get('np.said'), 'raw');
 });
 
 test('구운 음성이 없거나 Dropbox가 없으면 그 선택지는 나오지 않는다', async () => {

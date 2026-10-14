@@ -22,7 +22,8 @@ export const DROPBOX = {
   authorize: 'https://www.dropbox.com/oauth2/authorize',
   token: 'https://api.dropboxapi.com/oauth2/token',
   download: 'https://content.dropboxapi.com/2/files/download',
-  search: 'https://api.dropboxapi.com/2/files/search_v2'
+  search: 'https://api.dropboxapi.com/2/files/search_v2',
+  list: 'https://api.dropboxapi.com/2/files/list_folder'
 };
 
 /* ---------- where a file is ---------- */
@@ -185,6 +186,23 @@ export function createDropbox({
       throw new Error(`Dropbox 오류 (${response.status})`);
     },
 
+    /* What is in one folder, by name. One request answers for every paper, which matters on a phone:
+       asking per paper cost a round trip for each name that was not there. A folder that does not
+       exist is not a failure — it means nothing has been baked yet. */
+    async list(folder) {
+      const token = await self.access();
+      const response = await fetchImpl(DROPBOX.list, {
+        method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
+        body: JSON.stringify({path: String(folder || ''), recursive: false, limit: 500})
+      });
+      if (response.status === 409) return [];
+      if (response.status === 401) { self.forget(); throw Object.assign(new Error('Dropbox 연결이 만료되었습니다. 다시 연결해 주세요.'), {need: 'dropbox'}); }
+      if (!response.ok) throw new Error(`Dropbox 오류 (${response.status})`);
+      const answer = await response.json().catch(() => ({}));
+      return (answer.entries || []).filter(e => e && e['.tag'] === 'file' && e.name)
+        .map(e => ({name: e.name, path: e.path_display || `${folder}/${e.name}`, size: e.size || 0, at: e.server_modified || ''}));
+    },
+
     /* The same file name anywhere under the library folder. */
     async find(path) {
       const name = String(path).split('/').pop();
@@ -283,7 +301,22 @@ export function bakedPaths(title, folder = AUDIO_BASE, copies = 4) {
 
 /* The bytes of the baked paper, and the sidecar beside it when there is one. Nothing is downloaded
    twice: what the phone already has is kept in the same store the PDFs use. */
-export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = null, onStep = () => {}} = {}) {
+/* What the Mac has baked, read once and kept for the session: every paper after the first is
+   answered without a request. */
+export function bakedIndex({dropbox, folder = AUDIO_BASE} = {}) {
+  let held = null;
+  return {
+    async names() {
+      if (held) return held;
+      if (!dropbox || !dropbox.linked) return (held = []);
+      held = await dropbox.list(folder).catch(() => []);
+      return held;
+    },
+    forget() { held = null; }
+  };
+}
+
+export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = null, index = null, onStep = () => {}} = {}) {
   if (!dropbox || !dropbox.linked) return null;
   const paths = bakedPaths(title, folder);
   for (const path of paths) {
@@ -292,8 +325,14 @@ export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = n
       if (held) return {path, bytes: held, fromCache: true};
     }
   }
+  /* One listing of the folder decides which of the names is there, instead of a failed download for
+     each name that is not. */
+  const listing = index ? await index.names() : null;
+  const there = listing ? new Set(listing.map(entry => entry.name)) : null;
+  const want = there ? paths.filter(path => there.has(path.split('/').pop())) : paths;
+  if (!want.length) return null;
   onStep('찾는 중');
-  for (const path of paths) {
+  for (const path of want) {
     let bytes = null;
     try { bytes = await dropbox.download(path); }
     catch (error) { if (error && error.missing) continue; throw error; }

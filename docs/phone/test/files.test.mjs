@@ -237,3 +237,40 @@ test('the times beside the audio are read when they are there, and missed quietl
   assert.equal(await F.bakedMarks({path: '/논문 음성/A paper.m4b', dropbox: none}), null);
   assert.equal(await F.bakedMarks({path: '', dropbox}), null);
 });
+
+test('the folder is read once for the whole session, not once for every paper', async () => {
+  let lists = 0, downloads = 0;
+  const dropbox = {
+    linked: true,
+    async list(folder) {
+      lists++;
+      assert.equal(folder, '/논문 음성');
+      return [{name: 'A paper.m4b', path: '/논문 음성/A paper.m4b', size: 10}];
+    },
+    async download(path) { downloads++; if (path.endsWith('A paper.m4b')) return new Uint8Array([1]).buffer; throw Object.assign(new Error('gone'), {missing: true}); }
+  };
+  const index = F.bakedIndex({dropbox});
+  const baked = await F.bakedAudio({title: 'A paper', dropbox, index});
+  assert.equal(baked.path, '/논문 음성/A paper.m4b');
+  assert.equal(downloads, 1, 'only the name that is actually there was fetched');
+
+  // A paper nobody baked costs nothing at all: no download, and no second listing.
+  assert.equal(await F.bakedAudio({title: 'Never baked', dropbox, index}), null);
+  assert.equal(downloads, 1);
+  assert.equal(await F.bakedAudio({title: 'Nor this', dropbox, index}), null);
+  assert.equal(lists, 1, 'one listing answered for all three papers');
+
+  // Without an index it still works, the old way, by asking for each name.
+  downloads = 0;
+  assert.ok(await F.bakedAudio({title: 'A paper', dropbox}));
+  assert.ok(downloads > 1, 'and that is exactly why the index is worth having');
+});
+
+test('a sync folder that does not exist yet means nothing is baked, not a failure', async () => {
+  const dropbox = {linked: true, async list() { throw new Error('409'); }, async download() { throw new Error('never asked'); }};
+  const index = F.bakedIndex({dropbox});
+  assert.deepEqual(await index.names(), []);
+  assert.equal(await F.bakedAudio({title: 'A paper', dropbox, index}), null);
+  // And with no Dropbox at all it does not even ask.
+  assert.deepEqual(await F.bakedIndex({dropbox: {linked: false}}).names(), []);
+});

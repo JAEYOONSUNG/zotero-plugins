@@ -19,7 +19,7 @@ import EN from './en.js';
 import {createPlayer, speechEngine, bakedVoice, pickVoice, paperLanguage, sectionsOf, RATES,
         voiceMenu, voiceTier, TIERS, langName, sampleFor} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE,
-        bakedAudio, bakedMarks, AUDIO_BASE, AUDIO_KEY} from './files.js';
+        bakedAudio, bakedMarks, bakedIndex, AUDIO_BASE, AUDIO_KEY} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
@@ -27,7 +27,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v14';
+export const BUILD = 'nonmun-v15';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -2460,11 +2460,15 @@ function buildChain() {
    along and a tap on a sentence still moves the voice. */
 export const audioFolder = () => localStorage.getItem(AUDIO_KEY) || AUDIO_BASE;
 
+/* The folder is read once, not once per paper: a phone on a slow signal should not spend a round
+   trip finding out that a paper was never baked. */
+let bakedList = null;
 async function findBaked(item) {
   if (!dropbox.linked) return null;
   const title = clean(item.data.title) || '논문';
+  if (!bakedList) bakedList = bakedIndex({dropbox, folder: audioFolder()});
   try {
-    const found = await bakedAudio({title, folder: audioFolder(), dropbox, cache: fileCache});
+    const found = await bakedAudio({title, folder: audioFolder(), dropbox, cache: fileCache, index: bakedList});
     if (!found) return null;
     const marks = await bakedMarks({path: found.path, dropbox});
     return {...found, marks};
@@ -2505,12 +2509,13 @@ function buildSaying() {
     const button = el('button', {type: 'button', 'aria-pressed': String(id === listen.saying), text: label}, track);
     button.addEventListener('click', () => {
       if (id === listen.saying || !listen.player) return;
+      const was = listen.saying;
       listen.saying = id;
       localStorage.setItem(KEYS.said, id);
       if (id === 'mac') {
         listen.list = bakedUnits(listen.baked.marks);
         renderTranscript(listen.list);
-        const was = listen.player.state().status === 'playing';
+        const playing = listen.player.state().status === 'playing';
         listen.player.stop();
         listen.player = createPlayer({engine: listen.baked.engine, rate: readRate(), volume: readVolume(),
           onChange: event => paintReading(event.state)});
@@ -2518,11 +2523,11 @@ function buildSaying() {
         for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
         slide(track);
         paintVoice(listen.lang || 'en');
-        if (was) listen.player.play(0); else paintReading(listen.player.state());
+        if (playing) listen.player.play(0); else paintReading(listen.player.state());
         return;
       }
-      if (listen.player.state().voiceURI === undefined || listen.saying === 'mac') {
-        // Coming back from the file: the phone's own voice reads again.
+      if (was === 'mac') {
+        // Leaving the file behind: the phone's own voice reads again.
         listen.player.stop();
         listen.player = createPlayer({engine: listen.engine, rate: readRate(), volume: readVolume(),
           onChange: event => paintReading(event.state)});
