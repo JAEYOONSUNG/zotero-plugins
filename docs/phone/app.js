@@ -28,12 +28,12 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v18';
+export const BUILD = 'nonmun-v19';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
               read: 'np.read', recent: 'np.recent', kind: 'np.lastkind', of: 'np.of.',
-              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol', reads: 'np.reads', lang: 'np.lang', said: 'np.said'};
+              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol', reads: 'np.reads', lang: 'np.lang', said: 'np.said', theme: 'np.theme'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
@@ -2757,11 +2757,7 @@ export function nightWanted(held, dark) {
   if (held === 'off') return false;
   return !!dark;
 }
-const nightOn = () => {
-  let dark = false;
-  try { dark = !!(matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); } catch (_) {}
-  return nightWanted(localStorage.getItem(NIGHT), dark);
-};
+const nightOn = () => nightWanted(localStorage.getItem(NIGHT), darkWanted(localStorage.getItem(KEYS.theme), phoneIsDark()));
 
 /* While there is something to say, it stands where the page would be. */
 /* The page number, shown while the pages are moving and for a moment after, so a reader with the
@@ -3113,6 +3109,22 @@ function paintSettings() {
     });
   }
   requestAnimationFrame(() => slide(tongue));
+  /* Light or dark. It takes effect under the finger — no reload — because the whole look hangs off
+     tokens on the root element. */
+  const look = setRow(about.card, '화면', '').row;
+  const scheme = el('nav', {class: 'seg small-seg', role: 'group', 'aria-label': t('화면')}, look);
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, scheme);
+  for (const [id, label] of [['auto', '자동'], ['light', '라이트'], ['dark', '다크']]) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(id === theme()), text: label}, scheme);
+    button.addEventListener('click', () => {
+      if (id === theme()) return;
+      if (id === 'auto') localStorage.removeItem(KEYS.theme); else localStorage.setItem(KEYS.theme, id);
+      applyTheme(id);
+      for (const other of scheme.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(scheme);
+    });
+  }
+  requestAnimationFrame(() => slide(scheme));
   setRow(about.card, '버전', BUILD.replace(/^nonmun-/, ''));
   const check = setGo(about.card, '업데이트 확인', async () => {
     check.disabled = true;
@@ -3301,8 +3313,8 @@ function openCollections() {
     const card = el('section', {class: 'card'}, body);
     const wrap = el('div', {class: 'tags'}, card);
     for (const {tag, n} of tags) {
-      const chip = el('button', {class: `chip pick-chip${state.tag === tag ? ' on' : ''}`, type: 'button'}, wrap);
-      el('span', {text: tag}, chip);
+      const chip = el('button', {class: `chip pick-chip${state.tag === tag ? ' on' : ''}`, type: 'button', title: tag}, wrap);
+      el('span', {class: 'chip-text', text: tag}, chip);
       el('span', {class: 'n', text: String(n)}, chip);
       chip.addEventListener('click', () => {
         state.tag = state.tag === tag ? '' : tag;
@@ -3663,6 +3675,33 @@ async function takeDropboxReturn() {
 /* Which language this phone reads in: 자동 follows the phone itself, and the choice is settled
    before a single word is drawn. */
 export const language = () => localStorage.getItem(KEYS.lang) || 'auto';
+
+/* Light or dark. 자동 follows the phone, which is what it has always done; the other two are for
+   the reader whose phone is in one and whose eyes want the other — a bright train at night, a dark
+   phone in a lit room. Nothing here reloads: the tokens hang off the root, so the whole app turns
+   between one frame and the next. */
+export const themeWanted = held => (held === 'light' || held === 'dark' ? held : 'auto');
+export const darkWanted = (held, phoneIsDark) => {
+  const want = themeWanted(held);
+  return want === 'auto' ? !!phoneIsDark : want === 'dark';
+};
+export const theme = () => themeWanted(localStorage.getItem(KEYS.theme));
+const phoneIsDark = () => {
+  try { return !!(matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); } catch (_) { return false; }
+};
+/* The bar at the top of the phone is painted by the page, not by the app, so it has to be told
+   too — otherwise a dark app keeps a white strip above it. In 자동 each of the two metas keeps its
+   own colour and its own media; asked for one, both carry that one. */
+const BAR = {light: '#f1f1f5', dark: '#000000'};
+export function applyTheme(choice, {root = document.documentElement, page = document} = {}) {
+  const want = themeWanted(choice);
+  if (want === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', want);
+  for (const meta of page.querySelectorAll('meta[name="theme-color"]')) {
+    const own = /dark/.test(meta.getAttribute('media') || '') ? 'dark' : 'light';
+    meta.setAttribute('content', BAR[want === 'auto' ? own : want]);
+  }
+  return want;
+}
 function speakLanguage() {
   setStrings(EN);
   return useLanguage(language(), {language: (navigator.languages && navigator.languages[0]) || navigator.language || ''});
@@ -3695,6 +3734,7 @@ function translatePage(root = document) {
 
 async function start() {
   speakLanguage();
+  applyTheme(localStorage.getItem(KEYS.theme));   // before anything is drawn, as the language is
   translatePage();
   setReadSize(readSize());            // the size chosen last time, before anything is drawn
   try { history.replaceState({depth: 0}, ''); } catch (_) {}

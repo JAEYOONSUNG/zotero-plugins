@@ -28,9 +28,15 @@
   color-scheme: light dark;
 }
 /* Dark is the one most reading is done in: a true black canvas, cards lifted off it, so the list
-   has edges instead of being one flat sheet. */
+   has edges instead of being one flat sheet.
+
+   It is said twice on purpose: once for a phone that is itself dark, and once for a reader who
+   asked this app for dark on a phone that is not — 설정 · 앱 · 화면 writes data-theme on the root,
+   and `:not([data-theme="light"])` is what lets that same reader force light on a dark phone. The
+   two blocks have to carry the same tokens or one of the two darks drifts; a test holds them
+   together. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --canvas:#000; --card:#1c1c1e; --press:#2c2c2e;
     --ink:#f3f3f6; --muted:#9d9da6; --faint:#8a8a92;
     --track:rgba(118,118,128,.26); --track-hover:rgba(118,118,128,.4); --line:rgba(255,255,255,.1);
@@ -45,6 +51,24 @@
     --on-fill:#111113;
   }
 }
+:root[data-theme="dark"] {
+    --canvas:#000; --card:#1c1c1e; --press:#2c2c2e;
+    --ink:#f3f3f6; --muted:#9d9da6; --faint:#8a8a92;
+    --track:rgba(118,118,128,.26); --track-hover:rgba(118,118,128,.4); --line:rgba(255,255,255,.1);
+    --sel:#3a3a3f; --sel-shadow:0 1px 3px rgba(0,0,0,.6);
+    --card-shadow:none;
+    --lift:0 0 0 .5px rgba(255,255,255,.14), 0 8px 22px rgba(0,0,0,.7);
+    --over:0 0 0 .5px rgba(255,255,255,.18), 0 16px 38px rgba(0,0,0,.8);
+    --chrome:rgba(18,18,20,.86);
+    /* Lighter tints, because they are read as ink on black — so what is written ON them
+       has to turn dark, or a filled pill in the dark says nothing. */
+    --link:#5fa0ff; --bad:#ff7d72; --good:#4cd080; --warm:#e0a344;
+    --on-fill:#111113;
+}
+/* Asked for one of the two, the native parts — a scrollbar, a text field's caret, a date picker —
+   have to be told as well, or they stay in the phone's own scheme. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html, body { height:100%; }
@@ -160,7 +184,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .list { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain;
         padding:12px var(--pad) calc(var(--bottom) + 20px + var(--kb, 0px)); }
 /* The heading stays at the top of the list while its own papers scroll under it. */
-.group { position:sticky; top:0; z-index:1; margin:14px 0 6px; padding:5px 4px 6px;
+.group { position:sticky; top:0; z-index:1; margin:18px 0 8px; padding:5px 4px 7px;
          background:var(--canvas); font-size:13px; font-weight:700; letter-spacing:-.01em;
          color:var(--muted); font-variant-numeric:tabular-nums;
          display:flex; align-items:baseline; gap:7px; }
@@ -227,7 +251,8 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
    ink is measured on the Mac to read at 4.5:1 on the card it lands on. */
 .venue { font-weight:600; }
 .venue.ink { color:var(--j-ink); }
-@media (prefers-color-scheme: dark) { .venue.ink { color:var(--j-ink-d); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .venue.ink { color:var(--j-ink-d); } }
+:root[data-theme="dark"] .venue.ink { color:var(--j-ink-d); }
 /* A paper marked by hand on the Mac: its colour as a dot in the margin of the third line, never a
    bar down the edge of the card. */
 .mark { flex:none; width:8px; height:8px; border-radius:999px; background:var(--track-hover); }
@@ -264,7 +289,7 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .pick-bar[hidden] { display:none; }
 
 /* A row that leads somewhere: the name, how many, and the mark that says it opens. */
-.row.nav { display:flex; align-items:center; gap:10px; padding-top:13px; padding-bottom:13px; }
+.row.nav { display:flex; align-items:center; gap:12px; padding-top:15px; padding-bottom:15px; }
 .row.nav h2 { flex:1; min-width:0; font-size:16px; font-weight:500; -webkit-line-clamp:1; }
 .row.nav .n { flex:none; font-size:14px; color:var(--faint); font-variant-numeric:tabular-nums; }
 .chev { display:flex; flex:none; color:var(--faint); opacity:.7; }
@@ -433,7 +458,10 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .rate { display:flex; gap:2px; margin-inline-end:-6px; }
 .rate button { width:36px; height:36px; border-radius:999px; font-size:21px; color:var(--track-hover); }
 .rate button[aria-pressed="true"], .rate button.on { color:var(--warm); }
-.tags { display:flex; flex-wrap:wrap; gap:6px; }
+.tags { display:flex; flex-wrap:wrap; gap:8px; }
+/* In a list of its own a tag has the width of the sheet; it is only on a paper's row that it has
+   to give way to the figures beside it. */
+.tags .chip { max-width:100%; }
 .note { font-size:calc(14px * var(--read)); line-height:1.65; overflow-wrap:anywhere; }
 .note :is(h1,h2,h3) { font-size:15px; margin:8px 0 4px; }
 .note.clipped { display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
@@ -482,7 +510,7 @@ a.out { display:inline-flex; align-items:center; justify-content:center; text-de
 .set-group + .set-group { margin-top:24px; }
 .set-head { margin:0 0 7px var(--pad); font-size:13px; font-weight:600; letter-spacing:-.01em; color:var(--muted); }
 .card.rows { padding:0; gap:0; overflow:hidden; }
-.set-row { position:relative; display:flex; align-items:center; gap:12px; width:100%; min-height:47px;
+.set-row { position:relative; display:flex; align-items:center; gap:12px; width:100%; min-height:50px;
            text-align:start; padding:10px var(--pad); font-size:15px; }
 .set-row + .set-row::before { content:''; position:absolute; top:0; left:var(--pad); right:0; height:1px;
                               background:var(--line); transform:scaleY(.5); transform-origin:top; }
@@ -564,7 +592,9 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
             display:grid; place-items:center; transition:transform 90ms, background 90ms; }
 .play-btn svg { width:25px; height:25px; fill:currentColor; stroke:none; }
 .play-btn:active { background:var(--track-hover); transform:scale(.94); }
-.small-seg button { height:26px; font-size:12px; }
+/* The two choices in 설정 (언어, 화면) are small, not cramped: 26px of pill with 12px in it was
+   half a fingertip and hard to read in a moving car. */
+.small-seg button { height:32px; font-size:13px; }
 .pick { display:flex; align-items:center; gap:6px; min-width:0; }
 /* A setting that opens a menu rather than holding a list: the name on the left, what it is set to
    on the right, the whole thing one press. */
@@ -620,7 +650,8 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
          -webkit-backdrop-filter:blur(1.5px); backdrop-filter:blur(1.5px);
          animation:fade 140ms ease-out; }
 @keyframes fade { from { opacity:0 } to { opacity:1 } }
-@media (prefers-color-scheme: dark) { .scrim { background:rgba(0,0,0,.34) } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .scrim { background:rgba(0,0,0,.34) } }
+:root[data-theme="dark"] .scrim { background:rgba(0,0,0,.34) }
 @media (prefers-reduced-motion:reduce) { .scrim { animation:none } }
 /* The row the menu belongs to stays out of the dimming, lifted off the card it sits in. */
 .row.lifted-row { z-index:41; overflow:visible; }
@@ -673,7 +704,8 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .pdf-msg[hidden] { display:none; }
 .pdf-count { font-variant-numeric:tabular-nums; padding:4px 8px; border-radius:8px; font-size:13px; color:var(--muted); }
 .pdf-count:active { background:var(--track); }
-@media (prefers-color-scheme: dark) { .pdf { --pdf-canvas:#2a2a2e; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pdf { --pdf-canvas:#2a2a2e; } }
+:root[data-theme="dark"] .pdf { --pdf-canvas:#2a2a2e; }
 /* Reading in the dark: the page is turned to light-on-dark without touching the colours of the
    figures more than it has to. */
 .pdf.night .pdf-page { background:#111; }
@@ -714,9 +746,16 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .found-text { flex:1; min-width:0; font-size:13px; line-height:1.55; }
 .found-text b { background:var(--sel); box-shadow:var(--sel-shadow); border-radius:4px; padding:0 2px; }
 
-/* a tag, chosen or not */
-.pick-chip { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px; font-size:13px; }
-.pick-chip .n { color:var(--faint); font-variant-numeric:tabular-nums; font-size:11px; }
+/* a tag, chosen or not.
+
+   The pill had a fixed height and hid what did not fit, so a long tag wrapped inside it and came
+   out cut through the middle of a letter — and the ellipsis never showed, because a flex box does
+   not clip its text, its child does. The pill grows with the sheet instead, the name is the part
+   that gives way, and the count beside it never does. */
+.pick-chip { display:inline-flex; align-items:center; gap:7px; min-height:34px; max-width:100%;
+             padding:7px 14px; font-size:14px; }
+.pick-chip .chip-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pick-chip .n { flex:none; color:var(--faint); font-variant-numeric:tabular-nums; font-size:12px; }
 .pick-chip.on { background:var(--sel); box-shadow:var(--sel-shadow); color:var(--ink); font-weight:650; }
 .pick-chip.on .n { color:var(--ink); }
 

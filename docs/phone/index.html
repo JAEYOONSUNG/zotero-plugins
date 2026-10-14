@@ -13,6 +13,9 @@
 <link rel="apple-touch-icon" href="icon-180.png?v=3">
 <link rel="icon" href="icon-192.png?v=3">
 <link rel="stylesheet" href="app.css">
+<!-- 설정 · 앱 · 화면, read before the first paint: app.js runs after the page is drawn, so without
+     this a phone in the other scheme would flash its own colours first. -->
+<script>try{var np=localStorage.getItem('np.theme');if(np==='dark'||np==='light'){document.documentElement.setAttribute('data-theme',np);for(var m of document.querySelectorAll('meta[name="theme-color"]'))m.setAttribute('content',np==='dark'?'#000000':'#f1f1f5');}}catch(e){}</script>
 </head>
 <body>
 

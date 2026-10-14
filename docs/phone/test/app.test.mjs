@@ -3116,14 +3116,14 @@ test('anything lifted off the page is lifted by a token, so the dark is not forg
   // And both tokens exist in both schemes.
   for (const [scheme, block] of [
     ['light', /:root \{([\s\S]*?)\n\}/.exec(css)[1]],
-    ['dark', /@media \(prefers-color-scheme: dark\) \{\n  :root \{([\s\S]*?)\n  \}/.exec(css)[1]]
+    ['dark', /@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme="light"\]\) \{([\s\S]*?)\n  \}/.exec(css)[1]]
   ]) {
     for (const name of ['lift', 'over']) {
       assert.match(block, new RegExp(`--${name}:`), `${scheme} says what --${name} is`);
     }
   }
   // In the dark they carry an edge, since a shadow there is invisible.
-  const dark = /@media \(prefers-color-scheme: dark\) \{\n  :root \{([\s\S]*?)\n  \}/.exec(css)[1];
+  const dark = /@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme="light"\]\) \{([\s\S]*?)\n  \}/.exec(css)[1];
   for (const name of ['lift', 'over']) {
     const value = new RegExp(`--${name}:([^;]+)`).exec(dark)[1];
     assert.match(value, /rgba\(255,255,255/, `--${name} draws an edge in the dark`);
@@ -3134,7 +3134,7 @@ test('every ink the app writes in can be read on the paper it is written on', ()
   const css = read('app.css');
   const schemes = {
     light: inksIn(/:root \{([\s\S]*?)\n\}/.exec(css)[1]),
-    dark: inksIn(/@media \(prefers-color-scheme: dark\) \{\n  :root \{([\s\S]*?)\n  \}/.exec(css)[1])
+    dark: inksIn(/@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme="light"\]\) \{([\s\S]*?)\n  \}/.exec(css)[1])
   };
   for (const [scheme, ink] of Object.entries(schemes)) {
     assert.ok(ink.card && ink.canvas, `${scheme} says what a card and the canvas are`);
@@ -3435,8 +3435,10 @@ test('the language can be set by hand, and the setting is what the app starts wi
   await open.settle();
   open.document.getElementById('btn-settings-main').dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
-  const buttons = [...open.document.querySelectorAll('#settings .set-row .seg button')]
-    .filter(b => ['자동', '한국어', 'English'].includes(b.textContent));
+  // 화면 offers a 자동 of its own now, so the row is found by its own name rather than by its words.
+  const row = [...open.document.querySelectorAll('#settings .set-row')]
+    .find(r => r.querySelector('.what')?.textContent === '언어');
+  const buttons = [...row.querySelectorAll('.seg button')];
   assert.deepEqual(buttons.map(b => b.textContent), ['자동', '한국어', 'English']);
   assert.equal(buttons[0].getAttribute('aria-pressed'), 'true', 'a phone follows itself until told otherwise');
   buttons[2].dispatchEvent(new open.window.Event('click'));
@@ -3720,4 +3722,85 @@ test('맥이 읽은 분량도 이어서 볼 것을 고르는 데 들어간다', 
   assert.equal(shareOf({read: 0}), 0);
   assert.equal(shareOf({read: 140}), 100, 'a figure out of range is brought back into it');
   assert.equal(shareOf({}), 0);
+});
+
+/* ---- 설정 · 앱 · 화면 ---- */
+test('두 가지 다크는 같은 색을 말한다', () => {
+  const css = read('app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const auto = /@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme="light"\]\) \{([\s\S]*?)\n  \}/.exec(css)[1];
+  const asked = /\n:root\[data-theme="dark"\] \{([\s\S]*?)\n\}/.exec(css)[1];
+  const tokens = block => Object.fromEntries([...block.matchAll(/(--[a-z-]+):([^;]+)/g)].map(m => [m[1], m[2].trim()]));
+  // Two copies of one scheme: a phone that is dark, and a reader who asked for dark. They drift
+  // silently otherwise — one of the two darks would keep an old colour nobody looks at twice.
+  assert.deepEqual(tokens(asked), tokens(auto));
+  assert.ok(Object.keys(tokens(asked)).length > 10, 'and it is the whole scheme, not a token or two');
+  // Asked for either one, the native parts are told as well.
+  assert.match(css, /:root\[data-theme="light"\] \{ color-scheme: light; \}/);
+  assert.match(css, /:root\[data-theme="dark"\] \{ color-scheme: dark; \}/);
+  // Every rule that answers to the phone's own dark answers to the asked-for dark too.
+  const autoRules = [...css.matchAll(/@media \(prefers-color-scheme: dark\) \{ :root:not\(\[data-theme="light"\]\) ([^{]+)\{/g)].map(m => m[1].trim());
+  assert.ok(autoRules.length >= 3, 'the rules outside the token block are checked too');
+  for (const selector of autoRules) {
+    assert.match(css, new RegExp(`:root\\[data-theme="dark"\\] ${selector.replace(/[.[\]()*+?^$|\\]/g, '\\$&')}\\s*\\{`),
+      `${selector} is dark when asked for, not only when the phone is`);
+  }
+});
+
+test('화면을 고르면 그 자리에서 바뀌고, 기억된다', async () => {
+  const open = await boot({stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24)}});
+  await open.settle();
+  const {themeWanted, darkWanted} = await import('../app.js');
+  assert.equal(themeWanted(null), 'auto');
+  assert.equal(themeWanted('nonsense'), 'auto');
+  assert.equal(themeWanted('dark'), 'dark');
+  // 자동 is the phone's own; the other two are the reader's, whichever phone they are on.
+  assert.equal(darkWanted(null, true), true);
+  assert.equal(darkWanted(null, false), false);
+  assert.equal(darkWanted('light', true), false, 'a dark phone, a reader who wants light');
+  assert.equal(darkWanted('dark', false), true);
+
+  const root = open.document.documentElement;
+  const bar = () => [...open.document.querySelectorAll('meta[name="theme-color"]')].map(m => m.getAttribute('content'));
+  assert.equal(root.getAttribute('data-theme'), null, 'it starts out following the phone');
+  assert.deepEqual(bar(), ['#f1f1f5', '#000000'], 'and each bar colour keeps its own media');
+
+  open.document.getElementById('btn-settings-main').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const buttons = [...open.document.querySelectorAll('#settings-body .set-row')]
+    .find(row => /화면/.test(row.textContent)).querySelectorAll('button');
+  assert.deepEqual([...buttons].map(b => b.textContent), ['자동', '라이트', '다크']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'true');
+
+  buttons[2].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(root.getAttribute('data-theme'), 'dark', 'the whole app turns on the attribute');
+  assert.equal(open.storage.get('np.theme'), 'dark');
+  assert.deepEqual(bar(), ['#000000', '#000000'], 'and the strip above it goes with it');
+  assert.equal(buttons[2].getAttribute('aria-pressed'), 'true');
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'false');
+
+  // Back to 자동: nothing is remembered, so the phone answers again.
+  buttons[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(root.getAttribute('data-theme'), null);
+  assert.ok(!open.storage.get('np.theme'), 'nothing is kept for the phone’s own answer');
+  assert.deepEqual(bar(), ['#f1f1f5', '#000000']);
+
+  // The page itself settles the choice before app.js runs, or a phone in the other scheme flashes.
+  const html = read('index.html');
+  assert.match(html, /np\.theme/);
+  assert.ok(html.indexOf('np.theme') < html.indexOf('src="app.js"'), 'and it runs before the app does');
+});
+
+test('고른 화면은 PDF 페이지까지 따라간다', async () => {
+  const open = await boot();
+  await open.settle();
+  const {darkWanted, nightWanted} = await import('../app.js');
+  // 자동 is unchanged; asked for dark on a light phone, the page opens dark too.
+  assert.equal(nightWanted(null, darkWanted(null, false)), false);
+  assert.equal(nightWanted(null, darkWanted('dark', false)), true);
+  assert.equal(nightWanted(null, darkWanted('light', true)), false);
+  // What the reader said about this one page still wins over both.
+  assert.equal(nightWanted('off', darkWanted('dark', false)), false);
+  assert.equal(nightWanted('on', darkWanted('light', true)), true);
 });
