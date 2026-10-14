@@ -21,7 +21,7 @@ import path from 'node:path';
 export const MAX_PIECE = 700;
 export const GAP_SENTENCE = 0.18;     // seconds of silence between sentences
 export const GAP_CHAPTER = 0.9;       // and between sections, so a heading lands
-export const BITRATE = 64000;         // AAC-LC mono: a paper hour is about 29 MB
+export const BITRATE = 96000;         // AAC-LC mono: a paper hour is about 44 MB
 
 /* ---------- text ---------- */
 
