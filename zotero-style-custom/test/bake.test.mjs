@@ -411,11 +411,56 @@ test('a paper is brought up to a level a car can be heard over, from its own lou
   assert.ok(Math.abs(B.gainFor(0.89) - 1) < 0.001);
   // Nothing is lifted past LOUDEST_LIFT, or a breath between sentences becomes a roar.
   assert.equal(B.gainFor(0.0001), B.LOUDEST_LIFT);
-  // And nothing is pushed over the top: a sample at the ceiling stays at the ceiling, same sign.
+  // And nothing is pushed over the top: what would go over is rounded off, sign and all.
   const hot = Buffer.alloc(4); hot.writeInt16LE(30000, 0); hot.writeInt16LE(-30000, 2);
   B.applyGain(hot, 4);
-  assert.equal(hot.readInt16LE(0), 32767);
-  assert.equal(hot.readInt16LE(2), -32768);
+  assert.ok(hot.readInt16LE(0) > 30000 && hot.readInt16LE(0) <= 32767, hot.readInt16LE(0));
+  assert.equal(hot.readInt16LE(2), -hot.readInt16LE(0), 'the same curve either side of zero');
+});
+
+test('how loud a paper sounds decides the level, not its one loudest sample', () => {
+  // A real paper measured off a finished file: peaks at 0.73, but it sounds like -23 dBFS. The peak
+  // rule could only lift it 1.22x, which is not enough to hear over an engine.
+  assert.ok(Math.abs(B.gainFor(0.729) - 1.221) < 0.002);
+  assert.ok(Math.abs(B.loudnessGain({rms: 0.0701, peak: 0.729}) - 1.797) < 0.002);
+  // A paper that is already loud enough is left where it is, and a silent one is not divided by zero.
+  assert.ok(Math.abs(B.loudnessGain({rms: B.TARGET_RMS, peak: 0.5}) - B.gainFor(0.5)) < 0.001, 'the peak rule is still the floor');
+  assert.equal(B.loudnessGain({rms: 0, peak: 0}), 1);
+  assert.equal(B.loudnessGain({rms: 0.0001, peak: 0.0001}), B.LOUDEST_LIFT, 'never more than the limit');
+
+  // The knee: nothing below it moves, nothing above it ever reaches the ceiling, and it is smooth.
+  assert.equal(B.soften(0.5), 0.5);
+  assert.equal(B.soften(-0.5), -0.5);
+  assert.equal(B.soften(B.KNEE), B.KNEE);
+  for (const x of [0.85, 0.9, 1, 1.4, 4]) {
+    assert.ok(B.soften(x) > B.KNEE && B.soften(x) < 1, `${x} -> ${B.soften(x)}`);
+    assert.equal(B.soften(-x), -B.soften(x));
+  }
+  let last = 0;
+  for (let x = 0; x <= 2; x += 0.01) { const y = B.soften(x); assert.ok(y >= last, `not rising at ${x}`); last = y; }
+});
+
+test('a quiet paper is lifted past what its peaks alone would allow, and still never clips', async () => {
+  const dir = scratch(), out = path.join(dir, 'out');
+  // Mostly quiet speech with one loud moment in it: the peak rule would be held back by that moment.
+  const voice = {
+    async say({text}) {
+      const rate = 1000, n = 400, pcm = Buffer.alloc(n * 2);
+      const quiet = Math.round(0.08 * 32767), loud = Math.round(0.7 * 32767);
+      for (let i = 0; i < n; i++) pcm.writeInt16LE(i % 2 ? quiet : -quiet, i * 2);
+      if (text.includes('Loud')) { pcm.writeInt16LE(loud, 0); pcm.writeInt16LE(-loud, 2); }
+      return {audio: Buffer.concat([B.wavHeader(pcm.length, rate), pcm]), seconds: n / rate};
+    }
+  };
+  const baker = B.createBaker({speech: voice, outDir: out, tmpDir: path.join(dir, 'tmp'), afconvert: fakeEncoder(dir)});
+  const job = await settle(baker, baker.start({title: 'Quiet with one shout', chapters: [{title: '', text: 'Loud here. Quiet after.'}]}).id);
+  assert.equal(job.state, 'done', job.error || '');
+  assert.ok(job.rms > 0, 'the paper was measured');
+  const byPeak = B.gainFor(0.7);
+  assert.ok(job.gain > byPeak * 1.1, `${job.gain} should be well past the peak rule's ${byPeak.toFixed(2)}`);
+  const {pcm} = B.pcmOf(fs.readFileSync(job.file));
+  assert.ok(B.peakOf(pcm) <= 1, 'and it still never clips');
+  assert.ok(B.peakOf(pcm) > 0.7);
 });
 
 test('a quiet paper comes out of the bake loud, and the file says by how much', async () => {

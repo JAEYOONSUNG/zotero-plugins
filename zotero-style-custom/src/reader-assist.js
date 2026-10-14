@@ -1257,7 +1257,7 @@
       thing that tells one file from the next. */
    const {said}=bakeNames(session);
    const chapters=out.map(c=>({title:c.title,text:c.parts.join(' ')})).filter(c=>c.text.trim());
-   return chapters.length?[{title:'',text:said+'.'},...chapters]:[];
+   return chapters.length?[{title:'',text:(said+'.').replace(/\.+$/,'.')}, ...chapters]:[];
   }
   function bakeNames(session){
    const item=itemOf(session.reader);
@@ -1271,7 +1271,8 @@
    const venue=fieldOf(item,'publicationTitle');
    /* What the file says first. Only what the item actually holds: a filler like "논문 음성" is a shelf
       label, not something to read out. */
-   const said=[title,artist,[venue,year?year[0]:''].filter(Boolean).join(' ')].filter(Boolean).join('. ');
+   const stop=text=>String(text||'').replace(/\s*[.·]\s*$/,'');
+   const said=[title,artist,[venue,year?year[0]:''].filter(Boolean).join(' ')].map(stop).filter(Boolean).join('. ');
    return {title,said,tags:{artist,album:venue||t('논문 음성'),year:year?year[0]:'',genre:'Audiobook'}};
   }
   async function startBake(session){

@@ -1710,6 +1710,7 @@ test('“운전용 오디오 만들기” sends the paper to this Mac as chapter
  // The file opens by saying which paper it is -- in a car, that is all that tells one file from the next.
  assert.deepEqual(body.chapters.map(c=>c.title),['','Introduction','Methods','Results']);
  assert.equal(body.chapters[0].text,'Thermostable polymerase evolution.','no authors or journal on this item, so nothing is invented');
+ assert.ok(!/\.\./.test(body.chapters[0].text),'and never two stops in a row');
  assert.match(body.chapters[1].text,/^DNA polymerases drive PCR\. Thermal stability limits/);
  assert.ok(!JSON.stringify(body.chapters.slice(1)).includes('Smith'),'참고문헌 is not included while the filter says 본문');
  assert.ok(!JSON.stringify(body.chapters).includes('Residual activity'),'nor are captions');
@@ -1743,6 +1744,20 @@ test('“운전용 오디오 만들기” sends the paper to this Mac as chapter
  const asked=f.requests.filter(r=>/audio\/book\//.test(r.url)).length;
  await f.fire();
  assert.equal(f.requests.filter(r=>/audio\/book\//.test(r.url)).length,asked,'nothing keeps polling once it is finished');
+ f.stop();
+});
+
+test('the spoken opening does not stumble on an author list that already ends in a stop',async()=>{
+ const f=fixture({bridge:true,holdTimers:true});
+ const item=f.Z.Items.get(10);
+ item.getCreators=()=>[{lastName:'Crits-Christoph'},{lastName:'Kang'},{lastName:'Lee'},{lastName:'Ostrov'}];
+ item.getField=k=>({title:'MicrobeMod',publicationTitle:'Microbiology',date:'2023-11-14'}[k]||'');
+ await f.open();
+ f.press(f.panel().querySelector('[data-tab="listen"]'));await settle();
+ f.press(f.panel().querySelector('.sc-ra-bake .sc-ra-primary'));await settle();
+ const body=f.requests.find(r=>/\/v1\/audio\/book$/.test(r.url)&&r.method==='POST').body;
+ assert.equal(body.chapters[0].text,'MicrobeMod. Crits-Christoph et al. Microbiology 2023.');
+ assert.ok(!/\.\./.test(body.chapters[0].text));
  f.stop();
 });
 

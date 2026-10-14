@@ -161,8 +161,15 @@ export function pcmOf(wav) {
 
 export const QUIET = 0.012;            // below this a sample is silence (−38 dBFS)
 export const EDGE_KEEP = 0.04;         // seconds of the quiet left at each end, so nothing is clipped off
-export const PEAK = 0.89;              // what the loudest sample of the paper becomes
-export const LOUDEST_LIFT = 12;        // never lift a piece by more than this, or a breath becomes a roar
+export const PEAK = 0.89;              // where the loudest sample of the paper is allowed to land
+export const LOUDEST_LIFT = 12;        // never lift a paper by more than this, or a breath becomes a roar
+/* What a paper should sound like, rather than what its single loudest sample is. Speech sits far
+   below its peaks: a paper measured at -23 dBFS RMS could only be lifted 1.22x by the peak rule,
+   which is not enough to hear over an engine. The level is taken from the whole paper's RMS instead,
+   aimed at about -18 dBFS, and the few samples that would go over the top are rounded off by the
+   knee below rather than being allowed to limit the whole file. */
+export const TARGET_RMS = 0.126;       // -18 dBFS
+export const KNEE = 0.80;              // below this nothing is touched at all
 
 /* Where the speech in this piece starts and ends, in samples. */
 export function speechEdges(pcm, {quiet = QUIET} = {}) {
@@ -190,19 +197,38 @@ export function peakOf(pcm) {
   return top / 32767;
 }
 
-/* One number for the whole paper: what every sample is multiplied by so the loudest moment lands at
-   PEAK. Taken from the paper's own loudest piece, so the quiet sentences stay quieter than the loud
-   ones -- a paper is levelled, never flattened. */
+/* The peak rule: what every sample is multiplied by so the loudest moment lands at PEAK. */
 export function gainFor(peak, {target = PEAK, limit = LOUDEST_LIFT} = {}) {
   if (!(peak > 0)) return 1;
   return Math.min(limit, target / peak);
 }
 
-/* In place: every sample scaled, and clamped so a rounding error cannot wrap a sample to the opposite sign. */
-export function applyGain(pcm, gain) {
+/* One number for the whole paper, from how loud it actually sounds. The peak rule is kept as a
+   floor -- a paper whose peaks are already low is lifted at least that far -- and the louder of the
+   two is taken, because the knee can carry what goes over. The quiet sentences stay quieter than
+   the loud ones either way: this is one multiplication for the whole file, never per sentence. */
+export function loudnessGain({rms = 0, peak = 0} = {}, {target = TARGET_RMS, limit = LOUDEST_LIFT} = {}) {
+  const byPeak = gainFor(peak, {limit});
+  if (!(rms > 0)) return byPeak;
+  return Math.min(limit, Math.max(byPeak, target / rms));
+}
+
+/* Above the knee a sample is rounded off towards the ceiling instead of being cut square at it:
+   a hard edge is heard as a click, a curve is not heard at all. Below the knee nothing changes. */
+export function soften(x, knee = KNEE) {
+  const sign = x < 0 ? -1 : 1, a = Math.abs(x);
+  if (a <= knee) return x;
+  const over = (a - knee) / (1 - knee);
+  return sign * (knee + (1 - knee) * Math.tanh(over));
+}
+
+/* In place: every sample scaled, rounded off at the top, and held inside the range whatever
+   arithmetic says, so nothing can wrap to the opposite sign. */
+export function applyGain(pcm, gain, {knee = KNEE} = {}) {
   if (gain === 1) return pcm;
   for (let i = 0; i + 1 < pcm.length; i += 2) {
-    const v = Math.round(pcm.readInt16LE(i) * gain);
+    const scaled = (pcm.readInt16LE(i) / 32768) * gain;
+    const v = Math.round(soften(scaled, knee) * 32767);
     pcm.writeInt16LE(v > 32767 ? 32767 : v < -32768 ? -32768 : v, i);
   }
   return pcm;
@@ -385,7 +411,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
   const view = job => ({
     id: job.id, state: job.state, title: job.title, done: job.done, total: job.total,
     ahead: job.state === 'waiting' ? order.map(id => jobs.get(id)).filter(other => other && other.state === 'waiting' && order.indexOf(other.id) < order.indexOf(job.id)).length + (running ? 1 : 0) : 0,
-    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, gain: job.gain, error: job.error,
+    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, gain: job.gain, rms: job.rms, error: job.error,
     started: job.started, finished: job.finished
   });
 
@@ -402,7 +428,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
     const stem = path.join(tmpDir, `bake-${job.id}`);
     const wavPath = `${stem}.wav`;
     const m4aPath = `${stem}.m4a`;
-    let bytes = 0, rate = 0, loudest = 0;
+    let bytes = 0, rate = 0, loudest = 0, energy = 0, counted = 0;
     const out = fs.createWriteStream(wavPath);
     const write = piece => new Promise((resolve, reject) => out.write(piece, error => error ? reject(error) : resolve()));
     try {
@@ -420,6 +446,8 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         if (!pcm.length) { lengths.push(0); job.done = i + 1; continue; }   // the model said nothing
         const peak = peakOf(pcm);
         if (peak > loudest) loudest = peak;
+        for (let b = 0; b + 1 < pcm.length; b += 2) { const v = pcm.readInt16LE(b) / 32768; energy += v * v; }
+        counted += pcm.length / 2;
         await write(pcm);
         bytes += pcm.length;
         lengths.push(pcm.length / 2 / rate);
@@ -437,7 +465,9 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         await handle.write(wavHeader(bytes, rate), 0, 44, 0);
         /* One pass to bring the paper up to a level a car can be heard over. The gain comes from the
            paper's own loudest moment, so the quiet sentences stay quieter than the loud ones. */
-        const gain = job.level === false ? 1 : gainFor(loudest);
+        const rms = counted ? Math.sqrt(energy / counted) : 0;
+        const gain = job.level === false ? 1 : loudnessGain({rms, peak: loudest});
+        job.rms = Number(rms.toFixed(4));
         job.gain = Number(gain.toFixed(3));
         if (gain !== 1) {
           const slab = Buffer.alloc(1 << 20);
@@ -529,7 +559,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
         voice: String(request.voice || ''), model: String(request.model || ''),
         rate: Number(request.rate) > 0 ? Number(request.rate) : 1,
         bitrate: Number(request.bitrate) > 0 ? Number(request.bitrate) : BITRATE,
-        marks: request.marks !== false, trim: request.trim !== false, level: request.level !== false, gain: 1,
+        marks: request.marks !== false, trim: request.trim !== false, level: request.level !== false, gain: 1, rms: 0,
         tags: {title, ...(request.tags || {})},
         done: 0, total: pieces.length, seconds: 0, file: null, bytes: 0, error: null,
         started: 0, finished: 0, cancelled: false
