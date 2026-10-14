@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v17';
+export const BUILD = 'nonmun-v18';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -1140,7 +1140,10 @@ function drawRow(item, list) {
   const venue = venueOf(item) || (fact && fact.venue) || '';
   if (venue) {
     if (who) meta.appendChild(document.createTextNode(' · '));
-    const ink = inkFor(facts, venue);
+    /* Zotero may hold the journal's abbreviated name ("Nat Rev Microbiol") where the Mac's file is
+       keyed by the full one, so the colour is looked up under both. The name on the row stays the
+       one this library keeps; only the ink comes from the other spelling. */
+    const ink = inkFor(facts, venue) || (fact && fact.venue !== venue ? inkFor(facts, fact.venue) : null);
     const named = el('span', {class: 'venue'}, meta);
     if (ink) {
       named.classList.add('ink');

@@ -3581,7 +3581,8 @@ const FACTS = {v: 2, made: '2026-10-14T00:00:00Z',
   papers: {
     AAA: {jif: 35.11, cited: 1240, venue: 'Nature Reviews Microbiology', year: 2026, from: ['KR', 'US'], lead: 'KR',
           read: 67, page: 12, pages: 18, seconds: 3120, at: '2026-10-13', mark: 'teal'},
-    BBB: {jif: 6.4, cited: 3, from: ['JP']}
+    BBB: {jif: 6.4, cited: 3, from: ['JP']},
+    CCC: {jif: 35.11, venue: 'Nature Reviews Microbiology'}
   },
   journals: {'Nature Reviews Microbiology': {country: 'GB', h: 1845, ink: '#c6004f', inkDark: '#ff6ba6'},
              Science: {ink: '#ca2015', inkDark: '#f07b73'}}};
@@ -3671,6 +3672,12 @@ test('논문 시그니처 컬러와 맥에서 읽은 분량이 목록에 함께 
   const mark = row.querySelector('.mark');
   assert.equal(mark.getAttribute('data-mark'), 'teal');
   assert.equal(mark.getAttribute('aria-label'), '청록 표시');
+
+  /* Zotero holds "Nat Rev Microbiol" for the third paper while the Mac's file is keyed by the full
+     name: the row keeps this library's spelling and still wears that journal's colour. */
+  const abbreviated = open.document.querySelector('#list .row.paper[data-key="CCC"] .meta .venue');
+  assert.equal(abbreviated.textContent, 'Nat Rev Microbiol');
+  assert.equal(abbreviated.style.getPropertyValue('--j-ink').trim(), '#c6004f');
 
   // A paper the Mac has no colour and no record for is left plain.
   const other = open.document.querySelector('#list .row.paper[data-key="BBB"]');

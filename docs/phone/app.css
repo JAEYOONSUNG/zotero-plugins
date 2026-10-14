@@ -225,7 +225,8 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 /* The journal's name in the ink the Mac paints it in. Both themes' inks ride on the element as
    custom properties and the stylesheet picks one, so a row drawn once is right in either. Every
    ink is measured on the Mac to read at 4.5:1 on the card it lands on. */
-.venue.ink { color:var(--j-ink); font-weight:600; }
+.venue { font-weight:600; }
+.venue.ink { color:var(--j-ink); }
 @media (prefers-color-scheme: dark) { .venue.ink { color:var(--j-ink-d); } }
 /* A paper marked by hand on the Mac: its colour as a dot in the margin of the third line, never a
    bar down the edge of the card. */
