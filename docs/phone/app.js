@@ -19,7 +19,7 @@ import EN from './en.js';
 import {createPlayer, speechEngine, bakedVoice, pickVoice, paperLanguage, sectionsOf, RATES,
         voiceMenu, voiceTier, TIERS, langName, sampleFor} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE,
-        bakedAudio, bakedMarks, bakedIndex, libraryFacts, flagOf, bandOf,
+        bakedAudio, bakedMarks, bakedIndex, libraryFacts, flagOf, bandOf, inkFor, markOf, MARKS,
         AUDIO_BASE, AUDIO_KEY} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v16';
+export const BUILD = 'nonmun-v17';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -748,6 +748,12 @@ const visible = () => sortRows(filterRows(state.items, {
 
 function stars(n) { return n ? '★'.repeat(n) + '☆'.repeat(5 - n) : ''; }
 const STATUS_WORD = {unread: '안 읽음', reading: '읽는 중', done: '완료'};
+/* The seven colours a paper can be marked with on the Mac, named for the reader. Green is 녹색
+   rather than the plugin's 초록, because 초록 is already the word this app uses for an abstract. */
+const MARK_WORD = {
+  red: () => t('빨강'), orange: () => t('주황'), gold: () => t('노랑'), green: () => t('녹색'),
+  teal: () => t('청록'), blue: () => t('파랑'), purple: () => t('보라')
+};
 
 /* What is being looked at, and the order it is in — always on screen, so a library that seems
    to be missing papers says why. */
@@ -1123,17 +1129,41 @@ function drawRow(item, list) {
     el('span', {class: `pick-mark${chosen ? ' on' : ''}`, html: chosen ? PICK_MARK : ''}, face);
   }
   const terms = render.terms || [];
+  const fact = factsFor(item.key);
   markTerms(el('h2', {}, face), clean(item.data.title) || '(제목 없음)', terms);
-  markTerms(el('p', {class: 'meta'}, face), [authorsOf(item), yearOf(item), venueOf(item)].filter(Boolean).join(' · '), terms);
+  const meta = el('p', {class: 'meta'}, face);
+  const who = [authorsOf(item), yearOf(item)].filter(Boolean).join(' · ');
+  if (who) markTerms(el('span', {}, meta), who, terms);
+  /* The journal's name in the ink the Mac paints it in — the one treatment the library cards there
+     and these rows now share, so a paper is recognised by its journal before it is read. A journal
+     whose masthead has no colour of its own keeps the plain meta ink rather than a meaningless grey. */
+  const venue = venueOf(item) || (fact && fact.venue) || '';
+  if (venue) {
+    if (who) meta.appendChild(document.createTextNode(' · '));
+    const ink = inkFor(facts, venue);
+    const named = el('span', {class: 'venue'}, meta);
+    if (ink) {
+      named.classList.add('ink');
+      named.style.setProperty('--j-ink', ink.ink);
+      named.style.setProperty('--j-ink-d', ink.dark);
+    }
+    markTerms(named, venue, terms);
+  }
   const rating = ratingOf(item);
   const tag = (item.data.tags || []).find(t => !TAG_STATUS[t.tag] && !/^style-custom:/.test(t.tag));
   // How far it got, by either road: the voice through the sentences or a finger through the pages.
   const heard = progressOf(item.key);
   const part = heard > 1 && heard < 99;
-  const fact = factsFor(item.key);
+  const mark = markOf(fact);
   // The third line is only drawn for a paper that has something to say on it.
   if (rating || tag || part || fact) {
     const foot = el('div', {class: 'foot'}, face);
+    /* A paper marked by hand on the Mac wears that colour here as a dot — never as a bar down the
+       edge of the row, which on a rounded card reads as a painted fingernail. */
+    if (mark) {
+      const colour = T('{0} 표시', MARK_WORD[mark]());
+      el('span', {class: 'mark', 'data-mark': mark, title: colour, 'aria-label': colour}, foot);
+    }
     if (fact && fact.jif) {
       const band = bandOf(fact.jif);
       el('span', {class: 'jif', 'data-band': band, text: fact.jif >= 10 ? String(Math.round(fact.jif)) : fact.jif.toFixed(1),
@@ -1147,9 +1177,13 @@ function drawRow(item, list) {
     if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
     if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
     if (part) {
-      const bar = el('span', {class: 'heard', 'aria-label': `${heard}% 들음`}, foot);
+      /* The share is whichever road got furthest, so what it is called follows: the voice through
+         the sentences says 들음, a finger or the Mac's reader through the pages says 읽음. */
+      const voice = Number(localStorage.getItem(KEYS.pct + item.key)) || 0;
+      const said = voice >= heard ? T('{0}% 들음', heard) : T('{0}% 읽음', heard);
+      const bar = el('span', {class: 'heard', 'aria-label': said}, foot);
       el('i', {style: `width:${Math.min(100, heard)}%`}, bar);
-      el('span', {class: 'muted', text: `${heard}%`}, foot);
+      el('span', {class: 'muted', text: `${heard}%`, title: macRead(fact) || said}, foot);
     }
   }
   return row;
@@ -1179,15 +1213,44 @@ function drawTip(list) {
    filter, a paper that is not in what is being looked at has no business at the top of it. */
 /* How far through a paper someone got, whichever road they took: the share of the sentences the
    voice has said, or the share of the pages a finger has turned, whichever is further on. */
-export function shareOf({heard = 0, page = 0, pages = 0} = {}) {
+export function shareOf({heard = 0, page = 0, pages = 0, read = 0} = {}) {
   const turned = page > 1 && pages > 1 ? Math.round(page / pages * 100) : 0;
-  return Math.max(heard, turned);
+  // What the Mac's own reader got through, which for most of a library is the only record there is.
+  const mac = read > 0 ? Math.min(100, Math.round(read)) : 0;
+  return Math.max(heard, turned, mac);
 }
 const progressOf = key => shareOf({
   heard: Number(localStorage.getItem(KEYS.pct + key)) || 0,
   page: Number(localStorage.getItem(KEYS.page + key)) || 0,
-  pages: Number(localStorage.getItem(KEYS.of + key)) || 0
+  pages: Number(localStorage.getItem(KEYS.of + key)) || 0,
+  read: Number((factsFor(key) || {}).read) || 0
 });
+
+/* What the Mac recorded, as one line: how far through it got, how long it was read for, and when
+   that was. Said as the Mac's own record, because this phone did not measure any of it. */
+export function macRead(fact, {now = new Date()} = {}) {
+  if (!fact) return '';
+  const parts = [];
+  if (fact.page > 0 && fact.pages > 0) parts.push(T('{1}쪽 중 {0}쪽까지', fact.page, fact.pages));
+  else if (fact.page > 0) parts.push(T('{0}쪽까지', fact.page));
+  else if (fact.read > 0) parts.push(`${Math.round(fact.read)}%`);
+  if (fact.seconds >= 60) parts.push(T('{0}분 읽음', Math.round(fact.seconds / 60)));
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(fact.at || ''))) parts.push(dayAgo(fact.at, now));
+  return parts.length ? T('맥에서 {0}', parts.join(' · ')) : '';
+}
+
+/* A date as a reader thinks of it: today, yesterday, so many days ago, and a plain date once it is
+   far enough back that counting the days says nothing. */
+export function dayAgo(day, now = new Date()) {
+  const then = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(then.getTime())) return '';
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((today - then) / 86400000);
+  if (days <= 0) return T('오늘');
+  if (days === 1) return T('어제');
+  if (days < 30) return T('{0}일 전', days);
+  return T('{0}월 {1}일', then.getMonth() + 1, then.getDate());
+}
 
 /* Whichever of the two a paper was last left in the middle of — the voice or the page — because
    a reader coming back to a library wants the thing they were doing, not a choice about it. */
@@ -1729,6 +1792,9 @@ async function openDetail(key) {
     onPage > 1 ? `${onPage}쪽까지 봄${ofPages > 1 ? ` (${ofPages}쪽 중)` : ''}` : ''
   ].filter(Boolean).join(' · ');
   if (sofar) el('p', {class: 'muted small', text: sofar}, statusCard);
+  // And what the Mac's reader got through, which is the record for most of a library.
+  const macSoFar = macRead(factsFor(key));
+  if (macSoFar) el('p', {class: 'muted small', text: macSoFar}, statusCard);
 
   const abstract = clean(item.data.abstractNote);
   if (abstract) {

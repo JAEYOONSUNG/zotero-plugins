@@ -314,6 +314,28 @@ test('a country becomes the flag a phone draws, and a journal figure its band', 
   for (const nothing of [0, -1, null, 'Nature', NaN]) assert.equal(F.bandOf(nothing), '');
 });
 
+test('a journal comes with the ink the Mac paints it in, or with none at all', () => {
+  const facts = {journals: {'Nature Reviews Microbiology': {ink: '#c6004f', inkDark: '#ff6ba6'},
+                            Nature: {country: 'GB'}}};
+  assert.deepEqual(F.inkFor(facts, 'Nature Reviews Microbiology'), {ink: '#c6004f', dark: '#ff6ba6'});
+  assert.deepEqual(F.inkFor(facts, '  Nature Reviews Microbiology  '), {ink: '#c6004f', dark: '#ff6ba6'});
+  // Nature's masthead is black, so the Mac sends no colour and the name stays in the plain ink.
+  assert.equal(F.inkFor(facts, 'Nature'), null);
+  assert.equal(F.inkFor(facts, 'Journal of Nothing'), null);
+  assert.equal(F.inkFor(null, 'Nature Reviews Microbiology'), null);
+  assert.equal(F.inkFor({journals: {X: {ink: '#fff'}}}, 'X'), null, 'one half of a colour is no colour');
+  // A mark is one of the seven the Mac offers, and nothing else gets drawn.
+  assert.equal(F.markOf({mark: 'teal'}), 'teal');
+  assert.equal(F.markOf({mark: 'chartreuse'}), '');
+  assert.equal(F.markOf({}), '');
+  assert.equal(F.markOf(null), '');
+});
+
+test('the phone and the Mac offer the same seven colours', async () => {
+  const plugin = (await import('../../../zotero-style-custom/src/library-facts.js')).default;
+  assert.deepEqual(F.MARKS, plugin.MARKS, 'two copies of one list, checked rather than left to drift');
+});
+
 test('the phone and the Mac put a paper in the same band', async () => {
   // Two copies of one rule again; they are checked against each other rather than left to drift.
   const plugin = (await import('../../../zotero-style-custom/src/library-facts.js')).default;

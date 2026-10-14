@@ -385,6 +385,21 @@ export function flagOf(code) {
   return String.fromCodePoint(...[...two].map(letter => 0x1f1e6 + letter.charCodeAt(0) - 65));
 }
 
+/* The ink the Mac paints this journal's name in — light and dark, both measured there against the
+   page they are read on. A journal whose masthead has no colour of its own (Nature's is black) has
+   none here either, and its name is left in the plain meta ink rather than dressed in a grey that
+   would say the same as every other grey. */
+export function inkFor(facts, venue) {
+  const name = String(venue || '').trim();
+  const row = facts && facts.journals ? facts.journals[name] : null;
+  return row && row.ink && row.inkDark ? {ink: String(row.ink), dark: String(row.inkDark)} : null;
+}
+
+/* The seven colours a paper can be marked with by hand on the Mac. The plugin names the same seven
+   and a test holds the two lists together, the way it does for the bands. */
+export const MARKS = ['red', 'orange', 'gold', 'green', 'teal', 'blue', 'purple'];
+export const markOf = fact => (fact && MARKS.includes(fact.mark) ? fact.mark : '');
+
 /* The band a journal's figure falls in, the same four the plugin uses. */
 export const BANDS = [[30, 'top'], [10, 'high'], [5, 'mid'], [0, 'low']];
 export function bandOf(jif) {

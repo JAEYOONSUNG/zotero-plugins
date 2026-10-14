@@ -3577,12 +3577,14 @@ test('구운 음성이 없거나 Dropbox가 없으면 그 선택지는 나오지
 });
 
 /* ---- what the Mac knows and Zotero does not ---- */
-const FACTS = {v: 1, made: '2026-10-14T00:00:00Z',
+const FACTS = {v: 2, made: '2026-10-14T00:00:00Z',
   papers: {
-    AAA: {jif: 35.11, cited: 1240, venue: 'Nature Reviews Microbiology', year: 2026, from: ['KR', 'US'], lead: 'KR'},
+    AAA: {jif: 35.11, cited: 1240, venue: 'Nature Reviews Microbiology', year: 2026, from: ['KR', 'US'], lead: 'KR',
+          read: 67, page: 12, pages: 18, seconds: 3120, at: '2026-10-13', mark: 'teal'},
     BBB: {jif: 6.4, cited: 3, from: ['JP']}
   },
-  journals: {'Nature Reviews Microbiology': {country: 'GB', h: 1845}}};
+  journals: {'Nature Reviews Microbiology': {country: 'GB', h: 1845, ink: '#c6004f', inkDark: '#ff6ba6'},
+             Science: {ink: '#ca2015', inkDark: '#f07b73'}}};
 
 function factsDropbox(facts = FACTS) {
   return {handle: async (url, init = {}) => {
@@ -3631,4 +3633,84 @@ test('그 파일이 없으면 목록은 Zotero가 준 것만 그대로 보여준
   assert.ok(row, 'the library is still drawn');
   assert.equal(row.querySelector('.jif'), null, 'nothing is invented');
   assert.equal(row.querySelector('.from'), null);
+});
+
+test('논문 시그니처 컬러와 맥에서 읽은 분량이 목록에 함께 나온다', async () => {
+  const zotero = fakeServer();
+  const dropbox = factsDropbox();
+  const server = {sent: zotero.sent, fetchImpl: async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    return /dropboxapi\.com|dropbox\.com/.test(url) ? dropbox.handle(url, init) : zotero.fetchImpl(input, init);
+  }};
+  const open = await boot({server, stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...DROPBOX_LINKED}});
+  await open.settle();
+  await open.settle();
+
+  const row = open.document.querySelector('#list .row.paper[data-key="AAA"]');
+  // The journal's name wears the Mac's own ink for it, both themes' at once, and the name is still
+  // the name: a search mark inside it has to survive being painted.
+  const venue = row.querySelector('.meta .venue');
+  assert.ok(venue, 'the journal has an element of its own now');
+  // The name is the one Zotero holds; the colour is the one the Mac paints that journal in.
+  assert.equal(venue.textContent, 'Science');
+  assert.ok(venue.classList.contains('ink'));
+  assert.equal(venue.style.getPropertyValue('--j-ink').trim(), '#ca2015');
+  assert.equal(venue.style.getPropertyValue('--j-ink-d').trim(), '#f07b73');
+  assert.match(row.querySelector('.meta').textContent, /^Seo · Kim · 2025 · Science$/, 'and it reads as one line');
+
+  // How far the Mac got through it, as the same bar the voice fills.
+  const bar = row.querySelector('.heard');
+  assert.ok(bar, 'the share is drawn');
+  assert.equal(bar.getAttribute('aria-label'), '67% 읽음', 'pages read, not sentences heard');
+  assert.equal(bar.querySelector('i').style.width, '67%');
+  assert.match(row.textContent, /67%/);
+  assert.match(row.querySelector('.foot .muted:last-of-type').getAttribute('title'),
+               /18쪽 중 12쪽까지/, 'the pages behind the figure are a press away');
+
+  // The colour it was marked with by hand, as a dot and not a bar down the edge.
+  const mark = row.querySelector('.mark');
+  assert.equal(mark.getAttribute('data-mark'), 'teal');
+  assert.equal(mark.getAttribute('aria-label'), '청록 표시');
+
+  // A paper the Mac has no colour and no record for is left plain.
+  const other = open.document.querySelector('#list .row.paper[data-key="BBB"]');
+  assert.equal(other.querySelector('.meta .venue').textContent, 'Nature', 'the journal is still named');
+  assert.equal(other.querySelector('.meta .venue.ink'), null, 'no ink is invented');
+  assert.equal(other.querySelector('.mark'), null);
+  assert.equal(other.querySelector('.heard'), null);
+});
+
+test('맥이 읽은 기록은 한 줄로, 이 폰이 읽은 기록 아래에 적는다', async () => {
+  const i18n = await import('../i18n.js');
+  const {default: EN} = await import('../en.js');
+  const {macRead, dayAgo} = await import('../app.js');
+  const now = new Date('2026-10-15T09:00:00');
+  i18n.set(EN); i18n.use('ko');
+  assert.equal(macRead({read: 67, page: 12, pages: 18, seconds: 3120, at: '2026-10-13'}, {now}),
+               '맥에서 18쪽 중 12쪽까지 · 52분 읽음 · 2일 전');
+  // What is not known is left out rather than guessed at.
+  assert.equal(macRead({page: 4}, {now}), '맥에서 4쪽까지');
+  assert.equal(macRead({read: 30}, {now}), '맥에서 30%');
+  assert.equal(macRead({seconds: 30}, {now}), '', 'half a minute is not a reading record');
+  assert.equal(macRead(null), '');
+  assert.equal(macRead({}), '');
+  assert.equal(dayAgo('2026-10-15', now), '오늘');
+  assert.equal(dayAgo('2026-10-14', now), '어제');
+  assert.equal(dayAgo('2026-07-01', now), '7월 1일', 'far enough back that counting days says nothing');
+  assert.equal(dayAgo('not a day', now), '');
+  i18n.use('en');
+  assert.equal(macRead({page: 12, pages: 18, seconds: 3120, at: '2026-10-13'}, {now}),
+               'On the Mac · p. 12 of 18 · read for 52 minutes · 2 days ago');
+  assert.equal(dayAgo('2026-10-14', now), 'yesterday');
+  i18n.use('ko');
+});
+
+test('맥이 읽은 분량도 이어서 볼 것을 고르는 데 들어간다', async () => {
+  const {shareOf} = await import('../app.js');
+  // Whichever road got furthest: the voice, this phone's pages, or the Mac's reader.
+  assert.equal(shareOf({heard: 20, page: 3, pages: 10, read: 67}), 67);
+  assert.equal(shareOf({heard: 80, read: 67}), 80);
+  assert.equal(shareOf({read: 0}), 0);
+  assert.equal(shareOf({read: 140}), 100, 'a figure out of range is brought back into it');
+  assert.equal(shareOf({}), 0);
 });

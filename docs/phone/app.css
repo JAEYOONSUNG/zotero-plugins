@@ -222,6 +222,21 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .jif[data-band="mid"] { background:var(--track-hover); }
 .jif[data-band="low"] { background:var(--track); color:var(--muted); }
 .from { flex:none; font-size:12px; letter-spacing:-1px; }
+/* The journal's name in the ink the Mac paints it in. Both themes' inks ride on the element as
+   custom properties and the stylesheet picks one, so a row drawn once is right in either. Every
+   ink is measured on the Mac to read at 4.5:1 on the card it lands on. */
+.venue.ink { color:var(--j-ink); font-weight:600; }
+@media (prefers-color-scheme: dark) { .venue.ink { color:var(--j-ink-d); } }
+/* A paper marked by hand on the Mac: its colour as a dot in the margin of the third line, never a
+   bar down the edge of the card. */
+.mark { flex:none; width:8px; height:8px; border-radius:999px; background:var(--track-hover); }
+.mark[data-mark="red"] { background:#d2453a; }
+.mark[data-mark="orange"] { background:#cf7118; }
+.mark[data-mark="gold"] { background:#b38600; }
+.mark[data-mark="green"] { background:#2f8f4e; }
+.mark[data-mark="teal"] { background:#118391; }
+.mark[data-mark="blue"] { background:#2f6fd0; }
+.mark[data-mark="purple"] { background:#7a52cc; }
 
 /* The status is a mark in the margin, not a label taking a line of its own. */
 .flag { position:absolute; left:7px; top:16px; width:6px; height:6px; border-radius:999px; background:var(--faint); }
