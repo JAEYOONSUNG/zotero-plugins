@@ -19,7 +19,8 @@ import EN from './en.js';
 import {createPlayer, speechEngine, bakedVoice, pickVoice, paperLanguage, sectionsOf, RATES,
         voiceMenu, voiceTier, TIERS, langName, sampleFor} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE,
-        bakedAudio, bakedMarks, bakedIndex, AUDIO_BASE, AUDIO_KEY} from './files.js';
+        bakedAudio, bakedMarks, bakedIndex, libraryFacts, flagOf, bandOf,
+        AUDIO_BASE, AUDIO_KEY} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
@@ -27,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v15';
+export const BUILD = 'nonmun-v16';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -1129,9 +1130,20 @@ function drawRow(item, list) {
   // How far it got, by either road: the voice through the sentences or a finger through the pages.
   const heard = progressOf(item.key);
   const part = heard > 1 && heard < 99;
+  const fact = factsFor(item.key);
   // The third line is only drawn for a paper that has something to say on it.
-  if (rating || tag || part) {
+  if (rating || tag || part || fact) {
     const foot = el('div', {class: 'foot'}, face);
+    if (fact && fact.jif) {
+      const band = bandOf(fact.jif);
+      el('span', {class: 'jif', 'data-band': band, text: fact.jif >= 10 ? String(Math.round(fact.jif)) : fact.jif.toFixed(1),
+                  title: T('{0}의 임팩트 팩터', fact.venue || venueOf(item) || '')}, foot);
+    }
+    if (fact && fact.cited) el('span', {class: 'muted small', text: T('인용 {0}', fact.cited.toLocaleString())}, foot);
+    if (fact && fact.from && fact.from.length) {
+      const flags = fact.from.map(flagOf).filter(Boolean).join('');
+      if (flags) el('span', {class: 'from', text: flags, title: fact.from.join(' · ')}, foot);
+    }
     if (rating) el('span', {class: 'stars', text: stars(rating)}, foot);
     if (tag) el('span', {class: 'chip', text: clean(tag.tag).slice(0, 18)}, foot);
     if (part) {
@@ -2463,6 +2475,20 @@ export const audioFolder = () => localStorage.getItem(AUDIO_KEY) || AUDIO_BASE;
 /* The folder is read once, not once per paper: a phone on a slow signal should not spend a round
    trip finding out that a paper was never baked. */
 let bakedList = null;
+/* What the Mac knows and Zotero does not: the impact factor, the citation count and where the work
+   was done. One file, read once, and the list shows it from then on. Absent is not an error — it
+   means the plugin has not written it, and the rows simply carry what Zotero gave them. */
+let facts = null;
+async function loadFacts() {
+  if (facts || !dropbox.linked) return facts;
+  if (!bakedList) bakedList = bakedIndex({dropbox, folder: audioFolder()});
+  try {
+    facts = await libraryFacts({folder: audioFolder(), dropbox, index: bakedList});
+    if (facts) render({keep: true});
+  } catch (_) { facts = null; }
+  return facts;
+}
+export const factsFor = key => (facts && facts.papers && facts.papers[key]) || null;
 async function findBaked(item) {
   if (!dropbox.linked) return null;
   const title = clean(item.data.title) || '논문';
@@ -3619,6 +3645,7 @@ async function start() {
   render();
   restState();
   heldWrites().then(queue => paintHeld(queue.length)).catch(() => {});
+  loadFacts().catch(() => {});
   sync();
   if (paired) toast('키가 함께 들어왔습니다');
   else offerPairing();

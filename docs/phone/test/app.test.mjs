@@ -3575,3 +3575,60 @@ test('구운 음성이 없거나 Dropbox가 없으면 그 선택지는 나오지
   const off = await openListening();          // no Dropbox at all
   assert.equal(off.open.document.getElementById('listen-saying').hidden, true);
 });
+
+/* ---- what the Mac knows and Zotero does not ---- */
+const FACTS = {v: 1, made: '2026-10-14T00:00:00Z',
+  papers: {
+    AAA: {jif: 35.11, cited: 1240, venue: 'Nature Reviews Microbiology', year: 2026, from: ['KR', 'US'], lead: 'KR'},
+    BBB: {jif: 6.4, cited: 3, from: ['JP']}
+  },
+  journals: {'Nature Reviews Microbiology': {country: 'GB', h: 1845}}};
+
+function factsDropbox(facts = FACTS) {
+  return {handle: async (url, init = {}) => {
+    if (/oauth2\/token/.test(url)) return new Response(JSON.stringify({access_token: 'AT', expires_in: 14400}), {status: 200});
+    if (/files\/list_folder/.test(url)) return new Response(JSON.stringify({entries: [{'.tag': 'file', name: 'library.json', path_display: '/논문 음성/library.json', size: 99}]}), {status: 200});
+    const arg = init.headers && init.headers['Dropbox-API-Arg'];
+    const path = arg ? JSON.parse(arg).path : '';
+    if (path.endsWith('library.json')) return new Response(JSON.stringify(facts), {status: 200});
+    return new Response(JSON.stringify({error_summary: 'path/not_found/'}), {status: 409});
+  }};
+}
+
+test('임팩트 팩터·인용 수·저자 국적이 라이브러리 목록에 함께 나온다', async () => {
+  const zotero = fakeServer();
+  const dropbox = factsDropbox();
+  const server = {sent: zotero.sent, fetchImpl: async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    return /dropboxapi\.com|dropbox\.com/.test(url) ? dropbox.handle(url, init) : zotero.fetchImpl(input, init);
+  }};
+  const open = await boot({server, stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...DROPBOX_LINKED}});
+  await open.settle();
+  await open.settle();
+
+  const row = open.document.querySelector('#list .row.paper[data-key="AAA"]');
+  assert.ok(row, 'the paper is in the list');
+  const jif = row.querySelector('.jif');
+  assert.ok(jif, 'the journal figure is shown');
+  assert.equal(jif.textContent, '35', 'a big figure is shown whole, not to two places');
+  assert.equal(jif.getAttribute('data-band'), 'top');
+  assert.match(jif.getAttribute('title'), /Nature Reviews Microbiology/);
+  assert.match(row.textContent, /1,240/, 'the citation count, grouped');
+  assert.equal(row.querySelector('.from').textContent, '🇰🇷🇺🇸', 'the corresponding author’s country first');
+  assert.equal(row.querySelector('.from').getAttribute('title'), 'KR · US');
+
+  // A smaller figure keeps its decimal and lands in its own band.
+  const other = open.document.querySelector('#list .row.paper[data-key="BBB"]');
+  assert.equal(other.querySelector('.jif').textContent, '6.4');
+  assert.equal(other.querySelector('.jif').getAttribute('data-band'), 'mid');
+  assert.equal(other.querySelector('.from').textContent, '🇯🇵');
+});
+
+test('그 파일이 없으면 목록은 Zotero가 준 것만 그대로 보여준다', async () => {
+  const open = await boot();                       // no Dropbox at all
+  await open.settle();
+  const row = open.document.querySelector('#list .row.paper');
+  assert.ok(row, 'the library is still drawn');
+  assert.equal(row.querySelector('.jif'), null, 'nothing is invented');
+  assert.equal(row.querySelector('.from'), null);
+});

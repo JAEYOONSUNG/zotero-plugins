@@ -274,3 +274,50 @@ test('a sync folder that does not exist yet means nothing is baked, not a failur
   // And with no Dropbox at all it does not even ask.
   assert.deepEqual(await F.bakedIndex({dropbox: {linked: false}}).names(), []);
 });
+
+test('the facts the Mac leaves beside the audio are read, and a missing file is not a failure', async () => {
+  const facts = {v: 1, made: '2026-10-14T00:00:00Z',
+    papers: {AAA: {jif: 35.11, cited: 12, from: ['KR', 'US'], lead: 'KR'}},
+    journals: {Nature: {country: 'GB', h: 1845}}};
+  const asked = [];
+  const dropbox = {
+    linked: true,
+    async list() { return [{name: 'library.json', path: '/논문 음성/library.json', size: 10}]; },
+    async download(path) { asked.push(path); return new TextEncoder().encode(JSON.stringify(facts)).buffer; }
+  };
+  const got = await F.libraryFacts({dropbox});
+  assert.deepEqual(asked, ['/논문 음성/library.json']);
+  assert.equal(got.papers.AAA.jif, 35.11);
+  assert.equal(got.journals.Nature.country, 'GB');
+
+  // The listing says whether it is worth asking at all.
+  const empty = {linked: true, async list() { return []; }, async download() { throw new Error('should not be asked'); }};
+  assert.equal(await F.libraryFacts({dropbox: empty, index: F.bakedIndex({dropbox: empty})}), null);
+  // A file that is not there, a file that is not JSON, and no Dropbox: all of them are simply nothing.
+  const missing = {linked: true, async download() { throw Object.assign(new Error('gone'), {missing: true}); }};
+  assert.equal(await F.libraryFacts({dropbox: missing}), null);
+  const rubbish = {linked: true, async download() { return new TextEncoder().encode('not json at all').buffer; }};
+  assert.equal(await F.libraryFacts({dropbox: rubbish}), null);
+  const wrong = {linked: true, async download() { return new TextEncoder().encode('{"hello":true}').buffer; }};
+  assert.equal(await F.libraryFacts({dropbox: wrong}), null);
+  assert.equal(await F.libraryFacts({dropbox: null}), null);
+});
+
+test('a country becomes the flag a phone draws, and a journal figure its band', () => {
+  assert.equal(F.flagOf('KR'), '🇰🇷');
+  assert.equal(F.flagOf('us'), '🇺🇸');
+  for (const nonsense of ['Korea', '', null, 'K', 'KOR', 123]) assert.equal(F.flagOf(nonsense), '', String(nonsense));
+  assert.equal(F.bandOf(35.1), 'top');
+  assert.equal(F.bandOf(10), 'high');
+  assert.equal(F.bandOf(5), 'mid');
+  assert.equal(F.bandOf(4.9), 'low');
+  for (const nothing of [0, -1, null, 'Nature', NaN]) assert.equal(F.bandOf(nothing), '');
+});
+
+test('the phone and the Mac put a paper in the same band', async () => {
+  // Two copies of one rule again; they are checked against each other rather than left to drift.
+  const plugin = (await import('../../../zotero-style-custom/src/library-facts.js')).default;
+  for (const jif of [0, 0.1, 4.9, 5, 9.99, 10, 29.9, 30, 35.11, 120]) {
+    assert.equal(F.bandOf(jif), plugin.bandOf(jif), String(jif));
+  }
+});

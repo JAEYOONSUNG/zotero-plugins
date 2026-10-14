@@ -260,6 +260,21 @@ possible name cost eight round trips for every paper that had never been baked. 
 follows along and a tap on a sentence still moves the voice to it; without that sidecar the file is
 not offered, because a paper you cannot steer is worse than one read by the phone.
 
+## What Zotero does not know
+
+The library comes down Zotero's own API, which knows the title, the authors and the journal — and
+nothing about how the journal is regarded, how often a paper has been cited, or where the work was
+done. The Zotero plugin on the Mac has all three: it keeps an impact factor and a citation count per
+paper and OpenAlex's authorship for every work, institution and country included.
+
+So the plugin leaves a small file beside the baked audio — `library.json`, about 140 KB for 1,200
+papers, with no titles and no abstracts in it — and the phone reads it once per session from the
+folder it is already listing. Each row then carries the journal's figure as a quiet badge in one of
+four bands, the citation count, and the flags of the countries the work was done in, the
+corresponding author's first. The bands are checked against the plugin's own in the tests, because
+two copies of one rule is two chances to drift. Without the file the rows are exactly what Zotero
+gave them: nothing is invented.
+
 ## When the phone will not let go of an old copy
 
 The version this phone is running is at the bottom of 설정 · 앱, and **업데이트 확인** asks the

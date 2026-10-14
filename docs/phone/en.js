@@ -193,6 +193,8 @@ export default {
   '보내지 못한 변경 하나를 버렸습니다 — {0}': 'A change that could not be sent was dropped — {0}',
   '해당하는 논문이 없습니다': 'No paper matches',
   '선택': 'Pick',
+  '{0}의 임팩트 팩터': 'Impact factor of {0}',
+  '인용 {0}': 'cited {0}',
   '읽을 말': 'Which words',
   '원문': 'The paper',
   '번역': 'The translation',

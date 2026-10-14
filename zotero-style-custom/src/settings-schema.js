@@ -877,6 +877,14 @@
       "description": "새 절이 시작될 때 ‘Results’처럼 절 제목을 먼저 짧게 읽고, 문단과 절이 바뀔 때 잠깐 쉽니다."
     },
     {
+      "key": "shareLibraryFacts",
+      "category": "reader",
+      "label": "폰에 라이브러리 정보 내보내기",
+      "type": "boolean",
+      "default": true,
+      "description": "임팩트 팩터, 인용 수, 저자가 일한 나라를 작은 파일 하나로 동기화 폴더(구운 오디오가 들어가는 곳)에 둡니다. 폰 앱이 그것을 읽어 목록에 함께 보여줍니다. Zotero API는 이 셋을 알지 못하므로 이 파일이 없으면 폰은 보여줄 수 없습니다. 제목이나 초록은 들어가지 않습니다."
+    },
+    {
       "key": "readAloudCredit",
       "category": "reader",
       "label": "듣는 시간도 읽은 시간으로 기록",

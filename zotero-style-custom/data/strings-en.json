@@ -2952,5 +2952,7 @@
  "{0} · {1}MB · 폴더에 넣었습니다": "{0} · {1}MB · put in the folder",
  "{0} · 폴더에 넣었습니다": "{0} · put in the folder",
  "앞에 {0}편 · 차례를 기다리는 중…": "papers in front: {0} · waiting its turn…",
- "이미 있습니다 · {0}MB · {1}": "already there · {0}MB · {1}"
+ "이미 있습니다 · {0}MB · {1}": "already there · {0}MB · {1}",
+ "폰에 라이브러리 정보 내보내기": "Send the library's figures to the phone",
+ "임팩트 팩터, 인용 수, 저자가 일한 나라를 작은 파일 하나로 동기화 폴더(구운 오디오가 들어가는 곳)에 둡니다. 폰 앱이 그것을 읽어 목록에 함께 보여줍니다. Zotero API는 이 셋을 알지 못하므로 이 파일이 없으면 폰은 보여줄 수 없습니다. 제목이나 초록은 들어가지 않습니다.": "Puts the impact factor, the citation count and the countries the authors worked in into one small file in the sync folder — the same one the baked audio goes to. The phone app reads it and shows them beside each paper. Zotero's API knows none of the three, so without this file the phone cannot show them. No titles and no abstracts go in it."
 }

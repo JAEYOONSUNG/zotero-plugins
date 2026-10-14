@@ -352,3 +352,44 @@ export async function bakedMarks({path, dropbox}) {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (_) { return null; }
 }
+
+/* ---------- what Zotero does not know ----------
+   The impact factor, how often a paper has been cited, and where the work was done are all worked
+   out by the Zotero plugin on the Mac and kept in its own data file. None of it is in Zotero, so
+   none of it comes down the API. The plugin leaves a small file beside the baked audio
+   (`library.json`, about 140 KB for 1,200 papers, no titles and no abstracts in it) and this reads
+   it: once per session, from the folder the phone is already listing. */
+export const FACTS_FILE = 'library.json';
+
+export async function libraryFacts({folder = AUDIO_BASE, dropbox, index = null} = {}) {
+  if (!dropbox || !dropbox.linked) return null;
+  const where = `${String(folder || AUDIO_BASE).replace(/\/+$/, '')}/${FACTS_FILE}`;
+  if (index) {
+    const listing = await index.names();
+    if (!listing.some(entry => entry.name === FACTS_FILE)) return null;
+  }
+  let bytes = null;
+  try { bytes = await dropbox.download(where); }
+  catch (error) { if (error && error.missing) return null; throw error; }
+  if (!bytes) return null;
+  let parsed = null;
+  try { parsed = JSON.parse(new TextDecoder().decode(bytes)); } catch (_) { return null; }
+  if (!parsed || typeof parsed !== 'object' || !parsed.papers) return null;
+  return {papers: parsed.papers || {}, journals: parsed.journals || {}, made: parsed.made || ''};
+}
+
+/* A two-letter country as the flag a phone draws for it. Anything else is left as it came. */
+export function flagOf(code) {
+  const two = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(two)) return '';
+  return String.fromCodePoint(...[...two].map(letter => 0x1f1e6 + letter.charCodeAt(0) - 65));
+}
+
+/* The band a journal's figure falls in, the same four the plugin uses. */
+export const BANDS = [[30, 'top'], [10, 'high'], [5, 'mid'], [0, 'low']];
+export function bandOf(jif) {
+  const n = Number(jif);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  for (const [floor, name] of BANDS) if (n >= floor) return name;
+  return 'low';
+}

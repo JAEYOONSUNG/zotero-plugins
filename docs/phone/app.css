@@ -212,6 +212,17 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .row .meta { margin:3px 0 0; font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis;
              white-space:nowrap; }
 .row .foot { margin-top:6px; display:flex; align-items:center; gap:8px; overflow:hidden; white-space:nowrap; }
+
+/* What the Mac knows and Zotero does not. The journal's figure is a quiet badge, not a traffic
+   light: four steps of the same ink, the top one a little warmer, and never a coloured bar. */
+.jif { flex:none; min-width:26px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:650;
+       font-variant-numeric:tabular-nums; background:var(--track); color:var(--ink); }
+.jif[data-band="top"] { background:color-mix(in srgb, var(--warm) 22%, var(--track)); }
+.jif[data-band="high"] { background:color-mix(in srgb, var(--warm) 12%, var(--track)); }
+.jif[data-band="mid"] { background:var(--track-hover); }
+.jif[data-band="low"] { background:var(--track); color:var(--muted); }
+.from { flex:none; font-size:12px; letter-spacing:-1px; }
+
 /* The status is a mark in the margin, not a label taking a line of its own. */
 .flag { position:absolute; left:7px; top:16px; width:6px; height:6px; border-radius:999px; background:var(--faint); }
 .flag.unread { background:var(--link); }

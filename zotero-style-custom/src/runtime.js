@@ -22,6 +22,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     this.journalTools2 = typeof CustomStyleJournalMetrics !== "undefined" ? CustomStyleJournalMetrics : require("./journal-metrics.js");
     this.portraitTools = typeof CustomStyleAuthorPortrait !== "undefined" ? CustomStyleAuthorPortrait : require("./author-portrait.js");
     this.fileTools = typeof CustomStyleAttachmentKinds !== "undefined" ? CustomStyleAttachmentKinds : require("./attachment-kinds.js");
+    this.factTools = typeof CustomStyleLibraryFacts !== "undefined" ? CustomStyleLibraryFacts : require("./library-facts.js");
     this.itemKinds = typeof CustomStyleItemKinds !== "undefined" ? CustomStyleItemKinds : require("./item-kinds.js");
     this.patentTools = typeof CustomStylePatents !== "undefined" ? CustomStylePatents : require("./patents.js");
     this.journalIdentity = typeof CustomStyleJournalIdentity !== "undefined" ? CustomStyleJournalIdentity : require("./journal-identity.js");
@@ -7316,7 +7317,7 @@ var CustomStyleRuntime = class CustomStyleRuntime {
       if (!this.dirty) return;
       const snapshot = JSON.parse(JSON.stringify(this.cache));
       this.dirty = false;
-      try { await this.storage.write(snapshot); this.writeFailed = false; }
+      try { await this.storage.write(snapshot); this.writeFailed = false; this.shareFacts(snapshot); }
       catch (error) {
         this.dirty = true;
         /* A disk that will not take the file loses reading time, ratings and
@@ -7333,6 +7334,37 @@ var CustomStyleRuntime = class CustomStyleRuntime {
     });
     this.writeQueue = work.catch(error => this.Z.logError(error));
     return work;
+  }
+  /* What the phone cannot work out for itself — the impact factor, the citation count, where the
+     work was done — put beside the baked audio in the sync folder, so the app in a pocket can show
+     what the panel on this Mac shows. Written after a successful save, at most once a minute,
+     and never on the path of anything the reader is waiting for. */
+  shareFacts(snapshot) {
+    if (this.getSetting?.('shareLibraryFacts') === false) return;
+    const now = Date.now();
+    if (this.factsAt && now - this.factsAt < 60000) return;
+    this.factsAt = now;
+    Promise.resolve().then(async () => {
+      const facts = this.factTools.libraryFacts(snapshot);
+      if (!Object.keys(facts.papers).length) return;
+      const folder = this.audioFolder();
+      if (!folder) return;
+      const io = this.io || (typeof IOUtils !== 'undefined' ? IOUtils : null);
+      const paths = this.paths || (typeof PathUtils !== 'undefined' ? PathUtils : null);
+      if (!io || !paths || !io.writeUTF8) return;
+      await io.makeDirectory(folder, {ignoreExisting: true}).catch(() => {});
+      await io.writeUTF8(paths.join(folder, 'library.json'), JSON.stringify(facts));
+    }).catch(error => { this.factsAt = 0; this.Z.logError?.(error); });
+  }
+  /* Where the bridge leaves the baked audio, and where the phone looks for both. */
+  audioFolder() {
+    const asked = String(this.getSetting?.('audioFolder') || '').trim();
+    if (asked) return asked;
+    const paths = this.paths || (typeof PathUtils !== 'undefined' ? PathUtils : null);
+    let home = '';
+    try { home = paths && paths.homeDir ? paths.homeDir : ''; } catch (ignored) {}
+    if (!home || !paths) return '';
+    return paths.join(home, 'Dropbox', '논문 음성');
   }
   async refreshWindows() {
     // Anything worth repainting for is worth recomputing for.

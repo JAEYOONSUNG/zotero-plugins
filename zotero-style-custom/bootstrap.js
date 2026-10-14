@@ -10,7 +10,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI }) {
   try {
     await Zotero.initializationPromise;
-    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "attention", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "selfcheck-reader", "workspace", "paper-chat", "paper-translate", "read-aloud", "assist", "library", "reader-assist", "reader-tools", "workbench", "marquee", "item-cells", "reading", "updater", "runtime"]) {
+    for (const name of ["settings-schema", "data", "journals", "citations", "citation-formats", "supplementary", "discover", "paper-signals", "attention", "legacy-reading", "journal-metrics", "i18n", "strings", "author-portrait", "attachment-kinds", "library-facts", "item-kinds", "patents", "journal-identity", "jcr-categories", "jcr-browser", "affiliations", "paper-graph", "reading-path", "failures", "brand-icons", "selfcheck", "selfcheck-reader", "workspace", "paper-chat", "paper-translate", "read-aloud", "assist", "library", "reader-assist", "reader-tools", "workbench", "marquee", "item-cells", "reading", "updater", "runtime"]) {
       Services.scriptloader.loadSubScript(rootURI + "src/" + name + ".js", globalThis);
     }
     // The text extraction for the reader panel. Optional at load time: without it the panel
