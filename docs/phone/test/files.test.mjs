@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {dropboxPath, fileSource, headerArg, createDropbox, returningCode, paperFile, DROPBOX, DEFAULT_BASE} from '../files.js';
+import * as F from '../files.js';
 
 const BASE = '/0.Personal folder/0. Zotero';
 const linked = (path, extra = {}) => ({key: 'ATT1', data: {key: 'ATT1', itemType: 'attachment', linkMode: 'linked_file', contentType: 'application/pdf', path, ...extra}});
@@ -161,4 +162,78 @@ test('the address Dropbox sends the phone back to is read, refusal and all', () 
   assert.deepEqual(returningCode(''), {});
   assert.equal(returningCode('?error=access_denied&error_description=no').error, 'no');
   assert.equal(DEFAULT_BASE, '/0.Personal folder/0. Zotero');
+});
+
+/* ---- the audio this Mac baked ---- */
+
+test('the phone looks for a baked paper under the name the baker gave it, newest copy first', () => {
+  assert.deepEqual(F.bakedPaths('A paper: part 1'), [
+    '/논문 음성/A paper- part 1 (4).m4b',
+    '/논문 음성/A paper- part 1 (3).m4b',
+    '/논문 음성/A paper- part 1 (2).m4b',
+    '/논문 음성/A paper- part 1.m4b'
+  ]);
+  assert.deepEqual(F.bakedPaths('x', '/elsewhere/', 2), ['/elsewhere/x (2).m4b', '/elsewhere/x.m4b']);
+  assert.equal(F.bakedPaths('')[0].startsWith('/논문 음성/논문'), true);
+});
+
+test('the phone names a file exactly as the Mac that baked it does', async () => {
+  // Two copies of one rule is two chances to drift, and the drift would be silent: the phone would
+  // simply never find the file. They are checked against each other instead.
+  const baker = await import('../../../zotero-style-custom/bridge/tts/book.mjs');
+  for (const title of ['A paper: part 1', 'a/b:c', '', '  ..hidden  ', '형광펜이 글자에 앉는다',
+                       'word '.repeat(40), 'Ends with a dot.', 'Q? A! * " < > |']) {
+    assert.equal(F.safeName(title), baker.safeName(title), JSON.stringify(title));
+  }
+});
+
+test('a baked paper is fetched once and then comes from the phone', async () => {
+  const asked = [];
+  const store = new Map();
+  const cache = {get: async p => store.get(p) || null, put: async (p, b) => { store.set(p, b); }};
+  const bytes = new Uint8Array([1, 2, 3]).buffer;
+  const dropbox = {
+    linked: true,
+    async download(path) {
+      asked.push(path);
+      if (path.endsWith('A paper.m4b')) return bytes;
+      throw Object.assign(new Error('gone'), {missing: true});
+    }
+  };
+  const steps = [];
+  const first = await F.bakedAudio({title: 'A paper', dropbox, cache, onStep: s => steps.push(s)});
+  assert.equal(first.path, '/논문 음성/A paper.m4b');
+  assert.equal(first.bytes, bytes);
+  assert.equal(first.fromCache, false);
+  assert.deepEqual(steps, ['찾는 중']);
+  assert.equal(asked.length, 4, 'the later copies are tried first, then the plain name');
+
+  const again = await F.bakedAudio({title: 'A paper', dropbox, cache});
+  assert.equal(again.fromCache, true);
+  assert.equal(asked.length, 4, 'nothing was asked for a second time');
+});
+
+test('no baked paper, no Dropbox, and a Dropbox that is not well are each their own answer', async () => {
+  const missing = {linked: true, async download() { throw Object.assign(new Error('gone'), {missing: true}); }};
+  assert.equal(await F.bakedAudio({title: 'Nothing', dropbox: missing}), null);
+  assert.equal(await F.bakedAudio({title: 'Nothing', dropbox: null}), null);
+  assert.equal(await F.bakedAudio({title: 'Nothing', dropbox: {linked: false}}), null);
+  // A real failure is not "there is no file": it is passed on, so the reader is told.
+  const broken = {linked: true, async download() { throw Object.assign(new Error('Dropbox 연결이 만료되었습니다. 다시 연결해 주세요.'), {need: 'dropbox'}); }};
+  await assert.rejects(() => F.bakedAudio({title: 'Nothing', dropbox: broken}), /만료/);
+});
+
+test('the times beside the audio are read when they are there, and missed quietly when not', async () => {
+  const marks = {title: 'A paper', seconds: 100, chapters: [{at: 0, title: 'Abstract'}], marks: [{at: 0, text: 'One.'}]};
+  const dropbox = {
+    linked: true,
+    async download(path) {
+      assert.equal(path, '/논문 음성/A paper.json');
+      return new TextEncoder().encode(JSON.stringify(marks)).buffer;
+    }
+  };
+  assert.deepEqual(await F.bakedMarks({path: '/논문 음성/A paper.m4b', dropbox}), marks);
+  const none = {linked: true, async download() { throw new Error('nope'); }};
+  assert.equal(await F.bakedMarks({path: '/논문 음성/A paper.m4b', dropbox: none}), null);
+  assert.equal(await F.bakedMarks({path: '', dropbox}), null);
 });

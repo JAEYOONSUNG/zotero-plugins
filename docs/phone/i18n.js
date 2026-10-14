@@ -19,12 +19,14 @@ let table = {}, lang = DEFAULT;
 export const set = (en = {}) => { table = en || {}; };
 export const using = () => lang;
 
-/* 'auto' asks the phone. Anything not Korean reads English, because English is the one language this
-   table has; an unknown or missing preference follows the phone too. */
+/* 'auto' asks the phone: a Korean one reads Korean, any other reads English, because English is the
+   one language this table has. A phone that says nothing at all about its language is not a phone —
+   every browser answers — so that case keeps the language this app is written in. */
 export function use(choice, {language = ''} = {}) {
   const asked = String(choice || 'auto');
   if (asked === 'ko' || asked === 'en') { lang = asked; return lang; }
-  lang = /^ko\b/i.test(String(language || '')) ? 'ko' : 'en';
+  const said = String(language || '').trim();
+  lang = !said ? DEFAULT : /^ko\b/i.test(said) ? 'ko' : 'en';
   return lang;
 }
 

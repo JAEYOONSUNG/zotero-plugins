@@ -13,10 +13,13 @@
    Writes go through PATCH with If-Unmodified-Since-Version, so an item changed elsewhere since
    this phone last saw it is refused rather than overwritten. */
 
-import {readable, units as readingUnits, remainingSeconds} from './read.js';
-import {createPlayer, speechEngine, pickVoice, paperLanguage, sectionsOf, RATES,
+import {readable, units as readingUnits, remainingSeconds, fromNote, isTranslation, noteTarget} from './read.js';
+import {t, T, set as setStrings, use as useLanguage, using} from './i18n.js';
+import EN from './en.js';
+import {createPlayer, speechEngine, bakedVoice, pickVoice, paperLanguage, sectionsOf, RATES,
         voiceMenu, voiceTier, TIERS, langName, sampleFor} from './play.js';
-import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE} from './files.js';
+import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE,
+        bakedAudio, bakedMarks, AUDIO_BASE, AUDIO_KEY} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
@@ -24,24 +27,25 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v12';
+export const BUILD = 'nonmun-v14';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
               read: 'np.read', recent: 'np.recent', kind: 'np.lastkind', of: 'np.of.',
-              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol', reads: 'np.reads'};
+              drive: 'np.drive', chain: 'np.chain', vol: 'np.vol', reads: 'np.reads', lang: 'np.lang', said: 'np.said'};
 const STATUSES = [['', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['done', '완료']];
 const STATUS_TAG = {unread: '/unread', reading: '/reading', done: '/done'};
 const TAG_STATUS = {'/unread': 'unread', '/reading': 'reading', '/done': 'done'};
 
 const $ = id => document.getElementById(id);
+const SAYS = new Set(['text', 'title', 'aria-label', 'placeholder', 'aria-valuetext']);
 const el = (tag, attrs = {}, parent) => {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (v === undefined || v === null || v === false) continue;
-    if (k === 'text') node.textContent = v;
+    if (k === 'text') node.textContent = SAYS.has(k) ? t(v) : v;
     else if (k === 'html') node.innerHTML = v;
-    else node.setAttribute(k, v === true ? '' : String(v));
+    else node.setAttribute(k, v === true ? '' : SAYS.has(k) ? t(String(v)) : String(v));
   }
   if (parent) parent.appendChild(node);
   return node;
@@ -269,7 +273,7 @@ async function sync({full = false} = {}) {
       const keys = [...(gone.items || []), ...(gone.collections || [])];
       if (gone.items?.length) await DB.remove('items', gone.items);
       if (gone.collections?.length) await DB.remove('collections', gone.collections);
-      if (keys.length) toast(`${keys.length}건이 삭제되어 함께 지웠습니다`);
+      if (keys.length) toast(T('{0}건이 삭제되어 함께 지웠습니다', keys.length));
     }
 
     if (version) account.version = version;
@@ -277,7 +281,7 @@ async function sync({full = false} = {}) {
     render();
     await flushWrites();
     localStorage.setItem(KEYS.synced, String(Date.now()));
-    $('sync-state').textContent = seen ? `${seen.toLocaleString()}건 갱신` : '최신';
+    $('sync-state').textContent = seen ? T('{0}건 갱신', seen.toLocaleString()) : t('최신');
   } catch (error) {
     if (error.status === 403) { $('sync-state').textContent = ''; showKeyTrouble(); }
     else if (error.offline) $('sync-state').textContent = '오프라인';   // the usual state on a phone, not news
@@ -433,14 +437,14 @@ async function flushWrites({quiet = true} = {}) {
       } catch (error) {
         if (error.offline || error.busy) break;   // no signal yet; the rest can wait with it
         await DB.remove('queue', [write.id]);     // refused for good: keeping it would retry forever
-        toast(`보내지 못한 변경 하나를 버렸습니다 — ${error.message}`);
+        toast(T('보내지 못한 변경 하나를 버렸습니다 — {0}', error.message));
       }
     }
   } finally {
     flushWrites.busy = false;
     const left = await heldWrites();
     paintHeld(left.length);
-    if (sent) { render({keep: true}); if (!quiet) toast(`${sent}건을 보냈습니다`); }
+    if (sent) { render({keep: true}); if (!quiet) toast(T('{0}건을 보냈습니다', sent)); }
   }
   return sent;
 }
@@ -475,12 +479,13 @@ async function addNote(item, text) {
 function showCard({html, label, run, dismiss = '나중에'}) {
   const card = $('pair');
   if (!card) return;
-  $('pair-text').innerHTML = html;
+  // The sentence carries a <b> in it, so it is looked up whole and then written as markup.
+  $('pair-text').innerHTML = t(html);
   const go = $('pair-go'), hide = $('pair-hide');
-  go.textContent = label;
+  go.textContent = t(label);
   go.hidden = !label;
   go.onclick = run || null;
-  hide.textContent = dismiss;
+  hide.textContent = t(dismiss);
   hide.onclick = () => { card.hidden = true; };
   card.hidden = false;
 }
@@ -855,7 +860,7 @@ function paintPicked() {
   for (const id of ['pick-mark', 'pick-rate']) { const node = $(id); if (node) node.disabled = !n; }
   if (!on) return;
   const count = $('count');
-  if (count) count.textContent = n ? `${n.toLocaleString()}편 선택` : '선택';
+  if (count) count.textContent = n ? T('{0}편 선택', n.toLocaleString()) : t('선택');
 }
 /* Marked one after another rather than all at once: each write is its own intention against the
    paper as it stands on the server, which is what keeps a change made on the Mac meanwhile. */
@@ -870,10 +875,10 @@ async function applyPicked(what, value, said) {
   }
   const done = await applyMany(what, value, keys);
   setPicking(false);
-  toast(`${done.toLocaleString()}편을 ${said}`, {undo: async () => {
+  toast(T('{0}편을 {1}', done.toLocaleString(), said), {undo: async () => {
     let back = 0;
     for (const [key, before] of was) back += await applyMany(what, before, [key]);
-    toast(`${back.toLocaleString()}편을 되돌렸습니다`);
+    toast(T('{0}편을 되돌렸습니다', back.toLocaleString()));
   }});
 }
 async function applyMany(what, value, keys) {
@@ -1180,10 +1185,10 @@ export function resumeOf({key, kind, heard, page, pages}) {
     if (!(page > 1)) return null;
     const pct = pages > 1 ? Math.round(page / pages * 100) : 0;
     if (pct > 98) return null;
-    return {kind: 'read', said: `이어 읽기 · ${page}쪽`, label: '이어 읽기', pct};
+    return {kind: 'read', said: T('이어 읽기 · {0}쪽', page), label: '이어 읽기', pct};
   }
   if (!(heard >= 1 && heard <= 98)) return null;
-  return {kind: 'listen', said: `이어 듣기 · ${heard}%`, label: '이어 듣기', pct: heard};
+  return {kind: 'listen', said: T('이어 듣기 · {0}%', heard), label: '이어 듣기', pct: heard};
 }
 const RESUME_MARK = {
   listen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>',
@@ -1279,7 +1284,7 @@ function sayCount(n) {
   sayTimer = setTimeout(() => {
     if (n === saidLast) return;
     saidLast = n;
-    node.textContent = n ? `${n.toLocaleString()}편` : '해당하는 논문이 없습니다';
+    node.textContent = n ? T('{0}편', n.toLocaleString()) : t('해당하는 논문이 없습니다');
   }, 400);
 }
 
@@ -1319,7 +1324,7 @@ function drawMore() {
       const head = el('h3', {class: 'group'}, batch);
       el('span', {text: under}, head);
       const n = render.sizes ? render.sizes.get(under) : 0;
-      if (n > 1) el('span', {class: 'n', text: `${n.toLocaleString()}편`}, head);
+      if (n > 1) el('span', {class: 'n', text: T('{0}편', n.toLocaleString())}, head);
     }
     drawRow(rows[i], batch);
   }
@@ -1444,7 +1449,7 @@ function render({keep = false} = {}) {
   render.terms = words(state.q);        // so every row can show what matched
   list.textContent = '';
   more = null;
-  if (!state.picking) $('count').textContent = rows.length ? `${rows.length.toLocaleString()}편` : '';
+  if (!state.picking) $('count').textContent = rows.length ? T('{0}편', rows.length.toLocaleString()) : '';
   sayCount(rows.length);
   paintScope(rows.length);
 
@@ -1524,7 +1529,7 @@ export function marksAsText(item, placed) {
   return [citationOf(item), '', ...lines].join('\n');
 }
 async function copyMarks(item, placed) {
-  try { await navigator.clipboard.writeText(marksAsText(item, placed)); toast(`주석 ${placed.length}개를 복사했습니다`); }
+  try { await navigator.clipboard.writeText(marksAsText(item, placed)); toast(T('주석 {0}개를 복사했습니다', placed.length)); }
   catch (_) { toast('복사하지 못했습니다'); }
 }
 
@@ -1773,7 +1778,7 @@ async function openDetail(key) {
       paper.marks = marks;
       if (marks.length) {
         const card = el('section', {class: 'card'}, body);
-        el('h3', {text: `주석 ${marks.length}개`}, card);
+        el('h3', {text: T('주석 {0}개', marks.length)}, card);
         const placed = marks
           .map(mark => ({mark, place: markPlace(mark)}))
           .sort((a, b) => String(a.mark.data.annotationSortIndex || '').localeCompare(String(b.mark.data.annotationSortIndex || '')));
@@ -1788,7 +1793,7 @@ async function openDetail(key) {
           const text = el('span', {class: 'mark-text'}, line);
           el('span', {text: clean(mark.data.annotationText || mark.data.annotationComment || '(그림 주석)')}, text);
           const page = place ? place.page : Number(mark.data.annotationPageLabel) || 0;
-          if (page) el('span', {class: 'muted small', text: `${page}쪽`}, line);
+          if (page) el('span', {class: 'muted small', text: T('{0}쪽', page)}, line);
           line.addEventListener('click', () => openPaper(liveItem(key) || item, {at: page || 0}));
         }
       }
@@ -1872,7 +1877,7 @@ function setSleep(choice) {
     listen.sleepSection = (unit && unit.section) || '';
     // Without named parts there is nothing to stop at, and saying so beats stopping at nothing.
     if (!listen.sleepSection) { toast('이 논문에는 구간 제목이 없습니다'); return; }
-    toast(`${listen.sleepSection}이(가) 끝나면 멈춥니다`);
+    toast(T('{0}이(가) 끝나면 멈춥니다', listen.sleepSection));
     return;
   }
   const minutes = Number(choice) || 0;
@@ -1883,7 +1888,7 @@ function setSleep(choice) {
     listen.sleepAt = 0;
     toast('잠들기 시간이 되어 멈췄습니다');
   }, minutes * 60000);
-  toast(`${minutes}분 뒤에 멈춥니다`);
+  toast(T('{0}분 뒤에 멈춥니다', minutes));
 }
 
 /* Keep the screen on while the paper is being read; the lock screen stops Safari's speech. */
@@ -2186,7 +2191,7 @@ async function playOn() {
   listen.chaining = true;
   try {
     const title = clean(next.data.title) || '제목 없음';
-    toast(`다음 논문 · ${title}`);
+    toast(T('다음 논문 · {0}', title));
     await openListen(next);
     if (listen.player) { announce(title); listen.player.play(); }
   } finally { listen.chaining = false; }
@@ -2257,6 +2262,26 @@ function carNowPlaying(item, playing) {
   } catch (_) {}
 }
 
+/* The reader panel in Zotero can save a whole-paper translation as a child note. If this paper has
+   one, it can be heard in place of the original: the same player, the same sections, the same
+   everything — the words are just in the reader's own language. Asked for once per paper and then
+   kept, because it is one more request over a phone's signal. */
+const TRANSLATIONS = new Map();
+async function translationFor(item) {
+  if (TRANSLATIONS.has(item.key)) return TRANSLATIONS.get(item.key);
+  let found = null;
+  try {
+    const response = await api(`/items/${item.key}/children?limit=100`);
+    const rows = await response.json();
+    const notes = rows.filter(row => row.data && row.data.itemType === 'note' && isTranslation(row.data.note));
+    // The most recent one wins: a paper translated twice is a paper translated better.
+    const note = notes.sort((a, b) => String(b.data.dateModified || '').localeCompare(String(a.data.dateModified || '')))[0];
+    if (note) found = {key: note.key, html: note.data.note, target: noteTarget(note.data.note)};
+  } catch (_) { found = null; }
+  TRANSLATIONS.set(item.key, found);
+  return found;
+}
+
 async function openListen(item) {
   listen.item = item;
   localStorage.setItem(KEYS.last, item.key);   // so the library can offer to carry on
@@ -2289,11 +2314,25 @@ async function openListen(item) {
     return;
   }
 
+  listen.original = paper;
+  listen.translation = await translationFor(item);
+  listen.baked = null;
+  findBaked(item).then(found => {
+    if (!found || listen.item !== item) return;
+    listen.baked = bakedEngine(found.bytes, found.marks);
+    if (!listen.baked.marks.length) { listen.baked.release(); listen.baked = null; return; }
+    buildSaying();
+  }).catch(() => {});
+  listen.saying = listen.translation && localStorage.getItem(KEYS.said) === 'tr' ? 'tr' : 'raw';
+  if (listen.saying === 'tr') listen.paper = fromNote(listen.translation.html, {title: clean(item.data.title)});
+  buildSaying();
+
   const withCaptions = reading();
-  listen.list = readingUnits(paper, unitsFor(withCaptions));
+  listen.list = readingUnits(listen.paper, unitsFor(withCaptions));
   renderTranscript(listen.list);
 
   const lang = paperLanguage(listen.list);
+  listen.engine = engine;
   listen.voices = engine.voices();
   paintVoice(lang);
   const chosen = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
@@ -2405,6 +2444,105 @@ function buildChain() {
       localStorage.setItem(KEYS.chain, id === 'on' ? '1' : '0');
       for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
       slide(track);
+    });
+  }
+  requestAnimationFrame(() => slide(track));
+}
+
+/* ---------- the voice this Mac baked ----------
+   Supertonic cannot run on a phone: the model is 383 MB and slower than real time there. It runs on
+   the Mac, which leaves one m4b in a sync folder, and Dropbox is already connected here for the
+   PDFs — so that file is reachable. Playing it is not a nicety: a real audio file keeps playing
+   with the screen off and answers the car's buttons, and a web page's own speech does neither.
+
+   The file is found by the name the baker gave it, kept on the phone once fetched, and played by an
+   audio element. The sidecar beside it says where every sentence starts, so the list still follows
+   along and a tap on a sentence still moves the voice. */
+export const audioFolder = () => localStorage.getItem(AUDIO_KEY) || AUDIO_BASE;
+
+async function findBaked(item) {
+  if (!dropbox.linked) return null;
+  const title = clean(item.data.title) || '논문';
+  try {
+    const found = await bakedAudio({title, folder: audioFolder(), dropbox, cache: fileCache});
+    if (!found) return null;
+    const marks = await bakedMarks({path: found.path, dropbox});
+    return {...found, marks};
+  } catch (_) { return null; }        // a Dropbox that is not well is not a reason to refuse to read
+}
+
+/* The baked file, as something the player can be given in place of a voice: an audio element with
+   the same few things createPlayer asks of an engine. */
+function bakedEngine(bytes, marks) {
+  const blob = new Blob([bytes], {type: 'audio/mp4'});
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.preload = 'auto';
+  const at = Array.isArray(marks && marks.marks) ? marks.marks : [];
+  return {url, audio, marks: at, engine: bakedVoice({audio, marks: at}),
+          release() { try { audio.pause(); } catch (_) {} try { URL.revokeObjectURL(url); } catch (_) {} }};
+}
+/* The sentences the Mac spoke, in the order it spoke them, as units the player and the transcript
+   understand. Without the sidecar there is nothing to follow, and the file is not offered. */
+const bakedUnits = marks => (Array.isArray(marks) ? marks : marks && Array.isArray(marks.marks) ? marks.marks : [])
+  .filter(mark => mark && mark.text)
+  .map((mark, index) => ({text: mark.text, spoken: mark.text, page: 0, index,
+                          section: mark.chapterTitle || '', lead: ''}));
+
+/* 원문 or 번역: shown only when this paper has a translation to offer, because a row of choices
+   where one can never be picked is worse than no row. */
+function buildSaying() {
+  const row = $('listen-saying');
+  row.hidden = !listen.translation && !listen.baked;
+  row.textContent = '';
+  if (!listen.translation && !listen.baked) return;
+  const track = el('nav', {class: 'seg small-seg', role: 'group', 'aria-label': t('읽을 말')}, row);
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
+  const choices = [['raw', '원문']];
+  if (listen.translation) choices.push(['tr', '번역']);
+  if (listen.baked) choices.push(['mac', '맥 음성']);
+  for (const [id, label] of choices) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(id === listen.saying), text: label}, track);
+    button.addEventListener('click', () => {
+      if (id === listen.saying || !listen.player) return;
+      listen.saying = id;
+      localStorage.setItem(KEYS.said, id);
+      if (id === 'mac') {
+        listen.list = bakedUnits(listen.baked.marks);
+        renderTranscript(listen.list);
+        const was = listen.player.state().status === 'playing';
+        listen.player.stop();
+        listen.player = createPlayer({engine: listen.baked.engine, rate: readRate(), volume: readVolume(),
+          onChange: event => paintReading(event.state)});
+        listen.player.load(listen.list, {at: 0});
+        for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+        slide(track);
+        paintVoice(listen.lang || 'en');
+        if (was) listen.player.play(0); else paintReading(listen.player.state());
+        return;
+      }
+      if (listen.player.state().voiceURI === undefined || listen.saying === 'mac') {
+        // Coming back from the file: the phone's own voice reads again.
+        listen.player.stop();
+        listen.player = createPlayer({engine: listen.engine, rate: readRate(), volume: readVolume(),
+          onChange: event => paintReading(event.state)});
+      }
+      listen.paper = id === 'tr'
+        ? fromNote(listen.translation.html, {title: $('listen-title').textContent})
+        : listen.original;
+      listen.list = readingUnits(listen.paper, unitsFor(reading()));
+      renderTranscript(listen.list);
+      const playing = listen.player.state().status === 'playing';
+      listen.player.load(listen.list, {at: 0});
+      // A translation is a different language, so the voice is chosen again for it.
+      const lang = paperLanguage(listen.list);
+      listen.voices = listen.engine ? listen.engine.voices() : listen.voices;
+      const voice = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
+      if (voice) listen.player.setVoice(voice.voiceURI, voice.lang || lang);
+      paintVoice(lang);
+      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(track);
+      if (playing) listen.player.play(0); else paintReading(listen.player.state());
     });
   }
   requestAnimationFrame(() => slide(track));
@@ -2648,6 +2786,7 @@ async function readAlong(item, attachment) {
   paper.text = readingUnits(listen.paper, {captions: true});   // captions included: a figure is worth finding
   if (!listen.list.length) return;
   const lang = paperLanguage(listen.list);
+  listen.engine = engine;
   listen.voices = engine.voices();
   const chosen = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
   const rate = Number(localStorage.getItem(KEYS.rate)) || 1;
@@ -2679,7 +2818,7 @@ function findInPaper(query) {
   $('paper-hits').textContent = hits.length ? `${hits.length}${hits.length >= 80 ? '+' : ''}곳` : '없음';
   for (const hit of hits) {
     const row = el('button', {class: 'found', type: 'button'}, list);
-    el('span', {class: 'muted small page', text: `${hit.page}쪽`}, row);
+    el('span', {class: 'muted small page', text: T('{0}쪽', hit.page)}, row);
     const line = el('span', {class: 'found-text'}, row);
     const from = Math.max(0, hit.at - 40);
     el('span', {text: (from ? '…' : '') + hit.text.slice(from, hit.at)}, line);
@@ -2860,6 +2999,20 @@ function paintSettings() {
   /* Which build this is, and the way to ask for a newer one — because the usual answer to "is it
      the new version?" should not be "close the app completely and open it again". */
   const about = setGroup(body, '앱');
+  /* Korean, English, or whatever the phone itself is set to. Everything on screen is drawn from the
+     Korean text, so switching is a reload rather than a thousand repaints. */
+  const pick = setRow(about.card, '언어', '').row;
+  const tongue = el('nav', {class: 'seg small-seg', role: 'group', 'aria-label': t('언어')}, pick);
+  el('span', {class: 'ind', 'aria-hidden': 'true'}, tongue);
+  for (const [id, label] of [['auto', '자동'], ['ko', '한국어'], ['en', 'English']]) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(id === language()), text: label}, tongue);
+    button.addEventListener('click', () => {
+      if (id === language()) return;
+      localStorage.setItem(KEYS.lang, id);
+      location.reload();
+    });
+  }
+  requestAnimationFrame(() => slide(tongue));
   setRow(about.card, '버전', BUILD.replace(/^nonmun-/, ''));
   const check = setGo(about.card, '업데이트 확인', async () => {
     check.disabled = true;
@@ -3031,7 +3184,7 @@ function openCollections() {
       'aria-current': here ? 'true' : null,
       style: depth ? `padding-inline-start:${18 + depth * 16}px` : null}, body);
     el('h2', {text: name}, row);
-    el('span', {class: 'n', text: `${n.toLocaleString()}편`}, row);
+    el('span', {class: 'n', text: T('{0}편', n.toLocaleString())}, row);
     // The one being looked at is ticked rather than chevroned: it does not lead anywhere new.
     el('span', {class: 'chev', html: here ? TICK : CHEVRON}, row);
     return row;
@@ -3197,7 +3350,7 @@ function wire() {
           catch (_) { toast('복사하지 못했습니다'); }
         }},
         {label: '여기서부터 듣기', icon: ICON.listen, run: () => { if (listen.player) listen.player.play(at); }},
-        ...(unit.page ? [{label: `${unit.page}쪽 보기`, icon: ICON.pdf, run: () => {
+        ...(unit.page ? [{label: T('{0}쪽 보기', unit.page), icon: ICON.pdf, run: () => {
           if (listen.item) openPaper(liveItem(listen.item.key) || listen.item, {at: unit.page});
         }}] : [])
       ], {lift: null});
@@ -3407,7 +3560,42 @@ async function takeDropboxReturn() {
   catch (error) { return error.message; }
 }
 
+/* Which language this phone reads in: 자동 follows the phone itself, and the choice is settled
+   before a single word is drawn. */
+export const language = () => localStorage.getItem(KEYS.lang) || 'auto';
+function speakLanguage() {
+  setStrings(EN);
+  return useLanguage(language(), {language: (navigator.languages && navigator.languages[0]) || navigator.language || ''});
+}
+/* The page's own markup is written in Korean. Rather than make every label an id, the whole of it is
+   walked once at start and each exact Korean string is swapped for its English. It runs before the
+   app draws anything, and it only ever replaces a string the table knows. */
+function translatePage(root = document) {
+  if (using() === 'ko') return 0;
+  let done = 0;
+  const walker = document.createTreeWalker(root.body || root, 4 /* SHOW_TEXT */);
+  const texts = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) texts.push(node);
+  for (const node of texts) {
+    const was = node.nodeValue, trimmed = was.trim();
+    if (!trimmed || !/[가-힣]/.test(trimmed)) continue;
+    const en = t(trimmed);
+    if (en !== trimmed) { node.nodeValue = was.replace(trimmed, en); done++; }
+  }
+  for (const node of (root.body || root).querySelectorAll('[aria-label],[placeholder],[title],[aria-valuetext]')) {
+    for (const name of ['aria-label', 'placeholder', 'title', 'aria-valuetext']) {
+      const was = node.getAttribute(name);
+      if (!was || !/[가-힣]/.test(was)) continue;
+      const en = t(was.trim());
+      if (en !== was.trim()) { node.setAttribute(name, en); done++; }
+    }
+  }
+  return done;
+}
+
 async function start() {
+  speakLanguage();
+  translatePage();
   setReadSize(readSize());            // the size chosen last time, before anything is drawn
   try { history.replaceState({depth: 0}, ''); } catch (_) {}
   const paired = takeKeyFromLink();

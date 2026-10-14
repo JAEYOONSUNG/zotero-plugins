@@ -345,3 +345,72 @@ export const remainingSeconds = (list, from = 0, rate = 1) => {
   for (let i = Math.max(0, from); i < list.length; i++) words += (list[i].spoken.match(/\S+/g) || []).length;
   return Math.round(words / (200 * (rate || 1)) * 60);
 };
+
+/* ---------- a translation, read instead of the original ----------
+   The Zotero plugin's reader panel saves a whole-paper translation as a child note (paper-translate
+   noteHTML): a title, then for each paragraph the original in a <p> and the translation in a
+   <blockquote>, under <h2> headings that carry the page. This turns that note back into the same
+   shape readable() makes, so everything downstream — the player, the transcript, the sections, the
+   baker — works on a translation exactly as it works on the paper.
+
+   Only the blockquotes are read: the original is in the note so a reader can check it, not so a
+   voice can say every sentence twice. */
+
+const TAG = /<[^>]+>/g;
+const ENTITY = {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'"};
+const plain = html => String(html || '')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(TAG, '')
+  .replace(/&(#\d+|[a-z]+);/gi, (whole, name) => {
+    if (name[0] === '#') { const code = Number(name.slice(1)); return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : whole; }
+    const known = ENTITY[name.toLowerCase()];
+    return known === undefined ? whole : known;
+  })
+  .replace(/[ \t]+/g, ' ')
+  .trim();
+
+/* Is this note one of those? It is, when it has translations in it at all. */
+export const isTranslation = html => /<blockquote[\s>]/i.test(String(html || '')) && /<h1[\s>]/i.test(String(html || ''));
+
+/* The language the note says it is in: the "(KO)" the plugin puts after the title. */
+export function noteTarget(html) {
+  const head = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(String(html || ''));
+  const said = head ? /\(([A-Za-z-]{2,7})\)\s*$/.exec(plain(head[1])) : null;
+  return said ? said[1].toLowerCase() : '';
+}
+
+export function fromNote(html, {title = ''} = {}) {
+  const source = String(html || '');
+  const sections = [];
+  let heading = '', page = 1;
+  const open = (name, at) => { sections.push({heading: name, page: at, sentences: []}); };
+  for (const m of source.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>|<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi)) {
+    if (m[1] !== undefined) {
+      const said = plain(m[1]);
+      const where = /\(\s*p\.\s*(\d+)\s*\)\s*$/i.exec(said);
+      if (where) page = Number(where[1]) || page;
+      heading = said.replace(/\s*\(\s*p\.\s*\d+\s*\)\s*$/i, '').trim();
+      open(heading, page);
+      continue;
+    }
+    /* A blockquote holds the translation, and sometimes a line naming the translator after it; only
+       the first paragraph of the quote is the paper. */
+    const inside = [...String(m[2]).matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map(x => plain(x[1])).filter(Boolean);
+    const said = inside.length ? inside[0] : plain(m[2]);
+    if (!said) continue;
+    if (!sections.length) open(heading, page);
+    for (const text of splitSentences(said)) {
+      const spoken = spokenForm(text);
+      if (!/\p{L}/u.test(spoken) || spoken.replace(/\s/g, '').length < 3) continue;
+      sections[sections.length - 1].sentences.push({text, spoken, page});
+    }
+  }
+  const kept = sections.filter(section => section.sentences.length);
+  const words = kept.reduce((n, s) => n + s.sentences.reduce((m, x) => m + (x.spoken.match(/\S+/g) || []).length, 0), 0);
+  return {
+    sections: kept, captions: [], references: [],
+    skipped: {repeated: 0, furniture: 0, references: 0, captions: 0},
+    stats: {pages: page, sentences: kept.reduce((n, s) => n + s.sentences.length, 0), words},
+    translated: true, target: noteTarget(source), title
+  };
+}

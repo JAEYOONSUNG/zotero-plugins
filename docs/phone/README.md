@@ -227,6 +227,38 @@ node docs/phone/tools/coverage.mjs ~/Zotero/storage 200   # what is no longer re
 On 2026-10-13 the first went from 564 sentences read per paper to 401 as the front matter was
 dealt with, and the second holds at 75.5% of a file's words read, no paper below a quarter.
 
+## English, and Korean
+
+The app is written in Korean, and the Korean sentence is the key: `en.js` turns each one into
+English, and anything the table has no answer for still reads as the Korean it was written in
+rather than as a blank. A phone set to Korean gets Korean, any other phone gets English, and
+설정 · 앱 · 언어 (자동 / 한국어 / English) overrides that. The page's own markup is swapped in place
+at start-up, so there is no flash of one language before the other. `test/app.test.mjs` fails when a
+Korean string can reach the screen with no English beside it, and fails the other way too, when the
+table carries a line the app never says.
+
+## Hearing the translation instead of the paper
+
+The Zotero plugin's reader panel can save a whole-paper translation as a child note. When a paper has
+one, the listening settings offer 원문 / 번역: the same player, the same sections, the same page
+numbers, with the translated sentences in place of the original ones — and the voice is chosen again
+for the language the translation is in, so a Korean translation is read by a Korean voice. Only the
+translation is read, never both; the original is in the note so it can be checked, not so a voice can
+say every sentence twice.
+
+## The voice the Mac made
+
+Supertonic cannot run on a phone — the model is 383 MB and slower than real time there — so the Mac
+reads the paper ahead of time and leaves one m4b in `~/Dropbox/논문 음성` (the plugin's reader panel,
+운전용 오디오 만들기). Dropbox is already connected here for the PDFs, so the phone finds that file by
+the name the baker gave it, keeps it once fetched, and offers **맥 음성** beside 원문 and 번역.
+
+It is not only a better voice. A real audio file keeps playing with the screen off and answers the
+car's buttons, and a web page's own speech does neither — which was the one thing this app could not
+do. The sidecar the baker writes beside the file says where every sentence begins, so the list still
+follows along and a tap on a sentence still moves the voice to it; without that sidecar the file is
+not offered, because a paper you cannot steer is worse than one read by the phone.
+
 ## When the phone will not let go of an old copy
 
 The version this phone is running is at the bottom of 설정 · 앱, and **업데이트 확인** asks the

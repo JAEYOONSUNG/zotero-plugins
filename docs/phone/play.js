@@ -4,7 +4,7 @@
    DOM or the network: it is given an engine and tells the caller what changed, so the whole of
    it is tested without a phone.
 
-     engine.speak({text, lang, voiceURI, rate, onstart, onend, onerror})
+     engine.speak({text, unit, at, lang, voiceURI, rate, onstart, onend, onerror})
      engine.cancel()            drop everything queued or speaking
      engine.pause() / resume()  when engine.supportsPause
 
@@ -220,7 +220,7 @@ export function createPlayer({
     if (!unit) return;
     queuedTo = at;
     engine.speak({
-      text: sayable(unit), lang: speakLang, voiceURI: speakVoice, rate: speakRate, volume: speakVolume,
+      text: sayable(unit), unit, at, lang: speakLang, voiceURI: speakVoice, rate: speakRate, volume: speakVolume,
       onstart: () => onStart(mine, at),
       onend: () => onEnd(mine, at),
       onerror: reason => fail(mine, reason)
@@ -341,4 +341,83 @@ export function sectionsOf(units) {
     if (name && (!out.length || out[out.length - 1].name !== name)) out.push({name, index});
   });
   return out;
+}
+
+/* ---------- a voice that was made earlier ----------
+   The Mac reads a paper with Supertonic ahead of time and leaves one audiobook file. That file is
+   the same engine contract as speechSynthesis — speak a sentence, say when it starts and when it
+   ends — except that nothing is synthesised: the element is moved to where the sentence begins and
+   played until it ends. The player above cannot tell the difference, so everything built on it
+   (next, previous, the transcript, sleep, carrying on to the next paper) works unchanged.
+
+   iOS keeps an audio element playing with the screen off, which is the whole reason for this.
+
+   `audio` is an HTMLAudioElement (or anything with currentTime, play, pause and timeupdate), and
+   `marks` is [{at, seconds}] in the order the units are in. */
+export function bakedVoice({audio, marks = [], name = 'baked'} = {}) {
+  const list = Array.isArray(marks) ? marks : [];
+  /* The queue is what makes this a voice rather than a seek: speechSynthesis takes a sentence and
+     says it when the one before it is done, and the player above queues the next sentence the
+     moment the current one starts. Without a queue here, each of those would move the element and
+     the file would jump to the end. */
+  let queue = [], playing = null, epoch = 0, watching = false;
+
+  const endOf = i => {
+    const mark = list[i];
+    if (!mark) return Infinity;
+    const next = list[i + 1];
+    // Up to the next sentence, so the pause after this one belongs to it and nothing is clipped.
+    return Number.isFinite(Number(next && next.at)) ? Number(next.at) : Number(mark.at) + Number(mark.seconds || 0);
+  };
+  function finish(how, reason) {
+    const done = playing;
+    playing = null;
+    if (!done) return;
+    if (how === 'end') done.onend && done.onend();
+    else done.onerror && done.onerror(reason || 'audio-failed');
+    pump();
+  }
+  function pump() {
+    if (playing || !queue.length) return;
+    const item = queue.shift();
+    const mark = list[item.at];
+    if (!mark) { item.onerror && item.onerror('no-such-sentence'); pump(); return; }
+    playing = {...item, until: endOf(item.at)};
+    try {
+      audio.playbackRate = item.rate || 1;
+      audio.volume = Math.min(1, Math.max(0, Number(item.volume) || 0));
+      // A seek of less than a frame is no seek: it would restart the sentence being played.
+      if (Math.abs(audio.currentTime - Number(mark.at)) > 0.08) audio.currentTime = Number(mark.at) || 0;
+    } catch (_) {}
+    const mine = epoch;
+    const started = audio.play();
+    if (started && typeof started.then === 'function') started.catch(error => { if (mine === epoch) finish('error', String(error && error.name || 'audio-failed')); });
+    item.onstart && item.onstart();
+  }
+  function watch() {
+    if (watching) return;
+    watching = true;
+    audio.addEventListener('timeupdate', () => {
+      if (!playing || audio.paused) return;
+      if (audio.currentTime >= playing.until - 0.02) finish('end');
+    });
+    audio.addEventListener('ended', () => finish('end'));
+    audio.addEventListener('error', () => finish('error'));
+  }
+
+  return {
+    name,
+    supportsPause: true,
+    baked: true,
+    available() { return !!audio; },
+    voices() { return []; },          // there is one voice in this file and it is already chosen
+    speak({at = 0, rate = 1, volume = 1, onstart, onend, onerror}) {
+      watch();
+      queue.push({at, rate, volume, onstart, onend, onerror});
+      pump();
+    },
+    cancel() { epoch++; queue = []; playing = null; try { audio.pause(); } catch (_) {} },
+    pause() { try { audio.pause(); } catch (_) {} },
+    resume() { try { const p = audio.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
+  };
 }

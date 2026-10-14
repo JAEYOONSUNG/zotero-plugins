@@ -192,7 +192,7 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   window.clearInterval = clock.stopEvery;
   /* app.js is a real module (it imports read.js and play.js), so the fake phone is put in the
      globals the module will read and the module is imported fresh for each boot. */
-  const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash};
+  const location = {origin: 'https://x.test', pathname: '/phone/', search: '', hash, reloads: 0, reload() { this.reloads++; }};
   /* A history with a real stack, so the back gesture can be exercised: pushState adds, go(-n)
      walks back and fires popstate the way a browser does. */
   const stack = [{depth: 0}];
@@ -214,6 +214,7 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
   };
   window.location = location;
   const speech = fakeSpeech(voices);
+  const audios = [];
   const globals = {
     window, document, localStorage: window.localStorage, indexedDB: window.indexedDB, fetch: window.fetch,
     requestAnimationFrame: window.requestAnimationFrame, Response, URL, URLSearchParams, location, history,
@@ -225,15 +226,35 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
     navigator: {userAgent: 'test', ...nav},
     // What a phone hands the lock screen and the car; the page only ever constructs one.
     MediaMetadata: class { constructor(info) { Object.assign(this, info); } },
-    speechSynthesis: speech.synth, SpeechSynthesisUtterance: speech.Utterance
+    speechSynthesis: speech.synth, SpeechSynthesisUtterance: speech.Utterance,
+    /* An audio element the test can move through time, and the Blob/URL a file is handed to it as.
+       The phone plays a baked paper with one of these rather than with its own voice. */
+    Blob: class { constructor(parts, options) { this.parts = parts; this.type = options && options.type; } },
+    Audio: class {
+      constructor(src) {
+        this.src = src; this.currentTime = 0; this.playbackRate = 1; this.volume = 1; this.paused = true;
+        this.preload = ''; this.handlers = {}; audios.push(this);
+      }
+      addEventListener(name, fn) { (this.handlers[name] ||= []).push(fn); }
+      play() { this.paused = false; return Promise.resolve(); }
+      pause() { this.paused = true; }
+      fire(name) { for (const fn of this.handlers[name] || []) fn(); }
+      to(seconds) { this.currentTime = seconds; this.fire('timeupdate'); }
+    }
   };
+  const RealURL = URL;
+  class BlobURL extends RealURL {
+    static createObjectURL() { return 'blob:baked'; }
+    static revokeObjectURL() {}
+  }
+  globals.URL = BlobURL;
   const put = (name, value) => Object.defineProperty(globalThis, name, {value, configurable: true, writable: true});
   for (const [name, value] of Object.entries(globals)) put(name, value);
   await import(new URL(`../app.js?boot=${++boots}`, here));
   /* Turn the crank until everything in flight has landed. Waiting out a busy server takes
      longer than the usual round, so those tests ask for more rounds. */
   const settle = async (rounds = 60) => { for (let i = 0; i < rounds; i++) await new Promise(r => realAfter(r, 4)); };
-  return {window, document, settle, storage, location, speech};
+  return {window, document, settle, storage, location, speech, audios};
 }
 
 import {after as afterAll} from 'node:test';
@@ -787,9 +808,14 @@ test('a paper hands over a citation worth pasting', async () => {
 /* ---- listening ---- */
 const PDF_CHILD = [{key: 'PDF1', version: 3, data: {key: 'PDF1', itemType: 'attachment', contentType: 'application/pdf', filename: 'seo.pdf'}}];
 
-async function openListening({voices, nav, stored, ...options} = {}) {
-  const server = fakeServer({children: PDF_CHILD, fulltext: FULLTEXT, ...options});
-  const open = await boot({server, ...(voices ? {voices} : {}), ...(nav ? {nav} : {}), ...(stored ? {stored} : {})});
+async function openListening({voices, nav, stored, dropbox, ...options} = {}) {
+  const zotero = fakeServer({children: PDF_CHILD, fulltext: FULLTEXT, ...options});
+  const server = dropbox ? {sent: zotero.sent, fetchImpl: async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    return /dropboxapi\.com|dropbox\.com/.test(url) ? dropbox.handle(url, init) : zotero.fetchImpl(input, init);
+  }} : zotero;
+  const open = await boot({server, ...(voices ? {voices} : {}), ...(nav ? {nav} : {}),
+    stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...(dropbox ? DROPBOX_LINKED : {}), ...(stored || {})}});
   await open.settle();
   open.document.querySelectorAll('#list .row')[0].dispatchEvent(new open.window.Event('click', {bubbles: true}));
   await open.settle();
@@ -3304,4 +3330,233 @@ test('참고문헌까지 고른 뒤 다음 논문을 열어도 그대로 읽는�
   assert.equal(open.document.querySelectorAll('#listen-what button')[2].getAttribute('aria-pressed'), 'true');
   const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
   assert.ok(lines.some(l => /Nature 500/.test(l)), 'the choice carried over to this paper');
+});
+
+/* ---- English beside the Korean ---- */
+/* The app is written in Korean and the Korean sentence is the key, so a string with no English
+   still reads. That makes it easy for a new line to go in with no English and for nobody to notice,
+   which is what this checks: every Korean string that can reach the screen has an entry. */
+const SCREEN = [
+  /text: *'([^'\n]*[가-힣][^'\n]*)'/g, /label: *'([^'\n]*[가-힣][^'\n]*)'/g,
+  /title: *'([^'\n]*[가-힣][^'\n]*)'/g, /'aria-label': *'([^'\n]*[가-힣][^'\n]*)'/g,
+  /placeholder: *'([^'\n]*[가-힣][^'\n]*)'/g, /toast\('([^'\n]*[가-힣][^'\n]*)'/g,
+  /said: *'([^'\n]*[가-힣][^'\n]*)'/g, /\bt\('([^'\n]*[가-힣][^'\n]*)'\)/g,
+  /\bT\('([^'\n]*[가-힣][^'\n]*)'/g,
+  /html: *'([^'\n]*[가-힣][^'\n]*)'/g,
+  // the label beside an id in a list of choices: ['body', '본문만']
+  /\['[a-z-]*', *'([^'\n]*[가-힣][^'\n]*)'\]/g,
+  /textContent *= *'([^'\n]*[가-힣][^'\n]*)'/g,
+  // a fallback for something the server did not give: … || '제목 없음'
+  /\|\| *'([^'\n]*[가-힣][^'\n]*)'/g,
+  /\? *'([^'\n]*[가-힣][^'\n]*)' *:/g, /: *'([^'\n]*[가-힣][^'\n]*)';/g
+];
+const koreanOnScreen = () => {
+  const found = new Set();
+  for (const file of ['app.js', 'play.js', 'list.js', 'files.js']) {
+    const source = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const pattern of SCREEN) for (const m of source.matchAll(pattern)) found.add(m[1]);
+  }
+  const {document: page} = parseHTML(read('index.html'));
+  const walker = page.createTreeWalker(page.body, 4);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.nodeValue.trim();
+    if (text && /[가-힣]/.test(text)) found.add(text);
+  }
+  for (const node of page.body.querySelectorAll('[aria-label],[placeholder],[title],[aria-valuetext]')) {
+    for (const name of ['aria-label', 'placeholder', 'title', 'aria-valuetext']) {
+      const text = (node.getAttribute(name) || '').trim();
+      if (text && /[가-힣]/.test(text)) found.add(text);
+    }
+  }
+  return found;
+};
+
+test('every Korean string that reaches the screen has English beside it', async () => {
+  const {default: EN} = await import('../en.js');
+  const missing = [...koreanOnScreen()].filter(key => typeof EN[key] !== 'string' || !EN[key]);
+  assert.deepEqual(missing, [], `these have no English: ${missing.map(s => JSON.stringify(s)).join(', ')}`);
+});
+
+test('nothing is translated that the app never says', async () => {
+  const {default: EN} = await import('../en.js');
+  const said = koreanOnScreen();
+  const stale = Object.keys(EN).filter(key => !said.has(key));
+  assert.deepEqual(stale, [], `these are translated but never said: ${stale.join(', ')}`);
+});
+
+test('a phone set to English gets English, a Korean one Korean, and the choice overrides both', async () => {
+  const i18n = await import('../i18n.js');
+  const {default: EN} = await import('../en.js');
+  i18n.set(EN);
+  assert.equal(i18n.use('auto', {language: 'en-GB'}), 'en');
+  assert.equal(i18n.t('논문'), 'Papers');
+  assert.equal(i18n.use('auto', {language: 'ko-KR'}), 'ko');
+  assert.equal(i18n.t('논문'), '논문', 'Korean costs nothing: the table is not consulted');
+  assert.equal(i18n.use('en', {language: 'ko-KR'}), 'en', 'the reader can ask for English on a Korean phone');
+  assert.equal(i18n.use('ko', {language: 'en-GB'}), 'ko');
+  // A browser that says nothing is not a browser; that is the harness, and it keeps the written language.
+  assert.equal(i18n.use('auto', {language: ''}), 'ko');
+  // A string with no entry is still readable.
+  i18n.use('en', {language: 'en'});
+  assert.equal(i18n.t('아직 영어가 없는 문장'), '아직 영어가 없는 문장');
+  // Counts: the table writes the plural and one is made singular, verb and all.
+  i18n.set({...EN, '{0}편이 남았습니다': '{0} papers are left'});
+  assert.equal(i18n.T('{0}편', 3), '3 papers');
+  assert.equal(i18n.T('{0}편', 1), '1 paper');
+  assert.equal(i18n.T('{0}편이 남았습니다', 1), '1 paper is left');
+  assert.equal(i18n.T('{0}편이 남았습니다', 12), '12 papers are left');
+  // A number that is part of someone's title is not a count.
+  assert.equal(i18n.T('다음 논문 · {0}', '1 papers in a title'), 'Next paper · 1 papers in a title');
+  i18n.use('ko', {language: 'ko'});
+  i18n.set(EN);
+});
+
+test('a phone in English reads English all the way through, markup and all', async () => {
+  const open = await boot({nav: {language: 'en-GB', languages: ['en-GB']}});
+  await open.settle();
+  const page = open.document;
+  // The page's own markup, swapped in place at start-up.
+  assert.equal(page.getElementById('setup-go').textContent, 'Connect');
+  assert.match(page.getElementById('q').getAttribute('placeholder'), /Title, author/);
+  // Nothing Korean is left anywhere a reader can see it.
+  const walker = page.createTreeWalker(page.body, 4);
+  const left = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (!parent || parent.closest('[hidden]') || parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE') continue;
+    const text = node.nodeValue.trim();
+    if (text && /[가-힣]/.test(text)) left.push(text);
+  }
+  assert.deepEqual(left, [], `Korean left on an English phone: ${left.join(' | ')}`);
+});
+
+test('the language can be set by hand, and the setting is what the app starts with next time', async () => {
+  const open = await boot({nav: {language: 'ko-KR', languages: ['ko-KR']}});
+  await open.settle();
+  open.document.getElementById('btn-settings-main').dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  const buttons = [...open.document.querySelectorAll('#settings .set-row .seg button')]
+    .filter(b => ['자동', '한국어', 'English'].includes(b.textContent));
+  assert.deepEqual(buttons.map(b => b.textContent), ['자동', '한국어', 'English']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'true', 'a phone follows itself until told otherwise');
+  buttons[2].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.storage.get('np.lang'), 'en');
+  assert.equal(open.location.reloads, 1, 'everything on screen was drawn from Korean, so it is drawn again');
+});
+
+/* ---- hearing the translation instead of the paper ---- */
+const TRANSLATION_NOTE = {
+  key: 'TRN1', version: 4,
+  data: {key: 'TRN1', itemType: 'note', dateModified: '2026-10-14T00:00:00Z',
+    note: '<div><h1>Retron defence (KO)</h1><p><em>Claude 계정 (이 Mac) · 2026-10-14</em></p>'
+      + '<h2>Introduction (p. 1)</h2><p>Microbial decomposers can degrade newly encountered materials.</p>'
+      + '<blockquote><p>미생물 분해자는 새로 만난 물질을 분해할 수 있다. 이 효소는 오십 도에서 작동한다.</p></blockquote>'
+      + '<h2>Results (p. 3)</h2><p>The enzyme works at fifty degrees.</p>'
+      + '<blockquote><p>변이체는 활성을 유지했다.</p><p><em>DeepL</em></p></blockquote></div>'}
+};
+
+test('번역 노트가 있으면 원문 대신 번역을 읽을 수 있다', async () => {
+  const {open} = await openListening({children: [...PDF_CHILD, TRANSLATION_NOTE],
+    voices: [...ONE_VOICE, {voiceURI: 'v-yuna', name: 'Yuna', lang: 'ko-KR', localService: true}]});
+  const row = open.document.getElementById('listen-saying');
+  assert.equal(row.hidden, false, 'this paper has a translation, so the choice is offered');
+  const buttons = [...row.querySelectorAll('button')];
+  assert.deepEqual(buttons.map(b => b.textContent), ['원문', '번역']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'true', 'the paper itself unless asked');
+
+  const lines = () => [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.ok(lines().some(l => /Microbial decomposers/.test(l)));
+
+  buttons[1].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(lines().some(l => /미생물 분해자는/.test(l)), 'the translation is what is read now');
+  assert.ok(!lines().some(l => /Microbial decomposers/.test(l)), 'and the original is not read twice');
+  // The headings came across with it, and so did the page each one is on.
+  assert.ok([...open.document.querySelectorAll('#listen .sec')].some(n => /Introduction/.test(n.textContent)));
+  assert.equal(open.storage.get('np.said'), 'tr');
+  // A translation is another language: the voice is chosen again for it.
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const said = open.speech.queue[0];
+  assert.ok(said, 'something was queued to say');
+  assert.match(String(said.lang || ''), /^ko/, 'a Korean translation is read by a Korean voice');
+  assert.match(said.text, /미생물|Introduction/);
+
+  buttons[0].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(lines().some(l => /Microbial decomposers/.test(l)), 'and back again');
+  assert.equal(open.storage.get('np.said'), 'raw');
+});
+
+test('번역 노트가 없으면 그 줄은 아예 나오지 않는다', async () => {
+  const {open} = await openListening();
+  assert.equal(open.document.getElementById('listen-saying').hidden, true);
+  assert.equal(open.document.querySelectorAll('#listen-saying button').length, 0);
+});
+
+/* ---- the voice the Mac baked, played on the phone ---- */
+const BAKED_MARKS = {
+  title: 'Retron Septu defence', seconds: 9.4, audio: 'Retron Septu defence.m4b',
+  chapters: [{chapter: 0, at: 0, title: 'Introduction'}],
+  marks: [{at: 0, seconds: 3, chapter: 0, text: 'Retron Septu defence.'},
+          {at: 3.2, seconds: 3, chapter: 0, text: 'Microbial decomposers can degrade new materials.'},
+          {at: 6.4, seconds: 3, chapter: 0, text: 'The enzyme works at fifty degrees.'}]
+};
+const DROPBOX_LINKED = {'np.db.app': 'APPKEY', 'np.db.refresh': 'RT', 'np.db.access': 'AT', 'np.db.until': String(Date.now() + 3600000)};
+/* Dropbox answered at the network, the way the PDF tests do it: the app builds its own client. */
+function bakedDropbox({has = ['/논문 음성/Retron Septu defence.m4b'], marks = BAKED_MARKS} = {}) {
+  const paths = [];
+  return {
+    paths,
+    handle: async (url, init = {}) => {
+      if (/oauth2\/token/.test(url)) return new Response(JSON.stringify({access_token: 'AT', expires_in: 14400}), {status: 200});
+      const arg = init.headers && init.headers['Dropbox-API-Arg'];
+      const path = arg ? JSON.parse(arg).path : '';
+      paths.push(path);
+      if (path.endsWith('.json')) return new Response(JSON.stringify(marks), {status: 200});
+      if (has.includes(path)) return new Response(new Uint8Array([0, 0, 0, 24]), {status: 200});
+      return new Response(JSON.stringify({error_summary: 'path/not_found/'}), {status: 409});
+    }
+  };
+}
+
+test('맥이 구운 음성이 있으면 폰이 그것으로 읽는다 — 화면을 꺼도 멈추지 않는 파일로', async () => {
+  const {open} = await openListening({dropbox: bakedDropbox()});
+  await open.settle();
+  const row = open.document.getElementById('listen-saying');
+  assert.equal(row.hidden, false, 'the Mac made one, so it is offered');
+  const buttons = [...row.querySelectorAll('button')];
+  assert.deepEqual(buttons.map(b => b.textContent), ['원문', '맥 음성']);
+
+  buttons[1].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  // The list becomes the sentences the Mac actually spoke, so a tap lands on the right moment.
+  const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.deepEqual(lines, BAKED_MARKS.marks.map(m => m.text));
+
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const audio = open.audios.at(-1);
+  assert.ok(audio, 'an audio element is what plays it, not the phone’s own voice');
+  assert.equal(audio.paused, false);
+  assert.equal(audio.currentTime, 0);
+  assert.equal(open.speech.queue.length, 0, 'nothing was handed to speechSynthesis');
+
+  // It moves through the paper by itself, on the times the Mac wrote down.
+  audio.to(3.2);
+  await open.settle();
+  assert.equal(open.document.querySelector('#listen .sent[aria-current="true"]').textContent,
+    'Microbial decomposers can degrade new materials.');
+  // And a tap on a sentence seeks the file to it.
+  [...open.document.querySelectorAll('#listen .sent')][2].dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  assert.equal(audio.currentTime, 6.4);
+});
+
+test('구운 음성이 없거나 Dropbox가 없으면 그 선택지는 나오지 않는다', async () => {
+  const {open} = await openListening({dropbox: bakedDropbox({has: []})});
+  assert.equal(open.document.getElementById('listen-saying').hidden, true);
+  const off = await openListening();          // no Dropbox at all
+  assert.equal(off.open.document.getElementById('listen-saying').hidden, true);
 });

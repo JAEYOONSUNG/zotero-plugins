@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createPlayer, pickVoice, paperLanguage, speechEngine, spokenSeconds, sectionsOf, WATCH_EVERY,
-        voiceTier, voiceMenu, langName, sampleFor, RATES} from '../play.js';
+        voiceTier, voiceMenu, langName, sampleFor, RATES, bakedVoice} from '../play.js';
 
 /* A voice that speaks when told to: queue(), then finish() ends the oldest utterance. */
 function fakeEngine({supportsPause = true} = {}) {
@@ -341,4 +341,104 @@ test('the sections of a paper are listed with where each one starts', () => {
   ]);
   assert.deepEqual(sectionsOf([]), []);
   assert.deepEqual(sectionsOf(null), []);
+});
+
+/* ---- the voice the Mac made earlier ---- */
+function fakeAudio() {
+  const handlers = {};
+  return {
+    currentTime: 0, playbackRate: 1, volume: 1, paused: true, played: 0,
+    addEventListener(name, fn) { (handlers[name] ||= []).push(fn); },
+    play() { this.paused = false; this.played++; return Promise.resolve(); },
+    pause() { this.paused = true; },
+    fire(name) { for (const fn of handlers[name] || []) fn(); },
+    /* The element reaching a moment, the way a real one does: time moves, then it says so. */
+    to(seconds) { this.currentTime = seconds; this.fire('timeupdate'); }
+  };
+}
+const MARKS = [{at: 0, seconds: 2}, {at: 2.2, seconds: 3}, {at: 5.5, seconds: 1}];
+
+test('a baked file is a voice: it starts where the sentence starts and ends where the next one does', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  assert.equal(voice.available(), true);
+  assert.equal(voice.supportsPause, true);
+  assert.deepEqual(voice.voices(), [], 'the voice in a file is already chosen');
+
+  const said = [];
+  voice.speak({at: 1, rate: 1.2, volume: 0.5, onstart: () => said.push('start'), onend: () => said.push('end')});
+  assert.equal(audio.currentTime, 2.2, 'it moved to where that sentence begins');
+  assert.equal(audio.playbackRate, 1.2);
+  assert.equal(audio.volume, 0.5);
+  assert.equal(audio.paused, false);
+  assert.deepEqual(said, ['start']);
+
+  audio.to(4);
+  assert.deepEqual(said, ['start'], 'still inside the sentence');
+  audio.to(5.5);
+  assert.deepEqual(said, ['start', 'end'], 'the next sentence begins, so this one is over');
+  audio.to(6);
+  assert.deepEqual(said, ['start', 'end'], 'and it is only over once');
+});
+
+test('the last sentence ends at its own end, and a file that stops ends it too', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  const said = [];
+  voice.speak({at: 2, onend: () => said.push('end')});
+  audio.to(6.2);
+  assert.deepEqual(said, []);
+  audio.to(6.5);
+  assert.deepEqual(said, ['end'], 'at + seconds, because there is nothing after it');
+
+  const other = fakeAudio(), second = bakedVoice({audio: other, marks: MARKS});
+  const over = [];
+  second.speak({at: 0, onend: () => over.push('end')});
+  other.fire('ended');
+  assert.deepEqual(over, ['end']);
+});
+
+test('a cancelled sentence is silent afterwards, whatever the element says next', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  const said = [];
+  voice.speak({at: 0, onend: () => said.push('end'), onerror: () => said.push('error')});
+  voice.cancel();
+  assert.equal(audio.paused, true);
+  audio.to(2.2);
+  audio.fire('ended');
+  audio.fire('error');
+  assert.deepEqual(said, [], 'nothing from the sentence that was dropped');
+  // And it can speak again after a cancel.
+  voice.speak({at: 0, onstart: () => said.push('start')});
+  assert.deepEqual(said, ['start']);
+});
+
+test('a sentence the file has no time for is an error, not silence', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  let why = '';
+  voice.speak({at: 9, onerror: reason => { why = reason; }});
+  assert.equal(why, 'no-such-sentence');
+  assert.equal(audio.played, 0);
+});
+
+test('playing a whole paper from a baked file runs through the player unchanged', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  const player = makePlayer({engine: voice, rate: 1});
+  player.load(units('One.', 'Two.', 'Three.'));
+  player.play();
+  assert.equal(player.state().status, 'playing');
+  assert.equal(player.state().index, 0);
+  audio.to(2.2);
+  assert.equal(player.state().index, 1, 'the player moved on by itself');
+  audio.to(5.5);
+  assert.equal(player.state().index, 2);
+  // Next and previous are seeks, and they land on the sentence asked for.
+  player.prev();
+  assert.equal(audio.currentTime, 2.2);
+  assert.equal(player.state().index, 1);
+  player.pause();
+  assert.equal(audio.paused, true);
 });

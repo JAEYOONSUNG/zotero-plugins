@@ -253,3 +253,63 @@ export async function paperFile({attachment, base = '', cache = null, zoteroFile
   if (cache) await cache.put(key, bytes).catch(() => {});
   return bytes;
 }
+
+/* ---------- the audio this Mac baked ----------
+   The Zotero plugin's bridge reads a whole paper with Supertonic and leaves one m4b audiobook in a
+   sync folder (bridge/tts/book.mjs). Dropbox is already connected here for the PDFs, so that file is
+   reachable from the phone: it is the same voice the Mac has, it plays with the screen off, and the
+   car's buttons work on it, none of which a web page's own speech can do.
+
+   The name has to be worked out the same way the baker worked it out, which is why safeName is
+   repeated here rather than guessed at. */
+export const AUDIO_BASE = '/논문 음성';
+export const AUDIO_KEY = 'np.db.audio';
+
+export function safeName(title, limit = 90) {
+  const one = String(title == null ? '' : title).replace(/\s+/g, ' ').trim();
+  const safe = one.replace(/[\/\\:*?"<>|\x00-\x1f]/g, '-').replace(/^[.\s-]+/, '').replace(/[.\s-]+$/, '');
+  if (!safe) return '논문';
+  return safe.length <= limit ? safe : safe.slice(0, limit).replace(/\s+\S*$/, '') || safe.slice(0, limit);
+}
+
+/* Where to look, newest copy first: a paper baked twice is "<name> (2).m4b". */
+export function bakedPaths(title, folder = AUDIO_BASE, copies = 4) {
+  const base = safeName(title), where = String(folder || AUDIO_BASE).replace(/\/+$/, '') || AUDIO_BASE;
+  const out = [];
+  for (let n = copies; n >= 2; n--) out.push(`${where}/${base} (${n}).m4b`);
+  out.push(`${where}/${base}.m4b`);
+  return out;
+}
+
+/* The bytes of the baked paper, and the sidecar beside it when there is one. Nothing is downloaded
+   twice: what the phone already has is kept in the same store the PDFs use. */
+export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = null, onStep = () => {}} = {}) {
+  if (!dropbox || !dropbox.linked) return null;
+  const paths = bakedPaths(title, folder);
+  for (const path of paths) {
+    if (cache) {
+      const held = await cache.get(path).catch(() => null);
+      if (held) return {path, bytes: held, fromCache: true};
+    }
+  }
+  onStep('찾는 중');
+  for (const path of paths) {
+    let bytes = null;
+    try { bytes = await dropbox.download(path); }
+    catch (error) { if (error && error.missing) continue; throw error; }
+    if (!bytes) continue;
+    if (cache) await cache.put(path, bytes).catch(() => {});
+    return {path, bytes, fromCache: false};
+  }
+  return null;
+}
+
+/* The times beside the audio: chapters, and where every sentence starts. Missing is not a failure —
+   the file plays without it, it just cannot follow along. */
+export async function bakedMarks({path, dropbox}) {
+  if (!dropbox || !path) return null;
+  try {
+    const bytes = await dropbox.download(path.replace(/\.m4b$/, '.json'));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (_) { return null; }
+}
