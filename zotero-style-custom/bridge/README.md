@@ -57,7 +57,9 @@ off, the car's buttons work, and Books remembers where you stopped.
 
 In Zotero this is the **운전용 오디오 만들기 / Make audio for the car** button in the panel's 듣기 (Listen) tab. It sends
 the paper as chapters — one per section, whatever the 본문 / +캡션 / +촸고문헌 choice includes — and shows how far it
-has got. Baking runs about four times faster than real time, so an hour of speech takes a quarter of an hour.
+has got. Baking was measured at about **twice real time** on real papers while the Mac was in use — an
+hour of speech takes about half an hour. (A first measurement of four times came from a toy of two
+short chapters and did not hold up.)
 
 | | |
 |---|---|

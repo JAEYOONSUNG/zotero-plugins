@@ -1202,7 +1202,8 @@
   /* -- an audio file for the car --
      The panel reads a sentence at a time, which is what a reader wants. A drive wants the whole paper
      finished: iOS stops a web page's voice when the screen locks, but it does not stop an audio file.
-     So this Mac speaks the paper ahead of time (about four times faster than real time) and leaves one
+     So this Mac speaks the paper ahead of time (measured at about twice real time on a working M-series
+     Mac: a real paper, long sentences, the reader using the machine) and leaves one
      m4b audiobook in a sync folder, named and chaptered, with the position remembered by the phone. */
   const BAKE_POLL=2000;
   const BAKE_TIP='이 Mac이 논문 전체를 미리 읽어 오디오북 파일 하나로 만듭니다. 동기화 폴더에 떨어지므로 폰에서 화면을 끄고도, 차에서도 들을 수 있습니다.';
@@ -1223,7 +1224,8 @@
    bridgeVoices().then(bridge=>{if(!bridge||session.destroyed)return;if(bridge.out)session.bakeOut=bridge.out;paintBake(session);return catchUpBake(session,bridge);}).catch(()=>{});
   }
   /* How long the file will be, and how big, before anything is made: the panel already measures the
-     paper for "약 N분 남음", and a bake runs at about four times real time. 64 kbps mono is 8 KB a second. */
+     paper for "약 N분 남음". A bake was measured at about twice real time on a real paper (an early
+     figure of four came from a toy of two short chapters). 64 kbps mono is 8 KB a second. */
   function bakeSize(session){
    const player=session.player;if(!player)return null;
    const units=player.units(),rate=player.state().rate||1,key=units.length+':'+rate;
