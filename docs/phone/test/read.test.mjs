@@ -155,7 +155,11 @@ test('a citation that lost its superscript is not read as a number', () => {
 test('a number inside a name is not a citation', () => {
   const kept = 'Plasmid pGKE75 was expressed from the gk704 promoter in B. subtilis ATCC6051 with Cas9, Tn21, p53, IS110 and BL21(DE3) at OD600.';
   assert.equal(spokenForm(kept), kept);
-  assert.equal(spokenForm('shown in figure3 and table2 for type1 and lane2.'), 'shown in figure3 and table2 for type1 and lane2.');
+  assert.equal(spokenForm('shown in figure3 and table2 in lane2 and eq4.'), 'shown in figure3 and table2 in lane2 and eq4.',
+    'the few things a paper numbers out loud keep their numbers');
+  assert.equal(spokenForm('R-M systems are classified into four types17 and a sulfur group18 was added.'),
+    'R-M systems are classified into four types and a sulfur group was added.',
+    'but an ordinary noun with a number stuck to it is a reference');
   assert.equal(withoutCitations('The result (which we confirmed in 2015) held.'), 'The result (which we confirmed in 2015) held.',
     'a bracket with something to say in it is part of the paper');
   assert.equal(withoutCitations('A sentence with nothing to take out.'), 'A sentence with nothing to take out.');

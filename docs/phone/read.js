@@ -170,13 +170,12 @@ function dehyphenate(text) {
    A number inside a name is not one of those. Cas9, Tn21, OD600, BL21, p53 and figure3 all keep
    their numbers: a bare number is taken only off the end of a plain lowercase word, a list or a
    range of them off the end of anything, and a bracket only when there is nothing in it but
-   names, initials and a year. */
-const CITE_KEEP = new Set(['figure', 'figures', 'fig', 'figs', 'table', 'tables', 'tab', 'panel', 'panels',
-  'lane', 'lanes', 'eq', 'eqn', 'equation', 'equations', 'ref', 'refs', 'reference', 'references',
-  'type', 'types', 'class', 'group', 'step', 'day', 'days', 'site', 'sites', 'residue', 'residues',
-  'position', 'strain', 'clone', 'primer', 'exon', 'intron', 'chapter', 'section', 'page', 'phase',
-  'round', 'rounds', 'trial', 'part', 'level', 'stage', 'gene', 'version', 'buffer', 'plasmid',
-  'chromosome', 'sample', 'column', 'row', 'set', 'run', 'cycle', 'cycles', 'point', 'state', 'mode']);
+   names, initials and a year. The words spared are only the ones a paper numbers out loud, and
+   even those because a publisher sometimes sets them without the space: sparing every common
+   noun would have left the references in ("four types17", "a sulfur group18"). */
+const CITE_KEEP = new Set(['figure', 'figures', 'fig', 'figs', 'table', 'tables', 'tab', 'panel',
+  'panels', 'lane', 'lanes', 'eq', 'eqn', 'equation', 'equations', 'ref', 'refs', 'reference',
+  'references', 'movie', 'video', 'supplementary', 'extended']);
 const CITE_WORD = /((?:\p{L}[\p{L}’'-]*)|[)\]])(\d{1,3}(?:\s?[,–—-]\s?\d{1,3})+)(?=[\s.,;:)\]]|$)/gu;
 const CITE_TAIL = /\b([a-z]{3,})(\d{1,3})(?=[\s.,;:)\]]|$)/g;
 const CITE_YEAR = /\b(?:19|20)\d\d[a-z]?\b/;

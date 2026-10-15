@@ -180,8 +180,13 @@
 
     A number inside a name is not a citation -- Cas9, Tn21, OD600, BL21, p53 -- so a bare number
     is taken only off the end of a plain lowercase word, and a list or a range of them off the
-    end of anything. Those are the shapes a lost superscript leaves behind. */
- const CITE_KEEP=new Set(['figure','figures','fig','figs','table','tables','tab','panel','panels','lane','lanes','eq','eqn','equation','equations','ref','refs','reference','references','type','types','class','group','step','day','days','site','sites','residue','residues','position','strain','clone','primer','exon','intron','chapter','section','page','phase','round','rounds','trial','part','level','stage','gene','version','buffer','plasmid','chromosome','sample','column','row','set','run','cycle','cycles','point','state','mode','grade','band','track']);
+    end of anything. Those are the shapes a lost superscript leaves behind.
+
+    The words spared are only the ones a paper numbers out loud -- figure, table, equation,
+    lane -- and even those because a publisher sometimes sets them without the space. A longer
+    list costs citations: "classified into four types17" and "a sulfur group18" are references,
+    not names, and sparing every common noun would have read both numbers out. */
+ const CITE_KEEP=new Set(['figure','figures','fig','figs','table','tables','tab','panel','panels','lane','lanes','eq','eqn','equation','equations','ref','refs','reference','references','movie','video','supplementary','extended']);
  const CITE_WORD=/((?:\p{L}[\p{L}’'-]*)|[)\]])(\d{1,3}(?:\s?[,–—-]\s?\d{1,3})+)(?=[\s.,;:)\]]|$)/gu;
  const CITE_TAIL=/\b([a-z]{3,})(\d{1,3})(?=[\s.,;:)\]]|$)/g;
  const CITE_YEAR=/\b(?:19|20)\d\d[a-z]?\b/;

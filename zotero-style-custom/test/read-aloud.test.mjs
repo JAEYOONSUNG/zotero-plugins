@@ -404,7 +404,8 @@ test('citations are not read out: the numbers a lost superscript left behind, an
  assert.equal(S('as reported [12, 13] and elsewhere [4].'),'as reported and elsewhere.');
  // a number inside a name is not a citation, and neither is a parenthesis with something to say
  assert.equal(S('Plasmid pGKE75 was expressed from the gk704 promoter in B. subtilis ATCC6051 with Cas9, Tn21, p53, IS110 and BL21(DE3) at OD600.'),'Plasmid pGKE75 was expressed from the gk704 promoter in B. subtilis ATCC6051 with Cas9, Tn21, p53, IS110 and BL21(DE3) at OD600.');
- assert.equal(S('shown in figure3 and table2 for type1 and lane2.'),'shown in figure3 and table2 for type1 and lane2.','a numbered thing in the paper is not a reference to another paper');
+ assert.equal(S('shown in figure3 and table2 in lane2 and eq4.'),'shown in figure3 and table2 in lane2 and eq4.','a numbered thing in the paper is not a reference to another paper');
+ assert.equal(S('R-M systems are classified into four types17 and a sulfur group18 was added.'),'R-M systems are classified into four types and a sulfur group was added.','an ordinary noun with a number stuck to it is a reference');
  assert.equal(S('The result (which we confirmed in 2015) held, and 11,000 × g for 10–20 min is unchanged.'),'The result (which we confirmed in 2015) held, and 11,000 times g for 10 to 20 minutes is unchanged.');
  assert.equal(RA.withoutCitations('A sentence with nothing to take out.'),'A sentence with nothing to take out.');
 });
