@@ -393,6 +393,21 @@ test('ions, primes, citations set as superscripts and the glyph quirks of real P
  assert.equal(S('using dual-indexing sequencing primers, a prime-boost and primed cells.'),'using dual-indexing sequencing primers, a prime-boost and primed cells.','the word prime is left alone');
  assert.equal(S('EM·DNT and msf·GFP; Sigma−Aldrich and qRT−PCR'),'EM DNT and msf GFP; Sigma-Aldrich and qRT-PCR');
 });
+test('citations are not read out: the numbers a lost superscript left behind, and the names in brackets',()=>{
+ const S=t=>RA.speechText(t,'en');
+ // every line below is from a paper in the Defense system collection, as the bake had it
+ assert.equal(S('Many antiviral defence mechanisms are conserved across all domains of life1.'),'Many antiviral defence mechanisms are conserved across all domains of life.');
+ assert.equal(S('the same organism and even single cell1,2, and STING12,13 after that.'),'the same organism and even single cell, and STING after that.');
+ assert.equal(S('First engineering was introduced with E. coli (Jiang et al, 2013).'),'First engineering was introduced with E. coli.');
+ assert.equal(S('including Lactobacillus reuteri (Oh and van Pijkeren, 2014) and Streptomyces (Smith, 2014; Lee, 2015).'),'including Lactobacillus reuteri and Streptomyces.');
+ assert.equal(S('unleashes indiscriminate DNase activity (12, 13) upon binding (3-5).'),'unleashes indiscriminate DNase activity upon binding.');
+ assert.equal(S('as reported [12, 13] and elsewhere [4].'),'as reported and elsewhere.');
+ // a number inside a name is not a citation, and neither is a parenthesis with something to say
+ assert.equal(S('Plasmid pGKE75 was expressed from the gk704 promoter in B. subtilis ATCC6051 with Cas9, Tn21, p53, IS110 and BL21(DE3) at OD600.'),'Plasmid pGKE75 was expressed from the gk704 promoter in B. subtilis ATCC6051 with Cas9, Tn21, p53, IS110 and BL21(DE3) at OD600.');
+ assert.equal(S('shown in figure3 and table2 for type1 and lane2.'),'shown in figure3 and table2 for type1 and lane2.','a numbered thing in the paper is not a reference to another paper');
+ assert.equal(S('The result (which we confirmed in 2015) held, and 11,000 × g for 10–20 min is unchanged.'),'The result (which we confirmed in 2015) held, and 11,000 times g for 10 to 20 minutes is unchanged.');
+ assert.equal(RA.withoutCitations('A sentence with nothing to take out.'),'A sentence with nothing to take out.');
+});
 test('ranges, dashes, abbreviations, figure references and links',()=>{
  const S=t=>RA.speechText(t,'en');
  assert.equal(S('residues 88–123 and cycles 2–4; RMF–HPF–100S dimers; SDS– PAGE; host and—at least in some cases—DNA damage'),'residues 88 to 123 and cycles 2 to 4; RMF-HPF-100S dimers; SDS-PAGE; host and, at least in some cases, DNA damage');

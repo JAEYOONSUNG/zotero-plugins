@@ -171,10 +171,44 @@
   s=s.replace(UNIT_DENOMINATOR,(all,letter,atom)=>{const u=unitWords(atom,'1',ko);return typeof u==='string'?all:letter+' '+T.per+' '+u.text;});
   return s;
  }
+ /* ---- in-text citations ------------------------------------------------
+    A citation is not a sentence. The superscript that marked one does not survive text
+    extraction, so "conserved across all domains of life51" reaches the voice as a number read
+    out in the middle of a clause, and "(Oh and van Pijkeren, 2014)" as four words nobody is
+    listening for. Both go. Only what is said loses them; the written sentence keeps them, and
+    the reference list is still there for a reader who asks for it.
+
+    A number inside a name is not a citation -- Cas9, Tn21, OD600, BL21, p53 -- so a bare number
+    is taken only off the end of a plain lowercase word, and a list or a range of them off the
+    end of anything. Those are the shapes a lost superscript leaves behind. */
+ const CITE_KEEP=new Set(['figure','figures','fig','figs','table','tables','tab','panel','panels','lane','lanes','eq','eqn','equation','equations','ref','refs','reference','references','type','types','class','group','step','day','days','site','sites','residue','residues','position','strain','clone','primer','exon','intron','chapter','section','page','phase','round','rounds','trial','part','level','stage','gene','version','buffer','plasmid','chromosome','sample','column','row','set','run','cycle','cycles','point','state','mode','grade','band','track']);
+ const CITE_WORD=/((?:\p{L}[\p{L}’'-]*)|[)\]])(\d{1,3}(?:\s?[,–—-]\s?\d{1,3})+)(?=[\s.,;:)\]]|$)/gu;
+ const CITE_TAIL=/\b([a-z]{3,})(\d{1,3})(?=[\s.,;:)\]]|$)/g;
+ const CITE_YEAR=/\b(?:19|20)\d\d[a-z]?\b/;
+ /* What may stand inside a citation's brackets and nothing else: surnames and their particles,
+    initials, "et al", a year, and the punctuation between them. A parenthesis with a verb in it
+    is a remark, and a remark is part of the paper. */
+ const CITE_ONLY=/^(?:\s*(?:\p{Lu}[\p{L}’'-]*|\p{Lu}\.|and|&|et|al\.?|van|von|de[rnl]?|du|da|dos|del|la|le|ten|ter|bin|ibn|see|also|reviewed|in|refs?\.?|e\.g\.|i\.e\.|unpublished|personal|communication|data|not|shown|\d{1,4}[a-z]?|[,;:&–—.-])\s*)+$/u;
+ const citationInside=inner=>{
+  const body=String(inner).trim();
+  if(!body)return false;
+  if(/^\d{1,3}(?:\s*[,–—-]\s*\d{1,3})+$/.test(body))return true;   // "(12, 13)", "(3-5)"
+  if(/^\d{2,3}$/.test(body))return true;                                     // "(12)"; "(1)" is a list
+  return CITE_YEAR.test(body)&&CITE_ONLY.test(body);
+ };
+ const citeKeep=word=>CITE_KEEP.has(String(word).toLowerCase());
+ function withoutCitations(text){
+  let s=clean(text);if(!s)return s;
+  s=s.replace(/\(([^()]{1,200})\)/g,(all,inner)=>citationInside(inner)?' ':all);
+  s=s.replace(/\s*\[\s*\d{1,3}\s*(?:[,–—-]\s*\d{1,3}\s*)*\]/g,'');
+  s=s.replace(CITE_WORD,(all,lead,digits)=>citeKeep(lead)?all:lead);
+  s=s.replace(CITE_TAIL,(all,word)=>citeKeep(word)?all:word);
+  return s.replace(/\s+([.,;:!?)\]])/g,'$1').replace(/\(\s*\)/g,'').replace(/\s{2,}/g,' ').trim();
+ }
  const ROMAN={i:'1',ii:'2',iii:'3',iv:'4',v:'5',vi:'6',vii:'7',viii:'8',ix:'9',x:'10'};
  const NO_OPERAND=/(?:^|[(\[,;:]|\b(?:of|with|at|to|from|in|for|and|or|was|were|is|are|by|only|all|any|when|if|had|have|has|having|showing|show|shows))$/i;
  function speechText(text,lang='en'){
-  let s=clean(text);if(!s)return s;
+  let s=withoutCitations(text);if(!s)return s;
   const code=String(lang||'en').toLowerCase().split(/[-_]/)[0];
   const ko=code==='ko',full=ko||code==='en';const T=ko?KO:EN;
   // addresses are said as what they are, never spelled out
@@ -674,6 +708,6 @@
   for(let i=Math.max(0,from);i<list.length;i++){const m=sayable(list[i]).match(/\S+/g);words+=m?m.length:0;}
   return Math.round(words/(SAY_WPM*clamp(rate,RATE_MIN,RATE_MAX,1))*60);
  }
- const api={create,speechEngine,audioEngine,multiEngine,speechText,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,paperLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
+ const api={create,speechEngine,audioEngine,multiEngine,speechText,withoutCitations,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,paperLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
  root.CustomStyleReadAloud=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
