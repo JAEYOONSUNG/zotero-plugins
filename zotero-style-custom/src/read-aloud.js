@@ -27,6 +27,12 @@
 (function(root){
  'use strict';
  const RATE_MIN=0.8,RATE_MAX=1.8,CHUNK_MAX=400,CREDIT_MAX_SECONDS=120;
+ /* A sentence the engine starts and never finishes: the system voices do stop part way and send neither
+    `end` nor `error` (the same fault the phone app hit, where the watchdog's restart made a sentence
+    repeat for ever). The player waits SLOW times as long as the sentence should take, then starts it
+    again, and after GIVE_UP tries it leaves that sentence behind and reads the next one. The paper
+    always moves forward: it never dies in silence and never reads one stretch over and over. */
+ const GIVE_UP=2,SLOW=3;
  const clamp=(value,low,high,fallback)=>{const n=Number(value);return Number.isFinite(n)?Math.min(high,Math.max(low,n)):fallback;};
  const clean=text=>String(text==null?'':text).replace(/\s+/g,' ').trim();
 
@@ -430,6 +436,9 @@
    },
    owns(){return !!current||queue.length>0;},
    busy(){return !!current||queue.length>0;},
+   /* Nothing is sounding and the next piece has not come back from the voice yet. On a busy Mac that wait is
+      long, and it is not the player's business to restart a sentence over it. */
+   waiting(){return !current&&queue.length>0&&!queue[0].result;},
    pause(){paused=true;if(current)try{current.audio.pause();}catch(_){}},
    resume(){paused=false;if(current){try{const p=current.audio.play();if(p&&p.catch)p.catch(()=>{});}catch(_){}}else pump();}};
  }
@@ -459,6 +468,7 @@
    cancel(){for(const part of list)try{part.engine.cancel();}catch(_){}},
    owns(){return !!active&&(typeof active.engine.owns!=='function'||active.engine.owns());},
    busy(){return !!active&&(typeof active.engine.busy!=='function'||active.engine.busy());},
+   waiting(){return !!active&&typeof active.engine.waiting==='function'&&active.engine.waiting();},
    pause(){if(active&&active.engine.pause)active.engine.pause();},
    resume(){if(active&&active.engine.resume)active.engine.resume();}
   };
@@ -558,11 +568,12 @@
   if(!engine)throw new Error('A speech engine is required');
   const timer=timers||{set:(fn,ms)=>setTimeout(fn,ms),clear:id=>clearTimeout(id)};
   let all=[],list=[],index=0,status='idle',gen=0,queuedTo=-1,entered=-1,queueLive=false,dead=false,watch=null,error='',heard=false,queueing=false,deferred=null,enginePaused=false,gap=null;
+  let lastEvent=0,tries=0,tryingAt=-1,revived=0,skipped=0,skipRun=0;
   let speakRate=clamp(rate,RATE_MIN,RATE_MAX,1),speakVoice=voiceURI||'',speakLang=lang||'en';
   const filter={captions:filters.captions===true,references:filters.references===true};
   const clock={since:null,accum:0};
   const emit=type=>{if(dead)return;try{onChange({type,state:snapshot()});}catch(_){}};
-  const snapshot=()=>({status,index,total:list.length,unit:list[index]||null,rate:speakRate,voiceURI:speakVoice,lang:speakLang,filters:{...filter},error,engine:engine.name,supportsPause:engine.supportsPause!==false});
+  const snapshot=()=>({status,index,total:list.length,unit:list[index]||null,rate:speakRate,voiceURI:speakVoice,lang:speakLang,filters:{...filter},error,engine:engine.name,supportsPause:engine.supportsPause!==false,revived,skipped});
   const clearWatch=()=>{if(watch!==null){timer.clear(watch);watch=null;}};
   /* A breath before a new paragraph or section (ms at rate 1; off unless the caller asks), and the section's heading
      said before its first sentence. Between two sentences of one paragraph there is no gap: the next is queued early. */
@@ -581,8 +592,33 @@
    if(!heard){fail(g,'no-audio');return;}
    if(gap){armWatch(g);return;}
    if(typeof engine.busy==='function'&&!engine.busy()){interrupt(g,'interrupted');return;}
+   /* The engine says it is busy, but nothing has started or ended for far longer than this sentence can
+      take. An engine that claims to be speaking is not proof that it is: this one is stuck. */
+   if(typeof engine.waiting==='function'&&engine.waiting()){armWatch(g);return;}
+   if(now()-lastEvent>patience(index)){stuck(g);return;}
    armWatch(g);
   },watchdogMs);};
+  const beat=()=>{lastEvent=now();};
+  /* How long the sentence should take at this speed, by the same 200 words a minute the estimate uses. */
+  const expectedMs=i=>{const m=sayable(list[i]||{}).match(/\S+/g);return (m?m.length:1)/(SAY_WPM*speakRate)*60000;};
+  /* The watchdog hears from every piece of a sentence, so the wait is measured per piece: a 1,700-character
+     sentence goes to the engine in five, and waiting three times the whole sentence for one of them would be
+     four minutes. Twenty seconds at the least, for a short sentence read slowly or a voice slow to start. */
+  const piecesAt=i=>{const n=splitForEngine(speechText(sayable(list[i]||{}),speakLang)).length;return n||1;};
+  const patience=i=>Math.max(20000,expectedMs(i)/piecesAt(i)*SLOW+watchdogMs);
+  function stuck(g){
+   if(g!==gen||dead||status!=='playing')return;
+   if(tryingAt!==index){tryingAt=index;tries=0;}
+   if(tries<GIVE_UP){tries++;revived++;emit('revived');startAt(index);return;}
+   // Two tries were enough. Whatever is wrong with this sentence, the rest of the paper is not waiting for it.
+   const at=index;tries=0;tryingAt=-1;skipped++;skipRun++;
+   if(at+1>=list.length){gen++;clearWatch();clearGap();try{engine.cancel();}catch(_){}queueLive=false;index=at;status='done';emit('skipped');emit('done');return;}
+   emit('skipped');
+   /* Three sentences in a row left behind and not one of them finished: it is the voice, not the sentences.
+      Better to say so than to mumble the first words of every sentence to the end of the paper. */
+   if(skipRun>=3){fail(g,'voice-stuck');return;}
+   startAt(at+1);
+  }
   function fail(g,reason){if(g!==gen)return;gen++;clearWatch();clearGap();try{engine.cancel();}catch(_){}queueLive=false;status='error';error=String(reason||'error');emit('error');}
   /* Stopped by a cancel this player did not make: become paused where we are, and do not cancel back (that would stop the other speaker). */
   function interrupt(g,reason){
@@ -606,16 +642,21 @@
    if(deferred){const next=deferred;deferred=null;if(next.g===gen&&queuedTo<next.u)enqueue(next.u,next.g);}
   }
   function enter(u,g){
-   if(entered===u)return;
+   /* Only forward. A start or an end that arrives late must not drag the paper back to a sentence already
+      read -- that is how a stretch comes to be read over and over. */
+   if(u<=entered)return;
    entered=u;index=u;clock.accum=0;clock.since=now();status='playing';error='';
    if(u+1<list.length&&queuedTo<u+1&&!gapBefore(u+1)){if(queueing)deferred={u:u+1,g};else enqueue(u+1,g);}
    emit('sentence');
   }
-  function onStart(g,u,k){if(g!==gen||dead)return;heard=true;clearWatch();if(k===0)enter(u,g);if(watchdogMs&&typeof engine.busy==='function')armWatch(g);}
+  function onStart(g,u,k){if(g!==gen||dead)return;heard=true;beat();clearWatch();if(k===0)enter(u,g);if(watchdogMs&&typeof engine.busy==='function')armWatch(g);}
   function onEnd(g,u,last){
    if(g!==gen||dead)return;
+   beat();
    if(watchdogMs)armWatch(g);
    if(!last)return;
+   if(tryingAt===u){tryingAt=-1;tries=0;}
+   skipRun=0;                                  // a sentence that got through clears the run of lost ones
    const spent=(clock.accum+(clock.since!==null?now()-clock.since:0))/1000;clock.since=null;
    if(entered===u){try{onCredit(list[u],Math.min(CREDIT_MAX_SECONDS,Math.max(0,spent)));}catch(_){}}
    if(u+1>=list.length){clearWatch();queueLive=false;status='done';emit('done');return;}
@@ -628,7 +669,7 @@
    gen++;const g=gen;clearWatch();clearGap();try{engine.cancel();}catch(_){}
    // speechSynthesis stays paused through a cancel(): a queue left paused would hold the new sentence in silence
    if(enginePaused){enginePaused=false;try{engine.resume();}catch(_){}}
-   index=Math.max(0,Math.min(list.length-1,i));entered=-1;queuedTo=index-1;queueLive=true;status='playing';error='';clock.accum=0;clock.since=null;heard=false;deferred=null;
+   index=Math.max(0,Math.min(list.length-1,i));entered=-1;queuedTo=index-1;queueLive=true;status='playing';error='';clock.accum=0;clock.since=null;heard=false;deferred=null;beat();
    emit('status');armWatch(g);enqueue(index,g);
   }
   function rebuild(keep){
@@ -646,7 +687,7 @@
    state:snapshot,units:()=>list,
    /* What to store to come back to this sentence: its text, its page, its index. */
    position:()=>({index,sig:signature(list[index]),page:list[index]&&list[index].page,total:list.length}),
-   play(from){if(dead||!list.length)return snapshot();startAt(from===undefined?(status==='done'?0:index):from);return snapshot();},
+   play(from){if(dead||!list.length)return snapshot();tryingAt=-1;tries=0;startAt(from===undefined?(status==='done'?0:index):from);return snapshot();},
    pause(){
     if(status!=='playing')return snapshot();
     clearWatch();
@@ -664,6 +705,7 @@
    stop(silent){gen++;clearWatch();clearGap();try{engine.cancel();}catch(_){}queueLive=false;entered=-1;queuedTo=-1;clock.since=null;clock.accum=0;if(status!=='idle'){status='idle';if(!silent)emit('status');}return snapshot();},
    seek(i){
     if(dead||!list.length)return snapshot();
+    tryingAt=-1;tries=0;
     const target=Math.max(0,Math.min(list.length-1,Math.round(Number(i)||0)));
     if(status==='playing'){startAt(target);return snapshot();}
     gen++;clearWatch();clearGap();try{engine.cancel();}catch(_){}queueLive=false;entered=-1;index=target;
@@ -713,6 +755,6 @@
   for(let i=Math.max(0,from);i<list.length;i++){const m=sayable(list[i]).match(/\S+/g);words+=m?m.length:0;}
   return Math.round(words/(SAY_WPM*clamp(rate,RATE_MIN,RATE_MAX,1))*60);
  }
- const api={create,speechEngine,audioEngine,multiEngine,speechText,withoutCitations,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,paperLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM};
+ const api={create,speechEngine,audioEngine,multiEngine,speechText,withoutCitations,remainingSeconds,sayEngine,splitSentences,splitForEngine,detectLanguage,paperLanguage,pickVoice,composeUnits,plainTextStructure,fallbackPaperText,signature,sayable,RATE_MIN,RATE_MAX,CHUNK_MAX,SAY_WPM,GIVE_UP,SLOW};
  root.CustomStyleReadAloud=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

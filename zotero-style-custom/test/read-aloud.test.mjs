@@ -515,3 +515,122 @@ test('long sentences: most are one utterance; a cut falls at a clause near the m
  const s3='The cells were grown in 50 micrograms per milliliter kanamycin '+'and further selective media containing several antibiotics '.repeat(7)+'until saturation.';
  for(const x of RA.splitForEngine(s3))assert.ok(!/^(?:micrograms|per|milliliter)\b/.test(x),'a quantity stays whole: '+x.slice(0,30));
 });
+
+/* -- a sentence the voice will not finish -----------------------------------
+   The fault the phone app was caught by: the voice starts a sentence, stops part way and sends neither
+   `end` nor `error`. There the watchdog restarted it and it died in the same place for ever; here the
+   paper simply stopped. Either way the listener hears one stretch over and over. */
+
+/* A clock the test drives, and an engine that reads each sentence in four seconds -- except the ones
+   the test says it will not finish. */
+function clockEngine({stuckOn=()=>false,readMs=4000,busy=()=>true}={}){
+ let at=0,id=0;const jobs=new Map();
+ const queue=[],spoken=[];let current=null;
+ const timers={set:(fn,ms)=>{jobs.set(++id,{fn,due:at+Math.max(0,ms)});return id;},clear:i=>{jobs.delete(i);}};
+ function serve(){
+  if(current||!queue.length)return;
+  const u=queue.shift();current=u;spoken.push(u.text);
+  u.onstart&&u.onstart();
+  if(stuckOn(u.text))return;
+  timers.set(()=>{if(current!==u)return;current=null;u.onend&&u.onend();serve();},readMs);
+ }
+ return {spoken,timers,now:()=>at,
+  pass(ms){const until=at+ms;for(;;){const next=[...jobs.entries()].filter(([,j])=>j.due<=until).sort((a,b)=>a[1].due-b[1].due)[0];if(!next)break;jobs.delete(next[0]);at=next[1].due;next[1].fn();}at=until;},
+  engine:{name:'clock',supportsPause:true,voices:()=>[],speak(u){queue.push(u);serve();},
+   cancel(){queue.length=0;current=null;},pause(){},resume(){},busy}};
+}
+const said=spoken=>spoken.map(t=>t.replace(/ has.*/,''));
+const five=()=>[0,1,2,3,4].map(i=>unit(`Sentence ${i+1} has a few words in it.`,1,0));
+
+test('a sentence the voice never finishes is tried twice more, then left behind, and the paper reads on',()=>{
+ const c=clockEngine({stuckOn:t=>/Sentence 3/.test(t)});
+ const events=[];
+ const p=RA.create({engine:c.engine,timers:c.timers,now:c.now,watchdogMs:6000,headings:false,onChange:e=>events.push(e.type)});
+ p.load(five());p.play();
+ c.pass(5*60*1000);
+ assert.deepEqual(said(c.spoken),['Sentence 1','Sentence 2','Sentence 3','Sentence 3','Sentence 3','Sentence 4','Sentence 5']);
+ assert.equal(p.state().status,'done','the paper finishes instead of waiting for ever on one sentence');
+ assert.equal(p.state().revived,RA.GIVE_UP);
+ assert.equal(p.state().skipped,1);
+ assert.ok(events.includes('revived')&&events.includes('skipped'),'and says so, so it can be reported');
+});
+
+test('a voice that is only slow is never cut off',()=>{
+ // Nine words at 200 a minute is under three seconds; this voice takes eighteen, and is left alone.
+ const c=clockEngine({readMs:18000});
+ const p=RA.create({engine:c.engine,timers:c.timers,now:c.now,watchdogMs:6000,headings:false});
+ p.load(five());p.play();
+ c.pass(5*60*1000);
+ assert.deepEqual(said(c.spoken),['Sentence 1','Sentence 2','Sentence 3','Sentence 4','Sentence 5'],'no sentence spoken twice');
+ assert.equal(p.state().revived,0);
+ assert.equal(p.state().status,'done');
+});
+
+test('a sentence still being made by the Mac is waited for, however long the Mac takes',()=>{
+ /* The natural voices are made on this Mac before they sound: while a paper is being baked for the car
+    one piece took eighteen seconds. The player must not take that for a stuck sentence and start over --
+    that would cancel the request and ask for it again, for ever. */
+ const c=clockEngine({readMs:4000});
+ let making=true;                                     // the voice for sentence 2 is still being made
+ const engine={...c.engine,waiting:()=>making};
+ const p=RA.create({engine,timers:c.timers,now:c.now,watchdogMs:6000,headings:false});
+ p.load(five());p.play();
+ c.pass(4*60*1000);
+ assert.equal(p.state().revived,0,'nothing was restarted while the Mac was still making it');
+ making=false;
+ c.pass(60*1000);
+ assert.equal(p.state().status,'done');
+ assert.deepEqual(said(c.spoken),['Sentence 1','Sentence 2','Sentence 3','Sentence 4','Sentence 5']);
+});
+
+test('a voice that finishes nothing at all stops with a reason instead of mumbling the whole paper',()=>{
+ const c=clockEngine({stuckOn:()=>true});
+ const p=RA.create({engine:c.engine,timers:c.timers,now:c.now,watchdogMs:6000,headings:false});
+ p.load(five());p.play();
+ c.pass(10*60*1000);
+ assert.equal(p.state().status,'error');
+ assert.equal(p.state().error,'voice-stuck');
+ assert.equal(said(c.spoken).filter(t=>t==='Sentence 4').length,0,'it does not grind on through the paper');
+});
+
+test('the last sentence stuck ends the paper, and a stuck sentence read on the next try is not held against it',()=>{
+ const last=clockEngine({stuckOn:t=>/Sentence 5/.test(t)});
+ const p=RA.create({engine:last.engine,timers:last.timers,now:last.now,watchdogMs:6000,headings:false});
+ p.load(five());p.play();last.pass(5*60*1000);
+ assert.equal(p.state().status,'done');
+ assert.equal(p.state().skipped,1);
+
+ // The same sentence, stuck once and then read: the paper carries on and nothing is counted against it later.
+ let seen=0;
+ const flaky=clockEngine({stuckOn:t=>/Sentence 2/.test(t)&&++seen===1});
+ const q=RA.create({engine:flaky.engine,timers:flaky.timers,now:flaky.now,watchdogMs:6000,headings:false});
+ q.load(five());q.play();flaky.pass(5*60*1000);
+ assert.deepEqual(said(flaky.spoken),['Sentence 1','Sentence 2','Sentence 2','Sentence 3','Sentence 4','Sentence 5']);
+ assert.equal(q.state().skipped,0,'it was revived, not given up on');
+ assert.equal(q.state().status,'done');
+});
+
+test('a start that arrives late cannot drag the paper back to a sentence already read',()=>{
+ const engine=fakeEngine();
+ const {p}=player({engine});
+ p.play();
+ const first=engine.queue[0];
+ engine.begin();                   // One. starts
+ engine.finish();                  // and ends: Two. is next
+ engine.begin();
+ assert.equal(p.state().index,1);
+ first.onstart();                  // the engine reports the first sentence starting, long after it ended
+ assert.equal(p.state().index,1,'the paper stays where it is');
+ engine.finish();engine.begin();
+ assert.equal(p.state().index,2,'and goes on forward');
+});
+
+test('the user pressing play on a sentence that was given up on gives it a fresh pair of tries',()=>{
+ const c=clockEngine({stuckOn:t=>/Sentence 2/.test(t)});
+ const p=RA.create({engine:c.engine,timers:c.timers,now:c.now,watchdogMs:6000,headings:false});
+ p.load(five());p.play();c.pass(2*60*1000);
+ assert.equal(p.state().skipped,1);
+ const before=c.spoken.length;
+ p.play(1);c.pass(2*60*1000);
+ assert.equal(said(c.spoken).slice(before).filter(t=>t==='Sentence 2').length,RA.GIVE_UP+1,'tried again from the top, not refused');
+});

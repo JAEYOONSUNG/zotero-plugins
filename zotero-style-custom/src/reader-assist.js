@@ -1760,7 +1760,12 @@
      if(state.unit)highlight(session,state.unit);session.data.position={index:state.index,sig:RA.signature(state.unit),page:pageNumberOf(state.unit),filter:filterId(session.filters),at:Date.now()};saveSoon(session);}
    }
    if(state.status==='idle'||state.status==='done')clearHighlight(session);
-   if(state.status==='error')say(session,state.error==='no-audio'?t('소리가 나지 않습니다. 시스템 음성 설정을 확인하세요.'):T('읽기를 멈췄습니다: {0}',state.error),true);
+   if(state.status==='error')say(session,state.error==='no-audio'?t('소리가 나지 않습니다. 시스템 음성 설정을 확인하세요.'):
+    state.error==='voice-stuck'?t('이 목소리가 문장을 끝내지 못합니다. 다른 목소리를 골라 보세요.'):T('읽기를 멈췄습니다: {0}',state.error),true);
+   /* A sentence the voice would not finish, and what the player did about it. Written down because this is what
+      "it keeps reading the same part" looks like from inside: without it there is nothing to look at afterwards. */
+   if(type==='revived'||type==='skipped')writeReport(session,'stuck',
+    `${new Date().toISOString()} ${type} sentence ${state.index+1}/${state.total} · revived=${state.revived} skipped=${state.skipped} · voice=${state.voiceURI||'auto'} engine=${state.engine} rate=${state.rate}`);
   }
   function renderPlayer(session){
    const ui=session.ui,p=session.player,state=p?p.state():null,playing=state&&state.status==='playing';

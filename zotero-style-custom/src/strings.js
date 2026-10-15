@@ -1865,6 +1865,7 @@
  "이 메모를 노트에 썼습니다.": "This memo was written to the note.",
  "이 목록 문헌의 누적 읽기 시간": "Total reading time of the papers in this list",
  "이 목록 요약": "Summary of this list",
+ "이 목소리가 문장을 끝내지 못합니다. 다른 목소리를 골라 보세요.": "This voice will not finish a sentence. Try another voice.",
  "이 문단으로 이동": "Go to this paragraph",
  "이 문헌 메모": "Note on this item",
  "이 문헌 자세히 보기": "Show this paper",
