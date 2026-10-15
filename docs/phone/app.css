@@ -589,6 +589,9 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .player[hidden] { display:none; }
 /* Where in the paper on one side, how much of it is left on the other. */
 .player-meta { display:flex; justify-content:space-between; gap:10px; }
+/* Said once, under the place and the time left: this voice stops when the screen does. */
+.warn-line { font-size:12px; line-height:1.35; color:var(--muted); margin:4px 0 0; }
+#listen.driving .warn-line { font-size:14px; }
 .player-meta span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .player-row { display:flex; align-items:center; justify-content:center; gap:20px; }
 .player-row.wrap { gap:10px; justify-content:space-between; }

@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v23';
+export const BUILD = 'nonmun-v24';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -2065,6 +2065,7 @@ function paintReading(state) {
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
     $('listen-left').textContent = rest;
+    paintWarning();
     playMark($('listen-play'), playing);
     const seek = $('listen-seek');
     seek.max = String(Math.max(0, state.total - 1));
@@ -2084,6 +2085,21 @@ function paintReading(state) {
       try { paper.viewer.goto(unit.page); } catch (_) {}
     }
   }
+}
+
+/* iOS stops a page's own voice the moment the page stops being the page in front: the screen locks,
+   or another app comes up, and the reading stops with nothing said. A file does not stop -- that is
+   the whole reason papers are baked on the Mac. So when the phone's own voice is the one reading,
+   the bar says so, rather than letting the car be the place where it is discovered. */
+export const screenWarning = (saying, baked) =>
+  saying === 'mac' ? '' : baked ? t('폰 음성 · 화면을 끄면 멈춥니다. 맥 음성은 안 멈춥니다.')
+                                : t('폰 음성 · 화면을 끄면 멈춥니다. 맥이 아직 이 논문을 굽지 않았습니다.');
+function paintWarning() {
+  const note = $('listen-warn');
+  if (!note) return;
+  const text = listen.player ? screenWarning(listen.saying, !!listen.baked) : '';
+  note.textContent = text;
+  note.hidden = !text;
 }
 
 /* The sentence being read is kept in the middle of the screen rather than merely on it: a glance
@@ -2825,6 +2841,7 @@ function buildSaying() {
     });
   }
   requestAnimationFrame(() => slide(track));
+  paintWarning();
 }
 
 /* What is read: the body alone, the figure captions with it, or the reference list as well.

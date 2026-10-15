@@ -155,6 +155,10 @@ export default {
   '키가 함께 들어왔습니다': 'The key came with it',
   '키는 이 폰에만 저장되고 어디로도 보내지 않습니다.':
     'The key is kept on this phone alone and is never sent anywhere.',
+  '폰 음성 · 화면을 끄면 멈춥니다. 맥 음성은 안 멈춥니다.':
+    'Phone voice · stops when the screen does. The Mac’s voice does not.',
+  '폰 음성 · 화면을 끄면 멈춥니다. 맥이 아직 이 논문을 굽지 않았습니다.':
+    'Phone voice · stops when the screen does. The Mac has not baked this paper yet.',
   '홈 화면에 추가하면 키를 다시 넣어야 합니다.':
     'Adding it to the Home Screen starts it fresh, so the key has to go in again.',
   '복사했습니다. 홈 화면 앱 첫 화면에서 붙여넣기를 누르세요':

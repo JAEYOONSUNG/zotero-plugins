@@ -4036,3 +4036,17 @@ test('고른 화면은 PDF 페이지까지 따라간다', async () => {
   assert.equal(nightWanted('off', darkWanted('dark', false)), false);
   assert.equal(nightWanted('on', darkWanted('light', true)), true);
 });
+
+test('the bar says when the voice is one the screen can stop, and which papers do not stop', async () => {
+  // iOS stops a page's own voice when the screen locks and says nothing; a baked file plays on.
+  // The line belongs on the bar before the car, not in the car.
+  const {screenWarning} = await import('../app.js');
+  // Another test leaves the app in English; this one is about the Korean the bar shows here.
+  const i18n = await import('../i18n.js');
+  i18n.use('ko', {language: 'ko-KR'});
+  assert.equal(screenWarning('mac', true), '', 'the Mac reading from a file needs no warning');
+  assert.match(screenWarning('raw', true), /화면을 끄면 멈춥니다/);
+  assert.match(screenWarning('raw', true), /맥 음성은 안 멈춥니다/, 'and says what to switch to');
+  assert.match(screenWarning('raw', false), /맥이 아직 이 논문을 굽지 않았습니다/, 'with no file there is nothing to switch to');
+  assert.match(screenWarning('tr', false), /화면을 끄면 멈춥니다/, 'a translation is read by the phone too');
+});
