@@ -236,6 +236,7 @@ async function boot({server = fakeServer(), stored = {'np.user': '16265664', 'np
         this.preload = ''; this.handlers = {}; audios.push(this);
       }
       addEventListener(name, fn) { (this.handlers[name] ||= []).push(fn); }
+      removeEventListener(name, fn) { this.handlers[name] = (this.handlers[name] || []).filter(held => held !== fn); }
       play() { this.paused = false; return Promise.resolve(); }
       pause() { this.paused = true; }
       fire(name) { for (const fn of this.handlers[name] || []) fn(); }
@@ -3542,12 +3543,12 @@ test('맥이 구운 음성이 있으면 폰이 그것으로 읽는다 — 화면
   const row = open.document.getElementById('listen-saying');
   assert.equal(row.hidden, false, 'the Mac made one, so it is offered');
   const buttons = [...row.querySelectorAll('button')];
-  assert.deepEqual(buttons.map(b => b.textContent), ['원문', '맥 음성']);
-  /* And it is what reads, without being asked: the paper was baked precisely so the phone would not
-     have to say it in its own voice. It was hidden behind a menu before, so a reader who had baked
-     240 papers heard none of them. */
-  assert.equal(buttons[1].getAttribute('aria-pressed'), 'true', 'the Mac’s voice is the one in use');
-  assert.equal(buttons[0].getAttribute('aria-pressed'), 'false');
+  /* The Mac's voice comes first and is what reads, without being asked: the paper was baked
+     precisely so the phone would not have to say it in its own voice, which the reader calls 후지다.
+     The phone's own is named as the stand-in it is, not as "원문" standing level with it. */
+  assert.deepEqual(buttons.map(b => b.textContent), ['맥 음성', '폰 음성']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'true', 'the Mac’s voice is the one in use');
+  assert.equal(buttons[1].getAttribute('aria-pressed'), 'false');
 
   // The list is the sentences the Mac actually spoke, so a tap lands on the right moment.
   const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
@@ -3571,8 +3572,8 @@ test('맥이 구운 음성이 있으면 폰이 그것으로 읽는다 — 화면
   await open.settle();
   assert.equal(audio.currentTime, 6.4);
 
-  // Back to the paper itself: the phone's own voice reads again, and the file stops.
-  [...row.querySelectorAll('button')][0].dispatchEvent(new open.window.Event('click'));
+  // Back to the phone's own voice: the file stops, and it reads the paper itself.
+  [...row.querySelectorAll('button')][1].dispatchEvent(new open.window.Event('click'));
   await open.settle();
   assert.equal(audio.paused, true, 'the file was left behind, not left playing');
   const back = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
@@ -3588,6 +3589,76 @@ test('구운 음성이 없거나 Dropbox가 없으면 그 선택지는 나오지
   assert.equal(open.document.getElementById('listen-saying').hidden, true);
   const off = await openListening();          // no Dropbox at all
   assert.equal(off.open.document.getElementById('listen-saying').hidden, true);
+});
+
+test('폰 기본 음성은 떔빵이다 — 구운 파일이 있으면 지난번에 원문을 눌렀더라도 그것이 읽는다', async () => {
+  /* The reader calls the phone's own voice 후지다 and wants it only where the Mac has not read
+     first, so a past tap on the phone's voice is not a standing instruction. */
+  const {open} = await openListening({dropbox: bakedDropbox(), stored: {'np.said': 'raw'}});
+  await open.settle();
+  const buttons = [...open.document.querySelectorAll('#listen-saying button')];
+  assert.deepEqual(buttons.map(b => b.textContent), ['맥 음성', '폰 음성']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'true', 'the Mac reads it all the same');
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.equal(open.audios.at(-1).paused, false);
+  assert.equal(open.speech.queue.length, 0, 'the phone did not say a word of it');
+});
+
+test('파일을 못 읽으면 폰 목소리가 이어 읽는다 — 달리는 차가 조용해지지 않게', async () => {
+  const {open} = await openListening({dropbox: bakedDropbox()});
+  await open.settle();
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const audio = open.audios.at(-1);
+  assert.equal(audio.paused, false, 'the file is playing');
+  // The signal dies and the file cannot go on.
+  audio.fire('error');
+  await open.settle();
+  const buttons = [...open.document.querySelectorAll('#listen-saying button')];
+  assert.equal(buttons[1].getAttribute('aria-pressed'), 'true', 'the phone’s voice took over');
+  assert.ok(open.speech.queue.length > 0, 'and it is reading, not silent');
+  assert.match(open.document.getElementById('toast').textContent, /폰 목소리/);
+});
+
+test('한참 들은 논문은 신호 없는 길을 위해 폰이 받아 둔다', async () => {
+  const dropbox = bakedDropbox();
+  const {open} = await openListening({dropbox});
+  await open.settle();
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  const audio = open.audios.at(-1);
+  assert.ok(!dropbox.paths.includes('/논문 음성/Retron Septu defence.m4b'), 'nothing was fetched to begin with');
+  audio.to(20);
+  await open.settle();
+  assert.ok(!dropbox.paths.includes('/논문 음성/Retron Septu defence.m4b'), 'a glance costs no bytes');
+  audio.to(75);
+  await open.settle();
+  assert.ok(dropbox.paths.includes('/논문 음성/Retron Septu defence.m4b'), 'a real listen is put away');
+});
+
+test('목소리 메뉴는 화면 밖으로 잘려 보이지 않는다', async () => {
+  const open = await boot();
+  await open.settle();
+  const {floatPlace} = await import(new URL(`../app.js?boot=${boots}`, here));
+  const view = {width: 390, height: 844};
+  /* 목소리 sits at the left of its row: hanging a 196px menu off its right edge put the menu's own
+     left edge 76px off the side of the phone, and the menu was cut down its side. */
+  const left = floatPlace({box: {top: 600, bottom: 630, right: 120, width: 90}, wide: 196, tall: 240, view});
+  assert.equal(left.left, 8);
+  assert.equal(left.top, 354, 'and from that far down the screen it opens upwards, as it did before');
+  // Higher up it hangs under the button it was opened from.
+  const under = floatPlace({box: {top: 200, bottom: 230, right: 120, width: 90}, wide: 196, tall: 240, view});
+  assert.equal(under.top, 236);
+  // A button at the right edge still keeps its menu's right edge against it.
+  const right = floatPlace({box: {top: 100, bottom: 130, right: 382, width: 44}, wide: 196, tall: 240, view});
+  assert.equal(right.left, 186);
+  // Near the foot of the screen the menu opens upwards rather than off the bottom.
+  const up = floatPlace({box: {top: 700, bottom: 740, right: 382, width: 44}, wide: 196, tall: 300, view});
+  assert.equal(up.top, 394);
+  // And a menu wider than the phone starts on the screen instead of to the left of it.
+  const huge = floatPlace({box: {top: 10, bottom: 40, right: 300, width: 60}, wide: 500, tall: 100, view});
+  assert.equal(huge.left, 8);
 });
 
 test('구운 파일은 다 내려오기 전에 재생된다 — 20MB를 기다리다 목소리가 안 나오던 자리', async () => {

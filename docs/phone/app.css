@@ -668,6 +668,9 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
             padding:10px; border-radius:10px; font-size:15px; }
 .menu-row:active { background:var(--track); }
 .menu-row svg { width:19px; height:19px; flex:none; }
+/* A long name — every voice this phone has is named at length, 향상된 품질 and all — wraps onto a
+   second line instead of being cut off at the side of the menu. */
+.menu-row span:not(.tick) { min-width:0; white-space:normal; overflow-wrap:anywhere; }
 .menu-row[aria-pressed="true"] { color:var(--link); font-weight:600; }
 .menu-row.bad { color:var(--bad); }
 /* A line between what a paper can be done to and what it can be marked as. */
@@ -676,7 +679,8 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
    headings, which are quiet and never themselves a thing to press. */
 .menu-head { padding:7px 12px 3px; font-size:11px; font-weight:700; color:var(--faint); }
 /* A menu that hangs off a button is put where the button is, by the hand that opened it. */
-.menu.float { position:fixed; z-index:40; width:196px; max-height:min(66vh,440px); overflow-y:auto; }
+.menu.float { position:fixed; z-index:40; width:196px; max-width:calc(100vw - 16px);
+              max-height:min(66vh,440px); overflow-y:auto; }
 .menu-row .tick { width:17px; flex:none; display:flex; color:var(--link); }
 .menu-row .tick svg { width:17px; height:17px; stroke-width:2.4; }
 

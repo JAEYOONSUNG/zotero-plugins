@@ -374,8 +374,10 @@ export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = n
   /* One listing of the folder decides which of the names is there, instead of a failed download for
      each name that is not. */
   const listing = index ? await index.names() : null;
-  const there = listing ? new Set(listing.map(entry => entry.name)) : null;
-  const want = there ? paths.filter(path => there.has(path.split('/').pop())) : paths;
+  /* macOS hands a Korean name over decomposed and Dropbox holds it composed, so the two spellings
+     of one name are compared in one spelling. */
+  const there = listing ? new Set(listing.map(entry => String(entry.name).normalize('NFC'))) : null;
+  const want = there ? paths.filter(path => there.has(path.split('/').pop().normalize('NFC'))) : paths;
   if (!want.length) return null;
   onStep('찾는 중');
   /* Played from a link rather than fetched whole. A baked paper is 10–30 MB: waiting for all of it

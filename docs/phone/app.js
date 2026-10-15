@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v20';
+export const BUILD = 'nonmun-v21';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -2645,8 +2645,11 @@ export const bakedUnits = (marks, names = null) => {
   }));
 };
 
-/* Unless the reader has said otherwise, a baked paper is read in the Mac's voice. */
-export const wantsMac = (said = localStorage.getItem(KEYS.said)) => said !== 'raw' && said !== 'tr';
+/* A baked paper is read in the Mac's voice, full stop. The phone's own is a stand-in for the
+   papers the Mac has not read yet — it is not a choice to be remembered over a real voice, so a
+   tap on 폰 음성 lasts for that paper and no longer. The translation is different: that is a
+   choice about which words are read, and the Mac has only ever said the original. */
+export const wantsMac = (said = localStorage.getItem(KEYS.said)) => said !== 'tr';
 
 /* Hand the player the baked file in place of the phone's voice, wherever it is being read from.
    The sentences become the ones the Mac actually spoke, so the list still follows along and a tap
@@ -2662,13 +2665,43 @@ function useBaked({play = false} = {}) {
     onChange: event => paintReading(event.state)});
   listen.player.load(listen.list, {at: 0});
   keepAfterListening(listen.baked);
+  watchBaked(listen.baked);
   if (!$('listen').hidden) { buildSaying(); paintVoice(listen.lang || 'en'); }
+  if (playing) listen.player.play(0); else paintReading(listen.player.state());
+  return true;
+}
+
+/* Back to the phone's own voice: either asked for, or because the file could not be played — a
+   signal that dies mid-journey must not leave a silent car. */
+function useOwnVoice({play = false} = {}) {
+  if (!listen.engine) return false;
+  const playing = play || (listen.player ? listen.player.state().status === 'playing' : false);
+  listen.saying = listen.saying === 'tr' ? 'tr' : 'raw';
+  listen.list = readingUnits(listen.paper, unitsFor(reading()));
+  if (!$('listen').hidden) renderTranscript(listen.list);
+  if (listen.player) listen.player.stop();
+  listen.player = createPlayer({engine: listen.engine, rate: readRate(), volume: readVolume(),
+    onChange: event => paintReading(event.state)});
+  const lang = paperLanguage(listen.list);
+  const voice = pickVoice(listen.voices || [], lang, localStorage.getItem(KEYS.voice + lang) || '');
+  if (voice) listen.player.setVoice(voice.voiceURI, voice.lang || lang);
+  listen.player.load(listen.list, {at: 0});
+  if (!$('listen').hidden) { buildSaying(); paintVoice(lang); }
   if (playing) listen.player.play(0); else paintReading(listen.player.state());
   return true;
 }
 
 /* A paper streamed once is put away on the phone after a minute of real listening — long enough to
    mean it, so a journey with no signal has the file and a paper merely glanced at costs nothing. */
+function watchBaked(baked) {
+  if (!baked || !baked.audio || baked.watchingError) return;
+  baked.watchingError = true;
+  baked.audio.addEventListener('error', () => {
+    if (listen.saying !== 'mac') return;
+    if (useOwnVoice()) toast('맥 음성을 받지 못해 폰 목소리로 읽습니다');
+  }, {once: true});
+}
+
 export const KEEP_AFTER = 60;
 function keepAfterListening(baked) {
   if (!baked || !baked.streamed || !baked.path || baked.keeping || baked.watching || !baked.audio) return;
@@ -2683,8 +2716,11 @@ function keepAfterListening(baked) {
   audio.addEventListener('timeupdate', watch);
 }
 
-/* 원문 or 번역: shown only when this paper has a translation to offer, because a row of choices
-   where one can never be picked is worse than no row. */
+/* Which voice, and which words. Shown only when there is more than one of either to offer, because
+   a row of choices where one can never be picked is worse than no row.
+
+   The Mac's voice comes first and is what reads: the phone's own is named as what it is, a
+   stand-in, rather than standing as an equal under the name of the paper itself. */
 function buildSaying() {
   const row = $('listen-saying');
   row.hidden = !listen.translation && !listen.baked;
@@ -2692,9 +2728,8 @@ function buildSaying() {
   if (!listen.translation && !listen.baked) return;
   const track = el('nav', {class: 'seg small-seg', role: 'group', 'aria-label': t('읽을 말')}, row);
   el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
-  const choices = [['raw', '원문']];
+  const choices = listen.baked ? [['mac', '맥 음성'], ['raw', '폰 음성']] : [['raw', '원문']];
   if (listen.translation) choices.push(['tr', '번역']);
-  if (listen.baked) choices.push(['mac', '맥 음성']);
   for (const [id, label] of choices) {
     const button = el('button', {type: 'button', 'aria-pressed': String(id === listen.saying), text: label}, track);
     button.addEventListener('click', () => {
@@ -2703,28 +2738,14 @@ function buildSaying() {
       listen.saying = id;
       localStorage.setItem(KEYS.said, id);
       if (id === 'mac') { useBaked(); return; }
-      if (was === 'mac') {
-        // Leaving the file behind: the phone's own voice reads again.
-        listen.player.stop();
-        listen.player = createPlayer({engine: listen.engine, rate: readRate(), volume: readVolume(),
-          onChange: event => paintReading(event.state)});
-      }
+      void was;
+      // Which words: the paper itself, or the translation beside it. A translation is a different
+      // language, so useOwnVoice chooses the voice again for it.
       listen.paper = id === 'tr'
         ? fromNote(listen.translation.html, {title: $('listen-title').textContent})
-        : listen.original;
-      listen.list = readingUnits(listen.paper, unitsFor(reading()));
-      renderTranscript(listen.list);
-      const playing = listen.player.state().status === 'playing';
-      listen.player.load(listen.list, {at: 0});
-      // A translation is a different language, so the voice is chosen again for it.
-      const lang = paperLanguage(listen.list);
+        : (listen.original || listen.paper);
       listen.voices = listen.engine ? listen.engine.voices() : listen.voices;
-      const voice = pickVoice(listen.voices, lang, localStorage.getItem(KEYS.voice + lang) || '');
-      if (voice) listen.player.setVoice(voice.voiceURI, voice.lang || lang);
-      paintVoice(lang);
-      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
-      slide(track);
-      if (playing) listen.player.play(0); else paintReading(listen.player.state());
+      useOwnVoice();
     });
   }
   requestAnimationFrame(() => slide(track));
@@ -3076,6 +3097,26 @@ const ICON = {
   voice: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></svg>'
 };
+/* Where a menu that hangs off a button goes. It hangs under the button and from its right edge,
+   but it is kept on the screen before anything else: the 목소리 menu hangs off a button at the left
+   of its row, and aligning the menu's right edge with that button's put its own left edge 76px off
+   the side of the phone — the menu was simply cut down its side.
+
+   Pure, so the arithmetic is checked for every corner of the screen without a phone. */
+export const FLOAT_EDGE = 8, FLOAT_GAP = 6;
+export function floatPlace({box, wide = 196, tall = 0, view = {}} = {}) {
+  const width = view.width || 0, height = view.height || 0;
+  // A row near the bottom of the screen gets its menu above it rather than off the edge.
+  const under = (box.bottom || 0) + FLOAT_GAP;
+  const room = height - FLOAT_EDGE;
+  const top = tall && under + tall > room
+    ? Math.max(FLOAT_EDGE, (box.top || 0) - tall - FLOAT_GAP)
+    : under;
+  const last = Math.max(FLOAT_EDGE, width - wide - FLOAT_EDGE);
+  const left = Math.max(FLOAT_EDGE, Math.min((box.right || 0) - wide, last));
+  return {top: Math.round(top), left: Math.round(left)};
+}
+
 let floating = null;
 export function closeFloat() {
   if (!floating) return;
@@ -3112,13 +3153,13 @@ function floatMenu(anchor, items, {chosen = '', lift = null} = {}) {
   }
   const box = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
   if (box && box.width) {
-    const tall = menu.offsetHeight || 0;
-    const room = (window.innerHeight || 0) - 8;
-    // A row near the bottom of the screen gets its menu above it rather than off the edge.
-    const under = box.bottom + 6;
-    const top = tall && under + tall > room ? Math.max(8, box.top - tall - 6) : under;
-    menu.style.top = `${Math.round(top)}px`;
-    menu.style.right = `${Math.max(8, Math.round((window.innerWidth || 0) - box.right))}px`;
+    const place = floatPlace({
+      box, wide: menu.offsetWidth || 196, tall: menu.offsetHeight || 0,
+      view: {width: window.innerWidth || 0, height: window.innerHeight || 0}
+    });
+    menu.style.top = `${place.top}px`;
+    menu.style.left = `${place.left}px`;
+    menu.style.right = 'auto';
   }
   /* The tap that lands on the button itself is left to the button, which closes the menu by being
      pressed again; anything else is a way of saying no. iOS does not always let a tap on a plain
