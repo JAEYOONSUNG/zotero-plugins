@@ -246,6 +246,11 @@ svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9;
 .jif[data-band="mid"] { background:var(--track-hover); }
 .jif[data-band="low"] { background:var(--track); color:var(--muted); }
 .from { flex:none; font-size:12px; letter-spacing:-1px; }
+/* The Mac has a voice for this one. A quiet outline, the size of the rest of the foot: it is a
+   fact about the paper, not a thing to press. */
+.voiced { flex:none; display:flex; align-items:center; color:var(--muted); }
+.voiced svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.7;
+              stroke-linecap:round; stroke-linejoin:round; }
 /* The journal's name in the ink the Mac paints it in. Both themes' inks ride on the element as
    custom properties and the stylesheet picks one, so a row drawn once is right in either. Every
    ink is measured on the Mac to read at 4.5:1 on the card it lands on. */
@@ -678,18 +683,27 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 /* ---------- the PDF ---------- */
 /* The page itself is white on a dimmer canvas, as paper is, in both schemes: a PDF rendered on
    a dark canvas would otherwise be a bright rectangle with no edge. */
-.pdf { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+/* A zoomed page is wider than the phone, so both ways scroll — and the pages are laid from the
+   start of the line rather than centred: a centred flex item that overflows puts its left edge
+   out of the container's reach, which is why the left margin of a zoomed page could not be
+   reached at all. At zoom 1 a page is exactly the width of the column, so it looks the same. */
+.pdf { flex:1; min-height:0; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
        padding:10px 10px calc(var(--bottom) + 24px); background:var(--pdf-canvas,#8d8d93);
-       display:flex; flex-direction:column; align-items:center; gap:10px; }
-.pdf.with-player { padding-bottom:calc(var(--bottom) + 170px); }
+       display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+/* The player on this screen stands under the pages instead of over them: a bar floating on the
+   glass hid the last two inches of every page, and the slider and the search it also covered. */
+#paper-bar.player { position:static; }
+.pdf.with-player { padding-bottom:14px; }
 /* A tap gives the whole screen to the paper: the bar folds away and the pages grow into it. */
 #paper .top { transition:max-height 240ms cubic-bezier(.32,.72,0,1), opacity 160ms, padding 240ms;
               max-height:200px; overflow:hidden; }
 #paper.bare .top { max-height:0; opacity:0; padding-top:0; padding-bottom:0; }
 @media (prefers-reduced-motion:reduce) { #paper .top { transition:none } }
 /* Where you are, while the pages are moving and for a moment after. */
+/* It is shown only when the bar has folded away, so it sits where the bar was: at the bottom it
+   stood on the player, or behind it. */
 .page-now { position:absolute; z-index:4; left:50%; transform:translateX(-50%);
-            bottom:calc(var(--bottom) + 16px); padding:5px 13px; border-radius:999px;
+            top:calc(var(--top) + 10px); padding:5px 13px; border-radius:999px;
             background:var(--chrome); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
             box-shadow:var(--lift); font-size:12px; font-weight:650; color:var(--ink);
             font-variant-numeric:tabular-nums; opacity:0; transition:opacity 220ms; pointer-events:none; }
@@ -713,6 +727,9 @@ button.set-row:active::before, button.set-row:active + .set-row::before { backgr
 .jump { display:flex; align-items:center; gap:10px; padding:8px var(--pad) calc(var(--bottom) + 8px);
         background:var(--card); border-top:1px solid var(--line); }
 .jump[hidden] { display:none; }
+/* With the player standing under them, these two do not need the home bar's room as well. */
+#paper:has(#paper-bar:not([hidden])) .jump { padding-bottom:8px; }
+#paper:has(#paper-bar:not([hidden])) .finder-list { padding-bottom:calc(8px + var(--kb, 0px)); }
 .jump input { flex:1; accent-color:var(--ink); }
 
 /* the reader's own marks */

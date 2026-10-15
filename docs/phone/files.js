@@ -23,7 +23,9 @@ export const DROPBOX = {
   token: 'https://api.dropboxapi.com/oauth2/token',
   download: 'https://content.dropboxapi.com/2/files/download',
   search: 'https://api.dropboxapi.com/2/files/search_v2',
-  list: 'https://api.dropboxapi.com/2/files/list_folder'
+  list: 'https://api.dropboxapi.com/2/files/list_folder',
+  more: 'https://api.dropboxapi.com/2/files/list_folder/continue',
+  link: 'https://api.dropboxapi.com/2/files/get_temporary_link'
 };
 
 /* ---------- where a file is ---------- */
@@ -188,19 +190,48 @@ export function createDropbox({
 
     /* What is in one folder, by name. One request answers for every paper, which matters on a phone:
        asking per paper cost a round trip for each name that was not there. A folder that does not
-       exist is not a failure — it means nothing has been baked yet. */
+       exist is not a failure — it means nothing has been baked yet.
+
+       Dropbox answers a page at a time and says so (`has_more`); a folder of 240 baked papers is
+       481 files, so the rest is asked for rather than assumed away. Without this the papers baked
+       last were simply invisible on the phone, which is indistinguishable from never baked. */
     async list(folder) {
       const token = await self.access();
-      const response = await fetchImpl(DROPBOX.list, {
+      const head = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'};
+      const out = [];
+      let where = DROPBOX.list;
+      let body = JSON.stringify({path: String(folder || ''), recursive: false, limit: 500});
+      for (let page = 0; page < 40; page++) {
+        const response = await fetchImpl(where, {method: 'POST', headers: head, body});
+        if (response.status === 409) return out;
+        if (response.status === 401) { self.forget(); throw Object.assign(new Error('Dropbox 연결이 만료되었습니다. 다시 연결해 주세요.'), {need: 'dropbox'}); }
+        if (!response.ok) throw new Error(`Dropbox 오류 (${response.status})`);
+        const answer = await response.json().catch(() => ({}));
+        for (const e of answer.entries || []) {
+          if (!e || e['.tag'] !== 'file' || !e.name) continue;
+          out.push({name: e.name, path: e.path_display || `${folder}/${e.name}`,
+                    size: e.size || 0, at: e.server_modified || ''});
+        }
+        if (!answer.has_more || !answer.cursor) break;
+        where = DROPBOX.more;
+        body = JSON.stringify({cursor: answer.cursor});
+      }
+      return out;
+    },
+
+    /* A link an audio element can play straight from, instead of 15 MB that must arrive first.
+       Dropbox serves it with byte ranges, so it starts at once and seeks; it is good for four
+       hours, which is longer than any paper. */
+    async link(path) {
+      const token = await self.access();
+      const response = await fetchImpl(DROPBOX.link, {
         method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
-        body: JSON.stringify({path: String(folder || ''), recursive: false, limit: 500})
+        body: JSON.stringify({path: String(path || '')})
       });
-      if (response.status === 409) return [];
       if (response.status === 401) { self.forget(); throw Object.assign(new Error('Dropbox 연결이 만료되었습니다. 다시 연결해 주세요.'), {need: 'dropbox'}); }
-      if (!response.ok) throw new Error(`Dropbox 오류 (${response.status})`);
+      if (!response.ok) return '';
       const answer = await response.json().catch(() => ({}));
-      return (answer.entries || []).filter(e => e && e['.tag'] === 'file' && e.name)
-        .map(e => ({name: e.name, path: e.path_display || `${folder}/${e.name}`, size: e.size || 0, at: e.server_modified || ''}));
+      return String(answer.link || '');
     },
 
     /* The same file name anywhere under the library folder. */
@@ -301,22 +332,37 @@ export function bakedPaths(title, folder = AUDIO_BASE, copies = 4) {
 
 /* The bytes of the baked paper, and the sidecar beside it when there is one. Nothing is downloaded
    twice: what the phone already has is kept in the same store the PDFs use. */
-/* What the Mac has baked, read once and kept for the session: every paper after the first is
-   answered without a request. */
-export function bakedIndex({dropbox, folder = AUDIO_BASE} = {}) {
-  let held = null;
+/* What the Mac has baked. One listing answers for every paper, so it is kept — but not for the
+   whole life of the app: the Mac bakes while the phone is open, and a listing taken this morning
+   says a paper finished at noon was never baked. It is taken again when it is older than a few
+   minutes, and the pull to refresh throws it away outright. */
+export const INDEX_FRESH = 180000;
+export function bakedIndex({dropbox, folder = AUDIO_BASE, fresh = INDEX_FRESH, now = () => Date.now()} = {}) {
+  let held = null, at = 0, asking = null;
   return {
-    async names() {
-      if (held) return held;
-      if (!dropbox || !dropbox.linked) return (held = []);
-      held = await dropbox.list(folder).catch(() => []);
-      return held;
+    async names({refresh = false} = {}) {
+      if (held && !refresh && now() - at < fresh) return held;
+      if (!dropbox || !dropbox.linked) { held = []; at = now(); return held; }
+      // Two papers opened at once ask one question between them.
+      if (!asking) asking = dropbox.list(folder).catch(() => null).then(list => {
+        asking = null;
+        if (list) { held = list; at = now(); }
+        return held || [];
+      });
+      return await asking;
     },
-    forget() { held = null; }
+    /* Whether this one name is there, without a fresh listing when one was just taken. */
+    async has(name) {
+      const list = await this.names();
+      return list.some(entry => entry.name === name);
+    },
+    get taken() { return at; },
+    forget() { held = null; at = 0; }
   };
 }
 
-export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = null, index = null, onStep = () => {}} = {}) {
+export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = null, index = null,
+                                  stream = true, onStep = () => {}} = {}) {
   if (!dropbox || !dropbox.linked) return null;
   const paths = bakedPaths(title, folder);
   for (const path of paths) {
@@ -332,6 +378,16 @@ export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = n
   const want = there ? paths.filter(path => there.has(path.split('/').pop())) : paths;
   if (!want.length) return null;
   onStep('찾는 중');
+  /* Played from a link rather than fetched whole. A baked paper is 10–30 MB: waiting for all of it
+     before the voice was even offered meant that on a phone away from wifi the Mac's voice simply
+     never appeared, which looked exactly like nothing having been baked. */
+  if (stream) {
+    for (const path of want) {
+      let url = '';
+      try { url = await dropbox.link(path); } catch (_) { url = ''; }
+      if (url) return {path, url, fromCache: false};
+    }
+  }
   for (const path of want) {
     let bytes = null;
     try { bytes = await dropbox.download(path); }
@@ -341,6 +397,20 @@ export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = n
     return {path, bytes, fromCache: false};
   }
   return null;
+}
+
+/* The same file put away for a journey with no signal. Called once the reader is actually
+   listening to it, not when it is merely offered: nobody wants 20 MB spent on a paper they
+   glanced at. */
+export async function keepBaked({path, dropbox, cache}) {
+  if (!path || !dropbox || !cache) return false;
+  const held = await cache.get(path).catch(() => null);
+  if (held) return true;
+  let bytes = null;
+  try { bytes = await dropbox.download(path); } catch (_) { return false; }
+  if (!bytes) return false;
+  await cache.put(path, bytes).catch(() => {});
+  return true;
 }
 
 /* The times beside the audio: chapters, and where every sentence starts. Missing is not a failure —

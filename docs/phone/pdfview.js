@@ -48,6 +48,17 @@ export function nearestPage(tops, scrollTop, height) {
   return at;
 }
 
+/* Where to be after a zoom. The page the reader was on and the share of it they were down, not a
+   number of pixels — every pixel means something else at the new zoom. Across the page the middle
+   of the view is kept, so zooming in on the right-hand column does not throw the reader back to
+   the left margin, which is what left-aligned pages would otherwise do. */
+export function afterZoom({down = 0, across = 0, pageTop = 0, pageHeight = 1, viewWidth = 0, ratio = 1} = {}) {
+  return {
+    top: Math.max(0, pageTop + down * pageHeight),
+    left: Math.max(0, across * ratio - viewWidth / 2)
+  };
+}
+
 /* Which pages are worth holding a canvas for. */
 export function nearby(page, total, reach = 1) {
   const out = [];
@@ -278,10 +289,24 @@ export function createViewer({root, pdfjs, onPage = () => {}, onStatus = () => {
     setZoom(value, {draw = true} = {}) {
       const next = clampZoom(value);
       if (Math.abs(next - zoom) < 0.001 && draw) return zoom;
+      const was = zoom;
+      // Where the reader is, before the pixels mean something else.
+      const slot = draw ? frames[page - 1] : null;
+      const held = slot ? {
+        down: ((root.scrollTop || 0) - (slot.frame.offsetTop || 0)) / (slot.frame.offsetHeight || 1),
+        across: (root.scrollLeft || 0) + (root.clientWidth || 0) / 2
+      } : null;
       zoom = next;
       root.style.setProperty('--pdf-zoom', String(zoom));
       onZoom(zoom);
       if (draw) redraw();
+      if (held && slot) {
+        const back = afterZoom({...held, pageTop: slot.frame.offsetTop || 0,
+                                pageHeight: slot.frame.offsetHeight || 1,
+                                viewWidth: root.clientWidth || 0, ratio: next / (was || 1)});
+        root.scrollTop = back.top;
+        root.scrollLeft = back.left;
+      }
       return zoom;
     },
     get zoom() { return zoom; },

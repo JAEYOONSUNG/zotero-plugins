@@ -220,6 +220,8 @@ export default {
   '원문': 'The paper',
   '번역': 'The translation',
   '맥 음성': 'The Mac\u2019s voice',
+  '맥 음성 있음': 'The Mac has read this one',
+  '맥에서 구운 음성으로 읽습니다': 'Reading in the voice the Mac baked',
   '{0}건 갱신': '{0} changes',
   '홈 화면에 추가하면 키를 다시 넣어야 합니다. <b>키까지 함께 담기</b>를 누른 뒤 공유 → 홈 화면에 추가를 하세요.':
     'Adding it to the Home Screen starts it fresh, so the key has to go in again. Press <b>Carry the key too</b>, then Share → Add to Home Screen.',

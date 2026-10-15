@@ -343,3 +343,88 @@ test('the phone and the Mac put a paper in the same band', async () => {
     assert.equal(F.bandOf(jif), plugin.bandOf(jif), String(jif));
   }
 });
+
+/* ---- a folder of 240 baked papers ---- */
+test('한 번에 다 주지 않는 폴더는 끝까지 읽는다 — 안 그러면 나중에 구운 논문이 없는 것이 된다', async () => {
+  const names = Array.from({length: 1200}, (_, i) => `Paper ${i + 1}.m4b`);
+  const asked = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    asked.push(url);
+    if (/oauth2\/token/.test(url)) return new Response(JSON.stringify({access_token: 'AT', expires_in: 14400}), {status: 200});
+    const from = Number(body.cursor || 0);
+    const page = names.slice(from, from + 500);
+    return new Response(JSON.stringify({
+      entries: page.map(name => ({'.tag': 'file', name, path_display: `/논문 음성/${name}`, size: 9})),
+      has_more: from + 500 < names.length, cursor: String(from + 500)
+    }), {status: 200});
+  };
+  const db = createDropbox({store: fakeStore({'np.db.app': 'APPKEY', 'np.db.refresh': 'RT', 'np.db.access': 'AT', 'np.db.until': String(Date.now() + 3600000)}), fetchImpl});
+  const list = await db.list('/논문 음성');
+  assert.equal(list.length, 1200, 'every file, not only the first page');
+  assert.equal(list.at(-1).name, 'Paper 1200.m4b');
+  assert.equal(asked.filter(u => /list_folder\/continue/.test(u)).length, 2, 'the rest was asked for, twice');
+  // And the paper baked last is findable, which is the whole point.
+  const index = F.bakedIndex({dropbox: db});
+  assert.equal(await index.has('Paper 1200.m4b'), true);
+});
+
+test('구운 파일은 링크로 바로 재생하고, 링크가 없으면 받아서 재생한다', async () => {
+  const asked = [];
+  const dropbox = {
+    linked: true,
+    async list() { return [{name: 'A paper.m4b', path: '/논문 음성/A paper.m4b', size: 10}]; },
+    async link(path) { asked.push(`link:${path}`); return `https://dl.dropboxusercontent.com${path}`; },
+    async download(path) { asked.push(path); return new Uint8Array([1]).buffer; }
+  };
+  const index = F.bakedIndex({dropbox});
+  const streamed = await F.bakedAudio({title: 'A paper', dropbox, index});
+  assert.equal(streamed.url, 'https://dl.dropboxusercontent.com/논문 음성/A paper.m4b');
+  assert.equal(streamed.bytes, undefined, 'nothing was waited for');
+  assert.deepEqual(asked, ['link:/논문 음성/A paper.m4b']);
+
+  // A link that cannot be had is not the end of it: the file is fetched as before.
+  const noLink = {...dropbox, async link() { return ''; }};
+  const got = await F.bakedAudio({title: 'A paper', dropbox: noLink, index: F.bakedIndex({dropbox: noLink})});
+  assert.ok(got.bytes, 'the bytes arrived instead');
+
+  // What the phone already holds is played from the phone, link or no link.
+  const held = new Uint8Array([2]).buffer;
+  const cache = {async get(key) { return key === '/논문 음성/A paper.m4b' ? held : null; }, async put() {}};
+  const mine = await F.bakedAudio({title: 'A paper', dropbox, index, cache});
+  assert.equal(mine.bytes, held);
+  assert.equal(mine.fromCache, true);
+});
+
+test('목록은 몇 분 지나면 다시 읽는다 — 맥은 폰이 열려 있는 동안에도 계속 굽는다', async () => {
+  let lists = 0, clock = 0;
+  const dropbox = {linked: true, async list() { lists++; return [{name: `${lists}.m4b`, path: `/논문 음성/${lists}.m4b`}]; }};
+  const index = F.bakedIndex({dropbox, fresh: 1000, now: () => clock});
+  assert.equal((await index.names())[0].name, '1.m4b');
+  await index.names();
+  assert.equal(lists, 1, 'twice in a row costs one listing');
+  clock = 1500;
+  assert.equal((await index.names())[0].name, '2.m4b', 'a listing older than that is taken again');
+  index.forget();
+  await index.names();
+  assert.equal(lists, 3, 'and a refresh takes it again at once');
+  // Two papers opened at the same moment ask one question between them.
+  clock = 9000;
+  const [a, b] = await Promise.all([index.names(), index.names()]);
+  assert.equal(lists, 4);
+  assert.equal(a, b);
+});
+
+test('한참 들은 논문은 신호 없는 길을 위해 폰에 넣어 둔다', async () => {
+  const put = [];
+  const dropbox = {linked: true, async download(path) { put.push(`get:${path}`); return new Uint8Array([3]).buffer; }};
+  const cache = {held: new Map(), async get(key) { return this.held.get(key) || null; }, async put(key, value) { this.held.set(key, value); put.push(`put:${key}`); }};
+  assert.equal(await F.keepBaked({path: '/논문 음성/A paper.m4b', dropbox, cache}), true);
+  assert.deepEqual(put, ['get:/논문 음성/A paper.m4b', 'put:/논문 음성/A paper.m4b']);
+  // Already there: nothing is fetched twice.
+  assert.equal(await F.keepBaked({path: '/논문 음성/A paper.m4b', dropbox, cache}), true);
+  assert.equal(put.length, 2);
+  // And a download that fails is simply no file put away, not an error thrown at the reader.
+  const broken = {linked: true, async download() { throw new Error('no signal'); }};
+  assert.equal(await F.keepBaked({path: '/x.m4b', dropbox: broken, cache}), false);
+});

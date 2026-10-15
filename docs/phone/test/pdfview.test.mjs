@@ -2,7 +2,7 @@
    canvas; the arithmetic that decides it does not, and that is what goes wrong. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fitScale, nearestPage, nearby, pinchZoom, fingerGap, isDoubleTap, clampZoom,
+import {fitScale, nearestPage, nearby, pinchZoom, fingerGap, isDoubleTap, clampZoom, afterZoom,
         markRects, markPlace, MAX_PIXELS, ZOOMS, ZOOM_MIN, ZOOM_MAX} from '../pdfview.js';
 
 const A4 = {width: 595, height: 842};
@@ -119,4 +119,17 @@ test("Zotero's own shape for a mark is read, and a damaged one is skipped", () =
   assert.equal(markPlace({data: {annotationPosition: 'not json'}}), null);
   assert.equal(markPlace({data: {}}), null);
   assert.equal(markPlace(null), null);
+});
+
+test('확대해도 보고 있던 자리에 그대로 있다', () => {
+  /* Halfway down page 7, looking at the right-hand column. Zoomed to twice: the page is twice as
+     tall, so halfway down it is twice as far, and the middle of the view is still the middle. */
+  const back = afterZoom({down: 0.5, across: 300, pageTop: 6000, pageHeight: 1600, viewWidth: 390, ratio: 2});
+  assert.equal(back.top, 6800);
+  assert.equal(back.left, 300 * 2 - 195);
+  // Zoomed back out, nothing is scrolled past the start of the page.
+  const home = afterZoom({down: 0, across: 100, pageTop: 0, pageHeight: 800, viewWidth: 390, ratio: 1});
+  assert.equal(home.top, 0);
+  assert.equal(home.left, 0, 'a page that fits is not held off to one side');
+  assert.deepEqual(afterZoom(), {top: 0, left: 0});
 });

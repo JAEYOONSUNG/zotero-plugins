@@ -19,8 +19,8 @@ import EN from './en.js';
 import {createPlayer, speechEngine, bakedVoice, pickVoice, paperLanguage, sectionsOf, RATES,
         voiceMenu, voiceTier, TIERS, langName, sampleFor} from './play.js';
 import {fileSource, createDropbox, returningCode, paperFile, DEFAULT_BASE,
-        bakedAudio, bakedMarks, bakedIndex, libraryFacts, flagOf, bandOf, inkFor, markOf, MARKS,
-        AUDIO_BASE, AUDIO_KEY} from './files.js';
+        bakedAudio, bakedMarks, bakedIndex, bakedPaths, keepBaked, libraryFacts, flagOf, bandOf,
+        inkFor, markOf, MARKS, AUDIO_BASE, AUDIO_KEY} from './files.js';
 import {createViewer, markPlace} from './pdfview.js';
 import {filterRows, sortRows, usefulTags, familyOf, SORTS, groupOf, railLabel, fold, words} from './list.js';
 import {withRetry, isOffline, mergeQueue} from './net.js';
@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v19';
+export const BUILD = 'nonmun-v20';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -283,6 +283,8 @@ async function sync({full = false} = {}) {
     await flushWrites();
     localStorage.setItem(KEYS.synced, String(Date.now()));
     $('sync-state').textContent = seen ? T('{0}건 갱신', seen.toLocaleString()) : t('최신');
+    // The Mac bakes while the phone is in a pocket: a refresh asks the folder again, not just Zotero.
+    loadBaked({refresh: true}).catch(() => {});
   } catch (error) {
     if (error.status === 403) { $('sync-state').textContent = ''; showKeyTrouble(); }
     else if (error.offline) $('sync-state').textContent = '오프라인';   // the usual state on a phone, not news
@@ -1158,8 +1160,11 @@ function drawRow(item, list) {
   const heard = progressOf(item.key);
   const part = heard > 1 && heard < 99;
   const mark = markOf(fact);
+  /* Whether the Mac has already read this one aloud. It is the thing a reader picks a paper by
+     when the next hour is spent driving, and it was invisible until the paper was opened. */
+  const voiced = hasBaked(item.data.title);
   // The third line is only drawn for a paper that has something to say on it.
-  if (rating || tag || part || fact) {
+  if (rating || tag || part || fact || voiced) {
     const foot = el('div', {class: 'foot'}, face);
     /* A paper marked by hand on the Mac wears that colour here as a dot — never as a bar down the
        edge of the row, which on a rounded card reads as a painted fingernail. */
@@ -1172,6 +1177,8 @@ function drawRow(item, list) {
       el('span', {class: 'jif', 'data-band': band, text: fact.jif >= 10 ? String(Math.round(fact.jif)) : fact.jif.toFixed(1),
                   title: T('{0}의 임팩트 팩터', fact.venue || venueOf(item) || '')}, foot);
     }
+    if (voiced) el('span', {class: 'voiced', title: '맥 음성 있음', 'aria-label': '맥 음성 있음',
+                            html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h2.5v5H5.5A1.5 1.5 0 0 1 4 17.5zM20 14h-2.5v5h1A1.5 1.5 0 0 0 20 17.5z"/></svg>'}, foot);
     if (fact && fact.cited) el('span', {class: 'muted small', text: T('인용 {0}', fact.cited.toLocaleString())}, foot);
     if (fact && fact.from && fact.from.length) {
       const flags = fact.from.map(flagOf).filter(Boolean).join('');
@@ -2397,12 +2404,18 @@ async function openListen(item) {
 
   listen.original = paper;
   listen.translation = await translationFor(item);
-  listen.baked = null;
+  // Whatever was playing from a file is let go of here, or the paper before it would read on
+  // underneath this one: the PDF screen makes one of these too.
+  if (listen.baked) { listen.baked.release(); listen.baked = null; }
   findBaked(item).then(found => {
     if (!found || listen.item !== item) return;
-    listen.baked = bakedEngine(found.bytes, found.marks);
+    listen.baked = bakedEngine(found, found.marks);
     if (!listen.baked.marks.length) { listen.baked.release(); listen.baked = null; return; }
     buildSaying();
+    /* The Mac's voice is the whole reason the paper was baked, so it is what reads — the phone's
+       own voice stands in until the file is found, and stays only if that is what was asked for.
+       A choice made by hand is kept: 원문 means the phone's voice, 번역 means the translation. */
+    if (wantsMac()) useBaked();
   }).catch(() => {});
   listen.saying = listen.translation && localStorage.getItem(KEYS.said) === 'tr' ? 'tr' : 'raw';
   if (listen.saying === 'tr') listen.paper = fromNote(listen.translation.html, {title: clean(item.data.title)});
@@ -2558,6 +2571,33 @@ async function loadFacts() {
   return facts;
 }
 export const factsFor = key => (facts && facts.papers && facts.papers[key]) || null;
+
+/* Which papers the Mac has a voice for, so the library can say so before one is opened. The same
+   listing the facts came from, so this costs no request of its own, and it is taken again whenever
+   the library is refreshed — the Mac bakes all day and a paper finished at noon should not have to
+   wait for the app to be restarted. */
+let bakedNames = null;
+async function loadBaked({refresh = false} = {}) {
+  if (!dropbox.linked) return null;
+  if (!bakedList) bakedList = bakedIndex({dropbox, folder: audioFolder()});
+  if (refresh) bakedList.forget();
+  let list = null;
+  try { list = await bakedList.names({refresh}); } catch (_) { return bakedNames; }
+  if (!list) return bakedNames;
+  const next = new Set(list.filter(entry => /\.m4b$/i.test(entry.name)).map(entry => entry.name));
+  const was = bakedNames ? bakedNames.size : -1;
+  bakedNames = next;
+  if (next.size !== was) render({keep: true});
+  return bakedNames;
+}
+/* Is this paper one of them? The name is worked out exactly as the baker worked it out, copies
+   included, which is the same arithmetic that finds the file to play. */
+export const bakedCount = () => (bakedNames ? bakedNames.size : 0);
+export function hasBaked(title, names = bakedNames) {
+  if (!names || !names.size) return false;
+  return bakedPaths(clean(title) || '논문', audioFolder()).some(path => names.has(path.split('/').pop()));
+}
+
 async function findBaked(item) {
   if (!dropbox.linked) return null;
   const title = clean(item.data.title) || '논문';
@@ -2572,21 +2612,76 @@ async function findBaked(item) {
 
 /* The baked file, as something the player can be given in place of a voice: an audio element with
    the same few things createPlayer asks of an engine. */
-function bakedEngine(bytes, marks) {
-  const blob = new Blob([bytes], {type: 'audio/mp4'});
-  const url = URL.createObjectURL(blob);
+function bakedEngine(found, marks) {
+  const bytes = found && found.bytes;
+  const mine = bytes ? URL.createObjectURL(new Blob([bytes], {type: 'audio/mp4'})) : '';
+  const url = mine || (found && found.url) || '';
   const audio = new Audio(url);
-  audio.preload = 'auto';
+  // Streamed from Dropbox: enough of it to start, not all of it before anything can start.
+  audio.preload = bytes ? 'auto' : 'metadata';
   const at = Array.isArray(marks && marks.marks) ? marks.marks : [];
-  return {url, audio, marks: at, engine: bakedVoice({audio, marks: at}),
-          release() { try { audio.pause(); } catch (_) {} try { URL.revokeObjectURL(url); } catch (_) {} }};
+  const named = chapterNames(marks);
+  return {url, audio, path: (found && found.path) || '', streamed: !bytes,
+          marks: at, names: named, engine: bakedVoice({audio, marks: at}),
+          release() { try { audio.pause(); } catch (_) {} if (mine) { try { URL.revokeObjectURL(mine); } catch (_) {} } }};
+}
+/* The names the baker gave the chapters, by number, so the transcript can say which part of the
+   paper a sentence is in. The sidecar numbers each sentence's chapter rather than naming it. */
+export function chapterNames(marks) {
+  const out = new Map();
+  for (const chapter of (marks && marks.chapters) || []) {
+    if (chapter && Number.isFinite(Number(chapter.chapter))) out.set(Number(chapter.chapter), String(chapter.title || ''));
+  }
+  return out;
 }
 /* The sentences the Mac spoke, in the order it spoke them, as units the player and the transcript
    understand. Without the sidecar there is nothing to follow, and the file is not offered. */
-const bakedUnits = marks => (Array.isArray(marks) ? marks : marks && Array.isArray(marks.marks) ? marks.marks : [])
-  .filter(mark => mark && mark.text)
-  .map((mark, index) => ({text: mark.text, spoken: mark.text, page: 0, index,
-                          section: mark.chapterTitle || '', lead: ''}));
+export const bakedUnits = (marks, names = null) => {
+  const list = Array.isArray(marks) ? marks : marks && Array.isArray(marks.marks) ? marks.marks : [];
+  const titles = names || chapterNames(marks);
+  return list.filter(mark => mark && mark.text).map((mark, index) => ({
+    text: mark.text, spoken: mark.text, page: 0, index,
+    section: mark.chapterTitle || titles.get(Number(mark.chapter)) || '', lead: ''
+  }));
+};
+
+/* Unless the reader has said otherwise, a baked paper is read in the Mac's voice. */
+export const wantsMac = (said = localStorage.getItem(KEYS.said)) => said !== 'raw' && said !== 'tr';
+
+/* Hand the player the baked file in place of the phone's voice, wherever it is being read from.
+   The sentences become the ones the Mac actually spoke, so the list still follows along and a tap
+   on a sentence still moves the voice. */
+function useBaked({play = false} = {}) {
+  if (!listen.baked) return false;
+  const playing = play || (listen.player ? listen.player.state().status === 'playing' : false);
+  listen.saying = 'mac';
+  listen.list = bakedUnits(listen.baked.marks, listen.baked.names);
+  if (!$('listen').hidden) renderTranscript(listen.list);
+  if (listen.player) listen.player.stop();
+  listen.player = createPlayer({engine: listen.baked.engine, rate: readRate(), volume: readVolume(),
+    onChange: event => paintReading(event.state)});
+  listen.player.load(listen.list, {at: 0});
+  keepAfterListening(listen.baked);
+  if (!$('listen').hidden) { buildSaying(); paintVoice(listen.lang || 'en'); }
+  if (playing) listen.player.play(0); else paintReading(listen.player.state());
+  return true;
+}
+
+/* A paper streamed once is put away on the phone after a minute of real listening — long enough to
+   mean it, so a journey with no signal has the file and a paper merely glanced at costs nothing. */
+export const KEEP_AFTER = 60;
+function keepAfterListening(baked) {
+  if (!baked || !baked.streamed || !baked.path || baked.keeping || baked.watching || !baked.audio) return;
+  const audio = baked.audio;
+  baked.watching = true;
+  const watch = () => {
+    if ((audio.currentTime || 0) < KEEP_AFTER) return;
+    audio.removeEventListener('timeupdate', watch);
+    baked.keeping = true;
+    keepBaked({path: baked.path, dropbox, cache: fileCache}).catch(() => {});
+  };
+  audio.addEventListener('timeupdate', watch);
+}
 
 /* 원문 or 번역: shown only when this paper has a translation to offer, because a row of choices
    where one can never be picked is worse than no row. */
@@ -2607,20 +2702,7 @@ function buildSaying() {
       const was = listen.saying;
       listen.saying = id;
       localStorage.setItem(KEYS.said, id);
-      if (id === 'mac') {
-        listen.list = bakedUnits(listen.baked.marks);
-        renderTranscript(listen.list);
-        const playing = listen.player.state().status === 'playing';
-        listen.player.stop();
-        listen.player = createPlayer({engine: listen.baked.engine, rate: readRate(), volume: readVolume(),
-          onChange: event => paintReading(event.state)});
-        listen.player.load(listen.list, {at: 0});
-        for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
-        slide(track);
-        paintVoice(listen.lang || 'en');
-        if (playing) listen.player.play(0); else paintReading(listen.player.state());
-        return;
-      }
+      if (id === 'mac') { useBaked(); return; }
       if (was === 'mac') {
         // Leaving the file behind: the phone's own voice reads again.
         listen.player.stop();
@@ -2895,6 +2977,19 @@ async function readAlong(item, attachment) {
   bar.hidden = false;
   $('paper-view').classList.add('with-player');
   paintReading(listen.player.state());
+  /* And the Mac's own voice if this paper has been baked. The phone's voice is the stand-in that
+     can start at once; the file is what the papers were baked for, and it was reachable from the
+     listening screen alone — which is not where this library is read. */
+  if (listen.baked) { listen.baked.release(); listen.baked = null; }
+  if (!wantsMac()) return;
+  findBaked(item).then(found => {
+    if (!found || paper.item !== item || $('paper').hidden) return;
+    const baked = bakedEngine(found, found.marks);
+    if (!baked.marks.length) { baked.release(); return; }
+    if (listen.baked) listen.baked.release();
+    listen.baked = baked;
+    if (useBaked()) toast('맥에서 구운 음성으로 읽습니다');
+  }).catch(() => {});
 }
 
 /* Finding a word in the paper without a text layer: the sentences Zotero indexed each know which
@@ -3755,6 +3850,7 @@ async function start() {
   restState();
   heldWrites().then(queue => paintHeld(queue.length)).catch(() => {});
   loadFacts().catch(() => {});
+  loadBaked().catch(() => {});
   sync();
   if (paired) toast('키가 함께 들어왔습니다');
   else offerPairing();

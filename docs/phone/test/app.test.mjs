@@ -3507,7 +3507,8 @@ const BAKED_MARKS = {
 };
 const DROPBOX_LINKED = {'np.db.app': 'APPKEY', 'np.db.refresh': 'RT', 'np.db.access': 'AT', 'np.db.until': String(Date.now() + 3600000)};
 /* Dropbox answered at the network, the way the PDF tests do it: the app builds its own client. */
-function bakedDropbox({has = ['/논문 음성/Retron Septu defence.m4b'], marks = BAKED_MARKS} = {}) {
+function bakedDropbox({has = ['/논문 음성/Retron Septu defence.m4b'], marks = BAKED_MARKS,
+                      links = true} = {}) {
   const paths = [];
   return {
     paths,
@@ -3516,6 +3517,14 @@ function bakedDropbox({has = ['/논문 음성/Retron Septu defence.m4b'], marks 
       if (/files\/list_folder/.test(url)) {
         paths.push('list');
         return new Response(JSON.stringify({entries: has.map(p => ({'.tag': 'file', name: p.split('/').pop(), path_display: p, size: 24}))}), {status: 200});
+      }
+      /* The link an audio element plays from. The path is in the body here, not in the header the
+         download endpoint reads it from. */
+      if (/get_temporary_link/.test(url)) {
+        const asked = init.body ? JSON.parse(init.body).path : '';
+        paths.push(`link:${asked}`);
+        if (!links || !has.includes(asked)) return new Response(JSON.stringify({error_summary: 'path/not_found/'}), {status: 409});
+        return new Response(JSON.stringify({link: `https://dl.dropboxusercontent.com${asked}`}), {status: 200});
       }
       const arg = init.headers && init.headers['Dropbox-API-Arg'];
       const path = arg ? JSON.parse(arg).path : '';
@@ -3534,10 +3543,13 @@ test('맥이 구운 음성이 있으면 폰이 그것으로 읽는다 — 화면
   assert.equal(row.hidden, false, 'the Mac made one, so it is offered');
   const buttons = [...row.querySelectorAll('button')];
   assert.deepEqual(buttons.map(b => b.textContent), ['원문', '맥 음성']);
+  /* And it is what reads, without being asked: the paper was baked precisely so the phone would not
+     have to say it in its own voice. It was hidden behind a menu before, so a reader who had baked
+     240 papers heard none of them. */
+  assert.equal(buttons[1].getAttribute('aria-pressed'), 'true', 'the Mac’s voice is the one in use');
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'false');
 
-  buttons[1].dispatchEvent(new open.window.Event('click'));
-  await open.settle();
-  // The list becomes the sentences the Mac actually spoke, so a tap lands on the right moment.
+  // The list is the sentences the Mac actually spoke, so a tap lands on the right moment.
   const lines = [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
   assert.deepEqual(lines, BAKED_MARKS.marks.map(m => m.text));
 
@@ -3576,6 +3588,73 @@ test('구운 음성이 없거나 Dropbox가 없으면 그 선택지는 나오지
   assert.equal(open.document.getElementById('listen-saying').hidden, true);
   const off = await openListening();          // no Dropbox at all
   assert.equal(off.open.document.getElementById('listen-saying').hidden, true);
+});
+
+test('구운 파일은 다 내려오기 전에 재생된다 — 20MB를 기다리다 목소리가 안 나오던 자리', async () => {
+  const dropbox = bakedDropbox();
+  const {open} = await openListening({dropbox});
+  await open.settle();
+  const audio = open.audios.at(-1);
+  assert.ok(audio, 'there is something to play');
+  assert.ok(dropbox.paths.includes('link:/논문 음성/Retron Septu defence.m4b'),
+    'a link was asked for, which Dropbox serves with byte ranges');
+  assert.ok(!dropbox.paths.includes('/논문 음성/Retron Septu defence.m4b'),
+    'and the file itself was not fetched whole before the voice was offered');
+  // The sidecar is small and still read: without it the file cannot be followed along.
+  assert.ok(dropbox.paths.includes('/논문 음성/Retron Septu defence.json'));
+});
+
+test('링크를 못 받으면 예전처럼 파일을 받아서 읽는다', async () => {
+  const dropbox = bakedDropbox({links: false});
+  const {open} = await openListening({dropbox});
+  await open.settle();
+  assert.ok(dropbox.paths.includes('/논문 음성/Retron Septu defence.m4b'), 'the bytes were fetched instead');
+  const row = open.document.getElementById('listen-saying');
+  assert.equal(row.hidden, false, 'and the Mac’s voice is offered all the same');
+});
+
+test('맥이 읽어둔 논문은 목록에서 바로 알아볼 수 있다', async () => {
+  const zotero = fakeServer();
+  /* The same one listing answers for the facts and for the audio, so this costs no request of
+     its own. */
+  const dropbox = {handle: async (url, init = {}) => {
+    if (/oauth2\/token/.test(url)) return new Response(JSON.stringify({access_token: 'AT', expires_in: 14400}), {status: 200});
+    if (/files\/list_folder/.test(url)) return new Response(JSON.stringify({entries: [
+      {'.tag': 'file', name: 'library.json', path_display: '/논문 음성/library.json', size: 99},
+      {'.tag': 'file', name: 'Retron Septu defence.m4b', path_display: '/논문 음성/Retron Septu defence.m4b', size: 24}
+    ]}), {status: 200});
+    const arg = init.headers && init.headers['Dropbox-API-Arg'];
+    const path = arg ? JSON.parse(arg).path : '';
+    if (path.endsWith('library.json')) return new Response(JSON.stringify(FACTS), {status: 200});
+    return new Response(JSON.stringify({error_summary: 'path/not_found/'}), {status: 409});
+  }};
+  const server = {sent: zotero.sent, fetchImpl: async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    return /dropboxapi\.com|dropbox\.com/.test(url) ? dropbox.handle(url, init) : zotero.fetchImpl(input, init);
+  }};
+  const open = await boot({server, stored: {'np.user': '16265664', 'np.key': 'k'.repeat(24), ...DROPBOX_LINKED}});
+  await open.settle();
+  await open.settle();
+
+  const voiced = open.document.querySelector('#list .row.paper[data-key="AAA"] .voiced');
+  assert.ok(voiced, 'the paper the Mac has read aloud says so');
+  assert.equal(voiced.getAttribute('title'), '맥 음성 있음');
+  assert.equal(open.document.querySelector('#list .row.paper[data-key="BBB"] .voiced'), null,
+    'and one it has not read does not');
+});
+
+test('PDF 화면은 화면 안에 들어온다 — 바가 페이지 위를 덮지 않는다', () => {
+  const css = read('app.css');
+  /* A centred flex item that overflows puts its left edge out of the container's reach, so a
+     zoomed page could not be panned back to its own margin. */
+  assert.match(css, /\.pdf \{[^}]*align-items:flex-start/, 'the pages are laid from the start of the line');
+  assert.match(css, /\.pdf \{[^}]*overflow:auto/, 'and both ways scroll');
+  assert.ok(!/\.pdf \{[^}]*align-items:center/.test(css), 'nothing centres them back');
+  // The player on this screen stands under the pages; on the listening screen it still floats.
+  assert.match(css, /#paper-bar\.player \{[^}]*position:static/);
+  assert.match(css, /\.player \{[^}]*position:absolute/, 'the transcript’s player is unchanged');
+  // Where you are is shown where the folded-away bar was, not on top of the player.
+  assert.match(css, /\.page-now \{[^}]*top:calc\(var\(--top\)/);
 });
 
 /* ---- what the Mac knows and Zotero does not ---- */
