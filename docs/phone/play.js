@@ -281,7 +281,7 @@ export function createPlayer({
     if (!on && watch) { stopEvery(watch); watch = null; }
   }
 
-  function enqueue(at, mine) {
+  function enqueue(at, mine, {continues = false} = {}) {
     const unit = list[at];
     if (!unit) return;
     queuedTo = at;
@@ -291,7 +291,7 @@ export function createPlayer({
     const last = pieces.length - 1;
     pieces.forEach((text, part) => {
       engine.speak({
-        text, unit, at, part, parts: pieces.length,
+        text, unit, at, part, parts: pieces.length, continues,
         lang: speakLang, voiceURI: speakVoice, rate: speakRate, volume: speakVolume,
         // Every piece spoken is a sign of life, so a long sentence is never mistaken for a dead one.
         onstart: () => { alive(); if (part === 0) onStart(mine, at); },
@@ -306,7 +306,7 @@ export function createPlayer({
     alive();
     entered = at; index = at; status = 'playing'; error = '';
     // The next sentence is queued as this one starts, so the engine runs them together.
-    if (at + 1 < list.length && queuedTo < at + 1) enqueue(at + 1, mine);
+    if (at + 1 < list.length && queuedTo < at + 1) enqueue(at + 1, mine, {continues: true});
     emit('sentence');
   }
   function onEnd(mine, at) {
@@ -315,7 +315,7 @@ export function createPlayer({
     if (at === stuckAt) { stuckAt = -1; tries = 0; }      // it was said in the end
     if (at + 1 >= list.length) { status = 'done'; watching(false); emit('done'); return; }
     // A sentence that ended without ever starting (iOS drops one now and then): move on.
-    if (entered < at + 1 && queuedTo < at + 1) enqueue(at + 1, mine);
+    if (entered < at + 1 && queuedTo < at + 1) enqueue(at + 1, mine, {continues: true});
   }
   function fail(mine, reason) {
     if (mine !== generation) return;
@@ -471,24 +471,68 @@ export function bakedVoice({audio, marks = [], name = 'baked'} = {}) {
     const item = queue.shift();
     const mark = list[item.at];
     if (!mark) { item.onerror && item.onerror('no-such-sentence'); pump(); return; }
-    playing = {...item, until: endOf(item.at)};
+    const begin = Number(mark.at) || 0, until = endOf(item.at);
+    let settling = false;
     try {
       audio.playbackRate = item.rate || 1;
       audio.volume = Math.min(1, Math.max(0, Number(item.volume) || 0));
+      const now = Number(audio.currentTime) || 0;
+      /* Carried on from the sentence before, and the file is already inside this one: leave it alone.
+         A boundary is noticed late whenever the file stalls or the link is slow, and moving it back to
+         the mark then says the words it has just said a second time. A sentence asked for by hand --
+         a tap on the list, 이전, 다음 -- always goes to its mark. */
+      const inside = item.continues && now >= begin - 0.08 && now < until - 0.05;
       // A seek of less than a frame is no seek: it would restart the sentence being played.
-      if (Math.abs(audio.currentTime - Number(mark.at)) > 0.08) audio.currentTime = Number(mark.at) || 0;
+      if (!inside && Math.abs(now - begin) > 0.08) {
+        audio.currentTime = begin;
+        settling = true;
+        /* An element that does not yet know how long the file is ignores a seek outright, and the
+           paper then starts from its first words rather than the sentence asked for. Ask again the
+           moment it knows. */
+        if (audio.readyState === 0 && typeof audio.addEventListener === 'function') {
+          audio.addEventListener('loadedmetadata', () => {
+            if (playing && playing.at === item.at && playing.settling) { try { audio.currentTime = begin; } catch (_) {} }
+          }, {once: true});
+        }
+      }
     } catch (_) {}
+    playing = {...item, begin, until, settling, waited: 0, tries: 0};
     const mine = epoch;
     const started = audio.play();
     if (started && typeof started.then === 'function') started.catch(error => { if (mine === epoch) finish('error', String(error && error.name || 'audio-failed')); });
     item.onstart && item.onstart();
   }
+  /* How many times the clock may say the file is somewhere else before the seek is asked for again:
+     about five seconds of an element that reports four times a second. */
+  const SETTLE_TICKS = 20;
+  const arrived = now => !!playing && now >= playing.begin - 0.25 && now < playing.until;
   function watch() {
     if (watching) return;
     watching = true;
     audio.addEventListener('timeupdate', () => {
       if (!playing || audio.paused) return;
-      if (audio.currentTime >= playing.until - 0.02) finish('end');
+      const now = Number(audio.currentTime) || 0;
+      /* Until the file has actually arrived inside this sentence, where it says it is means nothing.
+         A seek backwards leaves the clock ahead for a moment, and believing it ended this sentence
+         the instant it began -- and the next, and the next -- is how one tap on 이전 ran away through
+         the paper. */
+      if (playing.settling) {
+        // Counted even while the element says it is still seeking: a seek that never lands must not
+        // leave the paper silent for ever.
+        if (!audio.seeking && arrived(now)) { playing.settling = false; playing.waited = 0; return; }
+        if (++playing.waited <= SETTLE_TICKS) return;
+        playing.waited = 0;
+        if (playing.tries++) { finish('error', 'seek-failed'); return; }
+        try { audio.currentTime = playing.begin; } catch (_) {}
+        return;
+      }
+      if (audio.seeking) return;                     // sent somewhere and not there yet
+      if (now >= playing.until - 0.02) finish('end');
+    });
+    // The element says when it has arrived; only believe it if it arrived where it was sent.
+    audio.addEventListener('seeked', () => {
+      if (!playing || !playing.settling) return;
+      if (arrived(Number(audio.currentTime) || 0)) { playing.settling = false; playing.waited = 0; }
     });
     audio.addEventListener('ended', () => finish('end'));
     audio.addEventListener('error', () => finish('error'));
@@ -500,9 +544,9 @@ export function bakedVoice({audio, marks = [], name = 'baked'} = {}) {
     baked: true,
     available() { return !!audio; },
     voices() { return []; },          // there is one voice in this file and it is already chosen
-    speak({at = 0, rate = 1, volume = 1, onstart, onend, onerror}) {
+    speak({at = 0, rate = 1, volume = 1, continues = false, onstart, onend, onerror}) {
       watch();
-      queue.push({at, rate, volume, onstart, onend, onerror});
+      queue.push({at, rate, volume, continues, onstart, onend, onerror});
       pump();
     },
     /* Whether a sound is actually coming out, which is what the player's watchdog is really

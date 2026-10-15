@@ -614,3 +614,123 @@ test('playing a whole paper from a baked file runs through the player unchanged'
   player.pause();
   assert.equal(audio.paused, true);
 });
+
+/* ---------- a file that does not arrive the instant it is asked to ----------
+   On the phone the paper is streamed from Dropbox: setting currentTime starts a range request, and
+   until it lands the element keeps reporting where it was. Reported as "처음에 블록 넘어갈 때 로딩
+   래그 때문인지 두 번 읽는 경우가 종종 있어" and "전 블럭으로 한 번 넘어가면 중간에 끊기고 다음
+   블럭으로 계속 넘어간다". */
+function slowAudio({lag = 0} = {}) {
+  const handlers = {};
+  return {
+    currentTime: 0, playbackRate: 1, volume: 1, paused: true, played: 0, seeking: false, want: null,
+    addEventListener(name, fn) { (handlers[name] ||= []).push(fn); },
+    play() { this.paused = false; this.played++; return Promise.resolve(); },
+    pause() { this.paused = true; },
+    fire(name) { for (const fn of handlers[name] || []) fn(); },
+    // Where the element is sent: with lag it does not move yet, as a streamed file does not.
+    set time(seconds) { if (lag) { this.seeking = true; this.want = seconds; } else { this.currentTime = seconds; } },
+    to(seconds) { this.currentTime = seconds; this.fire('timeupdate'); },
+    tick() { this.fire('timeupdate'); },                       // the clock reports, unmoved
+    land() { this.seeking = false; if (this.want !== null) this.currentTime = this.want; this.want = null; this.fire('seeked'); }
+  };
+}
+/* currentTime is a plain property on the fake, so a seek by the voice is caught by defining it. */
+function laggy() {
+  const audio = slowAudio({lag: 1});
+  let held = 0;
+  Object.defineProperty(audio, 'currentTime', {
+    get() { return held; },
+    set(seconds) { audio.seeking = true; audio.want = seconds; },
+    configurable: true
+  });
+  audio.land = () => { audio.seeking = false; if (audio.want !== null) held = audio.want; audio.want = null; audio.fire('seeked'); };
+  audio.to = seconds => { held = seconds; audio.fire('timeupdate'); };
+  audio.tick = () => audio.fire('timeupdate');
+  return audio;
+}
+
+test('a boundary noticed late does not send the file back: the words are not said twice', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  const said = [];
+  voice.speak({at: 0, onstart: () => said.push('start 0'), onend: () => said.push('end 0')});
+  assert.equal(audio.currentTime, 0);
+  // The player queues the next sentence as this one starts, as it does with every engine.
+  voice.speak({at: 1, continues: true, onstart: () => said.push('start 1'), onend: () => said.push('end 1')});
+  /* The file stalls and the clock only reports again well inside sentence 1 — the end of 0 and the
+     start of 1 arrive at once. Sentence 1 must carry on from here, not jump back to 2.2. */
+  audio.to(3.1);
+  assert.deepEqual(said, ['start 0', 'end 0', 'start 1']);
+  assert.equal(audio.currentTime, 3.1, 'the file was left where it is: no word is said twice');
+  audio.to(5.6);
+  assert.deepEqual(said, ['start 0', 'end 0', 'start 1', 'end 1']);
+});
+
+test('a sentence asked for by hand always goes to its mark, even one already playing', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: MARKS});
+  voice.speak({at: 1, onstart() {}, onend() {}});
+  audio.to(3.4);
+  voice.cancel();
+  voice.speak({at: 1, onstart() {}, onend() {}});     // a tap on the sentence being read: from its start
+  assert.equal(audio.currentTime, 2.2);
+});
+
+test('going back a sentence does not run away forward while the file is still seeking', () => {
+  const audio = laggy();
+  const voice = bakedVoice({audio, marks: MARKS});
+  const said = [];
+  voice.speak({at: 2, onstart: () => said.push('start 2'), onend: () => said.push('end 2')});
+  audio.land();                                   // it arrives at 5.5 and plays
+  audio.to(5.8);
+  assert.deepEqual(said, ['start 2']);
+
+  // 이전: the player cancels and asks for sentence 1, whose seek has not landed yet.
+  voice.cancel();
+  voice.speak({at: 1, onstart: () => said.push('start 1'), onend: () => said.push('end 1')});
+  assert.deepEqual(said, ['start 2', 'start 1']);
+  // The clock still says 5.8 — past the end of sentence 1. Nothing may be concluded from that.
+  audio.tick(); audio.tick(); audio.tick();
+  assert.deepEqual(said, ['start 2', 'start 1'], 'no end, so no running away through the paper');
+  // It lands, and the sentence is read from its own beginning.
+  audio.land();
+  audio.to(3.0);
+  assert.deepEqual(said, ['start 2', 'start 1']);
+  audio.to(5.6);
+  assert.deepEqual(said, ['start 2', 'start 1', 'end 1']);
+});
+
+test('a seek that never lands is reported rather than leaving the paper silent', () => {
+  const audio = laggy();
+  const voice = bakedVoice({audio, marks: MARKS});
+  const said = [];
+  voice.speak({at: 1, onstart: () => said.push('start'), onend: () => said.push('end'), onerror: why => said.push('error:' + why)});
+  audio.paused = false;
+  for (let i = 0; i < 20 + 1; i++) audio.tick();      // five seconds of the clock saying 0
+  assert.equal(audio.want, 2.2, 'it is asked for once more');
+  for (let i = 0; i < 20 + 1; i++) audio.tick();
+  assert.deepEqual(said, ['start', 'error:seek-failed'], 'and then the player is told, so it can try again');
+});
+
+test('a file asked for a sentence before it knows its own length is asked again when it does', () => {
+  /* A streamed element with no metadata yet ignores currentTime, and the paper would start from its
+     first words instead of the sentence the reader came back to. */
+  const audio = fakeAudio();
+  audio.readyState = 0;
+  let held = 0;
+  Object.defineProperty(audio, 'currentTime', {
+    get() { return held; },
+    set(seconds) { if (audio.readyState) held = seconds; },      // ignored until the metadata is in
+    configurable: true
+  });
+  const voice = bakedVoice({audio, marks: MARKS});
+  const said = [];
+  voice.speak({at: 2, onstart: () => said.push('start'), onend: () => said.push('end')});
+  assert.equal(audio.currentTime, 0, 'the element ignored it, as a real one does');
+  audio.readyState = 1;
+  audio.fire('loadedmetadata');
+  assert.equal(audio.currentTime, 5.5, 'and it is sent there again the moment it can go');
+  audio.to(5.9);
+  assert.deepEqual(said, ['start'], 'reading the sentence that was asked for, not the first one');
+});
