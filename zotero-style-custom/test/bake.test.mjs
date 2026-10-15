@@ -554,3 +554,36 @@ test('a bake killed halfway leaves no 300 MB scratch file for the next one to tr
   B.createBaker({speech: fakeVoice(), outDir: path.join(dir, 'out'), tmpDir: tmp, afconvert: fakeEncoder(dir)});
   assert.deepEqual(fs.readdirSync(tmp), ['keep-me.txt'], 'only this bakery’s own leftovers are swept');
 });
+
+/* ---------- a reader comes first ---------- */
+
+test('a bake stands aside between pieces while somebody is listening, and finishes once they stop', async () => {
+  const dir = scratch(), out = path.join(dir, 'out');
+  const voice = fakeVoice();
+  let listening = true;
+  const baker = B.createBaker({speech: voice, outDir: out, tmpDir: path.join(dir, 'tmp'), afconvert: fakeEncoder(dir),
+    waitFor: async () => { while (listening) await new Promise(r => setTimeout(r, 5)); }});
+  const started = baker.start({title: 'Held', chapters: [{title: '', text: 'One. Two. Three.'}]});
+  await new Promise(r => setTimeout(r, 60));
+  assert.equal(voice.said.length, 0, 'not one piece spoken while the reader has the machine');
+  assert.equal(baker.get(started.id).held, true, 'and the job says why it is not moving');
+  listening = false;
+  const job = await settle(baker, started.id);
+  assert.equal(job.state, 'done', job.error || '');
+  assert.equal(job.held, false);
+  assert.deepEqual(voice.said.map(s => s.text), ['One.', 'Two.', 'Three.'], 'nothing was skipped by the wait');
+});
+
+test('a bake cancelled while it stands aside ends as cancelled, not as a file', async () => {
+  const dir = scratch();
+  let listening = true;
+  const baker = B.createBaker({speech: fakeVoice(), outDir: path.join(dir, 'out'), tmpDir: path.join(dir, 'tmp'), afconvert: fakeEncoder(dir),
+    waitFor: async () => { while (listening) await new Promise(r => setTimeout(r, 5)); }});
+  const job = baker.start({title: 'Stop', chapters: [{title: '', text: 'One. Two.'}]});
+  await new Promise(r => setTimeout(r, 30));
+  baker.cancel(job.id);
+  listening = false;
+  const done = await settle(baker, job.id);
+  assert.equal(done.state, 'cancelled');
+  assert.equal(done.file, null);
+});

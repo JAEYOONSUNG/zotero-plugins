@@ -401,7 +401,7 @@ function run(bin, args) {
 
 /* One bake at a time (the model is one ONNX session), a short queue behind it, and a job record the
    plugin can poll. `speech` is bridge/tts/speech.mjs's engine: say() -> {audio: WAV, seconds}. */
-export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afconvert', keep = 40, maxQueue = 8, now = Date.now, log = () => {}}) {
+export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afconvert', keep = 40, maxQueue = 8, now = Date.now, log = () => {}, waitFor = null}) {
   const jobs = new Map();
   let running = null;
   const order = [];
@@ -411,7 +411,7 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
   const view = job => ({
     id: job.id, state: job.state, title: job.title, done: job.done, total: job.total,
     ahead: job.state === 'waiting' ? order.map(id => jobs.get(id)).filter(other => other && other.state === 'waiting' && order.indexOf(other.id) < order.indexOf(job.id)).length + (running ? 1 : 0) : 0,
-    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, gain: job.gain, rms: job.rms, error: job.error,
+    seconds: Number(job.seconds.toFixed(1)), file: job.file, bytes: job.bytes, gain: job.gain, rms: job.rms, error: job.error, held: !!job.held,
     started: job.started, finished: job.finished
   });
 
@@ -437,6 +437,13 @@ export function createBaker({speech, outDir, tmpDir, afconvert = '/usr/bin/afcon
       const lengths = [];
       for (let i = 0; i < job.pieces.length; i++) {
         if (job.cancelled) throw Object.assign(new Error('cancelled'), {cancelled: true});
+        /* A bake is work for tomorrow's drive; a sentence somebody is waiting for is now. Between pieces
+           the bake stands aside for whoever is listening, and `waitFor` holds it there. */
+        if (waitFor) {
+          job.held = true;
+          try { await waitFor(); } finally { job.held = false; }
+          if (job.cancelled) throw Object.assign(new Error('cancelled'), {cancelled: true});
+        }
         const piece = job.pieces[i];
         const said = await speech.say({model: job.model, text: piece.text, lang: job.lang, voice: job.voice, rate: job.rate});
         const said2 = pcmOf(said.audio), sampleRate = said2.sampleRate;

@@ -399,13 +399,24 @@ function audioOut() {
   return path.join(HOME, 'Music', '논문 음성');
 }
 
+/* ---------- somebody listening comes before a bake ----------
+   One ONNX session, one machine: while a paper is being baked the Mac has nothing left over, so a
+   sentence the reader in Zotero asks for queues behind the bake and arrives many seconds late -- and
+   the bake blocks even the bridge's answer about which voices exist, which is how the local voices
+   went missing from the voice menu. So a live sentence marks the bridge as being listened to, and the
+   bake waits between pieces until the listening stops. It resumes by itself; nothing is lost. */
+const LIVE_QUIET = 45000;
+let lastLive = 0;
+function listening() { return Date.now() - lastLive < LIVE_QUIET; }
+async function standAside() { while (listening()) await new Promise(resolve => setTimeout(resolve, 500)); }
+
 let baker = null;
 async function bakerFor() {
   if (baker) return baker;
   const s = await speechModule().catch(() => null);
   if (!s) return null;
   const {createBaker} = await import(path.join(TTS_DIR, 'book.mjs'));
-  baker = createBaker({speech: s.engine, outDir: audioOut(), tmpDir: BAKE_TMP, log});
+  baker = createBaker({speech: s.engine, outDir: audioOut(), tmpDir: BAKE_TMP, log, waitFor: standAside});
   return baker;
 }
 
@@ -468,8 +479,10 @@ async function speak(req, res, meta) {
   if (!s) { meta.status = 501; return fail(res, 501, 'Read-aloud voices are not installed; run bridge/install.sh', 'not_installed'); }
   const ticket = ticketFor(res);
   meta.inChars = input.length;
+  lastLive = Date.now();
   try {
       const {audio, seconds} = await s.engine.say({model: String(body.model || ''), text: input, lang: String(body.lang || 'en').toLowerCase().split(/[-_]/)[0], voice: String(body.voice || ''), rate: Number(body.speed) || 1});
+    lastLive = Date.now();                       // from the end of the sentence, not its start
     if (ticket.aborted) { meta.status = 499; return; }
     meta.status = 200; meta.audioMs = Math.round(seconds * 1000);
     res.writeHead(200, {'Content-Type': 'audio/wav', 'Content-Length': audio.length, 'Cache-Control': 'no-store', 'x-audio-seconds': seconds.toFixed(3)});

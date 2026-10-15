@@ -221,6 +221,18 @@
  }
  const KEY_HINTS={mac:{toggle:'⌥⇧K',prev:'⌥⇧J',next:'⌥⇧L'},other:{toggle:'Alt+Shift+K',prev:'Alt+Shift+J',next:'Alt+Shift+L'}};
 
+ /* ---- what the voice menu remembers of this Mac's own voices ----
+    A list once given stands for ten minutes, so a bridge too busy to answer -- baking a paper, every
+    core taken -- does not empty the voice menu; a bridge really gone loses its voices once the ten
+    minutes are up. A failed look is tried again sooner than a good one. */
+ const VOICES_FRESH=60000,VOICES_RETRY=10000,VOICES_KEEP=600000;
+ const voicesFresh=(last,at)=>!!last&&at-last.at<(last.value?VOICES_FRESH:VOICES_RETRY);
+ function voiceCache(last,value,at){
+  if(value)return {at,good:at,value};
+  if(last&&last.value&&at-last.good<VOICES_KEEP)return {at,good:last.good,value:last.value};
+  return {at,good:0,value:null};
+ }
+
  /* A short Markdown (headings, bullets, **bold**) as DOM nodes, never as HTML. A
     "(Results, p. 4)" becomes a button that calls onPage(4). */
  function renderMarkdown(doc,parent,text,{pages=0,onPage=null}={}){
@@ -1443,19 +1455,27 @@
    for(const [lang,v] of Object.entries(map)){const id=v&&(v.voice||v.tierVoices&&(v.tierVoices.standard||v.tierVoices.premium));if(typeof id==='string'&&/^[\w-]+$/.test(id))out[lang]=id;}
    return out;
   }
+  /* The bridge answers this on the thread that does the speaking, and one ONNX session holds the whole
+     machine: while a paper is being baked for the car, even this list -- a constant -- can take seconds.
+     Four seconds of patience was not enough, so the Supertonic voices kept dropping out of the menu and
+     the paper fell back to a system voice mid-afternoon. The patience is longer now, and the last list
+     the bridge gave stands while a slow answer is asked for again; only a bridge that has said nothing
+     for ten minutes -- uninstalled, or stopped -- loses its voices from the menu. */
   let bridgeVoiceCheck=null;
   async function bridgeVoices(){
-   if(bridgeVoiceCheck&&Date.now()-bridgeVoiceCheck.at<60000)return bridgeVoiceCheck.value;
+   const last=bridgeVoiceCheck;
+   if(voicesFresh(last,Date.now()))return last.value;
    let value=null;
    try{
     const config=runtime.assist&&typeof runtime.assist.bridge==='function'?await runtime.assist.bridge():null;
     if(config){
-     const r=await Z.HTTP.request('GET',config.base+'/v1/audio/voices',{headers:{Authorization:'Bearer '+config.token},responseType:'json',timeout:4000,successCodes:false,errorDelayMax:0});
+     const r=await Z.HTTP.request('GET',config.base+'/v1/audio/voices',{headers:{Authorization:'Bearer '+config.token},responseType:'json',timeout:15000,successCodes:false,errorDelayMax:0});
      const body=r&&r.status===200?r.response:null;
      if(body&&body.available&&Array.isArray(body.models)&&body.models.length)value={config,models:body.models,out:body.bake&&body.bake.out||''};
     }
    }catch(_){value=null;}
-   bridgeVoiceCheck={at:Date.now(),value};return value;
+   bridgeVoiceCheck=voiceCache(last,value,Date.now());
+   return bridgeVoiceCheck.value;
   }
   async function naturalEngine(session){
    const win=Z.getMainWindow?Z.getMainWindow():null;
@@ -2765,5 +2785,5 @@
   }
   return Object.freeze({sync,mountToolbar,releaseWindow,selectionPopup,probe,probeAll,diagnose,reserve,setGuard,pruneCache,stop,sessions:()=>[...sessions.values()],owner});
  }
- return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,shortcutOf,KEY_HINTS,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,mergeBands,pointToPage});
+ return Object.freeze({create,renderMarkdown,unmarkedButtons,pressable,shortcutOf,voicesFresh,voiceCache,VOICES_KEEP,KEY_HINTS,icon,ICONS,WIDTH,MIN_WIDTH,RAIL_WIDTH,MIN_PDF,BUTTON_RADIUS,viewportFor,overlayBoxes,mergeBands,pointToPage});
 });

@@ -1908,3 +1908,32 @@ test('a paper waiting behind others says how many, so the wait is not a blank',a
  assert.match(f.panel().querySelector('.sc-ra-bake-note').textContent,/Waiting|차례/);
  f.stop();
 });
+
+/* -- the Mac's own voices stay in the menu ---------------------------------- */
+
+test('a bridge too busy to answer does not empty the voice menu, but a bridge that has gone does',()=>{
+ const list={config:{port:47823,token:'k'},models:[{id:'supertonic',voices:[{id:'F3'}]}],out:'/x'};
+ const good=ReaderAssist.voiceCache(null,list,1000);
+ assert.equal(good.value,list);
+ assert.equal(good.good,1000);
+ // Baking a paper takes every core, so the list arrives late or not at all. The menu keeps its voices:
+ // falling back to a system voice mid-paper is what the reader actually noticed.
+ const held=ReaderAssist.voiceCache(good,null,1000+120000);
+ assert.equal(held.value,list);
+ assert.equal(held.good,1000,'the ten minutes run from the last real answer, not from this failure');
+ // Still kept a few minutes in, and gone once the bridge has said nothing for ten.
+ assert.equal(ReaderAssist.voiceCache(held,null,1000+500000).value,list);
+ assert.equal(ReaderAssist.voiceCache(held,null,1000+ReaderAssist.VOICES_KEEP+1).value,null);
+ // An answer that comes back resets the clock.
+ assert.equal(ReaderAssist.voiceCache(held,list,900000).good,900000);
+});
+
+test('a failed look for this Mac’s voices is tried again sooner than a good one',()=>{
+ const list={config:{},models:[{id:'supertonic'}],out:''};
+ const good={at:1000,good:1000,value:list},none={at:1000,good:0,value:null};
+ assert.equal(ReaderAssist.voicesFresh(good,1000+30000),true,'a list a minute old is not asked for again');
+ assert.equal(ReaderAssist.voicesFresh(good,1000+61000),false);
+ assert.equal(ReaderAssist.voicesFresh(none,1000+5000),true,'but nothing is hammered either');
+ assert.equal(ReaderAssist.voicesFresh(none,1000+11000),false,'a bridge started while Zotero runs shows up within ten seconds');
+ assert.equal(ReaderAssist.voicesFresh(null,1),false);
+});
