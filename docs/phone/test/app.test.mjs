@@ -153,7 +153,12 @@ function fakeServer({items = ITEMS, collections = COLLECTIONS, children = null, 
       if (fulltext === null) return new Response('Not found', {status: 404});
       return new Response(JSON.stringify({content: fulltext, indexedPages: 2, totalPages: 2}), {status: 200, headers: {'Content-Type': 'application/json'}});
     }
-    if (/^\/items\/\w+\/children$/.test(rest)) return new Response(JSON.stringify(children || []), {status: 200, headers: {'Content-Type': 'application/json'}});
+    if (/^\/items\/\w+\/children$/.test(rest)) {
+      // A library where one paper has a PDF and the next has none is the shape of a real one.
+      const parent = rest.split('/')[2];
+      const mine = typeof children === 'function' ? children(parent) : children;
+      return new Response(JSON.stringify(mine || []), {status: 200, headers: {'Content-Type': 'application/json'}});
+    }
     if (/^\/items\/\w+\/file$/.test(rest)) return new Response(new Uint8Array(900).fill(37), {status: 200, headers: {'Content-Type': 'application/pdf'}});
     if (/^\/items\/\w+$/.test(rest)) {
       if ((init.method || 'GET') === 'GET') {
@@ -1051,6 +1056,28 @@ test('one paper after another, so a drive is not a paper and then silence', asyn
   open.speech.finish(); open.speech.start();
   await open.settle();
   assert.ok(!/다음 논문/.test(open.speech.spoken[open.speech.spoken.length - 1]), 'and only once');
+});
+
+test('이어서 계속: 다음 논문에 읽을 본문이 없으면 멈춘다 — 앞 논문을 다시 읽지 않고', async () => {
+  /* The paper that ended was still loaded in the player. Opening one with nothing to read left
+     it there, and "the next paper" read the last one over again, under the new one's name. */
+  const {open} = await openListening({children: key => key === 'AAA' ? PDF_CHILD : []});
+  const $id = id => open.document.getElementById(id);
+  const click = node => node.dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  click([...$id('listen-chain').querySelectorAll('button')].find(b => b.textContent === '이어서 계속'));
+  const sents = [...open.document.querySelectorAll('#listen .sent')];
+  click(sents[sents.length - 1]);
+  await open.settle();
+  open.speech.start();
+  await open.settle();
+  const heard = open.speech.spoken.length;
+  open.speech.finish();                        // the paper ends and the next one is opened
+  await open.settle(40);
+  assert.match($id('listen-title').textContent, /PET depolymerase/, 'the next paper was opened');
+  assert.match($id('listen-body').textContent, /읽을 본문이 없습니다/, 'and says it has nothing to read');
+  assert.equal(open.speech.queue.length, 0, 'nothing is being spoken');
+  assert.equal(open.speech.spoken.length, heard, 'the paper that ended was not read again');
+  assert.equal($id('listen-bar').hidden, true, 'and there is no player over a paper there is none for');
 });
 
 test('the paper after this one is fetched before it is wanted, so a tunnel does not end the drive', async () => {
@@ -3635,6 +3662,61 @@ test('한참 들은 논문은 신호 없는 길을 위해 폰이 받아 둔다',
   audio.to(75);
   await open.settle();
   assert.ok(dropbox.paths.includes('/논문 음성/Retron Septu defence.m4b'), 'a real listen is put away');
+});
+
+/* The Mac bakes the body alone, but a reference list that ran on without a heading is read as
+   body and ends up in the file. Nothing on the phone could skip it: the file is the file. */
+const REF_ENTRY = 'Doi K, Mori K, Martono H, Nagayoshi Y, Fujino Y, Tashiro K (2013) Draft genome sequence of Geobacillus kaustophilus.';
+const BAKED_WITH_REFS = {...BAKED_MARKS, seconds: 13.6,
+  marks: [...BAKED_MARKS.marks, {at: 9.6, seconds: 4, chapter: 0, text: REF_ENTRY}]};
+
+test('레퍼런스는 안 읽는다 — 구운 파일에 들어있어도, 불러오면 그 자리로 간다', async () => {
+  const {open} = await openListening({dropbox: bakedDropbox({marks: BAKED_WITH_REFS})});
+  await open.settle();
+  const lines = () => [...open.document.querySelectorAll('#listen .sent')].map(n => n.textContent);
+  assert.equal(lines().length, 3, 'the three sentences of the paper');
+  assert.ok(!lines().some(line => /Draft genome sequence/.test(line)), 'and not the reference list');
+
+  // The choice is there, and it is the one a file can answer: there are no captions in a bake.
+  const scope = [...open.document.querySelectorAll('#listen-what button')];
+  assert.deepEqual(scope.map(b => b.textContent), ['본문만', '참고문헌까지']);
+  assert.equal(scope[0].getAttribute('aria-pressed'), 'true');
+
+  scope[1].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(lines().some(line => /Draft genome sequence/.test(line)), 'asked for, it is read');
+  // And the file still lands on the right second: the sentences and the marks stayed in step.
+  [...open.document.querySelectorAll('#listen .sent')].at(-1).dispatchEvent(new open.window.Event('click', {bubbles: true}));
+  await open.settle();
+  assert.equal(open.audios.at(-1).currentTime, 9.6);
+});
+
+test('돌아오면 읽던 자리에서 다시 읽는다 — 파일은 건드리지 않고', async () => {
+  // The phone's own voice: iOS stopped it when the app went away and said nothing about it.
+  const {open} = await openListening();
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  open.speech.start();
+  const said = open.speech.spoken.length;
+  open.speech.queue.length = 0;                     // what iOS does to a page it puts away
+  open.document.dispatchEvent(new open.window.Event('visibilitychange'));
+  await open.settle();
+  assert.ok(open.speech.queue.length > 0, 'it is reading again rather than sitting silent');
+  open.speech.start();
+  assert.equal(open.speech.spoken.at(-1), open.speech.spoken[said - 1], 'and from the sentence it stopped on');
+
+  // The file, which never stopped, is not disturbed by coming back.
+  const baked = await openListening({dropbox: bakedDropbox()});
+  await baked.open.settle();
+  baked.open.document.getElementById('listen-play').dispatchEvent(new baked.open.window.Event('click'));
+  await baked.open.settle();
+  const audio = baked.open.audios.at(-1);
+  audio.to(3.2);
+  await baked.open.settle();
+  baked.open.document.dispatchEvent(new baked.open.window.Event('visibilitychange'));
+  await baked.open.settle();
+  assert.equal(audio.paused, false, 'still playing');
+  assert.equal(audio.currentTime, 3.2, 'and not sent back to the start of the sentence');
 });
 
 test('목소리 메뉴는 화면 밖으로 잘려 보이지 않는다', async () => {

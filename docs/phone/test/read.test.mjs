@@ -3,7 +3,7 @@
    of lines, figure captions in the middle of the body, and a reference list at the end. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readable, units, splitSentences, spokenForm, repeatedLines, remainingSeconds, stripStamp, isAuthorList, breakLong, LONG} from '../read.js';
+import {readable, units, splitSentences, spokenForm, withoutCitations, repeatedLines, remainingSeconds, stripStamp, isAuthorList, breakLong, LONG} from '../read.js';
 
 const PAPER = [
   // page 1
@@ -134,6 +134,31 @@ test('sentences break where a reader would, not at every full stop', () => {
 test('what is spoken keeps its punctuation tidy after the citations go', () => {
   assert.equal(spokenForm('The yield rose [1], and fell (Smith et al., 2019).'), 'The yield rose, and fell.');
   assert.equal(spokenForm('As shown (Fig. 2), it works.'), 'As shown, it works.');
+});
+
+/* The commonest citation in these papers is invisible in the text Zotero hands over: the
+   superscript that marked it is gone, so what is left is a number glued to a word and read out
+   in the middle of a clause. Every line below is from a paper in the library. */
+test('a citation that lost its superscript is not read as a number', () => {
+  assert.equal(spokenForm('Many antiviral defence mechanisms are conserved across all domains of life1.'),
+    'Many antiviral defence mechanisms are conserved across all domains of life.');
+  assert.equal(spokenForm('the same organism and even single cell1,2, and STING12,13 after that.'),
+    'the same organism and even single cell, and STING after that.');
+  assert.equal(spokenForm('First engineering was introduced with E. coli (Jiang et al, 2013).'),
+    'First engineering was introduced with E. coli.');
+  assert.equal(spokenForm('including Lactobacillus reuteri (Oh and van Pijkeren, 2014) and Streptomyces (Smith, 2014; Lee, 2015).'),
+    'including Lactobacillus reuteri and Streptomyces.');
+  assert.equal(spokenForm('unleashes indiscriminate DNase activity (12, 13) upon binding (3-5).'),
+    'unleashes indiscriminate DNase activity upon binding.');
+});
+
+test('a number inside a name is not a citation', () => {
+  const kept = 'Plasmid pGKE75 was expressed from the gk704 promoter in B. subtilis ATCC6051 with Cas9, Tn21, p53, IS110 and BL21(DE3) at OD600.';
+  assert.equal(spokenForm(kept), kept);
+  assert.equal(spokenForm('shown in figure3 and table2 for type1 and lane2.'), 'shown in figure3 and table2 for type1 and lane2.');
+  assert.equal(withoutCitations('The result (which we confirmed in 2015) held.'), 'The result (which we confirmed in 2015) held.',
+    'a bracket with something to say in it is part of the paper');
+  assert.equal(withoutCitations('A sentence with nothing to take out.'), 'A sentence with nothing to take out.');
 });
 
 test('a row of numbers from a table is not offered as a sentence', () => {

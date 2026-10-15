@@ -173,7 +173,52 @@ export function spokenSeconds(text, rate = 1) {
   return Math.max(1.2, (words / 2.7) + (hangul / 5.5)) / Math.max(0.5, rate);
 }
 
+/* ---- how much a voice is given at once ----
+   iOS stops speaking part way through a long utterance, fires neither `end` nor `error`, and
+   leaves `speaking` saying whatever it likes. The sentence then never finishes, the watchdog
+   starts it again, it stops in the same place, and the reader hears the same sentence for ever.
+   About one sentence in eighty in these papers is long enough for that (1.2% are over 400
+   characters, a few per paper), which is exactly how often the reader met it.
+
+   So nothing longer than VOICE_MAX is ever handed over whole. The sentence is unchanged on
+   screen and is still one sentence to the player — only what the voice is given is cut, at the
+   pause nearest the middle that a reader would take, outside any bracket. The desktop plugin
+   has done this since it was written (CHUNK_MAX there); the phone never did. */
+export const VOICE_MAX = 300, LEAST_PIECE = 60;
+const CUTS = [/[.;:?!]\s/g, /,\s/g, /\s(?:and|but|or|which|that|while|whereas|because|although|however|therefore|thus)\s/gi, /\s/g];
+export function splitForVoice(text, max = VOICE_MAX) {
+  const body = String(text || '').trim();
+  if (!body) return [];
+  if (!max || body.length <= max) return [body];
+  // Where the brackets are, so a list of genes is not cut in half.
+  const depth = [];
+  let open = 0;
+  for (const ch of body) { if (ch === '(' || ch === '[') open++; depth.push(open); if ((ch === ')' || ch === ']') && open > 0) open--; }
+  const middle = body.length / 2, least = Math.min(LEAST_PIECE, Math.floor(body.length / 4));
+  let cut = -1;
+  for (const rule of CUTS) {
+    for (const outside of [true, false]) {
+      rule.lastIndex = 0;
+      let found, best = -1, nearest = Infinity;
+      while ((found = rule.exec(body))) {
+        const at = found.index + found[0].length;
+        if (at < least || body.length - at < least) continue;
+        if (outside && depth[found.index] > 0) continue;
+        const off = Math.abs(at - middle);
+        if (off < nearest) { nearest = off; best = at; }
+      }
+      if (best > 0) { cut = best; break; }
+    }
+    if (cut > 0) break;
+  }
+  if (cut < 0) cut = max;
+  return [...splitForVoice(body.slice(0, cut), max), ...splitForVoice(body.slice(cut), max)];
+}
+
 export const WATCH_EVERY = 2500;
+/* How many sentences' worth of silence a queue that claims to be speaking is given, and how
+   many times one sentence may be started again before the paper goes on without it. */
+export const STUCK = 3, GIVE_UP = 2;
 
 export function createPlayer({
   engine, onChange = () => {}, rate = 1, lang = 'en', voiceURI = '', volume = 1,
@@ -183,7 +228,7 @@ export function createPlayer({
 } = {}) {
   if (!engine) throw new Error('an engine is required');
   let list = [], index = 0, status = 'idle', generation = 0, queuedTo = -1, entered = -1, error = '';
-  let heard = 0, watch = null, revivals = 0;
+  let heard = 0, watch = null, revivals = 0, stuckAt = -1, tries = 0;
   let speakRate = clamp(rate, RATE_MIN, RATE_MAX, 1), speakLang = lang || 'en', speakVoice = voiceURI || '';
   let speakVolume = clamp(volume, 0, 1, 1);
   const state = () => ({status, index, total: list.length, unit: list[index] || null,
@@ -197,18 +242,39 @@ export function createPlayer({
     return (lead + spoken).trim();
   };
 
-  /* iOS drops the speech queue now and then — the screen dims, a notification arrives, or the
-     engine simply stops — and says nothing about it, leaving the reader looking at a sentence
+  /* iOS drops the speech queue now and then — the screen dims, a notification arrives, the app
+     goes to the background — and says nothing about it, leaving the reader looking at a sentence
      that never finishes. So while it is meant to be playing, a sentence that has had long enough
-     to be spoken and has made no sound is started again. */
+     to be spoken and has made no sound is started again.
+
+     `speaking()` is not proof of life: the queue iOS abandoned when the app went away still says
+     it is speaking when the app comes back, and a watchdog that believed it would wait for ever.
+     So it buys time (STUCK sentences' worth) and no more. A file is the exception — an audio
+     element that says it is playing is playing, and interrupting it would be the only thing in
+     this function a listener could hear. */
   function watchdog() {
     if (status !== 'playing') return;
     const due = spokenSeconds(sayable(list[index]), speakRate) * 1000 + 6000;
-    if (now() - heard < due) return;
-    if (engine.speaking && engine.speaking()) { alive(); return; }
+    const quiet = now() - heard;
+    if (quiet < due) return;
+    if (engine.speaking && engine.speaking() && (engine.baked || quiet < due * STUCK)) return;
+    revive();
+  }
+
+  /* A sentence the voice will not say is left behind rather than read for ever. Starting it
+     again is right the first time — the queue was dropped and the words were never heard — but
+     a sentence that has now failed GIVE_UP times will fail the next time too, and a reader
+     listening to the same words for the fourth time has lost the paper, not one sentence. */
+  function revive() {
+    if (stuckAt !== index) { stuckAt = index; tries = 0; }
+    tries++;
     revivals++;
     emit('stalled');
-    startAt(index);
+    if (tries <= GIVE_UP) { startAt(index); return; }
+    stuckAt = -1; tries = 0;
+    if (index + 1 >= list.length) { status = 'done'; watching(false); emit('done'); return; }
+    emit('skipped');
+    startAt(index + 1);
   }
   function watching(on) {
     if (on && !watch) watch = every(watchdog, WATCH_EVERY);
@@ -219,15 +285,24 @@ export function createPlayer({
     const unit = list[at];
     if (!unit) return;
     queuedTo = at;
-    engine.speak({
-      text: sayable(unit), unit, at, lang: speakLang, voiceURI: speakVoice, rate: speakRate, volume: speakVolume,
-      onstart: () => onStart(mine, at),
-      onend: () => onEnd(mine, at),
-      onerror: reason => fail(mine, reason)
+    /* A file is not cut up: there, `at` is a place in the recording, and asking for it twice
+       would play the same seconds twice. Only a voice synthesising the words is given pieces. */
+    const pieces = engine.baked ? [sayable(unit)] : splitForVoice(sayable(unit));
+    const last = pieces.length - 1;
+    pieces.forEach((text, part) => {
+      engine.speak({
+        text, unit, at, part, parts: pieces.length,
+        lang: speakLang, voiceURI: speakVoice, rate: speakRate, volume: speakVolume,
+        // Every piece spoken is a sign of life, so a long sentence is never mistaken for a dead one.
+        onstart: () => { alive(); if (part === 0) onStart(mine, at); },
+        onend: () => { alive(); if (part === last) onEnd(mine, at); },
+        onerror: reason => fail(mine, reason)
+      });
     });
   }
   function onStart(mine, at) {
-    if (mine !== generation || entered === at) return;
+    // A start for a sentence already passed is iOS repeating itself, not the reader going back.
+    if (mine !== generation || at <= entered) return;
     alive();
     entered = at; index = at; status = 'playing'; error = '';
     // The next sentence is queued as this one starts, so the engine runs them together.
@@ -237,6 +312,7 @@ export function createPlayer({
   function onEnd(mine, at) {
     if (mine !== generation) return;
     alive();
+    if (at === stuckAt) { stuckAt = -1; tries = 0; }      // it was said in the end
     if (at + 1 >= list.length) { status = 'done'; watching(false); emit('done'); return; }
     // A sentence that ended without ever starting (iOS drops one now and then): move on.
     if (entered < at + 1 && queuedTo < at + 1) enqueue(at + 1, mine);
@@ -302,6 +378,19 @@ export function createPlayer({
       generation++; try { engine.cancel(); } catch (_) {}
       index = target; entered = -1; queuedTo = -1;
       emit('sentence');
+      return state();
+    },
+    /* Back from somewhere else — another app, a locked screen, a phone call. iOS stops a page's
+       own voice when the page goes away and tells it nothing when it returns, so the sentence
+       that was being read is started again rather than left hanging. Something that is still
+       making a sound is left alone: a baked file plays through all of this, which is what it is
+       for. */
+    wake() {
+      if (status !== 'playing') return state();
+      if (engine.speaking && engine.speaking()) { alive(); return state(); }
+      revivals++;
+      emit('stalled');
+      startAt(index);
       return state();
     },
     next() { return api.seek(index + 1); },
@@ -416,6 +505,10 @@ export function bakedVoice({audio, marks = [], name = 'baked'} = {}) {
       queue.push({at, rate, volume, onstart, onend, onerror});
       pump();
     },
+    /* Whether a sound is actually coming out, which is what the player's watchdog is really
+       asking. An element that iOS paused while the app was away says so here, and the sentence
+       is started again from its mark. */
+    speaking() { try { return !!playing && !audio.paused && !audio.ended; } catch (_) { return false; } },
     cancel() { epoch++; queue = []; playing = null; try { audio.pause(); } catch (_) {} },
     pause() { try { audio.pause(); } catch (_) {} },
     resume() { try { const p = audio.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createPlayer, pickVoice, paperLanguage, speechEngine, spokenSeconds, sectionsOf, WATCH_EVERY,
-        voiceTier, voiceMenu, langName, sampleFor, RATES, bakedVoice} from '../play.js';
+        voiceTier, voiceMenu, langName, sampleFor, RATES, bakedVoice, splitForVoice, VOICE_MAX, GIVE_UP} from '../play.js';
 
 /* A voice that speaks when told to: queue(), then finish() ends the oldest utterance. */
 function fakeEngine({supportsPause = true} = {}) {
@@ -303,9 +303,181 @@ test('a voice that is simply slow is not interrupted', () => {
   player.load(units('A very long sentence indeed.', 'Two.'));
   player.play();
   engine.start();
-  clock.pass(60000);
+  clock.pass(15000);
   assert.deepEqual(engine.spoken, ['A very long sentence indeed.'], 'it was left to finish');
+  assert.equal(player.state().revivals, 0, 'and nothing was started again');
   player.stop();
+});
+
+/* Coming back from another app is the case the reader actually hits: the voice stopped the
+   moment the app went away and iOS said nothing about it, and the queue it abandoned still
+   claims to be speaking. A watchdog that believed that waited for ever. */
+test('a queue that claims to be speaking but has said nothing for minutes is started again', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => true;           // what iOS says about a queue it has already dropped
+  const clock = handClock();
+  const player = createPlayer({engine, ...clock});
+  player.load(units('One sentence here.', 'Two.'));
+  player.play();
+  engine.start();
+  clock.pass(120000);                     // two minutes in another app
+  engine.start();
+  assert.deepEqual(engine.spoken, ['One sentence here.', 'One sentence here.'], 'the sentence is read again');
+  assert.equal(player.state().revivals, 1);
+  player.stop();
+});
+
+test('a file that is still playing is never interrupted, however long the sentence', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => true;
+  engine.baked = true;                    // an audio element: if it says it is playing, it is
+  const clock = handClock();
+  const player = createPlayer({engine, ...clock});
+  player.load(units('One sentence here.', 'Two.'));
+  player.play();
+  engine.start();
+  clock.pass(600000);
+  assert.deepEqual(engine.spoken, ['One sentence here.'], 'ten minutes of chapter, uninterrupted');
+  assert.equal(player.state().revivals, 0);
+  player.stop();
+});
+
+test('back from another app: a voice that went quiet starts again, one that is still reading is left alone', () => {
+  const quiet = fakeEngine();
+  quiet.speaking = () => false;
+  const clock = handClock();
+  const player = createPlayer({engine: quiet, ...clock});
+  player.load(units('One sentence here.', 'Two.'));
+  player.play();
+  quiet.start();
+  player.wake();
+  quiet.start();
+  assert.deepEqual(quiet.spoken, ['One sentence here.', 'One sentence here.'], 'picked up where it stopped');
+  player.stop();
+
+  const sounding = fakeEngine();
+  sounding.speaking = () => true;
+  const second = createPlayer({engine: sounding, ...handClock()});
+  second.load(units('One sentence here.', 'Two.'));
+  second.play();
+  sounding.start();
+  second.wake();
+  assert.deepEqual(sounding.spoken, ['One sentence here.'], 'nothing was disturbed');
+  assert.equal(second.state().status, 'playing');
+  second.stop();
+});
+
+test('a paused paper is not woken by coming back to the app', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => false;
+  const player = createPlayer({engine, ...handClock()});
+  player.load(units('One.', 'Two.'));
+  player.play();
+  engine.start();
+  player.pause();
+  player.wake();
+  assert.deepEqual(engine.spoken, ['One.']);
+  assert.equal(player.state().status, 'paused');
+  player.stop();
+});
+
+/* ---- the sentence that was read over and over ----
+   iOS stops part way through a long utterance and fires neither end nor error. The sentence
+   never finishes, the watchdog starts it again, it stops in the same place: the reader hears one
+   sentence for ever. Two things are done about it — nothing long is handed over whole, and a
+   sentence that has failed twice is left behind rather than tried a third time. */
+const LONG_ONE = 'The enzyme, which was purified from a thermophilic strain isolated in 2019, degrades the polymer at fifty degrees; the reaction was followed by chromatography, and the products were identified by mass spectrometry, which showed that the ester bonds are cleaved in a processive manner, whereas the amide bonds, as reported before, remain intact throughout the whole experiment.';
+
+test('a long sentence is given to the voice in pieces, at the pauses, with nothing lost', () => {
+  const pieces = splitForVoice(LONG_ONE);
+  assert.ok(pieces.length > 1, 'it was cut');
+  assert.ok(pieces.every(piece => piece.length <= VOICE_MAX), 'no piece is longer than a voice will take');
+  assert.equal(pieces.join(' ').replace(/\s+/g, ' '), LONG_ONE.replace(/\s+/g, ' '), 'and every word is still there');
+  assert.ok(pieces.every(piece => /[;,.]$|\b(and|but|which|that|whereas)$/.test(piece.trim()) || piece === pieces.at(-1)),
+    'the cuts fall where a reader would pause');
+  assert.deepEqual(splitForVoice('A short one.'), ['A short one.'], 'a short sentence is left alone');
+  assert.deepEqual(splitForVoice(''), []);
+});
+
+test('the pieces are still one sentence: one place in the paper, and the next sentence follows the last piece', () => {
+  const engine = fakeEngine();
+  const seen = [];
+  const player = createPlayer({engine, ...handClock(), onChange: event => seen.push(event.type)});
+  player.load([{text: LONG_ONE, spoken: LONG_ONE, index: 0, page: 1}, {text: 'The next one.', spoken: 'The next one.', index: 1, page: 1}]);
+  player.play();
+  const parts = splitForVoice(LONG_ONE).length;
+  assert.ok(parts > 1);
+  engine.start();
+  assert.equal(player.state().index, 0, 'the first piece is the sentence starting');
+  assert.equal(seen.filter(type => type === 'sentence').length, 1, 'one sentence, not one per piece');
+  for (let i = 0; i < parts - 1; i++) { engine.finish(); engine.start(); }
+  assert.equal(player.state().index, 0, 'still the same sentence while its pieces are read');
+  engine.finish();                                  // the last piece ends
+  engine.start();
+  assert.equal(player.state().index, 1, 'and the paper moves on');
+  assert.equal(engine.spoken.at(-1), 'The next one.');
+  player.stop();
+});
+
+test('a sentence the voice will not say is left behind, not read for ever', () => {
+  // A voice that takes the words, begins, and then dies without a word about it: the iOS failure.
+  const engine = fakeEngine();
+  engine.speaking = () => false;
+  const clock = handClock();
+  const seen = [];
+  const player = createPlayer({engine, ...clock, onChange: event => seen.push(event.type)});
+  player.load(units('The sentence it chokes on.', 'The one after it.'));
+  player.play();
+  for (let i = 0; i <= GIVE_UP; i++) { engine.start(); clock.pass(30000); }
+  assert.equal(engine.spoken.filter(text => text === 'The sentence it chokes on.').length, GIVE_UP + 1,
+    'it was tried, and tried again, and then let go');
+  assert.equal(player.state().index, 1, 'the paper went on');
+  assert.ok(seen.includes('skipped'), 'and said so');
+  engine.start();
+  assert.equal(engine.spoken.at(-1), 'The one after it.');
+  player.stop();
+});
+
+test('a sentence that comes good after one stall is not held against it', () => {
+  const engine = fakeEngine();
+  engine.speaking = () => false;
+  const clock = handClock();
+  const player = createPlayer({engine, ...clock});
+  player.load(units('One.', 'Two.', 'Three.'));
+  player.play();
+  clock.pass(30000);                      // the first try is dropped
+  engine.start(); engine.finish();        // the second is heard
+  engine.start();                         // "Two." begins
+  clock.pass(30000);                      // and it stalls once too
+  engine.start(); engine.finish();
+  engine.start();                         // "Three." begins
+  assert.equal(player.state().index, 2, 'every sentence was read, none skipped');
+  assert.equal(player.state().status, 'playing');
+  player.stop();
+});
+
+test('a file is never cut into pieces: its sentences are places in a recording', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: [{at: 0, seconds: 40}, {at: 40, seconds: 5}]});
+  const asked = [];
+  const spy = {...voice, baked: true, speak(item) { asked.push(item); voice.speak(item); }};
+  const player = createPlayer({engine: spy, ...handClock()});
+  player.load([{text: LONG_ONE, spoken: LONG_ONE, index: 0, page: 0}, {text: 'Next.', spoken: 'Next.', index: 1, page: 0}]);
+  player.play();
+  assert.ok(splitForVoice(LONG_ONE).length > 1, 'the phone would have cut this one up');
+  assert.deepEqual(asked.map(item => item.at), [0, 1], 'the file was asked for two sentences, not six pieces');
+  assert.ok(asked.every(item => item.parts === 1));
+  player.stop();
+});
+
+test('a baked file says whether a sound is actually coming out of it', () => {
+  const audio = fakeAudio();
+  const voice = bakedVoice({audio, marks: [{at: 0, seconds: 3}, {at: 3, seconds: 3}]});
+  assert.equal(voice.speaking(), false, 'nothing has been asked of it yet');
+  voice.speak({at: 0});
+  assert.equal(voice.speaking(), true);
+  audio.pause();
+  assert.equal(voice.speaking(), false, 'iOS paused it while the app was away');
 });
 
 test('nothing is watched while it is paused, stopped or finished', () => {

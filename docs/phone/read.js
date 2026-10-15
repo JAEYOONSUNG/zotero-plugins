@@ -161,9 +161,48 @@ function dehyphenate(text) {
   return text.replace(/(\p{Ll})-\n(\p{Ll})/gu, '$1$2').replace(/(\p{L})\n(?=\p{L})/gu, '$1 ').replace(/\n+/g, ' ');
 }
 
+/* ---- the citations ----
+   A citation is not a sentence. Most of them are easy to see -- "[12]", "(Smith et al., 2019)" --
+   but the commonest kind in these papers is invisible: a superscript that lost its superscript
+   when the PDF's text was extracted, so "conserved across all domains of life" arrives as
+   "life51" and a number is read out in the middle of a clause.
+
+   A number inside a name is not one of those. Cas9, Tn21, OD600, BL21, p53 and figure3 all keep
+   their numbers: a bare number is taken only off the end of a plain lowercase word, a list or a
+   range of them off the end of anything, and a bracket only when there is nothing in it but
+   names, initials and a year. */
+const CITE_KEEP = new Set(['figure', 'figures', 'fig', 'figs', 'table', 'tables', 'tab', 'panel', 'panels',
+  'lane', 'lanes', 'eq', 'eqn', 'equation', 'equations', 'ref', 'refs', 'reference', 'references',
+  'type', 'types', 'class', 'group', 'step', 'day', 'days', 'site', 'sites', 'residue', 'residues',
+  'position', 'strain', 'clone', 'primer', 'exon', 'intron', 'chapter', 'section', 'page', 'phase',
+  'round', 'rounds', 'trial', 'part', 'level', 'stage', 'gene', 'version', 'buffer', 'plasmid',
+  'chromosome', 'sample', 'column', 'row', 'set', 'run', 'cycle', 'cycles', 'point', 'state', 'mode']);
+const CITE_WORD = /((?:\p{L}[\p{L}’'-]*)|[)\]])(\d{1,3}(?:\s?[,–—-]\s?\d{1,3})+)(?=[\s.,;:)\]]|$)/gu;
+const CITE_TAIL = /\b([a-z]{3,})(\d{1,3})(?=[\s.,;:)\]]|$)/g;
+const CITE_YEAR = /\b(?:19|20)\d\d[a-z]?\b/;
+/* What may stand inside a citation's brackets and nothing else: surnames and their particles,
+   initials, "et al", a year, and the punctuation between them. A bracket with a verb in it is a
+   remark, and a remark is part of the paper. */
+const CITE_ONLY = /^(?:\s*(?:\p{Lu}[\p{L}’'-]*|\p{Lu}\.|and|&|et|al\.?|van|von|de[rnl]?|du|da|dos|del|la|le|ten|ter|bin|ibn|see|also|reviewed|in|refs?\.?|e\.g\.|i\.e\.|unpublished|personal|communication|data|not|shown|\d{1,4}[a-z]?|[,;:&–—.-])\s*)+$/u;
+const citationInside = inner => {
+  const body = String(inner).trim();
+  if (!body) return false;
+  if (/^\d{1,3}(?:\s*[,–—-]\s*\d{1,3})+$/.test(body)) return true;      // "(12, 13)", "(3-5)"
+  if (/^\d{2,3}$/.test(body)) return true;                                   // "(12)"; "(1)" is a list
+  return CITE_YEAR.test(body) && CITE_ONLY.test(body);
+};
+const citeKeep = word => CITE_KEEP.has(String(word).toLowerCase());
+export function withoutCitations(text) {
+  return String(text ?? '')
+    .replace(/\(([^()]{1,200})\)/g, (all, inner) => citationInside(inner) ? ' ' : all)
+    .replace(CITE_WORD, (all, lead) => citeKeep(lead) ? all : lead)
+    .replace(CITE_TAIL, (all, word) => citeKeep(word) ? all : word)
+    .replace(/\(\s*\)/g, '');
+}
+
 /* What is said out loud: the citations go, the sentence on screen keeps them. */
 export function spokenForm(text) {
-  return String(text)
+  return withoutCitations(text)
     .replace(/\s*\[(?:\s*\d+\s*(?:[-–,]\s*\d+\s*)*)+\]/g, '')                      // [1], [2-4], [1,5]
     .replace(/\s*\((?:[^()]*?\b(?:et al\.?|and colleagues)[^()]*?|\s*(?:19|20)\d\d[a-z]?(?:\s*[;,]\s*(?:19|20)\d\d[a-z]?)*\s*)\)/g, '')
     .replace(/\s*\(\s*(?:fig(?:ure|s)?|table|eq|supplementary)\.?\s*[^)]{0,20}\)/gi, '')

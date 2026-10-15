@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v21';
+export const BUILD = 'nonmun-v22';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -1979,13 +1979,29 @@ function setSleep(choice) {
   toast(T('{0}분 뒤에 멈춥니다', minutes));
 }
 
-/* Keep the screen on while the paper is being read; the lock screen stops Safari's speech. */
+/* Keep the screen on while the paper is being read; the lock screen stops Safari's speech.
+   iOS takes the lock back the moment the app goes away and does not hand it back on return, so a
+   lock that has been released is no lock: it is asked for again rather than counted. */
 async function holdScreen(on) {
   try {
     if (!('wakeLock' in navigator)) return;
+    if (listen.wake && listen.wake.released) listen.wake = null;
     if (on && !listen.wake) listen.wake = await navigator.wakeLock.request('screen');
     if (!on && listen.wake) { await listen.wake.release(); listen.wake = null; }
   } catch (_) { listen.wake = null; }
+}
+
+/* Coming back to the app. Everything iOS does to a page it has put away it does silently: the
+   page's own voice stops mid-sentence, the screen lock is taken back, and nothing is said about
+   either. So on the way back the sentence is started again if it went quiet and the lock is
+   asked for again. A file that is still playing is left alone, which is the whole reason a
+   paper is baked. */
+export function cameBack() {
+  if (!listen.player || listen.player.state().status !== 'playing') return false;
+  holdScreen(true);
+  if (listen.hum) { try { const p = listen.hum.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
+  listen.player.wake();
+  return true;
 }
 
 function leftListen() {
@@ -2041,6 +2057,11 @@ function paintReading(state) {
   // than leaving a car silent.
   if (state.status === 'done') playOn();
   holdScreen(playing);
+  /* While a paper is being read the page holds an audio session open, not only while driving:
+     that session is what puts the paper on the lock screen and answers the buttons on a steering
+     wheel, and it is what iOS looks at when it decides whether a page it has put away may go on
+     making a sound. */
+  if (playing) carControls(true);
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
     $('listen-left').textContent = rest;
@@ -2238,6 +2259,8 @@ function paintVolume() {
 export const driving = () => localStorage.getItem(KEYS.drive) === '1';
 export const chaining = () => localStorage.getItem(KEYS.chain) === '1';
 
+const nowPlaying = () => !!listen.player && listen.player.state().status === 'playing';
+
 function setDriving(on) {
   localStorage.setItem(KEYS.drive, on ? '1' : '0');
   $('listen').classList.toggle('driving', !!on);
@@ -2245,7 +2268,8 @@ function setDriving(on) {
   if (button) button.setAttribute('aria-pressed', String(!!on));
   if (on && !chaining()) localStorage.setItem(KEYS.chain, '1');
   buildChain();
-  carControls(on);
+  // Turning driving off does not take the lock screen away from a paper that is still being read.
+  carControls(on || nowPlaying());
   toast(on ? '운전 모드 · 화면 아무 데나 눌러 멈춤, 끝나면 다음 논문' : '운전 모드를 껐습니다');
   const node = listen.nodes[listen.index];
   if (node) centerOn(node, {soft: false});
@@ -2281,7 +2305,8 @@ async function playOn() {
     const title = clean(next.data.title) || '제목 없음';
     toast(T('다음 논문 · {0}', title));
     await openListen(next);
-    if (listen.player) { announce(title); listen.player.play(); }
+    // Only the paper that was actually opened is read: one with no body leaves no player behind.
+    if (listen.player && listen.item === next) { announce(title); listen.player.play(); }
   } finally { listen.chaining = false; }
   return true;
 }
@@ -2388,6 +2413,13 @@ async function openListen(item) {
     const card = el('section', {class: 'card'}, body);
     el('h3', {text: '읽을 본문이 없습니다'}, card);
     el('p', {class: 'muted small', text: error.message}, card);
+    /* The paper before this one is let go of here. Carrying on to the next paper has already
+       changed which paper this screen is about, and a player left reading the last one would
+       read it again under the new one's name — and write its place under the new one's key. */
+    if (listen.player) { listen.player.stop(); listen.player = null; }
+    if (listen.baked) { listen.baked.release(); listen.baked = null; }
+    listen.list = []; listen.nodes = [];
+    $('listen-bar').hidden = true;
     return;
   }
   const {text, onlyAbstract} = said;
@@ -2453,7 +2485,7 @@ async function openListen(item) {
 
   buildRates(rate);
   buildSizes();
-  buildScope(lang, withCaptions);
+  buildScope();
   buildChain();
   paintVolume();
   buildSections();
@@ -2621,8 +2653,12 @@ function bakedEngine(found, marks) {
   audio.preload = bytes ? 'auto' : 'metadata';
   const at = Array.isArray(marks && marks.marks) ? marks.marks : [];
   const named = chapterNames(marks);
+  /* One file, and a voice over whichever of its sentences are being read: leaving the reference
+     list out changes which sentences those are, and the voice has to be told, because what the
+     player calls sentence n is a place in this file. */
   return {url, audio, path: (found && found.path) || '', streamed: !bytes,
           marks: at, names: named, engine: bakedVoice({audio, marks: at}),
+          voice: (list = at) => bakedVoice({audio, marks: list}),
           release() { try { audio.pause(); } catch (_) {} if (mine) { try { URL.revokeObjectURL(mine); } catch (_) {} } }};
 }
 /* The names the baker gave the chapters, by number, so the transcript can say which part of the
@@ -2635,15 +2671,38 @@ export function chapterNames(marks) {
   return out;
 }
 /* The sentences the Mac spoke, in the order it spoke them, as units the player and the transcript
-   understand. Without the sidecar there is nothing to follow, and the file is not offered. */
-export const bakedUnits = (marks, names = null) => {
-  const list = Array.isArray(marks) ? marks : marks && Array.isArray(marks.marks) ? marks.marks : [];
+   understand. Without the sidecar there is nothing to follow, and the file is not offered.
+
+   The marks and the units are made together and have to stay in step: the player asks the file
+   for sentence n, and n is a place in the file, so a sentence left out of the one must be left
+   out of the other. */
+const REF_CHAPTER = /\ucc38\uace0\s*\ubb38\ud5cc|references?|bibliography|literature cited|works cited/i;
+/* A bibliography entry, once it has become a sentence: a run of surnames and bare initials, a
+   year, and nothing anybody would say out loud. The Mac bakes the body alone, but a reference
+   list that ran on without a heading is read as body and ends up in the file. */
+export function looksReference(text) {
+  const body = clean(text);
+  if (body.length < 40) return false;
+  if (!/\b(?:19|20)\d\d[a-z]?\b/.test(body)) return false;
+  const initials = (body.split(/\s+/).filter(word => /^\p{Lu}{1,3}[.,;]?$/u.test(word))).length;
+  return initials >= 4 && (body.match(/,/g) || []).length >= 4;
+}
+export const isReferenceMark = (mark, titles) =>
+  REF_CHAPTER.test(String((mark && mark.chapterTitle) || (titles && titles.get(Number(mark && mark.chapter))) || ''))
+  || looksReference(mark && mark.text);
+
+export function bakedParts(marks, names = null, want = {}) {
+  const all = Array.isArray(marks) ? marks : marks && Array.isArray(marks.marks) ? marks.marks : [];
   const titles = names || chapterNames(marks);
-  return list.filter(mark => mark && mark.text).map((mark, index) => ({
+  const kept = all.filter(mark => mark && mark.text && (want.references || !isReferenceMark(mark, titles)));
+  const units = kept.map((mark, index) => ({
     text: mark.text, spoken: mark.text, page: 0, index,
     section: mark.chapterTitle || titles.get(Number(mark.chapter)) || '', lead: ''
   }));
-};
+  if (kept.length || !all.length) return {marks: kept, units};
+  return bakedParts(all, titles, {references: true});   // everything the Mac said beats nothing said
+}
+export const bakedUnits = (marks, names = null, want = {}) => bakedParts(marks, names, want).units;
 
 /* A baked paper is read in the Mac's voice, full stop. The phone's own is a stand-in for the
    papers the Mac has not read yet — it is not a choice to be remembered over a real voice, so a
@@ -2654,20 +2713,34 @@ export const wantsMac = (said = localStorage.getItem(KEYS.said)) => said !== 'tr
 /* Hand the player the baked file in place of the phone's voice, wherever it is being read from.
    The sentences become the ones the Mac actually spoke, so the list still follows along and a tap
    on a sentence still moves the voice. */
-function useBaked({play = false} = {}) {
+/* The same place in a paper, counted in somebody else's sentences. The Mac broke the paper up
+   where its own voice breathed and the phone breaks it where the writer put the full stops, so
+   there is no sentence that is the same sentence — but a reader who is a third of the way
+   through is a third of the way through either way, and the alternative is starting again. */
+export const placeAcross = (at, from, to) =>
+  from > 1 && to > 0 ? Math.min(to - 1, Math.max(0, Math.round((at / (from - 1)) * (to - 1)))) : 0;
+
+function useBaked({play = false, keep = ''} = {}) {
   if (!listen.baked) return false;
-  const playing = play || (listen.player ? listen.player.state().status === 'playing' : false);
+  const was = listen.player ? listen.player.state() : null;
+  const playing = play || (was ? was.status === 'playing' : false);
+  const made = bakedParts(listen.baked.marks, listen.baked.names, unitsFor(reading()));
+  if (!made.units.length) return false;
   listen.saying = 'mac';
-  listen.list = bakedUnits(listen.baked.marks, listen.baked.names);
+  listen.list = made.units;
+  // A scope changed in the middle of a paper comes back to the sentence it was changed on; a
+  // voice swapped in the middle of one carries on from where that one had got to.
+  const at = keep ? Math.max(0, made.units.findIndex(unit => unit.text === keep))
+                  : was ? placeAcross(was.index, was.total, made.units.length) : 0;
   if (!$('listen').hidden) renderTranscript(listen.list);
   if (listen.player) listen.player.stop();
-  listen.player = createPlayer({engine: listen.baked.engine, rate: readRate(), volume: readVolume(),
+  listen.player = createPlayer({engine: listen.baked.voice(made.marks), rate: readRate(), volume: readVolume(),
     onChange: event => paintReading(event.state)});
-  listen.player.load(listen.list, {at: 0});
+  listen.player.load(listen.list, {at});
   keepAfterListening(listen.baked);
   watchBaked(listen.baked);
-  if (!$('listen').hidden) { buildSaying(); paintVoice(listen.lang || 'en'); }
-  if (playing) listen.player.play(0); else paintReading(listen.player.state());
+  if (!$('listen').hidden) { buildSaying(); buildScope(); paintVoice(listen.lang || 'en'); }
+  if (playing) listen.player.play(at); else paintReading(listen.player.state());
   return true;
 }
 
@@ -2675,7 +2748,8 @@ function useBaked({play = false} = {}) {
    signal that dies mid-journey must not leave a silent car. */
 function useOwnVoice({play = false} = {}) {
   if (!listen.engine) return false;
-  const playing = play || (listen.player ? listen.player.state().status === 'playing' : false);
+  const was = listen.player ? listen.player.state() : null;
+  const playing = play || (was ? was.status === 'playing' : false);
   listen.saying = listen.saying === 'tr' ? 'tr' : 'raw';
   listen.list = readingUnits(listen.paper, unitsFor(reading()));
   if (!$('listen').hidden) renderTranscript(listen.list);
@@ -2685,9 +2759,11 @@ function useOwnVoice({play = false} = {}) {
   const lang = paperLanguage(listen.list);
   const voice = pickVoice(listen.voices || [], lang, localStorage.getItem(KEYS.voice + lang) || '');
   if (voice) listen.player.setVoice(voice.voiceURI, voice.lang || lang);
-  listen.player.load(listen.list, {at: 0});
-  if (!$('listen').hidden) { buildSaying(); paintVoice(lang); }
-  if (playing) listen.player.play(0); else paintReading(listen.player.state());
+  // A translation is a different paper's worth of sentences; either way, the place is kept.
+  const at = was ? placeAcross(was.index, was.total, listen.list.length) : 0;
+  listen.player.load(listen.list, {at});
+  if (!$('listen').hidden) { buildSaying(); buildScope(); paintVoice(lang); }
+  if (playing) listen.player.play(at); else paintReading(listen.player.state());
   return true;
 }
 
@@ -2758,30 +2834,37 @@ export const scopeOf = value => SCOPES.some(([id]) => id === value) ? value : 'b
 export const unitsFor = scope => ({captions: scope !== 'body', references: scope === 'references'});
 export const reading = () => scopeOf(localStorage.getItem(KEYS.reads));
 
-function buildScope(lang, scope) {
+/* The Mac bakes the body alone, so there are no captions in the file to offer; what is left to
+   choose there is whether the reference list it swept up with the body is read. */
+export const MAC_SCOPES = [['body', '\ubcf8\ubb38\ub9cc'], ['references', '\ucc38\uace0\ubb38\ud5cc\uae4c\uc9c0']];
+function buildScope() {
   const track = $('listen-what');
   track.textContent = '';
   el('span', {class: 'ind', 'aria-hidden': 'true'}, track);
-  const now = scopeOf(scope);
-  for (const [id, label] of SCOPES) {
-    const button = el('button', {type: 'button', 'aria-pressed': String(id === now), text: label}, track);
+  const mac = listen.saying === 'mac';
+  const now = scopeOf(reading());
+  const here = mac && now === 'captions' ? 'body' : now;
+  for (const [id, label] of (mac ? MAC_SCOPES : SCOPES)) {
+    const button = el('button', {type: 'button', 'aria-pressed': String(id === here), text: label}, track);
     button.addEventListener('click', () => {
-      const at = listen.player.state().index;
-      const unit = listen.list[at];
+      if (!listen.player) return;
+      const unit = listen.list[listen.player.state().index];
       localStorage.setItem(KEYS.reads, id);
+      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+      slide(track);
+      // The Mac's voice is a file: leaving the references out of it leaves out the sentences
+      // themselves, which is the whole list the player is reading and the voice is speaking.
+      if (listen.saying === 'mac') { useBaked({keep: unit ? unit.text : ''}); return; }
       listen.list = readingUnits(listen.paper, unitsFor(id));
       renderTranscript(listen.list);
       // Where the reader was stays where the reader was, even though the list around it changed.
       const back = unit ? Math.max(0, listen.list.findIndex(u => u.text === unit.text)) : 0;
       const playing = listen.player.state().status === 'playing';
       listen.player.load(listen.list, {at: back});
-      for (const other of track.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
-      slide(track);
       if (playing) listen.player.play(back); else paintReading(listen.player.state());
     });
   }
   requestAnimationFrame(() => slide(track));
-  void lang;
 }
 
 /* ---------- the PDF itself ---------- */
@@ -3685,6 +3768,8 @@ function wire() {
     $('q').focus();
     drawRecent();
   });
+  // Back from another app, or from a locked screen: the reading picks itself up.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'hidden') cameBack(); });
   // Whatever was changed with no signal goes out the moment there is some.
   addEventListener('online', () => { restState(); flushWrites({quiet: false}); });
   addEventListener('offline', restState);
