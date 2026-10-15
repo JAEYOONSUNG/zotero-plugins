@@ -634,3 +634,58 @@ test('the user pressing play on a sentence that was given up on gives it a fresh
  p.play(1);c.pass(2*60*1000);
  assert.equal(said(c.spoken).slice(before).filter(t=>t==='Sentence 2').length,RA.GIVE_UP+1,'tried again from the top, not refused');
 });
+
+/* -- a word said twice at the start ----------------------------------------
+   Extraction hands back whatever sat on its own line in a large type: a figure's axis, the sample names
+   beside it, the author line. Said one after another before the first sentence of a section, the listener
+   hears the same words twice. Measured on this Mac's own extracted papers: one lead in 62 did it. */
+
+test('a figure axis, its sample names and the author line are not announced as headings',async()=>{
+ const PT=(await import('../src/paper-text.js')).default;
+ const s=(text,page=0)=>({text,spoken:text,page,rects:[]});
+ const structured={sections:[
+  {heading:'5 10 15 20 Time (h)',spoken:'5 10 15 20 Time (h)',kind:'body',page:0,paragraphs:[]},
+  {heading:'Kubu-PM12',spoken:'Kubu-PM12',kind:'body',page:0,paragraphs:[]},
+  {heading:'20% (w/w) PET 1 mgENZYME·gPET',kind:'body',page:0,paragraphs:[]},
+  {heading:'5 10 15 20 Time (h)',kind:'body',page:0,paragraphs:[]},
+  {heading:'Peter C. DeWeirdt, Emily M. Mahoney, Michael T. Laub',kind:'body',page:0,paragraphs:[]},
+  {heading:'Industrial performance',kind:'body',page:0,paragraphs:[{sentences:[s('Industrial conditions are harsh.')]}]}]};
+ const units=RA.composeUnits(structured,{},PT);
+ assert.equal(units[0].lead,'Industrial performance','only the heading that is a heading is said');
+});
+
+test('the same heading is never said twice in one breath, and at most two are',async()=>{
+ const PT=(await import('../src/paper-text.js')).default;
+ const s=(text,page=0)=>({text,spoken:text,page,rects:[]});
+ const twice={sections:[
+  {heading:'Results',kind:'body',page:0,paragraphs:[]},
+  {heading:'RESULTS',kind:'body',page:0,paragraphs:[]},
+  {heading:'Growth',kind:'body',page:0,paragraphs:[{sentences:[s('Cells grew.')]}]}]};
+ assert.equal(RA.composeUnits(twice,{},PT)[0].lead,'Results. Growth');
+ const deep={sections:[
+  {heading:'Results',kind:'body',page:0,paragraphs:[]},
+  {heading:'Enzymes',kind:'body',page:0,paragraphs:[]},
+  {heading:'Thermal stability',kind:'body',page:0,paragraphs:[]},
+  {heading:'At 95 degrees',kind:'body',page:0,paragraphs:[{sentences:[s('Activity held.')]}]}]};
+ assert.equal(RA.composeUnits(deep,{},PT)[0].lead,'Thermal stability. At 95 degrees','a listener needs where they are, not the whole path');
+});
+
+test('a heading whose last word the sentence starts with is not said',async()=>{
+ const PT=(await import('../src/paper-text.js')).default;
+ const s=(text,page=0)=>({text,spoken:text,page,rects:[]});
+ const seam={sections:[{heading:'Results and discussion',kind:'body',page:0,paragraphs:[{sentences:[s('Discussion of the fold begins here.')]}]}]};
+ assert.equal(RA.composeUnits(seam,{},PT)[0].lead,undefined);
+ const ko={sections:[{heading:'결과',kind:'body',page:0,paragraphs:[{sentences:[s('세포가 자랐다.')]}]}]};
+ assert.equal(RA.composeUnits(ko,{},PT)[0].lead,'결과','a Korean heading is two letters and is still a heading');
+});
+
+test('two presses in the same breath start the sentence once; changing the voice first does start it again',()=>{
+ const {p,engine}=player();
+ p.play();p.play();
+ assert.deepEqual(engine.log.filter(l=>l[0]==='speak').map(l=>l[1]),['One.'],'the first word is not said twice');
+ p.setVoice('voice-b');
+ assert.deepEqual(engine.log.filter(l=>l[0]==='speak').map(l=>l[1]),['One.','One.'],'a different voice is a real restart');
+ engine.begin();
+ p.play();
+ assert.equal(engine.log.filter(l=>l[0]==='speak').length,4,'and once it is sounding, play starts it over as before');
+});

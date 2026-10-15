@@ -491,6 +491,26 @@
  }
  const sayable=u=>{const spoken=u&&typeof u.spoken==='string'?clean(u.spoken):'';return spoken&&/[\p{L}\p{N}]/u.test(spoken)?spoken:clean(u&&u.text);};
  const isBack=section=>!!section&&(section.kind==='back'||section.kind==='references'||section.back===true);
+/* Whether a line that the extraction took for a section heading is one a listener should hear before the
+   section. Extraction hands back a figure's axis ("5 10 15 20 Time (h)"), the sample names beside it
+   ("Kubu-PM12") and the author line as headings, and the player said every one of them in a row before the
+   first sentence -- the same words twice over, which is what "it says words twice at the start" sounds
+   like. A heading is a few plain words: Korean and the other scripts that write without spaces count a
+   two-letter word (결과, 서론), the Latin ones need three. */
+ const SPACELESS=/[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+ function headingLike(text){
+  const h=clean(text);
+  if(!h||h.length>90)return false;
+  if((h.match(/\./g)||[]).length>=2)return false;                    // "Peter C. DeWeirdt, Emily M. Mahoney, ..."
+  const words=h.match(/[\p{L}\p{N}][\p{L}\p{N}’'\u2010-\u2015-]*/gu)||[];
+  if(!words.length)return false;
+  const letters=words.filter(w=>/^\p{L}+$/u.test(w)),figures=words.filter(w=>/\d/.test(w));
+  if(!letters.some(w=>SPACELESS.test(w)?w.length>=1:w.length>=2))return false;   // "h", "Kubu-PM12": not words
+  if(figures.length>letters.length)return false;                                 // "5 10 15 20 Time (h)"
+  const low=words.map(w=>w.toLowerCase());
+  if(low.some((w,i)=>i&&w===low[i-1]))return false;                              // "(w/w)", and anything else that stutters
+  return true;
+ }
  /* The body in reading order, with the captions and the reference list added
     only when asked. Captions go after the last sentence on their page. */
  function composeUnits(structured,{captions=false,references=false}={},paperText=root.StyleCustomPaperText){
@@ -504,11 +524,22 @@
   let parents=[];
   sections.forEach((section,si)=>{
    const heading=clean(String(section&&(section.spoken||section.heading)||'').replace(/[|•▪■◦]/g,' ')).replace(/^(?:\d+(?:\.\d+)*|[IVX]+)[.)]?\s+/,'').replace(/[.:;,]+$/,'');
-   const said=heading&&heading.length<=90?heading:'';
-   if(!firstAt.has(si)){if(said)parents.push(said);return;}
+   const said=headingLike(heading)?heading:'';
+   if(!firstAt.has(si)){if(said&&!parents.some(p=>p.toLowerCase()===said.toLowerCase()))parents.push(said);return;}
    const first=body[firstAt.get(si)];
    const own=said&&!clean(first.text).toLowerCase().startsWith(said.toLowerCase())?said:'';
-   const lead=[...parents,own].filter(Boolean).join('. ');parents=[];
+   /* Never the same heading twice in one breath, and at most two of them: everything above this sentence
+      is a hierarchy, and a listener only needs where they are, not the whole path. */
+   const parts=[];
+   for(const part of [...parents,own])if(part&&!parts.some(p=>p.toLowerCase()===part.toLowerCase()))parts.push(part);
+   parents=[];
+   // "Results and discussion" before "Discussion of the fold begins" is the word twice. Drop the heading, keep the sentence.
+   const firstWord=(clean(first.text).toLowerCase().match(/[\p{L}\p{N}]+/u)||[''])[0];
+   while(parts.length){
+    const last=(parts[parts.length-1].toLowerCase().match(/[\p{L}\p{N}]+/gu)||[]).pop();
+    if(last&&last===firstWord)parts.pop();else break;
+   }
+   const lead=parts.slice(-2).join('. ');
    if(lead)first.lead=lead;
   });
   if(!references)body=body.filter(u=>u.kind!=='back');
@@ -568,7 +599,7 @@
   if(!engine)throw new Error('A speech engine is required');
   const timer=timers||{set:(fn,ms)=>setTimeout(fn,ms),clear:id=>clearTimeout(id)};
   let all=[],list=[],index=0,status='idle',gen=0,queuedTo=-1,entered=-1,queueLive=false,dead=false,watch=null,error='',heard=false,queueing=false,deferred=null,enginePaused=false,gap=null;
-  let lastEvent=0,tries=0,tryingAt=-1,revived=0,skipped=0,skipRun=0;
+  let lastEvent=0,tries=0,tryingAt=-1,revived=0,skipped=0,skipRun=0,startSig='';
   let speakRate=clamp(rate,RATE_MIN,RATE_MAX,1),speakVoice=voiceURI||'',speakLang=lang||'en';
   const filter={captions:filters.captions===true,references:filters.references===true};
   const clock={since:null,accum:0};
@@ -666,6 +697,12 @@
   }
   function startAt(i){
    if(dead)return;
+   /* Two presses in the same breath -- the transcript line and the toolbar, a double Alt-click -- used to
+      cancel the sentence just started and start it again. The system voices do not always stop in time, so
+      the first word was heard twice. Nothing has sounded yet and nothing has changed: this is the same start. */
+   const sig=i+'|'+speakVoice+'|'+speakRate+'|'+speakLang+'|'+filter.captions+'|'+filter.references;
+   if(status==='playing'&&!heard&&sig===startSig&&queuedTo===i)return;
+   startSig=sig;
    gen++;const g=gen;clearWatch();clearGap();try{engine.cancel();}catch(_){}
    // speechSynthesis stays paused through a cancel(): a queue left paused would hold the new sentence in silence
    if(enginePaused){enginePaused=false;try{engine.resume();}catch(_){}}
