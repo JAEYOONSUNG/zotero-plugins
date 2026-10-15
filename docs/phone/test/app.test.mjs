@@ -4050,3 +4050,61 @@ test('the bar says when the voice is one the screen can stop, and which papers d
   assert.match(screenWarning('raw', false), /맥이 아직 이 논문을 굽지 않았습니다/, 'with no file there is nothing to switch to');
   assert.match(screenWarning('tr', false), /화면을 끄면 멈춥니다/, 'a translation is read by the phone too');
 });
+
+test('맥이 굽는 동안 폰 목소리로 읽다가, 파일이 생기면 그 자리에서 맥 음성이 이어받는다', async () => {
+  /* The Mac bakes the papers that have been read first, so a paper opened before its file existed
+     usually has one minutes later. Reading the rest of it in the stand-in voice -- which iOS stops at
+     the lock screen -- is the thing to avoid. */
+  const has = [];
+  const dropbox = bakedDropbox({has});
+  const {open} = await openListening({dropbox});
+  await open.settle();
+  assert.equal(open.document.getElementById('listen-saying').hidden, true, 'nothing baked yet, so no choice to offer');
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(open.speech.queue.length > 0, 'the phone is reading it meanwhile');
+  assert.match(open.document.getElementById('listen-warn').textContent, /화면을 끄면 멈춥니다/);
+
+  // The Mac finishes it while the paper is being read, and the reader comes back to the app.
+  has.push('/논문 음성/Retron Septu defence.m4b');
+  open.document.dispatchEvent(new open.window.Event('visibilitychange'));
+  await open.settle();
+
+  const buttons = [...open.document.querySelectorAll('#listen-saying button')];
+  assert.deepEqual(buttons.map(b => b.textContent), ['맥 음성', '폰 음성']);
+  assert.equal(buttons[0].getAttribute('aria-pressed'), 'true', 'the Mac’s voice took over');
+  const audio = open.audios.at(-1);
+  assert.ok(audio && !audio.paused, 'and it is the file playing');
+  assert.match(open.document.getElementById('toast').textContent, /맥 음성/);
+  assert.equal(open.document.getElementById('listen-warn').hidden, true, 'the warning goes with it');
+});
+
+test('폰 음성을 직접 고른 논문은 파일이 생겨도 그대로 둔다', async () => {
+  const has = ['/논문 음성/Retron Septu defence.m4b'];
+  const dropbox = bakedDropbox({has});
+  const {open} = await openListening({dropbox});
+  await open.settle();
+  // The reader asks for the phone's voice on this paper, by hand.
+  [...open.document.querySelectorAll('#listen-saying button')][1].dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  open.document.getElementById('listen-play').dispatchEvent(new open.window.Event('click'));
+  await open.settle();
+  assert.ok(open.speech.queue.length > 0, 'the phone is reading');
+  open.document.dispatchEvent(new open.window.Event('visibilitychange'));
+  await open.settle();
+  const buttons = [...open.document.querySelectorAll('#listen-saying button')];
+  assert.equal(buttons[1].getAttribute('aria-pressed'), 'true', 'still the phone’s voice, as asked');
+  assert.ok(open.speech.queue.length > 0);
+});
+
+test('파일을 다시 찾아보는 때: 읽는 중에 25문장마다, 이미 파일이 있거나 사람이 골랐으면 안 본다', async () => {
+  const {lookDue, LOOK_EVERY} = await import('../app.js');
+  const playing = {status: 'playing', index: 0};
+  assert.equal(lookDue(playing, {saying: 'raw'}), true, 'nothing looked at yet');
+  assert.equal(lookDue(playing, {saying: 'raw', baked: {}}), false, 'a file is already in hand');
+  assert.equal(lookDue(playing, {saying: 'mac'}), false, 'the Mac is already reading');
+  assert.equal(lookDue(playing, {saying: 'raw', asked: true}), false, 'the reader chose this voice');
+  assert.equal(lookDue({status: 'paused', index: 0}, {saying: 'raw'}), false, 'a paper nobody is listening to can wait');
+  assert.equal(lookDue({status: 'playing', index: 10}, {saying: 'raw', lookAt: 0}), false, 'ten sentences on is too soon');
+  assert.equal(lookDue({status: 'playing', index: LOOK_EVERY}, {saying: 'raw', lookAt: 0}), true);
+});

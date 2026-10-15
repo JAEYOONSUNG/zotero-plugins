@@ -155,6 +155,8 @@ export default {
   '키가 함께 들어왔습니다': 'The key came with it',
   '키는 이 폰에만 저장되고 어디로도 보내지 않습니다.':
     'The key is kept on this phone alone and is never sent anywhere.',
+  '맥이 다 구웠습니다 · 맥 음성으로 이어서 읽습니다':
+    'The Mac has finished baking it · carrying on in the Mac’s voice',
   '폰 음성 · 화면을 끄면 멈춥니다. 맥 음성은 안 멈춥니다.':
     'Phone voice · stops when the screen does. The Mac’s voice does not.',
   '폰 음성 · 화면을 끄면 멈춥니다. 맥이 아직 이 논문을 굽지 않았습니다.':

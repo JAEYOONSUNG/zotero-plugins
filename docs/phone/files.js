@@ -362,7 +362,7 @@ export function bakedIndex({dropbox, folder = AUDIO_BASE, fresh = INDEX_FRESH, n
 }
 
 export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = null, index = null,
-                                  stream = true, onStep = () => {}} = {}) {
+                                  stream = true, refresh = false, onStep = () => {}} = {}) {
   if (!dropbox || !dropbox.linked) return null;
   const paths = bakedPaths(title, folder);
   for (const path of paths) {
@@ -373,7 +373,7 @@ export async function bakedAudio({title, folder = AUDIO_BASE, dropbox, cache = n
   }
   /* One listing of the folder decides which of the names is there, instead of a failed download for
      each name that is not. */
-  const listing = index ? await index.names() : null;
+  const listing = index ? await index.names({refresh}) : null;
   /* macOS hands a Korean name over decomposed and Dropbox holds it composed, so the two spellings
      of one name are compared in one spelling. */
   const there = listing ? new Set(listing.map(entry => String(entry.name).normalize('NFC'))) : null;

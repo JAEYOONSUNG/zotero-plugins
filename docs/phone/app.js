@@ -28,7 +28,7 @@ import {withRetry, isOffline, mergeQueue} from './net.js';
 const API = 'https://api.zotero.org';
 /* Which build of the app this is. It is the name the service worker keeps its copy of the shell
    under, so the two cannot drift: a test holds them to each other. */
-export const BUILD = 'nonmun-v24';
+export const BUILD = 'nonmun-v25';
 const KEYS = {user: 'np.user', key: 'np.key', ver: 'np.version', scope: 'np.scope',
               rate: 'np.rate', voice: 'np.voice.', at: 'np.at.', sort: 'np.sort', page: 'np.page.',
               pct: 'np.pct.', seen: 'np.seen.', synced: 'np.synced', last: 'np.last', tip: 'np.tip',
@@ -2001,6 +2001,7 @@ export function cameBack() {
   holdScreen(true);
   if (listen.hum) { try { const p = listen.hum.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
   listen.player.wake();
+  void takeBakedOver();        // away for a while is long enough for the Mac to have finished one
   return true;
 }
 
@@ -2062,6 +2063,7 @@ function paintReading(state) {
      wheel, and it is what iOS looks at when it decides whether a page it has put away may go on
      making a sound. */
   if (playing) carControls(true);
+  lookAgainForBaked(state);
   if (!$('listen').hidden) {
     $('listen-where').textContent = line;
     $('listen-left').textContent = rest;
@@ -2413,6 +2415,7 @@ async function translationFor(item) {
 
 async function openListen(item) {
   listen.item = item;
+  listen.lookAt = null; listen.ownVoiceAsked = false;
   localStorage.setItem(KEYS.last, item.key);   // so the library can offer to carry on
   localStorage.setItem(KEYS.kind, 'listen');
   $('listen-title').textContent = clean(item.data.title) || '논문';
@@ -2646,12 +2649,12 @@ export function hasBaked(title, names = bakedNames) {
   return bakedPaths(clean(title) || '논문', audioFolder()).some(path => names.has(path.split('/').pop()));
 }
 
-async function findBaked(item) {
+async function findBaked(item, {refresh = false} = {}) {
   if (!dropbox.linked) return null;
   const title = clean(item.data.title) || '논문';
   if (!bakedList) bakedList = bakedIndex({dropbox, folder: audioFolder()});
   try {
-    const found = await bakedAudio({title, folder: audioFolder(), dropbox, cache: fileCache, index: bakedList});
+    const found = await bakedAudio({title, folder: audioFolder(), dropbox, cache: fileCache, index: bakedList, refresh});
     if (!found) return null;
     const marks = await bakedMarks({path: found.path, dropbox});
     return {...found, marks};
@@ -2760,6 +2763,39 @@ function useBaked({play = false, keep = ''} = {}) {
   return true;
 }
 
+/* The Mac bakes while the phone reads, and it bakes the papers that have been read first — so a paper
+   opened before its file existed often has one a few minutes later. The phone's own voice stops at the
+   lock screen, so it is worth looking again rather than reading the whole paper in the stand-in: every
+   LOOK_EVERY sentences and whenever the app comes back, and the file takes over from the place the
+   phone had reached. A reader who asked for 폰 음성 on this paper is left alone. */
+export const LOOK_EVERY = 25;
+export const lookDue = (state, {baked, saying, asked, lookAt} = {}) =>
+  !baked && !asked && saying !== 'mac' && !!state && state.status === 'playing'
+  && (!Number.isInteger(lookAt) || state.index - lookAt >= LOOK_EVERY);
+function lookAgainForBaked(state) {
+  if (!listen.item || !lookDue(state, {baked: listen.baked, saying: listen.saying, asked: listen.ownVoiceAsked, lookAt: listen.lookAt})) return;
+  listen.lookAt = state.index;
+  void takeBakedOver();
+}
+async function takeBakedOver() {
+  const item = listen.item;
+  if (!item || listen.baked || listen.saying === 'mac' || listen.ownVoiceAsked || !wantsMac() || listen.looking) return false;
+  listen.looking = true;
+  try {
+    const found = await findBaked(item, {refresh: true});
+    if (!found || listen.item !== item || listen.baked) return false;
+    const made = bakedEngine(found, found.marks);
+    if (!made.marks.length) { made.release(); return false; }
+    listen.baked = made;
+    buildSaying();
+    if (!useBaked()) return false;
+    toast('맥이 다 구웠습니다 · 맥 음성으로 이어서 읽습니다');
+    return true;
+  } catch (_) {
+    return false;
+  } finally { listen.looking = false; }
+}
+
 /* Back to the phone's own voice: either asked for, or because the file could not be played — a
    signal that dies mid-journey must not leave a silent car. */
 function useOwnVoice({play = false} = {}) {
@@ -2829,7 +2865,9 @@ function buildSaying() {
       const was = listen.saying;
       listen.saying = id;
       localStorage.setItem(KEYS.said, id);
-      if (id === 'mac') { useBaked(); return; }
+      if (id === 'mac') { listen.ownVoiceAsked = false; useBaked(); return; }
+      // Asked for by hand on this paper: a file finishing later does not take it back.
+      listen.ownVoiceAsked = true;
       void was;
       // Which words: the paper itself, or the translation beside it. A translation is a different
       // language, so useOwnVoice chooses the voice again for it.
